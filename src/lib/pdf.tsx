@@ -1,6 +1,9 @@
 import React from 'react';
-import { renderToBuffer, Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import path from 'path';
+import { renderToBuffer, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 import { formatDateShort, formatMAD } from '@/lib/utils';
+
+const LOGO_PATH = path.resolve(process.cwd(), 'public', 'logo.png');
 
 const styles = StyleSheet.create({
   page: {
@@ -175,9 +178,8 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.logo}>Dog Universe</Text>
-            <Text style={styles.companySubtitle}>SARLAU — Premium Pet Care</Text>
-            <Text style={[styles.companySubtitle, { marginTop: 2 }]}>Dr el Caid Souihla Saada, Marrakech</Text>
+            <Image src={LOGO_PATH} style={{ width: 120, height: 45, objectFit: 'contain' }} />
+            <Text style={[styles.companySubtitle, { marginTop: 4 }]}>SARLAU — Dr el Caid Souihla Saada, Marrakech</Text>
           </View>
           <View style={styles.companyDetails}>
             <Text>contact@doguniverse.ma</Text>

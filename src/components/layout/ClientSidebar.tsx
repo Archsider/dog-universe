@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { signOut } from 'next-auth/react';
@@ -51,10 +52,7 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
       {/* Logo */}
       <div className="px-6 py-5 border-b border-[#F0D98A]/30">
         <Link href={`/${locale}/client/dashboard`} className="block">
-          <h1 className="text-xl font-serif font-bold text-charcoal">
-            Dog <span className="text-gold-500">Universe</span>
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Marrakech</p>
+          <Image src="/logo.png" alt="Dog Universe" width={140} height={50} className="object-contain" priority />
         </Link>
       </div>
 
