@@ -5,7 +5,8 @@ import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { PawPrint, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import Image from 'next/image';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -60,11 +61,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <Link href={`/${locale}`} className="inline-flex items-center gap-2 mb-6">
-            <PawPrint className="h-7 w-7 text-gold-500" />
-            <span className="text-2xl font-serif font-bold text-charcoal">
-              Dog <span className="text-gold-500">Universe</span>
-            </span>
+          <Link href={`/${locale}`} className="inline-block mb-6">
+            <Image src="/logo.png" alt="Dog Universe" width={160} height={44} className="h-12 w-auto object-contain mx-auto" priority />
           </Link>
           <h1 className="text-2xl font-serif font-semibold text-charcoal">{t('title')}</h1>
           <p className="text-charcoal/60 mt-1 text-sm">{t('subtitle')}</p>
