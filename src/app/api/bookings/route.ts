@@ -58,6 +58,16 @@ export async function POST(request: Request) {
       groomingSize,
       groomingPrice,
       pricePerNight,
+      // Boarding taxi addon
+      taxiGoEnabled,
+      taxiGoDate,
+      taxiGoTime,
+      taxiGoAddress,
+      taxiReturnEnabled,
+      taxiReturnDate,
+      taxiReturnTime,
+      taxiReturnAddress,
+      taxiAddonPrice,
       // Taxi specific
       taxiType,
     } = body;
@@ -111,7 +121,16 @@ export async function POST(request: Request) {
           includeGrooming: includeGrooming ?? false,
           groomingSize: groomingSize || null,
           groomingPrice: groomingPrice ?? 0,
-          pricePerNight: pricePerNight ?? 200,
+          pricePerNight: pricePerNight ?? 0,
+          taxiGoEnabled: taxiGoEnabled ?? false,
+          taxiGoDate: taxiGoDate || null,
+          taxiGoTime: taxiGoTime || null,
+          taxiGoAddress: taxiGoAddress || null,
+          taxiReturnEnabled: taxiReturnEnabled ?? false,
+          taxiReturnDate: taxiReturnDate || null,
+          taxiReturnTime: taxiReturnTime || null,
+          taxiReturnAddress: taxiReturnAddress || null,
+          taxiAddonPrice: taxiAddonPrice ?? 0,
         },
       });
     } else if (serviceType === 'PET_TAXI') {

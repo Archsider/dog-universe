@@ -117,6 +117,16 @@ model BoardingDetail {
   groomingSize    String? // "SMALL" | "LARGE"
   groomingPrice   Float   @default(0)
   pricePerNight   Float   @default(0)
+  // Pet taxi addon
+  taxiGoEnabled     Boolean @default(false)
+  taxiGoDate        String?
+  taxiGoTime        String?
+  taxiGoAddress     String?
+  taxiReturnEnabled Boolean @default(false)
+  taxiReturnDate    String?
+  taxiReturnTime    String?
+  taxiReturnAddress String?
+  taxiAddonPrice    Float   @default(0)
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }

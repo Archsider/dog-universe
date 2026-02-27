@@ -16,7 +16,7 @@ import { formatMAD } from '@/lib/utils';
 interface Pet {
   id: string;
   name: string;
-  species: string;
+  species: string; // 'DOG' | 'CAT'
   breed: string | null;
   photoUrl: string | null;
 }
@@ -27,7 +27,26 @@ type PetSize = 'SMALL' | 'LARGE';
 
 const TAXI_PRICES = { STANDARD: 150, VET: 300, AIRPORT: 300 };
 const GROOMING_PRICES = { SMALL: 100, LARGE: 150 };
-const BOARDING_PRICE_PER_NIGHT = 200;
+const TAXI_ADDON_PRICE = 150;
+
+// Boarding pricing rules
+const DOG_PRICE_SINGLE = 120;    // 1 chien, ≤32 nuits
+const DOG_PRICE_LONG = 100;      // 1 chien, >32 nuits
+const DOG_PRICE_MULTI = 100;     // 2+ chiens par chien
+const CAT_PRICE = 70;            // Chat, peu importe
+
+interface PriceItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+const isValidTaxiDate = (dateStr: string): boolean => {
+  if (!dateStr) return true;
+  const d = new Date(dateStr + 'T12:00:00');
+  return d.getDay() !== 0; // 0 = dimanche
+};
 
 export default function NewBookingPage() {
   const locale = useLocale();
@@ -48,7 +67,16 @@ export default function NewBookingPage() {
   const [groomingPets, setGroomingPets] = useState<Record<string, boolean>>({});
   const [petSizes, setPetSizes] = useState<Record<string, PetSize>>({});
   const [boardingNotes, setBoardingNotes] = useState('');
-  // Taxi
+  // Taxi addon (boarding)
+  const [taxiGoEnabled, setTaxiGoEnabled] = useState(false);
+  const [taxiGoDate, setTaxiGoDate] = useState('');
+  const [taxiGoTime, setTaxiGoTime] = useState('');
+  const [taxiGoAddress, setTaxiGoAddress] = useState('');
+  const [taxiReturnEnabled, setTaxiReturnEnabled] = useState(false);
+  const [taxiReturnDate, setTaxiReturnDate] = useState('');
+  const [taxiReturnTime, setTaxiReturnTime] = useState('');
+  const [taxiReturnAddress, setTaxiReturnAddress] = useState('');
+  // Taxi standalone
   const [taxiType, setTaxiType] = useState<TaxiType>('STANDARD');
   const [taxiDate, setTaxiDate] = useState('');
   const [taxiTime, setTaxiTime] = useState('');
@@ -72,10 +100,22 @@ export default function NewBookingPage() {
       addPet: 'Ajouter un animal',
       checkIn: 'Date d\'arrivée',
       checkOut: 'Date de départ',
-      grooming: 'Toilettage (+100/150 MAD)',
+      grooming: 'Toilettage (chiens uniquement)',
+      groomingPrice: '+100/150 MAD',
       petSize: 'Taille',
       small: 'Petit (<10kg)',
       large: 'Grand (>10kg)',
+      taxiAddonTitle: 'Option Pet Taxi',
+      taxiAddonDesc: 'Transport aller et/ou retour (lun-sam, 10h-17h) — 150 MAD/trajet',
+      taxiGo: 'Aller — dépôt à la pension',
+      taxiReturn: 'Retour — récupération à la pension',
+      taxiGoDate: 'Date de dépôt',
+      taxiReturnDate: 'Date de récupération',
+      taxiTime: 'Heure',
+      taxiAddress: 'Adresse',
+      taxiAddressPlaceholder: 'Votre adresse, Marrakech',
+      sundayNotAllowed: 'Le dimanche n\'est pas disponible',
+      invalidTime: 'Horaire disponible : 10h - 17h',
       taxiTypeLabel: 'Type de trajet',
       standard: 'Standard (ville)',
       vet: 'Vétérinaire',
@@ -90,8 +130,10 @@ export default function NewBookingPage() {
       type: 'Type',
       animals: 'Animaux',
       dates: 'Dates',
+      duration: 'Durée',
       nights: 'nuits',
       night: 'nuit',
+      breakdown: 'Détail du tarif',
       total: 'Total estimé',
       confirm: 'Confirmer la réservation',
       confirmedTitle: 'Réservation envoyée !',
@@ -99,7 +141,7 @@ export default function NewBookingPage() {
       ref: 'Référence',
       viewHistory: 'Voir mes réservations',
       newBooking: 'Nouvelle réservation',
-      groomingNote: 'Le toilettage est disponible uniquement en complément de la pension.',
+      groomingNote: 'Le toilettage est disponible uniquement pour les chiens.',
       selectAtLeastOne: 'Sélectionnez au moins un animal',
       fillAllFields: 'Veuillez remplir tous les champs obligatoires',
       checkOutAfterCheckIn: 'La date de départ doit être après la date d\'arrivée',
@@ -119,10 +161,22 @@ export default function NewBookingPage() {
       addPet: 'Add a pet',
       checkIn: 'Check-in date',
       checkOut: 'Check-out date',
-      grooming: 'Grooming (+100/150 MAD)',
+      grooming: 'Grooming (dogs only)',
+      groomingPrice: '+100/150 MAD',
       petSize: 'Size',
       small: 'Small (<10kg)',
       large: 'Large (>10kg)',
+      taxiAddonTitle: 'Pet Taxi Option',
+      taxiAddonDesc: 'Drop-off and/or pick-up transport (Mon-Sat, 10am-5pm) — 150 MAD/trip',
+      taxiGo: 'Drop-off at the boarding',
+      taxiReturn: 'Pick-up from the boarding',
+      taxiGoDate: 'Drop-off date',
+      taxiReturnDate: 'Pick-up date',
+      taxiTime: 'Time',
+      taxiAddress: 'Address',
+      taxiAddressPlaceholder: 'Your address, Marrakech',
+      sundayNotAllowed: 'Sunday is not available',
+      invalidTime: 'Available hours: 10am - 5pm',
       taxiTypeLabel: 'Trip type',
       standard: 'Standard (city)',
       vet: 'Veterinarian',
@@ -137,8 +191,10 @@ export default function NewBookingPage() {
       type: 'Type',
       animals: 'Pets',
       dates: 'Dates',
+      duration: 'Duration',
       nights: 'nights',
       night: 'night',
+      breakdown: 'Price breakdown',
       total: 'Estimated total',
       confirm: 'Confirm booking',
       confirmedTitle: 'Booking sent!',
@@ -146,7 +202,7 @@ export default function NewBookingPage() {
       ref: 'Reference',
       viewHistory: 'View my bookings',
       newBooking: 'New booking',
-      groomingNote: 'Grooming is only available as an add-on to boarding.',
+      groomingNote: 'Grooming is available for dogs only.',
       selectAtLeastOne: 'Select at least one pet',
       fillAllFields: 'Please fill in all required fields',
       checkOutAfterCheckIn: 'Check-out must be after check-in',
@@ -172,16 +228,85 @@ export default function NewBookingPage() {
     return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
   };
 
-  const calculateTotal = () => {
-    if (bookingType === 'PET_TAXI') return TAXI_PRICES[taxiType];
+  const selectedPetObjects = pets.filter(p => selectedPets.includes(p.id));
+  const dogPets = selectedPetObjects.filter(p => p.species === 'DOG');
+  const catPets = selectedPetObjects.filter(p => p.species === 'CAT');
+
+  const getPriceBreakdown = (): { items: PriceItem[], total: number } => {
+    if (bookingType === 'PET_TAXI') {
+      const price = TAXI_PRICES[taxiType];
+      const label = taxiType === 'STANDARD' ? (locale === 'fr' ? 'Pet Taxi — Standard' : 'Pet Taxi — Standard')
+        : taxiType === 'VET' ? (locale === 'fr' ? 'Pet Taxi — Vétérinaire' : 'Pet Taxi — Vet')
+        : (locale === 'fr' ? 'Pet Taxi — Aéroport' : 'Pet Taxi — Airport');
+      return { items: [{ description: label, quantity: 1, unitPrice: price, total: price }], total: price };
+    }
+
     const nights = calculateNights();
-    let total = nights * BOARDING_PRICE_PER_NIGHT * selectedPets.length;
-    selectedPets.forEach(petId => {
-      if (groomingPets[petId]) {
-        total += petSizes[petId] === 'LARGE' ? GROOMING_PRICES.LARGE : GROOMING_PRICES.SMALL;
+    const items: PriceItem[] = [];
+
+    // Dogs
+    if (dogPets.length === 1) {
+      const pricePerNight = nights > 32 ? DOG_PRICE_LONG : DOG_PRICE_SINGLE;
+      items.push({
+        description: locale === 'fr' ? `Pension ${dogPets[0].name} (chien)` : `Boarding ${dogPets[0].name} (dog)`,
+        quantity: nights,
+        unitPrice: pricePerNight,
+        total: nights * pricePerNight,
+      });
+    } else if (dogPets.length > 1) {
+      dogPets.forEach(dog => {
+        items.push({
+          description: locale === 'fr' ? `Pension ${dog.name} (chien)` : `Boarding ${dog.name} (dog)`,
+          quantity: nights,
+          unitPrice: DOG_PRICE_MULTI,
+          total: nights * DOG_PRICE_MULTI,
+        });
+      });
+    }
+
+    // Cats
+    catPets.forEach(cat => {
+      items.push({
+        description: locale === 'fr' ? `Pension ${cat.name} (chat)` : `Boarding ${cat.name} (cat)`,
+        quantity: nights,
+        unitPrice: CAT_PRICE,
+        total: nights * CAT_PRICE,
+      });
+    });
+
+    // Grooming (dogs only)
+    dogPets.forEach(dog => {
+      if (groomingPets[dog.id]) {
+        const groomPrice = petSizes[dog.id] === 'LARGE' ? GROOMING_PRICES.LARGE : GROOMING_PRICES.SMALL;
+        const sizeLabel = petSizes[dog.id] === 'LARGE' ? (locale === 'fr' ? 'grand' : 'large') : (locale === 'fr' ? 'petit' : 'small');
+        items.push({
+          description: locale === 'fr' ? `Toilettage ${dog.name} (${sizeLabel})` : `Grooming ${dog.name} (${sizeLabel})`,
+          quantity: 1,
+          unitPrice: groomPrice,
+          total: groomPrice,
+        });
       }
     });
-    return total;
+
+    // Taxi addon
+    if (taxiGoEnabled) {
+      items.push({
+        description: locale === 'fr' ? 'Pet Taxi — Aller' : 'Pet Taxi — Drop-off',
+        quantity: 1,
+        unitPrice: TAXI_ADDON_PRICE,
+        total: TAXI_ADDON_PRICE,
+      });
+    }
+    if (taxiReturnEnabled) {
+      items.push({
+        description: locale === 'fr' ? 'Pet Taxi — Retour' : 'Pet Taxi — Pick-up',
+        quantity: 1,
+        unitPrice: TAXI_ADDON_PRICE,
+        total: TAXI_ADDON_PRICE,
+      });
+    }
+
+    return { items, total: items.reduce((sum, item) => sum + item.total, 0) };
   };
 
   const validateStep = () => {
@@ -192,6 +317,14 @@ export default function NewBookingPage() {
     if (step === 3 && bookingType === 'BOARDING') {
       if (!checkIn || !checkOut) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
       if (new Date(checkOut) <= new Date(checkIn)) { toast({ title: l.checkOutAfterCheckIn, variant: 'destructive' }); return false; }
+      if (taxiGoEnabled) {
+        if (!taxiGoDate || !taxiGoTime || !taxiGoAddress) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
+        if (!isValidTaxiDate(taxiGoDate)) { toast({ title: l.sundayNotAllowed, variant: 'destructive' }); return false; }
+      }
+      if (taxiReturnEnabled) {
+        if (!taxiReturnDate || !taxiReturnTime || !taxiReturnAddress) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
+        if (!isValidTaxiDate(taxiReturnDate)) { toast({ title: l.sundayNotAllowed, variant: 'destructive' }); return false; }
+      }
     }
     if (step === 3 && bookingType === 'PET_TAXI') {
       if (!taxiDate || !taxiTime || !pickupAddress || !dropoffAddress) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
@@ -207,20 +340,31 @@ export default function NewBookingPage() {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
+      const { total } = getPriceBreakdown();
       const body: Record<string, unknown> = {
         serviceType: bookingType,
         petIds: selectedPets,
-        totalPrice: calculateTotal(),
+        totalPrice: total,
       };
       if (bookingType === 'BOARDING') {
         body.startDate = new Date(checkIn).toISOString();
         body.endDate = new Date(checkOut).toISOString();
         body.notes = boardingNotes;
-        const groomingPet = selectedPets.find(id => groomingPets[id]);
-        body.includeGrooming = !!groomingPet;
-        body.groomingSize = groomingPet ? (petSizes[groomingPet] || 'SMALL') : null;
-        body.groomingPrice = groomingPet ? (petSizes[groomingPet] === 'LARGE' ? GROOMING_PRICES.LARGE : GROOMING_PRICES.SMALL) : 0;
-        body.pricePerNight = BOARDING_PRICE_PER_NIGHT;
+        const groomingDog = dogPets.find(d => groomingPets[d.id]);
+        body.includeGrooming = !!groomingDog;
+        body.groomingSize = groomingDog ? (petSizes[groomingDog.id] || 'SMALL') : null;
+        body.groomingPrice = groomingDog ? (petSizes[groomingDog.id] === 'LARGE' ? GROOMING_PRICES.LARGE : GROOMING_PRICES.SMALL) : 0;
+        body.pricePerNight = 0;
+        // Taxi addon
+        body.taxiGoEnabled = taxiGoEnabled;
+        body.taxiGoDate = taxiGoEnabled ? taxiGoDate : null;
+        body.taxiGoTime = taxiGoEnabled ? taxiGoTime : null;
+        body.taxiGoAddress = taxiGoEnabled ? taxiGoAddress : null;
+        body.taxiReturnEnabled = taxiReturnEnabled;
+        body.taxiReturnDate = taxiReturnEnabled ? taxiReturnDate : null;
+        body.taxiReturnTime = taxiReturnEnabled ? taxiReturnTime : null;
+        body.taxiReturnAddress = taxiReturnEnabled ? taxiReturnAddress : null;
+        body.taxiAddonPrice = (taxiGoEnabled ? TAXI_ADDON_PRICE : 0) + (taxiReturnEnabled ? TAXI_ADDON_PRICE : 0);
       } else {
         const dateTime = new Date(`${taxiDate}T${taxiTime}`);
         body.startDate = dateTime.toISOString();
@@ -245,9 +389,8 @@ export default function NewBookingPage() {
     }
   };
 
-  const selectedPetObjects = pets.filter(p => selectedPets.includes(p.id));
   const nights = calculateNights();
-  const total = calculateTotal();
+  const { items: priceItems, total } = getPriceBreakdown();
   const today = new Date().toISOString().split('T')[0];
 
   return (
@@ -348,9 +491,10 @@ export default function NewBookingPage() {
           </div>
         )}
 
-        {/* Step 3: Details */}
+        {/* Step 3: Boarding Details */}
         {step === 3 && bookingType === 'BOARDING' && (
           <div className="space-y-5">
+            {/* Dates */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="checkin">{l.checkIn} *</Label>
@@ -362,12 +506,13 @@ export default function NewBookingPage() {
               </div>
             </div>
 
-            {selectedPetObjects.length > 0 && (
+            {/* Grooming — dogs only */}
+            {dogPets.length > 0 && (
               <div>
-                <Label>{l.grooming}</Label>
+                <Label>{l.grooming} <span className="text-gold-600 font-medium">{l.groomingPrice}</span></Label>
                 <p className="text-xs text-gray-500 mb-3">{l.groomingNote}</p>
                 <div className="space-y-2">
-                  {selectedPetObjects.map(pet => (
+                  {dogPets.map(pet => (
                     <div key={pet.id} className="flex items-center justify-between p-3 bg-ivory-50 rounded-lg">
                       <div className="flex items-center gap-2">
                         <input
@@ -398,6 +543,123 @@ export default function NewBookingPage() {
               </div>
             )}
 
+            {/* Pet Taxi Addon */}
+            <div className="border border-ivory-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Car className="h-4 w-4 text-gold-500" />
+                <span className="font-medium text-sm text-charcoal">{l.taxiAddonTitle}</span>
+              </div>
+              <p className="text-xs text-gray-500">{l.taxiAddonDesc}</p>
+
+              {/* Aller */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="taxi-go"
+                    checked={taxiGoEnabled}
+                    onChange={e => setTaxiGoEnabled(e.target.checked)}
+                    className="w-4 h-4 accent-gold-500"
+                  />
+                  <label htmlFor="taxi-go" className="text-sm font-medium text-charcoal cursor-pointer">
+                    {l.taxiGo} <span className="text-gold-600">+{TAXI_ADDON_PRICE} MAD</span>
+                  </label>
+                </div>
+                {taxiGoEnabled && (
+                  <div className="grid grid-cols-2 gap-3 pl-6">
+                    <div>
+                      <Label className="text-xs">{l.taxiGoDate} *</Label>
+                      <Input
+                        type="date"
+                        value={taxiGoDate}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTaxiGoDate(val);
+                          if (val && !isValidTaxiDate(val)) toast({ title: l.sundayNotAllowed, variant: 'destructive' });
+                        }}
+                        min={today}
+                        className="mt-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">{l.taxiTime} * (10h-17h)</Label>
+                      <Input
+                        type="time"
+                        value={taxiGoTime}
+                        onChange={e => setTaxiGoTime(e.target.value)}
+                        min="10:00"
+                        max="17:00"
+                        className="mt-1 text-sm"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs">{l.taxiAddress} *</Label>
+                      <Input
+                        value={taxiGoAddress}
+                        onChange={e => setTaxiGoAddress(e.target.value)}
+                        placeholder={l.taxiAddressPlaceholder}
+                        className="mt-1 text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Retour */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="taxi-return"
+                    checked={taxiReturnEnabled}
+                    onChange={e => setTaxiReturnEnabled(e.target.checked)}
+                    className="w-4 h-4 accent-gold-500"
+                  />
+                  <label htmlFor="taxi-return" className="text-sm font-medium text-charcoal cursor-pointer">
+                    {l.taxiReturn} <span className="text-gold-600">+{TAXI_ADDON_PRICE} MAD</span>
+                  </label>
+                </div>
+                {taxiReturnEnabled && (
+                  <div className="grid grid-cols-2 gap-3 pl-6">
+                    <div>
+                      <Label className="text-xs">{l.taxiReturnDate} *</Label>
+                      <Input
+                        type="date"
+                        value={taxiReturnDate}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTaxiReturnDate(val);
+                          if (val && !isValidTaxiDate(val)) toast({ title: l.sundayNotAllowed, variant: 'destructive' });
+                        }}
+                        min={today}
+                        className="mt-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">{l.taxiTime} * (10h-17h)</Label>
+                      <Input
+                        type="time"
+                        value={taxiReturnTime}
+                        onChange={e => setTaxiReturnTime(e.target.value)}
+                        min="10:00"
+                        max="17:00"
+                        className="mt-1 text-sm"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs">{l.taxiAddress} *</Label>
+                      <Input
+                        value={taxiReturnAddress}
+                        onChange={e => setTaxiReturnAddress(e.target.value)}
+                        placeholder={l.taxiAddressPlaceholder}
+                        className="mt-1 text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div>
               <Label htmlFor="notes">{l.notes}</Label>
               <Textarea id="notes" value={boardingNotes} onChange={e => setBoardingNotes(e.target.value)} placeholder={l.notesPlaceholder} rows={3} className="mt-1" />
@@ -405,6 +667,7 @@ export default function NewBookingPage() {
           </div>
         )}
 
+        {/* Step 3: Taxi Details */}
         {step === 3 && bookingType === 'PET_TAXI' && (
           <div className="space-y-5">
             <div>
@@ -470,17 +733,9 @@ export default function NewBookingPage() {
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">{locale === 'fr' ? 'Durée' : 'Duration'}</span>
+                    <span className="text-gray-500">{l.duration}</span>
                     <span className="font-medium text-charcoal">{nights} {nights > 1 ? l.nights : l.night}</span>
                   </div>
-                  {selectedPetObjects.some(p => groomingPets[p.id]) && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">{l.grooming.split(' (')[0]}</span>
-                      <span className="font-medium text-charcoal">
-                        {selectedPetObjects.filter(p => groomingPets[p.id]).map(p => p.name).join(', ')}
-                      </span>
-                    </div>
-                  )}
                 </>
               ) : (
                 <>
@@ -498,10 +753,30 @@ export default function NewBookingPage() {
                   </div>
                 </>
               )}
-              <div className="border-t border-ivory-200 pt-3 flex justify-between">
-                <span className="font-semibold text-charcoal">{l.total}</span>
-                <span className="font-bold text-lg text-gold-600">{formatMAD(total)}</span>
-              </div>
+
+              {/* Price breakdown */}
+              {priceItems.length > 0 && (
+                <>
+                  <div className="border-t border-ivory-200 pt-3">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{l.breakdown}</p>
+                    <div className="space-y-1.5">
+                      {priceItems.map((item, i) => (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span className="text-gray-600">
+                            {item.description}
+                            {item.quantity > 1 && <span className="text-gray-400"> × {item.quantity} × {formatMAD(item.unitPrice)}</span>}
+                          </span>
+                          <span className="font-medium text-charcoal">{formatMAD(item.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="border-t border-ivory-200 pt-3 flex justify-between">
+                    <span className="font-semibold text-charcoal">{l.total}</span>
+                    <span className="font-bold text-lg text-gold-600">{formatMAD(total)}</span>
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex items-start gap-2 bg-blue-50 p-3 rounded-lg text-sm text-blue-700">
               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
@@ -528,7 +803,7 @@ export default function NewBookingPage() {
               <Link href={`/${locale}/client/history`} className="flex-1">
                 <Button variant="outline" className="w-full">{l.viewHistory}</Button>
               </Link>
-              <Button className="flex-1" onClick={() => { setStep(1); setSelectedPets([]); setCheckIn(''); setCheckOut(''); setBookingRef(''); }}>
+              <Button className="flex-1" onClick={() => { setStep(1); setSelectedPets([]); setCheckIn(''); setCheckOut(''); setBookingRef(''); setTaxiGoEnabled(false); setTaxiReturnEnabled(false); }}>
                 {l.newBooking}
               </Button>
             </div>
