@@ -8,6 +8,9 @@ node_modules/
 out/
 build/
 
+# TypeScript build info
+*.tsbuildinfo
+
 # Env files
 .env
 .env.local
