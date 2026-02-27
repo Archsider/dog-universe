@@ -176,13 +176,15 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
         <View style={styles.header}>
           <View>
             <Text style={styles.logo}>Dog Universe</Text>
-            <Text style={styles.companySubtitle}>Premium Pet Care — Marrakech</Text>
+            <Text style={styles.companySubtitle}>SARLAU — Premium Pet Care</Text>
+            <Text style={[styles.companySubtitle, { marginTop: 2 }]}>Dr el Caid Souihla Saada, Marrakech</Text>
           </View>
           <View style={styles.companyDetails}>
             <Text>contact@doguniverse.ma</Text>
             <Text>www.doguniverse.ma</Text>
             <Text>+212 600-000000</Text>
             <Text>Marrakech, Maroc</Text>
+            <Text style={{ marginTop: 4 }}>ICE : 002035800000002</Text>
           </View>
         </View>
 
@@ -281,8 +283,8 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
 
         {/* Footer */}
         <Text style={styles.footer}>
-          Dog Universe — Marrakech, Maroc — contact@doguniverse.ma — www.doguniverse.ma
-          {'\n'}Merci pour votre confiance.
+          Dog Universe SARLAU — Dr el Caid Souihla Saada, Marrakech — ICE : 002035800000002
+          {'\n'}contact@doguniverse.ma — www.doguniverse.ma — Merci pour votre confiance.
         </Text>
       </Page>
     </Document>
