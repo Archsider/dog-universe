@@ -149,11 +149,27 @@ export default function LandingPage({ locale }: LandingPageProps) {
             {locale === 'fr' ? 'Tarifs transparents' : 'Transparent Pricing'}
           </h2>
         </div>
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <div className="grid md:grid-cols-3 gap-8">
           <div className="bg-white rounded-xl border border-[#F0D98A]/30 p-8 shadow-card">
             <h3 className="text-xl font-serif font-semibold text-charcoal mb-6 flex items-center gap-2">
               <PawPrint className="h-5 w-5 text-gold-500" />
-              {locale === 'fr' ? 'Toilettage (add-on pension)' : 'Grooming (boarding add-on)'}
+              {locale === 'fr' ? 'Pension' : 'Boarding'}
+            </h3>
+            <ul className="space-y-3">
+              <li className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-charcoal/70">{locale === 'fr' ? 'Chien' : 'Dog'}</span>
+                <span className="font-bold text-gold-700">120 MAD</span>
+              </li>
+              <li className="flex justify-between items-center py-2">
+                <span className="text-charcoal/70">{locale === 'fr' ? 'Chat' : 'Cat'}</span>
+                <span className="font-bold text-gold-700">70 MAD</span>
+              </li>
+            </ul>
+          </div>
+          <div className="bg-white rounded-xl border border-[#F0D98A]/30 p-8 shadow-card">
+            <h3 className="text-xl font-serif font-semibold text-charcoal mb-6 flex items-center gap-2">
+              <Scissors className="h-5 w-5 text-purple-500" />
+              {locale === 'fr' ? 'Bain (add-on pension)' : 'Bath (boarding add-on)'}
             </h3>
             <ul className="space-y-3">
               <li className="flex justify-between items-center py-2 border-b border-gray-100">
@@ -221,23 +237,6 @@ export default function LandingPage({ locale }: LandingPageProps) {
           </div>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="bg-[#1A1A1A] py-6">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-white/40 text-sm">
-            © {new Date().getFullYear()} Dog Universe. {t('footer.rights')}.
-          </p>
-          <div className="flex gap-4">
-            <Link href="#" className="text-white/40 hover:text-white/70 text-sm transition-colors">
-              {t('footer.privacy')}
-            </Link>
-            <Link href="#" className="text-white/40 hover:text-white/70 text-sm transition-colors">
-              {t('footer.terms')}
-            </Link>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
