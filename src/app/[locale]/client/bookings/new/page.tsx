@@ -100,7 +100,7 @@ export default function NewBookingPage() {
       addPet: 'Ajouter un animal',
       checkIn: 'Date d\'arrivée',
       checkOut: 'Date de départ',
-      grooming: 'Toilettage (chiens uniquement)',
+      grooming: 'Grooming (chiens uniquement)',
       groomingPrice: '+100/150 MAD',
       petSize: 'Taille',
       small: 'Petit (<10kg)',
@@ -141,7 +141,7 @@ export default function NewBookingPage() {
       ref: 'Référence',
       viewHistory: 'Voir mes réservations',
       newBooking: 'Nouvelle réservation',
-      groomingNote: 'Le toilettage est disponible uniquement pour les chiens.',
+      groomingNote: 'Le grooming est disponible uniquement pour les chiens.',
       selectAtLeastOne: 'Sélectionnez au moins un animal',
       fillAllFields: 'Veuillez remplir tous les champs obligatoires',
       checkOutAfterCheckIn: 'La date de départ doit être après la date d\'arrivée',
@@ -280,7 +280,7 @@ export default function NewBookingPage() {
         const groomPrice = petSizes[dog.id] === 'LARGE' ? GROOMING_PRICES.LARGE : GROOMING_PRICES.SMALL;
         const sizeLabel = petSizes[dog.id] === 'LARGE' ? (locale === 'fr' ? 'grand' : 'large') : (locale === 'fr' ? 'petit' : 'small');
         items.push({
-          description: locale === 'fr' ? `Toilettage ${dog.name} (${sizeLabel})` : `Grooming ${dog.name} (${sizeLabel})`,
+          description: `Grooming ${dog.name} (${sizeLabel})`,
           quantity: 1,
           unitPrice: groomPrice,
           total: groomPrice,
