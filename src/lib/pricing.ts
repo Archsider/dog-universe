@@ -1,5 +1,7 @@
 // Business rules & pricing for Dog Universe
+import { prisma } from '@/lib/prisma';
 
+// Hardcoded fallback defaults (used if no DB setting found)
 export const TAXI_PRICES = {
   STANDARD: 150,
   VET: 300,
@@ -11,13 +13,53 @@ export const GROOMING_PRICES = {
   LARGE: 150,
 } as const;
 
-// Boarding pricing rules
-export const BOARDING_DOG_SINGLE = 120;      // 1 chien, ≤32 nuits
-export const BOARDING_DOG_LONG_STAY = 100;   // 1 chien, >32 nuits
-export const BOARDING_DOG_MULTI = 100;        // 2 chiens et plus (par chien)
-export const BOARDING_CAT = 70;               // Chat, peu importe durée/nombre
+export const BOARDING_DOG_SINGLE = 120;
+export const BOARDING_DOG_LONG_STAY = 100;
+export const BOARDING_DOG_MULTI = 100;
+export const BOARDING_CAT = 70;
+export const TAXI_ADDON_PRICE = 150;
 
-export const TAXI_ADDON_PRICE = 150;          // Pet taxi addon (aller ou retour)
+export interface PricingSettings {
+  boarding_dog_per_night: number;
+  boarding_cat_per_night: number;
+  boarding_dog_long_stay: number;
+  boarding_dog_multi: number;
+  long_stay_threshold: number;
+  grooming_small_dog: number;
+  grooming_large_dog: number;
+  taxi_standard: number;
+  taxi_vet: number;
+  taxi_airport: number;
+}
+
+const PRICING_DEFAULTS: PricingSettings = {
+  boarding_dog_per_night: 120,
+  boarding_cat_per_night: 70,
+  boarding_dog_long_stay: 100,
+  boarding_dog_multi: 100,
+  long_stay_threshold: 32,
+  grooming_small_dog: 100,
+  grooming_large_dog: 150,
+  taxi_standard: 150,
+  taxi_vet: 300,
+  taxi_airport: 300,
+};
+
+export async function getPricingSettings(): Promise<PricingSettings> {
+  try {
+    const rows = await prisma.setting.findMany();
+    const settings = { ...PRICING_DEFAULTS };
+    for (const row of rows) {
+      const key = row.key as keyof PricingSettings;
+      if (key in settings) {
+        settings[key] = parseFloat(row.value) || settings[key];
+      }
+    }
+    return settings;
+  } catch {
+    return { ...PRICING_DEFAULTS };
+  }
+}
 
 export type TaxiType = 'STANDARD' | 'VET' | 'AIRPORT';
 export type GroomingSize = 'SMALL' | 'LARGE';
@@ -56,15 +98,17 @@ export function calculateBoardingBreakdown(
   groomingMap?: Record<string, GroomingSize>,
   taxiGoEnabled?: boolean,
   taxiReturnEnabled?: boolean,
+  pricing?: PricingSettings,
 ): PriceBreakdown {
+  const p = pricing ?? PRICING_DEFAULTS;
   const items: PriceLineItem[] = [];
 
-  const dogs = pets.filter(p => p.species === 'DOG');
-  const cats = pets.filter(p => p.species === 'CAT');
+  const dogs = pets.filter(pet => pet.species === 'DOG');
+  const cats = pets.filter(pet => pet.species === 'CAT');
 
   // Dogs
   if (dogs.length === 1) {
-    const pricePerNight = nights > 32 ? BOARDING_DOG_LONG_STAY : BOARDING_DOG_SINGLE;
+    const pricePerNight = nights > p.long_stay_threshold ? p.boarding_dog_long_stay : p.boarding_dog_per_night;
     items.push({
       descriptionFr: `Pension ${dogs[0].name} (chien)`,
       descriptionEn: `Boarding ${dogs[0].name} (dog)`,
@@ -78,8 +122,8 @@ export function calculateBoardingBreakdown(
         descriptionFr: `Pension ${dog.name} (chien)`,
         descriptionEn: `Boarding ${dog.name} (dog)`,
         quantity: nights,
-        unitPrice: BOARDING_DOG_MULTI,
-        total: nights * BOARDING_DOG_MULTI,
+        unitPrice: p.boarding_dog_multi,
+        total: nights * p.boarding_dog_multi,
       });
     });
   }
@@ -90,8 +134,8 @@ export function calculateBoardingBreakdown(
       descriptionFr: `Pension ${cat.name} (chat)`,
       descriptionEn: `Boarding ${cat.name} (cat)`,
       quantity: nights,
-      unitPrice: BOARDING_CAT,
-      total: nights * BOARDING_CAT,
+      unitPrice: p.boarding_cat_per_night,
+      total: nights * p.boarding_cat_per_night,
     });
   });
 
@@ -100,7 +144,7 @@ export function calculateBoardingBreakdown(
     dogs.forEach(dog => {
       const size = groomingMap[dog.id];
       if (size) {
-        const groomPrice = GROOMING_PRICES[size];
+        const groomPrice = size === 'SMALL' ? p.grooming_small_dog : p.grooming_large_dog;
         const sizeLabelFr = size === 'SMALL' ? 'petit' : 'grand';
         const sizeLabelEn = size === 'SMALL' ? 'small' : 'large';
         items.push({
@@ -120,8 +164,8 @@ export function calculateBoardingBreakdown(
       descriptionFr: 'Pet Taxi — Aller',
       descriptionEn: 'Pet Taxi — Drop-off',
       quantity: 1,
-      unitPrice: TAXI_ADDON_PRICE,
-      total: TAXI_ADDON_PRICE,
+      unitPrice: p.taxi_standard,
+      total: p.taxi_standard,
     });
   }
   if (taxiReturnEnabled) {
@@ -129,8 +173,8 @@ export function calculateBoardingBreakdown(
       descriptionFr: 'Pet Taxi — Retour',
       descriptionEn: 'Pet Taxi — Pick-up',
       quantity: 1,
-      unitPrice: TAXI_ADDON_PRICE,
-      total: TAXI_ADDON_PRICE,
+      unitPrice: p.taxi_standard,
+      total: p.taxi_standard,
     });
   }
 
@@ -140,8 +184,14 @@ export function calculateBoardingBreakdown(
   };
 }
 
-export function calculateTaxiPrice(taxiType: TaxiType): PriceBreakdown {
-  const price = TAXI_PRICES[taxiType];
+export function calculateTaxiPrice(taxiType: TaxiType, pricing?: PricingSettings): PriceBreakdown {
+  const p = pricing ?? PRICING_DEFAULTS;
+  const priceMap: Record<TaxiType, number> = {
+    STANDARD: p.taxi_standard,
+    VET: p.taxi_vet,
+    AIRPORT: p.taxi_airport,
+  };
+  const price = priceMap[taxiType];
   const labelsFr: Record<TaxiType, string> = {
     STANDARD: 'Pet Taxi — Course standard',
     VET: 'Pet Taxi — Transport vétérinaire',
@@ -167,6 +217,7 @@ export function calculateTaxiPrice(taxiType: TaxiType): PriceBreakdown {
   };
 }
 
-export function getGroomingPriceForPet(groomingSize: GroomingSize): number {
-  return GROOMING_PRICES[groomingSize];
+export function getGroomingPriceForPet(groomingSize: GroomingSize, pricing?: PricingSettings): number {
+  const p = pricing ?? PRICING_DEFAULTS;
+  return groomingSize === 'SMALL' ? p.grooming_small_dog : p.grooming_large_dog;
 }

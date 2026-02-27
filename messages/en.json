@@ -59,7 +59,8 @@
       "reservations": "Reservations",
       "billing": "Billing",
       "analytics": "Analytics",
-      "logs": "Logs"
+      "logs": "Logs",
+      "settings": "Settings"
     }
   },
   "auth": {
