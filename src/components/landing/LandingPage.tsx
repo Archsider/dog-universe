@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import Image from 'next/image';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
-import { PawPrint, Car, Scissors, Shield, Star, MessageCircle, Phone, Mail, MapPin, Clock } from 'lucide-react';
+import { PawPrint, Car, Scissors, Shield, Star, MessageCircle } from 'lucide-react';
 
 interface LandingPageProps {
   locale: string;
@@ -201,39 +201,6 @@ export default function LandingPage({ locale }: LandingPageProps) {
                 <span className="font-bold text-gold-700">300 MAD</span>
               </li>
             </ul>
-          </div>
-        </div>
-      </section>
-
-      {/* Contact */}
-      <section className="bg-charcoal py-16">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-10">
-            <h2 className="text-3xl font-serif font-bold text-gold-400 mb-3">{t('contact.title')}</h2>
-          </div>
-          <div className="grid md:grid-cols-4 gap-6 text-center">
-            {[
-              { icon: MapPin, text: t('contact.address') },
-              { icon: Phone, text: t('contact.phone') },
-              { icon: Mail, text: t('contact.email') },
-              { icon: Clock, text: t('contact.hours') },
-            ].map((item, i) => {
-              const Icon = item.icon;
-              return (
-                <div key={i} className="flex flex-col items-center gap-2 text-white/80">
-                  <Icon className="h-5 w-5 text-gold-400" />
-                  <span className="text-sm">{item.text}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="text-center mt-10">
-            <Link
-              href={`/${locale}/auth/register`}
-              className="bg-gold-500 hover:bg-gold-400 text-white font-semibold px-8 py-4 rounded-lg transition-colors"
-            >
-              {t('hero.cta')}
-            </Link>
           </div>
         </div>
       </section>
