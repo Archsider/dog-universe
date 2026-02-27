@@ -50,23 +50,28 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     }),
     prisma.invoice.findMany({
       where: { status: 'PAID', issuedAt: { gte: startOfLast12Months } },
-      select: { amount: true, issuedAt: true, booking: { select: { serviceType: true } } },
+      select: { amount: true, issuedAt: true, booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } } },
     }),
   ]);
 
   // Build monthly chart data
-  const monthlyData: Record<string, { boarding: number; taxi: number }> = {};
+  const monthlyData: Record<string, { boarding: number; taxi: number; grooming: number }> = {};
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = d.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: '2-digit' });
-    monthlyData[key] = { boarding: 0, taxi: 0 };
+    monthlyData[key] = { boarding: 0, taxi: 0, grooming: 0 };
   }
   revenueData.forEach(inv => {
     const d = new Date(inv.issuedAt);
     const key = d.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: '2-digit' });
     if (monthlyData[key]) {
-      if (inv.booking?.serviceType === 'PET_TAXI') monthlyData[key].taxi += inv.amount;
-      else monthlyData[key].boarding += inv.amount;
+      if (inv.booking?.serviceType === 'PET_TAXI') {
+        monthlyData[key].taxi += inv.amount;
+      } else {
+        const groomingPrice = inv.booking?.boardingDetail?.groomingPrice ?? 0;
+        monthlyData[key].grooming += groomingPrice;
+        monthlyData[key].boarding += inv.amount - groomingPrice;
+      }
     }
   });
   const chartData = Object.entries(monthlyData).map(([month, v]) => ({ month, ...v }));
