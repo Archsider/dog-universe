@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { Users, PawPrint, Calendar, TrendingUp, Clock, AlertCircle } from 'lucide-react';
+import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import RevenueChartWrapper from './RevenueChartWrapper';
 
@@ -18,15 +18,17 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
 
   const [
     totalClients,
-    totalPets,
     pendingBookings,
     currentBoarders,
     monthlyRevenue,
     recentBookings,
     revenueData,
+    monthlyBoardingInvoices,
+    monthlyTaxiAgg,
+    loyalClientsGroups,
+    newClientsThisMonth,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'CLIENT' } }),
-    prisma.pet.count(),
     prisma.booking.count({ where: { status: 'PENDING' } }),
     prisma.booking.count({
       where: {
@@ -52,6 +54,22 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       where: { status: 'PAID', issuedAt: { gte: startOfLast12Months } },
       select: { amount: true, issuedAt: true, booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } } },
     }),
+    prisma.invoice.findMany({
+      where: { status: 'PAID', issuedAt: { gte: startOfMonth }, booking: { serviceType: 'BOARDING' } },
+      select: { amount: true, booking: { select: { boardingDetail: { select: { groomingPrice: true } } } } },
+    }),
+    prisma.invoice.aggregate({
+      where: { status: 'PAID', issuedAt: { gte: startOfMonth }, booking: { serviceType: 'PET_TAXI' } },
+      _sum: { amount: true },
+    }),
+    prisma.booking.groupBy({
+      by: ['clientId'],
+      _count: { clientId: true },
+      having: { clientId: { _count: { gt: 1 } } },
+    }),
+    prisma.user.count({
+      where: { role: 'CLIENT', createdAt: { gte: startOfMonth } },
+    }),
   ]);
 
   // Build monthly chart data
@@ -76,28 +94,44 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   });
   const chartData = Object.entries(monthlyData).map(([month, v]) => ({ month, ...v }));
 
+  // Service revenue this month
+  const monthlyGroomingRevenue = monthlyBoardingInvoices.reduce((sum, inv) => sum + (inv.booking?.boardingDetail?.groomingPrice ?? 0), 0);
+  const monthlyBoardingRevenue = monthlyBoardingInvoices.reduce((sum, inv) => sum + inv.amount, 0) - monthlyGroomingRevenue;
+  const monthlyTaxiRevenue = monthlyTaxiAgg._sum.amount ?? 0;
+  const loyalClients = loyalClientsGroups.length;
+
   const labels = {
     fr: {
       title: 'Tableau de bord',
-      clients: 'Clients',
-      pets: 'Animaux',
+      caMonthly: 'CA mensuel',
+      animauxHeberges: 'Animaux hébergés',
       pending: 'En attente',
-      boarding: 'Pension actuelle',
-      monthRevenue: 'Revenu ce mois',
+      totalClients: 'Total clients',
+      pension: 'Pension',
+      taxi: 'Taxi animalier',
+      grooming: 'Toilettage',
+      loyalClients: 'Clients fidèles',
+      newClients: 'Nouveaux clients',
       recentBookings: 'Réservations récentes',
       viewAll: 'Voir tout',
-      revenueTitle: 'Revenus (12 derniers mois)',
+      revenueTitle: 'CA mensuel — 12 derniers mois',
+      thisMth: 'ce mois',
     },
     en: {
       title: 'Dashboard',
-      clients: 'Clients',
-      pets: 'Pets',
+      caMonthly: 'Monthly revenue',
+      animauxHeberges: 'Boarded animals',
       pending: 'Pending',
-      boarding: 'Current boarders',
-      monthRevenue: 'Revenue this month',
+      totalClients: 'Total clients',
+      pension: 'Boarding',
+      taxi: 'Pet taxi',
+      grooming: 'Grooming',
+      loyalClients: 'Loyal clients',
+      newClients: 'New clients',
       recentBookings: 'Recent bookings',
       viewAll: 'View all',
-      revenueTitle: 'Revenue (last 12 months)',
+      revenueTitle: 'Monthly revenue — last 12 months',
+      thisMth: 'this month',
     },
   };
 
@@ -118,14 +152,6 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   const l = labels[locale as keyof typeof labels] || labels.fr;
   const sl = statusLabels[locale] || statusLabels.fr;
 
-  const stats = [
-    { label: l.clients, value: totalClients, icon: Users, color: 'text-blue-500', bg: 'bg-blue-50', href: `/${locale}/admin/clients` },
-    { label: l.pets, value: totalPets, icon: PawPrint, color: 'text-green-500', bg: 'bg-green-50', href: `/${locale}/admin/animals` },
-    { label: l.pending, value: pendingBookings, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50', href: `/${locale}/admin/reservations?status=PENDING` },
-    { label: l.boarding, value: currentBoarders, icon: Calendar, color: 'text-gold-500', bg: 'bg-gold-50', href: `/${locale}/admin/reservations` },
-    { label: l.monthRevenue, value: formatMAD(monthlyRevenue._sum.amount || 0), icon: TrendingUp, color: 'text-purple-500', bg: 'bg-purple-50', href: `/${locale}/admin/billing` },
-  ];
-
   return (
     <div>
       <h1 className="text-2xl font-serif font-bold text-charcoal mb-6">{l.title}</h1>
@@ -141,20 +167,80 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
         </Link>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        {stats.map((s) => (
-          <Link key={s.label} href={s.href}>
-            <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card hover:shadow-card-hover transition-shadow">
-              <div className={`w-10 h-10 rounded-lg ${s.bg} flex items-center justify-center mb-3`}>
-                <s.icon className={`h-5 w-5 ${s.color}`} />
-              </div>
-              <div className="text-xl font-bold text-charcoal">{s.value}</div>
-              <div className="text-xs text-gray-500 mt-0.5">{s.label}</div>
+      {/* Row 1 — Main KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <Link href={`/${locale}/admin/billing`}>
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card hover:shadow-card-hover transition-shadow">
+            <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center mb-3">
+              <TrendingUp className="h-5 w-5 text-purple-500" />
             </div>
-          </Link>
-        ))}
+            <div className="text-xl font-bold text-charcoal">{formatMAD(monthlyRevenue._sum.amount || 0)}</div>
+            <div className="text-xs text-gray-500 mt-0.5">{l.caMonthly}</div>
+          </div>
+        </Link>
+
+        <Link href={`/${locale}/admin/reservations`}>
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card hover:shadow-card-hover transition-shadow">
+            <div className="w-10 h-10 rounded-lg bg-gold-50 flex items-center justify-center mb-3">
+              <Calendar className="h-5 w-5 text-gold-500" />
+            </div>
+            <div className="text-xl font-bold text-charcoal">{currentBoarders}</div>
+            <div className="text-xs text-gray-500 mt-0.5">{l.animauxHeberges}</div>
+          </div>
+        </Link>
+
+        <Link href={`/${locale}/admin/reservations?status=PENDING`}>
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card hover:shadow-card-hover transition-shadow">
+            <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center mb-3">
+              <Clock className="h-5 w-5 text-amber-500" />
+            </div>
+            <div className="text-xl font-bold text-charcoal">{pendingBookings}</div>
+            <div className="text-xs text-gray-500 mt-0.5">{l.pending}</div>
+          </div>
+        </Link>
+
+        <Link href={`/${locale}/admin/clients`}>
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card hover:shadow-card-hover transition-shadow">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center mb-3">
+              <Users className="h-5 w-5 text-blue-500" />
+            </div>
+            <div className="text-xl font-bold text-charcoal">{totalClients}</div>
+            <div className="text-xs text-gray-500 mt-0.5">{l.totalClients}</div>
+          </div>
+        </Link>
       </div>
 
+      {/* Row 2 — Service revenues this month */}
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="bg-gradient-to-br from-[#FBF5E0] to-[#FDF8EC] rounded-xl border border-[#E2C048]/30 p-4 shadow-card">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-gold-700 uppercase tracking-wide">{l.pension}</span>
+            <Calendar className="h-4 w-4 text-gold-500" />
+          </div>
+          <div className="text-2xl font-bold text-gold-800">{formatMAD(monthlyBoardingRevenue)}</div>
+          <div className="text-xs text-gold-600 mt-1">{l.thisMth}</div>
+        </div>
+
+        <div className="bg-gradient-to-br from-[#EBF4FF] to-[#F0F7FF] rounded-xl border border-blue-200/50 p-4 shadow-card">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-blue-700 uppercase tracking-wide">{l.taxi}</span>
+            <Car className="h-4 w-4 text-blue-500" />
+          </div>
+          <div className="text-2xl font-bold text-blue-800">{formatMAD(monthlyTaxiRevenue)}</div>
+          <div className="text-xs text-blue-600 mt-1">{l.thisMth}</div>
+        </div>
+
+        <div className="bg-gradient-to-br from-[#F3EEFF] to-[#F7F2FF] rounded-xl border border-purple-200/50 p-4 shadow-card">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-purple-700 uppercase tracking-wide">{l.grooming}</span>
+            <Scissors className="h-4 w-4 text-purple-500" />
+          </div>
+          <div className="text-2xl font-bold text-purple-800">{formatMAD(monthlyGroomingRevenue)}</div>
+          <div className="text-xs text-purple-600 mt-1">{l.thisMth}</div>
+        </div>
+      </div>
+
+      {/* Chart + Recent bookings */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
           <h2 className="font-semibold text-charcoal mb-4">{l.revenueTitle}</h2>
@@ -184,6 +270,33 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Row 3 — Client insights */}
+      <div className="grid grid-cols-2 gap-4 mt-6">
+        <Link href={`/${locale}/admin/clients`}>
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card hover:shadow-card-hover transition-shadow flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+              <Star className="h-6 w-6 text-amber-500" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-charcoal">{loyalClients}</div>
+              <div className="text-sm text-gray-500">{l.loyalClients}</div>
+            </div>
+          </div>
+        </Link>
+
+        <Link href={`/${locale}/admin/clients`}>
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card hover:shadow-card-hover transition-shadow flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
+              <UserPlus className="h-6 w-6 text-green-500" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-charcoal">{newClientsThisMonth}</div>
+              <div className="text-sm text-gray-500">{l.newClients}</div>
+            </div>
+          </div>
+        </Link>
       </div>
     </div>
   );
