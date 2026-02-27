@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import RevenueChartWrapper from './RevenueChartWrapper';
+import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 interface PageProps { params: { locale: string } }
 
@@ -13,7 +14,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
 
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const thisMonthStart = startOfMonth(now);
+  const thisMonthEnd = endOfMonth(now);
+  const lastMonthStart = startOfMonth(subMonths(now, 1));
+  const lastMonthEnd = endOfMonth(subMonths(now, 1));
   const startOfLast12Months = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
   const [
@@ -21,6 +25,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     pendingBookings,
     currentBoarders,
     monthlyRevenue,
+    lastMonthRevenue,
     recentBookings,
     revenueData,
     monthlyBoardingInvoices,
@@ -39,7 +44,11 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       },
     }),
     prisma.invoice.aggregate({
-      where: { status: 'PAID', issuedAt: { gte: startOfMonth } },
+      where: { status: 'PAID', issuedAt: { gte: thisMonthStart, lte: thisMonthEnd } },
+      _sum: { amount: true },
+    }),
+    prisma.invoice.aggregate({
+      where: { status: 'PAID', issuedAt: { gte: lastMonthStart, lte: lastMonthEnd } },
       _sum: { amount: true },
     }),
     prisma.booking.findMany({
@@ -55,11 +64,11 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       select: { amount: true, issuedAt: true, booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } } },
     }),
     prisma.invoice.findMany({
-      where: { status: 'PAID', issuedAt: { gte: startOfMonth }, booking: { serviceType: 'BOARDING' } },
+      where: { status: 'PAID', issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, booking: { serviceType: 'BOARDING' } },
       select: { amount: true, booking: { select: { boardingDetail: { select: { groomingPrice: true } } } } },
     }),
     prisma.invoice.aggregate({
-      where: { status: 'PAID', issuedAt: { gte: startOfMonth }, booking: { serviceType: 'PET_TAXI' } },
+      where: { status: 'PAID', issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, booking: { serviceType: 'PET_TAXI' } },
       _sum: { amount: true },
     }),
     prisma.booking.groupBy({
@@ -68,9 +77,16 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       having: { clientId: { _count: { gt: 1 } } },
     }),
     prisma.user.count({
-      where: { role: 'CLIENT', createdAt: { gte: startOfMonth } },
+      where: { role: 'CLIENT', createdAt: { gte: thisMonthStart, lte: thisMonthEnd } },
     }),
   ]);
+
+  // CA variation vs previous month
+  const thisMonthAmt = monthlyRevenue._sum.amount ?? 0;
+  const lastMonthAmt = lastMonthRevenue._sum.amount ?? 0;
+  const monthVariation = lastMonthAmt > 0
+    ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
+    : 0;
 
   // Build monthly chart data
   const monthlyData: Record<string, { boarding: number; taxi: number; grooming: number }> = {};
@@ -152,9 +168,18 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   const l = labels[locale as keyof typeof labels] || labels.fr;
   const sl = statusLabels[locale] || statusLabels.fr;
 
+  const monthName = now.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
+  const variationColor = monthVariation > 0 ? 'text-green-600' : monthVariation < 0 ? 'text-red-500' : 'text-gray-400';
+  const variationSign = monthVariation > 0 ? '+' : '';
+
   return (
     <div>
-      <h1 className="text-2xl font-serif font-bold text-charcoal mb-6">{l.title}</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
+        <p className="text-sm text-charcoal/50 mt-0.5 capitalize">
+          {locale === 'fr' ? 'Vue d\'ensemble' : 'Overview'} — {monthName}
+        </p>
+      </div>
 
       {pendingBookings > 0 && (
         <Link href={`/${locale}/admin/reservations?status=PENDING`}>
@@ -174,8 +199,11 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center mb-3">
               <TrendingUp className="h-5 w-5 text-purple-500" />
             </div>
-            <div className="text-xl font-bold text-charcoal">{formatMAD(monthlyRevenue._sum.amount || 0)}</div>
+            <div className="text-xl font-bold text-charcoal">{formatMAD(thisMonthAmt)}</div>
             <div className="text-xs text-gray-500 mt-0.5">{l.caMonthly}</div>
+            <div className={`text-xs mt-1 font-medium ${variationColor}`}>
+              {variationSign}{monthVariation}% vs mois préc.
+            </div>
           </div>
         </Link>
 
