@@ -19,7 +19,7 @@ export default function LandingPage({ locale }: LandingPageProps) {
       <header className="bg-white border-b border-[#F0D98A]/30 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link href={`/${locale}`} className="flex items-center">
-            <Image src="/logo.png" alt="Dog Universe" width={150} height={50} className="object-contain" priority />
+            <Image src="/logo.png" alt="Dog Universe" width={160} height={44} className="h-11 w-auto object-contain" priority />
           </Link>
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
