@@ -1,0 +1,238 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  phone        String?
+  passwordHash String
+  role         String   @default("CLIENT") // "ADMIN" | "CLIENT"
+  language     String   @default("fr")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  pets          Pet[]
+  bookings      Booking[]
+  invoices      Invoice[]
+  notifications Notification[]
+  loyaltyGrade  LoyaltyGrade?
+  actionLogs    ActionLog[]
+  adminNotes    AdminNote[]    @relation("NoteAuthor")
+  passwordResets PasswordResetToken[]
+}
+
+model Pet {
+  id          String   @id @default(cuid())
+  ownerId     String
+  name        String
+  species     String   // "DOG" | "CAT"
+  breed       String?
+  dateOfBirth DateTime?
+  gender      String?  // "MALE" | "FEMALE"
+  photoUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  vaccinations Vaccination[]
+  documents    PetDocument[]
+  bookingPets  BookingPet[]
+
+  @@index([ownerId])
+}
+
+model Vaccination {
+  id          String   @id @default(cuid())
+  petId       String
+  date        DateTime
+  vaccineType String
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([petId])
+}
+
+model PetDocument {
+  id         String   @id @default(cuid())
+  petId      String
+  name       String
+  fileUrl    String
+  fileType   String
+  uploadedAt DateTime @default(now())
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([petId])
+}
+
+model Booking {
+  id          String   @id @default(cuid())
+  clientId    String
+  serviceType String   // "BOARDING" | "PET_TAXI"
+  status      String   @default("PENDING") // "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED"
+  startDate   DateTime
+  endDate     DateTime?
+  arrivalTime String?
+  notes       String?
+  totalPrice  Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client         User           @relation(fields: [clientId], references: [id])
+  bookingPets    BookingPet[]
+  boardingDetail BoardingDetail?
+  taxiDetail     TaxiDetail?
+  invoice        Invoice?
+
+  @@index([clientId])
+  @@index([status])
+  @@index([startDate])
+}
+
+model BookingPet {
+  id        String @id @default(cuid())
+  bookingId String
+  petId     String
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  pet     Pet     @relation(fields: [petId], references: [id])
+
+  @@unique([bookingId, petId])
+  @@index([bookingId])
+}
+
+model BoardingDetail {
+  id              String  @id @default(cuid())
+  bookingId       String  @unique
+  includeGrooming Boolean @default(false)
+  groomingSize    String? // "SMALL" | "LARGE"
+  groomingPrice   Float   @default(0)
+  pricePerNight   Float   @default(0)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model TaxiDetail {
+  id        String @id @default(cuid())
+  bookingId String @unique
+  taxiType  String // "STANDARD" | "VET" | "AIRPORT"
+  price     Float
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  bookingId     String?  @unique
+  clientId      String
+  invoiceNumber String   @unique
+  amount        Float
+  status        String   @default("PENDING") // "PAID" | "PENDING"
+  pdfUrl        String?
+  notes         String?
+  issuedAt      DateTime @default(now())
+  paidAt        DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client  User        @relation(fields: [clientId], references: [id])
+  booking Booking?    @relation(fields: [bookingId], references: [id])
+  items   InvoiceItem[]
+
+  @@index([clientId])
+  @@index([status])
+}
+
+model InvoiceItem {
+  id          String @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Int    @default(1)
+  unitPrice   Float
+  total       Float
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "BOOKING_CONFIRMATION" | "BOOKING_VALIDATION" | "BOOKING_REFUSAL" | "STAY_REMINDER" | "INVOICE_AVAILABLE" | "ADMIN_MESSAGE" | "LOYALTY_UPDATE"
+  titleFr   String
+  titleEn   String
+  messageFr String
+  messageEn String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+}
+
+model LoyaltyGrade {
+  id         String    @id @default(cuid())
+  clientId   String    @unique
+  grade      String    @default("BRONZE") // "BRONZE" | "SILVER" | "GOLD" | "PLATINUM"
+  isOverride Boolean   @default(false)
+  overrideBy String?
+  overrideAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model AdminNote {
+  id         String   @id @default(cuid())
+  entityType String   // "CLIENT" | "PET"
+  entityId   String
+  content    String
+  createdBy  String
+  createdAt  DateTime @default(now())
+
+  author User @relation("NoteAuthor", fields: [createdBy], references: [id])
+
+  @@index([entityType, entityId])
+}
+
+model ActionLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  details    String?  // JSON string
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+}

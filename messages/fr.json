@@ -1,0 +1,537 @@
+{
+  "common": {
+    "appName": "Dog Universe",
+    "loading": "Chargement...",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "confirm": "Confirmer",
+    "back": "Retour",
+    "next": "Suivant",
+    "submit": "Soumettre",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "all": "Tous",
+    "yes": "Oui",
+    "no": "Non",
+    "noData": "Aucune donnée à afficher",
+    "error": "Une erreur est survenue",
+    "success": "Opération réussie",
+    "currency": "MAD",
+    "view": "Voir",
+    "download": "Télécharger",
+    "add": "Ajouter",
+    "create": "Créer",
+    "close": "Fermer",
+    "required": "Requis",
+    "optional": "Optionnel",
+    "actions": "Actions",
+    "status": "Statut",
+    "date": "Date",
+    "name": "Nom",
+    "email": "Email",
+    "phone": "Téléphone",
+    "notes": "Notes",
+    "amount": "Montant",
+    "total": "Total",
+    "from": "Du",
+    "to": "Au",
+    "per": "par",
+    "night": "nuit",
+    "nights": "nuits",
+    "or": "ou",
+    "and": "et"
+  },
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "pets": "Mes animaux",
+    "bookings": "Réservations",
+    "history": "Historique",
+    "invoices": "Factures",
+    "notifications": "Notifications",
+    "profile": "Mon profil",
+    "logout": "Se déconnecter",
+    "admin": {
+      "dashboard": "Tableau de bord",
+      "clients": "Clients",
+      "animals": "Animaux",
+      "reservations": "Réservations",
+      "billing": "Facturation",
+      "analytics": "Analytiques",
+      "logs": "Journaux"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Connexion",
+      "subtitle": "Accédez à votre espace Dog Universe",
+      "email": "Adresse e-mail",
+      "password": "Mot de passe",
+      "forgotPassword": "Mot de passe oublié ?",
+      "submit": "Se connecter",
+      "noAccount": "Pas encore de compte ?",
+      "register": "Créer un compte",
+      "errors": {
+        "invalidCredentials": "Email ou mot de passe incorrect",
+        "accountDisabled": "Ce compte est désactivé"
+      }
+    },
+    "register": {
+      "title": "Créer un compte",
+      "subtitle": "Rejoignez Dog Universe",
+      "name": "Nom complet",
+      "email": "Adresse e-mail",
+      "phone": "Téléphone",
+      "password": "Mot de passe",
+      "confirmPassword": "Confirmer le mot de passe",
+      "submit": "Créer mon compte",
+      "hasAccount": "Déjà un compte ?",
+      "login": "Se connecter",
+      "errors": {
+        "emailTaken": "Cette adresse e-mail est déjà utilisée",
+        "passwordMismatch": "Les mots de passe ne correspondent pas",
+        "weakPassword": "Le mot de passe doit contenir au moins 8 caractères"
+      }
+    },
+    "resetPassword": {
+      "title": "Mot de passe oublié",
+      "subtitle": "Saisissez votre e-mail pour recevoir un lien de réinitialisation",
+      "email": "Adresse e-mail",
+      "submit": "Envoyer le lien",
+      "emailSent": "Si cette adresse existe, vous recevrez un e-mail sous peu.",
+      "backToLogin": "Retour à la connexion",
+      "newTitle": "Nouveau mot de passe",
+      "newPassword": "Nouveau mot de passe",
+      "confirmNewPassword": "Confirmer le nouveau mot de passe",
+      "changePassword": "Changer le mot de passe",
+      "tokenExpired": "Ce lien est expiré ou invalide.",
+      "success": "Votre mot de passe a été modifié avec succès."
+    }
+  },
+  "dashboard": {
+    "greeting": "Bonjour, {name} !",
+    "subtitle": "Bienvenue dans votre espace Dog Universe",
+    "stats": {
+      "pets": "Animaux",
+      "totalStays": "Séjours totaux",
+      "totalSpent": "Total dépensé",
+      "loyalty": "Grade fidélité"
+    },
+    "myPets": "Mes animaux",
+    "upcomingBookings": "Prochaines réservations",
+    "recentInvoices": "Factures récentes",
+    "recentActivity": "Activité récente",
+    "noUpcomingBookings": "Aucune réservation à venir",
+    "bookNow": "Réserver maintenant",
+    "viewAllPets": "Voir tous mes animaux",
+    "viewAllBookings": "Voir toutes mes réservations",
+    "viewAllInvoices": "Voir toutes mes factures",
+    "loyalty": {
+      "grade": "Grade fidélité",
+      "bronze": "Bronze",
+      "silver": "Argent",
+      "gold": "Or",
+      "platinum": "Platine"
+    },
+    "quickActions": {
+      "book": "Réserver",
+      "myPets": "Mes animaux",
+      "invoices": "Factures",
+      "history": "Historique"
+    }
+  },
+  "pets": {
+    "title": "Mes animaux",
+    "addPet": "Ajouter un animal",
+    "editPet": "Modifier le profil",
+    "noPets": "Vous n'avez pas encore d'animaux enregistrés.",
+    "noPetsAction": "Ajoutez votre premier animal pour commencer.",
+    "form": {
+      "name": "Nom de l'animal",
+      "species": "Espèce",
+      "speciesOptions": {
+        "DOG": "Chien",
+        "CAT": "Chat"
+      },
+      "breed": "Race",
+      "dateOfBirth": "Date de naissance",
+      "gender": "Sexe",
+      "genderOptions": {
+        "MALE": "Mâle",
+        "FEMALE": "Femelle"
+      },
+      "photo": "Photo",
+      "uploadPhoto": "Télécharger une photo",
+      "changePhoto": "Changer la photo",
+      "notes": "Notes / instructions spéciales"
+    },
+    "tabs": {
+      "profile": "Profil",
+      "vaccinations": "Vaccinations",
+      "documents": "Documents",
+      "history": "Historique"
+    },
+    "vaccinations": {
+      "add": "Ajouter une vaccination",
+      "edit": "Modifier",
+      "name": "Nom du vaccin",
+      "date": "Date d'administration",
+      "comment": "Commentaire",
+      "noVaccinations": "Aucune vaccination enregistrée",
+      "upToDate": "À jour",
+      "expired": "Expiré",
+      "expiresSoon": "Expire bientôt"
+    },
+    "documents": {
+      "upload": "Télécharger un document",
+      "name": "Nom du document",
+      "noDocuments": "Aucun document enregistré",
+      "uploadedOn": "Téléchargé le",
+      "allowedFormats": "Formats acceptés : PDF, JPG, PNG (max. 10 Mo)"
+    },
+    "history": {
+      "noHistory": "Aucun séjour enregistré pour cet animal"
+    },
+    "age": "{count} an(s)",
+    "born": "Né(e) le",
+    "male": "Mâle",
+    "female": "Femelle",
+    "dog": "Chien",
+    "cat": "Chat"
+  },
+  "bookings": {
+    "title": "Réservations",
+    "newBooking": "Nouvelle réservation",
+    "ref": "Référence",
+    "noBookings": "Aucune réservation",
+    "status": {
+      "PENDING": "En attente",
+      "CONFIRMED": "Confirmée",
+      "COMPLETED": "Terminée",
+      "CANCELLED": "Annulée"
+    },
+    "serviceType": {
+      "BOARDING": "Pension",
+      "PET_TAXI": "Taxi animalier"
+    },
+    "taxiType": {
+      "STANDARD": "Course standard",
+      "VET": "Transport vétérinaire",
+      "AIRPORT": "Navette aéroport"
+    },
+    "grooming": "Toilettage inclus",
+    "arrival": "Arrivée",
+    "departure": "Départ",
+    "duration": "{count} nuit(s)",
+    "cancel": "Annuler la réservation",
+    "cancelConfirm": "Êtes-vous sûr(e) de vouloir annuler cette réservation ?",
+    "wizard": {
+      "step1": {
+        "title": "Type de service",
+        "subtitle": "Quel service souhaitez-vous réserver ?",
+        "boarding": {
+          "title": "Pension",
+          "description": "Hébergement de qualité pour votre animal dans notre établissement"
+        },
+        "taxi": {
+          "title": "Taxi animalier",
+          "description": "Transport sécurisé à Marrakech"
+        }
+      },
+      "step2": {
+        "title": "Choisir un animal",
+        "subtitle": "Quel(s) animal(aux) souhaitez-vous confier ?"
+      },
+      "step3": {
+        "title": "Dates et horaires",
+        "checkIn": "Date d'arrivée",
+        "checkOut": "Date de départ",
+        "arrivalTime": "Heure d'arrivée",
+        "taxiDate": "Date de prise en charge",
+        "taxiTime": "Heure"
+      },
+      "step4": {
+        "title": "Options",
+        "groomingTitle": "Toilettage",
+        "groomingDescription": "Bain, coupe et soin complet",
+        "groomingSmall": "+100 MAD (petit chien)",
+        "groomingLarge": "+150 MAD (grand chien)",
+        "taxiTypeTitle": "Type de course",
+        "notes": "Notes particulières",
+        "notesPlaceholder": "Régime alimentaire, médicaments, comportement particulier..."
+      },
+      "step5": {
+        "title": "Récapitulatif",
+        "subtitle": "Vérifiez les détails de votre réservation",
+        "service": "Service",
+        "pet": "Animal",
+        "dates": "Dates",
+        "options": "Options",
+        "groomingIncluded": "Toilettage inclus",
+        "noGrooming": "Sans toilettage",
+        "priceBreakdown": "Détail du prix",
+        "boarding": "Pension",
+        "grooming": "Toilettage",
+        "taxi": "Taxi",
+        "total": "Total estimé",
+        "submitText": "Envoyer la demande de réservation",
+        "notice": "Votre réservation sera confirmée par notre équipe sous 24h.",
+        "noPayment": "Aucun paiement en ligne requis pour le moment."
+      },
+      "confirmation": {
+        "title": "Demande envoyée !",
+        "subtitle": "Votre demande de réservation a bien été reçue. Notre équipe la validera sous 24h.",
+        "bookingRef": "Numéro de demande",
+        "viewBooking": "Voir la réservation",
+        "newBooking": "Nouvelle réservation",
+        "backToDashboard": "Retour au tableau de bord"
+      }
+    }
+  },
+  "history": {
+    "title": "Historique",
+    "allStays": "Tous les séjours",
+    "upcoming": "À venir",
+    "completed": "Terminés",
+    "cancelled": "Annulés",
+    "noHistory": "Aucun séjour dans l'historique"
+  },
+  "invoices": {
+    "title": "Factures",
+    "number": "N° Facture",
+    "date": "Date d'émission",
+    "dueDate": "Échéance",
+    "amount": "Montant",
+    "status": {
+      "PAID": "Payée",
+      "PENDING": "En attente"
+    },
+    "download": "Télécharger PDF",
+    "view": "Voir la facture",
+    "noInvoices": "Aucune facture",
+    "items": "Détail",
+    "description": "Description",
+    "quantity": "Qté",
+    "unitPrice": "Prix unitaire",
+    "subtotal": "Sous-total",
+    "total": "Total",
+    "paidOn": "Payée le",
+    "issuedOn": "Émise le"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Tout marquer comme lu",
+    "markRead": "Marquer comme lu",
+    "noNotifications": "Aucune notification",
+    "unread": "Non lu(s)",
+    "types": {
+      "BOOKING_CONFIRMATION": "Réservation envoyée",
+      "BOOKING_VALIDATION": "Réservation confirmée",
+      "BOOKING_REFUSAL": "Réservation refusée",
+      "STAY_REMINDER": "Rappel de séjour",
+      "INVOICE_AVAILABLE": "Nouvelle facture",
+      "ADMIN_MESSAGE": "Message de Dog Universe",
+      "LOYALTY_UPDATE": "Mise à jour du grade fidélité"
+    }
+  },
+  "profile": {
+    "title": "Mon profil",
+    "personalInfo": "Informations personnelles",
+    "security": "Sécurité",
+    "preferences": "Préférences",
+    "name": "Nom complet",
+    "email": "Adresse e-mail",
+    "phone": "Téléphone",
+    "changePassword": "Changer le mot de passe",
+    "currentPassword": "Mot de passe actuel",
+    "newPassword": "Nouveau mot de passe",
+    "confirmNewPassword": "Confirmer le nouveau mot de passe",
+    "language": "Langue",
+    "languageOptions": {
+      "fr": "Français",
+      "en": "English"
+    },
+    "saved": "Profil mis à jour avec succès"
+  },
+  "admin": {
+    "dashboard": {
+      "title": "Tableau de bord",
+      "subtitle": "Vue d'ensemble de votre activité",
+      "monthlyRevenue": "Revenus du mois",
+      "currentBoarders": "Pensionnaires actuels",
+      "occupancyRate": "Taux d'occupation",
+      "pendingReservations": "Réservations en attente",
+      "newClientsThisMonth": "Nouveaux clients ce mois",
+      "returningClients": "Clients récurrents",
+      "revenueChart": "Évolution des revenus (12 derniers mois)",
+      "serviceBreakdown": "Répartition par service",
+      "recentActivity": "Activité récente",
+      "vsLastMonth": "vs mois précédent"
+    },
+    "analytics": {
+      "title": "Analytiques",
+      "period": "Période",
+      "thisMonth": "Ce mois",
+      "last3months": "3 derniers mois",
+      "last6months": "6 derniers mois",
+      "last12months": "12 derniers mois",
+      "totalRevenue": "Revenu cumulé",
+      "avgBasket": "Panier moyen",
+      "avgStayDuration": "Durée moyenne de séjour",
+      "clientSegmentation": "Segmentation clients",
+      "active": "Actifs",
+      "semiActive": "Semi-actifs",
+      "inactive": "Inactifs",
+      "boarding": "Pension",
+      "taxi": "Taxi",
+      "grooming": "Toilettage"
+    },
+    "clients": {
+      "title": "Clients",
+      "search": "Rechercher un client...",
+      "totalClients": "Total clients",
+      "loyaltyGrade": "Grade",
+      "totalStays": "Séjours",
+      "totalSpent": "Dépenses",
+      "lastStay": "Dernier séjour",
+      "noClients": "Aucun client",
+      "viewProfile": "Voir le profil",
+      "internalNotes": "Notes internes (non visibles du client)",
+      "addNote": "Ajouter une note",
+      "loyaltyOverride": "Modifier le grade manuellement",
+      "suggestedGrade": "Grade suggéré",
+      "currentGrade": "Grade actuel",
+      "overrideGrade": "Forcer le grade"
+    },
+    "animals": {
+      "title": "Animaux",
+      "allAnimals": "Tous les animaux",
+      "search": "Rechercher un animal...",
+      "owner": "Propriétaire",
+      "vaccinationStatus": "Statut vaccinations",
+      "upToDate": "À jour",
+      "expired": "Expiré",
+      "expiresSoon": "Expire bientôt",
+      "noAnimals": "Aucun animal",
+      "internalNotes": "Notes internes (non visibles du client)"
+    },
+    "reservations": {
+      "title": "Réservations",
+      "pending": "En attente",
+      "all": "Toutes",
+      "calendar": "Calendrier",
+      "list": "Liste",
+      "approve": "Approuver",
+      "reject": "Refuser",
+      "complete": "Terminer",
+      "createManual": "Créer une réservation",
+      "addGrooming": "Ajouter le toilettage",
+      "rejectionReason": "Motif du refus",
+      "internalNotes": "Notes internes",
+      "noReservations": "Aucune réservation",
+      "confirmApprove": "Confirmer la réservation de {client} pour {pet} ?",
+      "confirmReject": "Refuser la réservation ?",
+      "confirmComplete": "Marquer ce séjour comme terminé ?"
+    },
+    "billing": {
+      "title": "Facturation",
+      "createInvoice": "Créer une facture",
+      "allInvoices": "Toutes les factures",
+      "paid": "Payées",
+      "pending": "En attente",
+      "markPaid": "Marquer payée",
+      "paymentMethod": "Mode de paiement",
+      "exportCsv": "Exporter CSV",
+      "client": "Client",
+      "booking": "Réservation liée",
+      "noInvoices": "Aucune facture",
+      "paymentMethods": {
+        "CASH": "Espèces",
+        "CARD": "Carte bancaire",
+        "TRANSFER": "Virement"
+      }
+    },
+    "logs": {
+      "title": "Journaux d'actions",
+      "action": "Action",
+      "actor": "Auteur",
+      "entity": "Entité",
+      "timestamp": "Horodatage",
+      "details": "Détails",
+      "noLogs": "Aucun journal",
+      "system": "Système"
+    },
+    "loyalty": {
+      "bronze": "Bronze",
+      "silver": "Argent",
+      "gold": "Or",
+      "platinum": "Platine",
+      "thresholds": {
+        "bronze": "1-3 séjours",
+        "silver": "4-9 séjours",
+        "gold": "10-19 séjours",
+        "platinum": "20+ séjours ou +5000 EUR de chiffre d'affaires"
+      }
+    }
+  },
+  "landing": {
+    "hero": {
+      "title": "Le paradis de votre compagnon à Marrakech",
+      "subtitle": "Pension haut de gamme, toilettage et transport — des soins premium pour votre animal",
+      "cta": "Réserver maintenant",
+      "login": "Mon espace client",
+      "tagline": "Confiance • Qualité • Bienveillance"
+    },
+    "services": {
+      "title": "Nos services",
+      "subtitle": "Une offre complète pour le bien-être de votre animal",
+      "boarding": {
+        "title": "Pension",
+        "description": "Des hébergements confortables, sécurisés et chaleureux pour votre animal, avec un suivi personnalisé."
+      },
+      "taxi": {
+        "title": "Taxi animalier",
+        "description": "Transport sécurisé et sans stress pour votre compagnon, vers le vétérinaire, l'aéroport ou partout à Marrakech."
+      },
+      "grooming": {
+        "title": "Toilettage",
+        "description": "Bain, coupe et soins professionnels disponibles en complément de la pension."
+      }
+    },
+    "why": {
+      "title": "Pourquoi nous choisir ?",
+      "trust": {
+        "title": "Confiance",
+        "description": "Une équipe professionnelle et bienveillante, dédiée à la sécurité de votre animal."
+      },
+      "quality": {
+        "title": "Qualité premium",
+        "description": "Des espaces de vie soignés, une alimentation adaptée et un suivi quotidien."
+      },
+      "communication": {
+        "title": "Suivi en temps réel",
+        "description": "Notifications et mises à jour via votre espace client personnel."
+      }
+    },
+    "contact": {
+      "title": "Contactez-nous",
+      "address": "Marrakech, Maroc",
+      "phone": "+212 600-000000",
+      "email": "contact@doguniverse.ma",
+      "hours": "Lun–Dim : 8h–20h"
+    },
+    "footer": {
+      "rights": "Tous droits réservés",
+      "privacy": "Confidentialité",
+      "terms": "CGU"
+    }
+  },
+  "errors": {
+    "page404": "Page introuvable",
+    "page403": "Accès non autorisé",
+    "page500": "Erreur serveur",
+    "goHome": "Retour à l'accueil",
+    "tryAgain": "Réessayer"
+  }
+}

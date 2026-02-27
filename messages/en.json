@@ -1,0 +1,537 @@
+{
+  "common": {
+    "appName": "Dog Universe",
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "search": "Search",
+    "filter": "Filter",
+    "all": "All",
+    "yes": "Yes",
+    "no": "No",
+    "noData": "No data to display",
+    "error": "An error occurred",
+    "success": "Operation successful",
+    "currency": "MAD",
+    "view": "View",
+    "download": "Download",
+    "add": "Add",
+    "create": "Create",
+    "close": "Close",
+    "required": "Required",
+    "optional": "Optional",
+    "actions": "Actions",
+    "status": "Status",
+    "date": "Date",
+    "name": "Name",
+    "email": "Email",
+    "phone": "Phone",
+    "notes": "Notes",
+    "amount": "Amount",
+    "total": "Total",
+    "from": "From",
+    "to": "To",
+    "per": "per",
+    "night": "night",
+    "nights": "nights",
+    "or": "or",
+    "and": "and"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "pets": "My Pets",
+    "bookings": "Bookings",
+    "history": "History",
+    "invoices": "Invoices",
+    "notifications": "Notifications",
+    "profile": "My Profile",
+    "logout": "Sign Out",
+    "admin": {
+      "dashboard": "Dashboard",
+      "clients": "Clients",
+      "animals": "Animals",
+      "reservations": "Reservations",
+      "billing": "Billing",
+      "analytics": "Analytics",
+      "logs": "Logs"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Sign In",
+      "subtitle": "Access your Dog Universe account",
+      "email": "Email address",
+      "password": "Password",
+      "forgotPassword": "Forgot password?",
+      "submit": "Sign In",
+      "noAccount": "Don't have an account?",
+      "register": "Create an account",
+      "errors": {
+        "invalidCredentials": "Invalid email or password",
+        "accountDisabled": "This account is disabled"
+      }
+    },
+    "register": {
+      "title": "Create an Account",
+      "subtitle": "Join Dog Universe",
+      "name": "Full name",
+      "email": "Email address",
+      "phone": "Phone number",
+      "password": "Password",
+      "confirmPassword": "Confirm password",
+      "submit": "Create my account",
+      "hasAccount": "Already have an account?",
+      "login": "Sign in",
+      "errors": {
+        "emailTaken": "This email address is already in use",
+        "passwordMismatch": "Passwords do not match",
+        "weakPassword": "Password must be at least 8 characters"
+      }
+    },
+    "resetPassword": {
+      "title": "Forgot Password",
+      "subtitle": "Enter your email to receive a reset link",
+      "email": "Email address",
+      "submit": "Send reset link",
+      "emailSent": "If this address exists, you will receive an email shortly.",
+      "backToLogin": "Back to sign in",
+      "newTitle": "New Password",
+      "newPassword": "New password",
+      "confirmNewPassword": "Confirm new password",
+      "changePassword": "Change Password",
+      "tokenExpired": "This link is expired or invalid.",
+      "success": "Your password has been changed successfully."
+    }
+  },
+  "dashboard": {
+    "greeting": "Hello, {name}!",
+    "subtitle": "Welcome to your Dog Universe space",
+    "stats": {
+      "pets": "Pets",
+      "totalStays": "Total Stays",
+      "totalSpent": "Total Spent",
+      "loyalty": "Loyalty Grade"
+    },
+    "myPets": "My Pets",
+    "upcomingBookings": "Upcoming Bookings",
+    "recentInvoices": "Recent Invoices",
+    "recentActivity": "Recent Activity",
+    "noUpcomingBookings": "No upcoming bookings",
+    "bookNow": "Book Now",
+    "viewAllPets": "View all pets",
+    "viewAllBookings": "View all bookings",
+    "viewAllInvoices": "View all invoices",
+    "loyalty": {
+      "grade": "Loyalty Grade",
+      "bronze": "Bronze",
+      "silver": "Silver",
+      "gold": "Gold",
+      "platinum": "Platinum"
+    },
+    "quickActions": {
+      "book": "Book",
+      "myPets": "My Pets",
+      "invoices": "Invoices",
+      "history": "History"
+    }
+  },
+  "pets": {
+    "title": "My Pets",
+    "addPet": "Add a Pet",
+    "editPet": "Edit Profile",
+    "noPets": "You have no registered pets yet.",
+    "noPetsAction": "Add your first pet to get started.",
+    "form": {
+      "name": "Pet name",
+      "species": "Species",
+      "speciesOptions": {
+        "DOG": "Dog",
+        "CAT": "Cat"
+      },
+      "breed": "Breed",
+      "dateOfBirth": "Date of birth",
+      "gender": "Gender",
+      "genderOptions": {
+        "MALE": "Male",
+        "FEMALE": "Female"
+      },
+      "photo": "Photo",
+      "uploadPhoto": "Upload a photo",
+      "changePhoto": "Change photo",
+      "notes": "Medical notes / special instructions"
+    },
+    "tabs": {
+      "profile": "Profile",
+      "vaccinations": "Vaccinations",
+      "documents": "Documents",
+      "history": "History"
+    },
+    "vaccinations": {
+      "add": "Add vaccination",
+      "edit": "Edit",
+      "name": "Vaccine name",
+      "date": "Administration date",
+      "comment": "Comment",
+      "noVaccinations": "No vaccinations recorded",
+      "upToDate": "Up to date",
+      "expired": "Expired",
+      "expiresSoon": "Expiring soon"
+    },
+    "documents": {
+      "upload": "Upload a document",
+      "name": "Document name",
+      "noDocuments": "No documents recorded",
+      "uploadedOn": "Uploaded on",
+      "allowedFormats": "Accepted formats: PDF, JPG, PNG (max. 10 MB)"
+    },
+    "history": {
+      "noHistory": "No stays recorded for this pet"
+    },
+    "age": "{count} year(s)",
+    "born": "Born on",
+    "male": "Male",
+    "female": "Female",
+    "dog": "Dog",
+    "cat": "Cat"
+  },
+  "bookings": {
+    "title": "Bookings",
+    "newBooking": "New Booking",
+    "ref": "Reference",
+    "noBookings": "No bookings",
+    "status": {
+      "PENDING": "Pending",
+      "CONFIRMED": "Confirmed",
+      "COMPLETED": "Completed",
+      "CANCELLED": "Cancelled"
+    },
+    "serviceType": {
+      "BOARDING": "Boarding",
+      "PET_TAXI": "Pet Taxi"
+    },
+    "taxiType": {
+      "STANDARD": "Standard trip",
+      "VET": "Vet transport",
+      "AIRPORT": "Airport transfer"
+    },
+    "grooming": "Grooming included",
+    "arrival": "Arrival",
+    "departure": "Departure",
+    "duration": "{count} night(s)",
+    "cancel": "Cancel booking",
+    "cancelConfirm": "Are you sure you want to cancel this booking?",
+    "wizard": {
+      "step1": {
+        "title": "Service Type",
+        "subtitle": "What service would you like to book?",
+        "boarding": {
+          "title": "Boarding",
+          "description": "Quality accommodation for your pet at our facility"
+        },
+        "taxi": {
+          "title": "Pet Taxi",
+          "description": "Safe transport anywhere in Marrakech"
+        }
+      },
+      "step2": {
+        "title": "Choose a Pet",
+        "subtitle": "Which pet would you like to board?"
+      },
+      "step3": {
+        "title": "Dates & Times",
+        "checkIn": "Check-in date",
+        "checkOut": "Check-out date",
+        "arrivalTime": "Arrival time",
+        "taxiDate": "Pickup date",
+        "taxiTime": "Time"
+      },
+      "step4": {
+        "title": "Options",
+        "groomingTitle": "Grooming",
+        "groomingDescription": "Full bath, cut and care",
+        "groomingSmall": "+100 MAD (small dog)",
+        "groomingLarge": "+150 MAD (large dog)",
+        "taxiTypeTitle": "Trip type",
+        "notes": "Special instructions",
+        "notesPlaceholder": "Diet, medications, special behavior..."
+      },
+      "step5": {
+        "title": "Summary",
+        "subtitle": "Review your booking details",
+        "service": "Service",
+        "pet": "Pet",
+        "dates": "Dates",
+        "options": "Options",
+        "groomingIncluded": "Grooming included",
+        "noGrooming": "No grooming",
+        "priceBreakdown": "Price breakdown",
+        "boarding": "Boarding",
+        "grooming": "Grooming",
+        "taxi": "Taxi",
+        "total": "Estimated total",
+        "submitText": "Send booking request",
+        "notice": "Your booking will be confirmed by our team within 24 hours.",
+        "noPayment": "No online payment required at this stage."
+      },
+      "confirmation": {
+        "title": "Request Sent!",
+        "subtitle": "Your booking request has been received. Our team will validate it within 24 hours.",
+        "bookingRef": "Request number",
+        "viewBooking": "View booking",
+        "newBooking": "New booking",
+        "backToDashboard": "Back to dashboard"
+      }
+    }
+  },
+  "history": {
+    "title": "History",
+    "allStays": "All stays",
+    "upcoming": "Upcoming",
+    "completed": "Completed",
+    "cancelled": "Cancelled",
+    "noHistory": "No stays in history"
+  },
+  "invoices": {
+    "title": "Invoices",
+    "number": "Invoice #",
+    "date": "Issue date",
+    "dueDate": "Due date",
+    "amount": "Amount",
+    "status": {
+      "PAID": "Paid",
+      "PENDING": "Pending"
+    },
+    "download": "Download PDF",
+    "view": "View invoice",
+    "noInvoices": "No invoices",
+    "items": "Details",
+    "description": "Description",
+    "quantity": "Qty",
+    "unitPrice": "Unit price",
+    "subtotal": "Subtotal",
+    "total": "Total",
+    "paidOn": "Paid on",
+    "issuedOn": "Issued on"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all as read",
+    "markRead": "Mark as read",
+    "noNotifications": "No notifications",
+    "unread": "Unread",
+    "types": {
+      "BOOKING_CONFIRMATION": "Booking sent",
+      "BOOKING_VALIDATION": "Booking confirmed",
+      "BOOKING_REFUSAL": "Booking rejected",
+      "STAY_REMINDER": "Stay reminder",
+      "INVOICE_AVAILABLE": "New invoice",
+      "ADMIN_MESSAGE": "Message from Dog Universe",
+      "LOYALTY_UPDATE": "Loyalty grade update"
+    }
+  },
+  "profile": {
+    "title": "My Profile",
+    "personalInfo": "Personal Information",
+    "security": "Security",
+    "preferences": "Preferences",
+    "name": "Full name",
+    "email": "Email address",
+    "phone": "Phone",
+    "changePassword": "Change Password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
+    "language": "Language",
+    "languageOptions": {
+      "fr": "Français",
+      "en": "English"
+    },
+    "saved": "Profile updated successfully"
+  },
+  "admin": {
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Overview of your activity",
+      "monthlyRevenue": "Monthly Revenue",
+      "currentBoarders": "Current Boarders",
+      "occupancyRate": "Occupancy Rate",
+      "pendingReservations": "Pending Reservations",
+      "newClientsThisMonth": "New Clients This Month",
+      "returningClients": "Returning Clients",
+      "revenueChart": "Revenue Over Time (Last 12 Months)",
+      "serviceBreakdown": "Service Breakdown",
+      "recentActivity": "Recent Activity",
+      "vsLastMonth": "vs last month"
+    },
+    "analytics": {
+      "title": "Analytics",
+      "period": "Period",
+      "thisMonth": "This month",
+      "last3months": "Last 3 months",
+      "last6months": "Last 6 months",
+      "last12months": "Last 12 months",
+      "totalRevenue": "Cumulative Revenue",
+      "avgBasket": "Average Basket",
+      "avgStayDuration": "Average Stay Duration",
+      "clientSegmentation": "Client Segmentation",
+      "active": "Active",
+      "semiActive": "Semi-active",
+      "inactive": "Inactive",
+      "boarding": "Boarding",
+      "taxi": "Taxi",
+      "grooming": "Grooming"
+    },
+    "clients": {
+      "title": "Clients",
+      "search": "Search a client...",
+      "totalClients": "Total clients",
+      "loyaltyGrade": "Grade",
+      "totalStays": "Stays",
+      "totalSpent": "Spent",
+      "lastStay": "Last stay",
+      "noClients": "No clients",
+      "viewProfile": "View profile",
+      "internalNotes": "Internal notes (not visible to client)",
+      "addNote": "Add note",
+      "loyaltyOverride": "Override grade manually",
+      "suggestedGrade": "Suggested grade",
+      "currentGrade": "Current grade",
+      "overrideGrade": "Override grade"
+    },
+    "animals": {
+      "title": "Animals",
+      "allAnimals": "All Animals",
+      "search": "Search an animal...",
+      "owner": "Owner",
+      "vaccinationStatus": "Vaccination status",
+      "upToDate": "Up to date",
+      "expired": "Expired",
+      "expiresSoon": "Expiring soon",
+      "noAnimals": "No animals",
+      "internalNotes": "Internal notes (not visible to client)"
+    },
+    "reservations": {
+      "title": "Reservations",
+      "pending": "Pending",
+      "all": "All",
+      "calendar": "Calendar",
+      "list": "List",
+      "approve": "Approve",
+      "reject": "Reject",
+      "complete": "Mark as Complete",
+      "createManual": "Create Reservation",
+      "addGrooming": "Add grooming",
+      "rejectionReason": "Reason for rejection",
+      "internalNotes": "Internal notes",
+      "noReservations": "No reservations",
+      "confirmApprove": "Confirm reservation for {client} with {pet}?",
+      "confirmReject": "Reject this reservation?",
+      "confirmComplete": "Mark this stay as completed?"
+    },
+    "billing": {
+      "title": "Billing",
+      "createInvoice": "Create Invoice",
+      "allInvoices": "All Invoices",
+      "paid": "Paid",
+      "pending": "Pending",
+      "markPaid": "Mark as Paid",
+      "paymentMethod": "Payment method",
+      "exportCsv": "Export CSV",
+      "client": "Client",
+      "booking": "Linked booking",
+      "noInvoices": "No invoices",
+      "paymentMethods": {
+        "CASH": "Cash",
+        "CARD": "Bank card",
+        "TRANSFER": "Bank transfer"
+      }
+    },
+    "logs": {
+      "title": "Action Logs",
+      "action": "Action",
+      "actor": "Author",
+      "entity": "Entity",
+      "timestamp": "Timestamp",
+      "details": "Details",
+      "noLogs": "No logs",
+      "system": "System"
+    },
+    "loyalty": {
+      "bronze": "Bronze",
+      "silver": "Silver",
+      "gold": "Gold",
+      "platinum": "Platinum",
+      "thresholds": {
+        "bronze": "1-3 stays",
+        "silver": "4-9 stays",
+        "gold": "10-19 stays",
+        "platinum": "20+ stays or 5000+ EUR revenue"
+      }
+    }
+  },
+  "landing": {
+    "hero": {
+      "title": "Your Pet's Paradise in Marrakech",
+      "subtitle": "Premium boarding, grooming and transport — exceptional care for your companion",
+      "cta": "Book Now",
+      "login": "My Account",
+      "tagline": "Trust • Quality • Care"
+    },
+    "services": {
+      "title": "Our Services",
+      "subtitle": "A complete offering for your pet's wellbeing",
+      "boarding": {
+        "title": "Boarding",
+        "description": "Comfortable, secure and warm accommodations for your pet, with personalized attention."
+      },
+      "taxi": {
+        "title": "Pet Taxi",
+        "description": "Safe, stress-free transport for your companion, to the vet, airport, or anywhere in Marrakech."
+      },
+      "grooming": {
+        "title": "Grooming",
+        "description": "Professional baths, cuts and care available as an add-on to boarding."
+      }
+    },
+    "why": {
+      "title": "Why Choose Us?",
+      "trust": {
+        "title": "Trust",
+        "description": "A professional and caring team, dedicated to your pet's safety."
+      },
+      "quality": {
+        "title": "Premium Quality",
+        "description": "Well-kept living spaces, adapted nutrition, and daily monitoring."
+      },
+      "communication": {
+        "title": "Real-Time Updates",
+        "description": "Notifications and updates through your personal client portal."
+      }
+    },
+    "contact": {
+      "title": "Contact Us",
+      "address": "Marrakech, Morocco",
+      "phone": "+212 600-000000",
+      "email": "contact@doguniverse.ma",
+      "hours": "Mon–Sun: 8am–8pm"
+    },
+    "footer": {
+      "rights": "All rights reserved",
+      "privacy": "Privacy",
+      "terms": "Terms"
+    }
+  },
+  "errors": {
+    "page404": "Page not found",
+    "page403": "Access denied",
+    "page500": "Server error",
+    "goHome": "Go to homepage",
+    "tryAgain": "Try again"
+  }
+}
