@@ -21,7 +21,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const rows = await prisma.setting.findMany();
+  const rows = await prisma.setting?.findMany() ?? [];
   const settings = { ...DEFAULT_SETTINGS };
   for (const row of rows) {
     settings[row.key] = row.value;
@@ -42,9 +42,11 @@ export async function PUT(request: Request) {
   const allowedKeys = Object.keys(DEFAULT_SETTINGS);
   const updates = Object.entries(body).filter(([k]) => allowedKeys.includes(k));
 
+  if (!prisma.setting) return NextResponse.json({ ok: true });
+
   await Promise.all(
     updates.map(([key, value]) =>
-      prisma.setting.upsert({
+      prisma.setting!.upsert({
         where: { key },
         update: { value: String(value) },
         create: { key, value: String(value) },

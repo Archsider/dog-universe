@@ -92,7 +92,7 @@ export async function GET(request: Request) {
       where: { role: 'CLIENT', createdAt: { gte: thisMonthStart, lte: thisMonthEnd } },
     }),
     prisma.user.count({ where: { role: 'CLIENT' } }),
-    prisma.setting.findUnique({ where: { key: 'max_capacity' } }),
+    prisma.setting?.findUnique({ where: { key: 'max_capacity' } }),
   ]);
 
   const thisMonthAmt = thisMonthRevenue._sum.amount ?? 0;

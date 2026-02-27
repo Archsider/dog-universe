@@ -22,7 +22,7 @@ export default async function AdminSettingsPage({ params: { locale } }: PageProp
   const session = await auth();
   if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
 
-  const rows = await prisma.setting.findMany();
+  const rows = await prisma.setting?.findMany() ?? [];
   const settings = { ...DEFAULT_SETTINGS };
   for (const row of rows) {
     settings[row.key] = row.value;

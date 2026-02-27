@@ -65,7 +65,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     }),
     prisma.user.count({ where: { role: 'CLIENT', createdAt: { gte: thisMonthStart, lte: thisMonthEnd } } }),
     prisma.user.count({ where: { role: 'CLIENT' } }),
-    prisma.setting.findUnique({ where: { key: 'max_capacity' } }),
+    prisma.setting?.findUnique({ where: { key: 'max_capacity' } }),
     prisma.invoiceItem.aggregate({ where: { description: { contains: 'Pension' } }, _sum: { total: true } }),
     prisma.invoiceItem.aggregate({ where: { description: { contains: 'Taxi' } }, _sum: { total: true } }),
     prisma.invoiceItem.aggregate({ where: { description: { contains: 'Toilettage' } }, _sum: { total: true } }),
