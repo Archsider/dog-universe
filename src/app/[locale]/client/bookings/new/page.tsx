@@ -350,10 +350,10 @@ export default function NewBookingPage() {
         body.startDate = new Date(checkIn).toISOString();
         body.endDate = new Date(checkOut).toISOString();
         body.notes = boardingNotes;
-        const groomingDog = dogPets.find(d => groomingPets[d.id]);
-        body.includeGrooming = !!groomingDog;
-        body.groomingSize = groomingDog ? (petSizes[groomingDog.id] || 'SMALL') : null;
-        body.groomingPrice = groomingDog ? (petSizes[groomingDog.id] === 'LARGE' ? GROOMING_PRICES.LARGE : GROOMING_PRICES.SMALL) : 0;
+        const groomingDogs = dogPets.filter(d => groomingPets[d.id]);
+        body.includeGrooming = groomingDogs.length > 0;
+        body.groomingSize = groomingDogs.length === 1 ? (petSizes[groomingDogs[0].id] || 'SMALL') : (groomingDogs.length > 1 ? 'MIXED' : null);
+        body.groomingPrice = groomingDogs.reduce((sum, dog) => sum + (petSizes[dog.id] === 'LARGE' ? GROOMING_PRICES.LARGE : GROOMING_PRICES.SMALL), 0);
         body.pricePerNight = 0;
         // Taxi addon
         body.taxiGoEnabled = taxiGoEnabled;
