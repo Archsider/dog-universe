@@ -105,3 +105,34 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   return NextResponse.json(updated);
 }
+
+export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  const session = await auth();
+  if (!session?.user || session.user.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const booking = await prisma.booking.findUnique({ where: { id: params.id } });
+  if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  await prisma.$transaction(async (tx) => {
+    // BookingPets, BoardingDetail, TaxiDetail cascade from Booking
+    // Invoice items cascade from Invoice
+    const invoice = await tx.invoice.findUnique({ where: { bookingId: params.id } });
+    if (invoice) {
+      await tx.invoiceItem.deleteMany({ where: { invoiceId: invoice.id } });
+      await tx.invoice.delete({ where: { id: invoice.id } });
+    }
+    await tx.booking.delete({ where: { id: params.id } });
+  });
+
+  await logAction({
+    userId: session.user.id,
+    action: 'BOOKING_DELETED',
+    entityType: 'Booking',
+    entityId: params.id,
+    details: { status: booking.status, clientId: booking.clientId },
+  });
+
+  return NextResponse.json({ message: 'deleted' });
+}

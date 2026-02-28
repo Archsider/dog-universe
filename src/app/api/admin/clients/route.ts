@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import bcrypt from 'bcryptjs';
+import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -63,4 +65,52 @@ export async function GET(request: Request) {
   }));
 
   return NextResponse.json({ clients: clientsWithRevenue, total, page, limit });
+}
+
+export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user || session.user.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { name, email, phone, password, language } = await request.json();
+
+  if (!name || !email || !password) {
+    return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
+  }
+  if (password.length < 8) {
+    return NextResponse.json({ error: 'WEAK_PASSWORD' }, { status: 400 });
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  if (existing) {
+    return NextResponse.json({ error: 'EMAIL_TAKEN' }, { status: 409 });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const user = await prisma.user.create({
+    data: {
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      phone: phone?.trim() || null,
+      passwordHash,
+      role: 'CLIENT',
+      language: language ?? 'fr',
+    },
+  });
+
+  await prisma.loyaltyGrade.create({
+    data: { clientId: user.id, grade: 'BRONZE', isOverride: false },
+  });
+
+  await logAction({
+    userId: session.user.id,
+    action: LOG_ACTIONS.USER_REGISTER,
+    entityType: 'User',
+    entityId: user.id,
+    details: { email: user.email, createdByAdmin: true },
+  });
+
+  return NextResponse.json({ id: user.id, email: user.email, name: user.name }, { status: 201 });
 }
