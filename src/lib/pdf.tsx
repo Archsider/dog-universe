@@ -186,9 +186,7 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Image src={LOGO_PATH} style={{ width: 120, height: 45, objectFit: 'contain' }} />
-            <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: '#C9A84C', marginTop: 6 }}>DOG UNIVERSE</Text>
-            <Text style={[styles.companySubtitle, { marginTop: 2 }]}>SARLAU — Dr el Caid Souihla Saada, Marrakech</Text>
+            <Image src={LOGO_PATH} style={{ width: 160, height: 60, objectFit: 'contain' }} />
           </View>
           <View style={styles.companyDetails}>
             <Text style={{ fontFamily: 'Helvetica-Bold', color: '#C9A84C', fontSize: 10 }}>+212 669 183 981</Text>
