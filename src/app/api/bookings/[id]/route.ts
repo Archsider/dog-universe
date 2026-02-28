@@ -68,6 +68,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   if (body.status) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
+  if (body.cancellationReason !== undefined) updateData.cancellationReason = body.cancellationReason;
   if (body.totalPrice !== undefined) updateData.totalPrice = body.totalPrice;
   if (body.startDate) updateData.startDate = new Date(body.startDate);
   if (body.endDate) updateData.endDate = new Date(body.endDate);

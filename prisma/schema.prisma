@@ -82,8 +82,9 @@ model Booking {
   startDate   DateTime
   endDate     DateTime?
   arrivalTime String?
-  notes       String?
-  totalPrice  Float    @default(0)
+  notes              String?
+  cancellationReason String?
+  totalPrice         Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
