@@ -110,8 +110,12 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const monthVariation = lastMonthAmt > 0
     ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
     : 0;
-  const CAT_CAPACITY = 10;
-  const DOG_CAPACITY = 50;
+  const capacitySettings = await prisma.setting.findMany({
+    where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
+  });
+  const capMap = Object.fromEntries(capacitySettings.map(s => [s.key, parseInt(s.value, 10)]));
+  const DOG_CAPACITY = capMap.capacity_dog ?? 50;
+  const CAT_CAPACITY = capMap.capacity_cat ?? 10;
 
   const avgNights = completedBoardings.length > 0
     ? completedBoardings.reduce((sum, b) => {
