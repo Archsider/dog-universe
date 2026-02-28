@@ -185,13 +185,9 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Image src={LOGO_PATH} style={{ width: 160, height: 60, objectFit: 'contain' }} />
-          </View>
-          <View style={styles.companyDetails}>
-            <Text style={{ fontFamily: 'Helvetica-Bold', color: '#C9A84C', fontSize: 10 }}>+212 669 183 981</Text>
-            <Text style={{ marginTop: 4 }}>RC : 87023</Text>
-            <Text>ICE : 002035800000002</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Image src={LOGO_PATH} style={{ width: 60, height: 60, objectFit: 'contain' }} />
+            <Text style={{ fontSize: 26, fontFamily: 'Helvetica-Bold', color: '#C9A84C' }}>DOG UNIVERSE</Text>
           </View>
         </View>
 
