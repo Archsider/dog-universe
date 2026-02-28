@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Users, ChevronRight } from 'lucide-react';
 import { formatMAD, getInitials } from '@/lib/utils';
 import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
+import CreateClientModal from './CreateClientModal';
 
 interface PageProps {
   params: { locale: string };
@@ -54,7 +55,10 @@ export default async function AdminClientsPage({ params: { locale }, searchParam
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
-        <span className="text-sm text-gray-500">{total} {l.clients}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">{total} {l.clients}</span>
+          <CreateClientModal locale={locale} />
+        </div>
       </div>
 
       <div className="flex gap-3 mb-6 flex-wrap">

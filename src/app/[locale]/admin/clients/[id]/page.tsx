@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { formatMAD, formatDate, getInitials, getBookingStatusColor } from '@/lib/utils';
 import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
 import ClientDetailActions from './ClientDetailActions';
+import DeleteClientButton from './DeleteClientButton';
+import CreateAnimalModal from '../CreateAnimalModal';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -57,13 +59,14 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href={`/${locale}/admin/clients`} className="text-gray-400 hover:text-charcoal"><ArrowLeft className="h-5 w-5" /></Link>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-1">
           <div className="w-12 h-12 rounded-full bg-gold-100 flex items-center justify-center text-gold-700 font-serif font-semibold text-lg">{getInitials(client.name)}</div>
           <div>
             <h1 className="text-xl font-serif font-bold text-charcoal">{client.name}</h1>
             <p className="text-sm text-gray-500">{client.email}</p>
           </div>
         </div>
+        <DeleteClientButton clientId={id} clientName={client.name} locale={locale} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -90,7 +93,10 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
 
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
-            <div className="flex items-center gap-2 mb-3"><PawPrint className="h-4 w-4 text-gold-500" /><h3 className="font-semibold text-charcoal text-sm">{l.pets}</h3></div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2"><PawPrint className="h-4 w-4 text-gold-500" /><h3 className="font-semibold text-charcoal text-sm">{l.pets}</h3></div>
+              <CreateAnimalModal locale={locale} defaultOwnerId={id} />
+            </div>
             {client.pets.length === 0 ? <p className="text-sm text-gray-400">{l.noPets}</p> : (
               <div className="space-y-2">
                 {client.pets.map(pet => (

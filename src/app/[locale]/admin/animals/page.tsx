@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { PawPrint, ChevronRight } from 'lucide-react';
 import { calculateAge } from '@/lib/utils';
+import CreateAnimalModal from './CreateAnimalModal';
 
 interface PageProps {
   params: { locale: string };
@@ -40,7 +41,10 @@ export default async function AdminAnimalsPage({ params: { locale }, searchParam
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
-        <span className="text-sm text-gray-500">{pets.length}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">{pets.length}</span>
+          <CreateAnimalModal locale={locale} />
+        </div>
       </div>
 
       <div className="flex gap-3 mb-6 flex-wrap">

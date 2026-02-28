@@ -2,6 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import PricingForm from './PricingForm';
+import DangerZone from './DangerZone';
 
 interface PageProps { params: { locale: string } }
 
@@ -28,5 +29,10 @@ export default async function AdminSettingsPage({ params: { locale } }: PageProp
     settings[row.key] = row.value;
   }
 
-  return <PricingForm initialValues={settings} />;
+  return (
+    <div className="space-y-8">
+      <PricingForm initialValues={settings} />
+      <DangerZone locale={locale} />
+    </div>
+  );
 }

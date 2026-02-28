@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import ReservationActions from './ReservationActions';
+import DeleteBookingButton from './DeleteBookingButton';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -79,13 +80,14 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
         <Link href={`/${locale}/admin/reservations`} className="text-gray-400 hover:text-charcoal">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div>
+        <div className="flex-1">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-serif font-bold text-charcoal font-mono">{booking.id.slice(0, 8).toUpperCase()}</h1>
             <Badge className={`${getBookingStatusColor(booking.status)}`}>{statusLbls[booking.status]}</Badge>
           </div>
           <p className="text-sm text-gray-500">{formatDate(booking.createdAt, locale)}</p>
         </div>
+        <DeleteBookingButton bookingId={id} locale={locale} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

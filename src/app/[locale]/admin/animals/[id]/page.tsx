@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, PawPrint, Shield, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDate, formatDateShort, getBookingStatusColor } from '@/lib/utils';
+import DeleteAnimalButton from './DeleteAnimalButton';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -45,7 +46,7 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href={`/${locale}/admin/animals`} className="text-gray-400 hover:text-charcoal"><ArrowLeft className="h-5 w-5" /></Link>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-1">
           <div className="w-14 h-14 rounded-full bg-gold-100 flex items-center justify-center overflow-hidden">
             {pet.photoUrl ? <img src={pet.photoUrl} alt={pet.name} className="w-14 h-14 object-cover" /> : <PawPrint className="h-7 w-7 text-gold-400" />}
           </div>
@@ -54,6 +55,7 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
             <p className="text-sm text-gray-500">{pet.breed || (pet.species === 'DOG' ? l.dog : l.cat)}</p>
           </div>
         </div>
+        <DeleteAnimalButton petId={id} petName={pet.name} locale={locale} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
