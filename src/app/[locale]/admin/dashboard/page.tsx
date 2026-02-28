@@ -20,10 +20,18 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   const lastMonthEnd = endOfMonth(subMonths(now, 1));
   const startOfLast12Months = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
+  const boardingNow = {
+    serviceType: 'BOARDING' as const,
+    status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+    startDate: { lte: now },
+    endDate: { gte: now },
+  };
+
   const [
     totalClients,
     pendingBookings,
-    currentBoarders,
+    currentCatBoarders,
+    currentDogBoarders,
     monthlyRevenue,
     lastMonthRevenue,
     recentBookings,
@@ -32,17 +40,12 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     monthlyTaxiAgg,
     loyalClientsGroups,
     newClientsThisMonth,
+    top5Revenue,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'CLIENT' } }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
-    prisma.booking.count({
-      where: {
-        serviceType: 'BOARDING',
-        status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
-        startDate: { lte: now },
-        endDate: { gte: now },
-      },
-    }),
+    prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingNow } }),
+    prisma.bookingPet.count({ where: { pet: { species: 'DOG' }, booking: boardingNow } }),
     prisma.invoice.aggregate({
       where: { status: 'PAID', issuedAt: { gte: thisMonthStart, lte: thisMonthEnd } },
       _sum: { amount: true },
@@ -79,7 +82,25 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     prisma.user.count({
       where: { role: 'CLIENT', createdAt: { gte: thisMonthStart, lte: thisMonthEnd } },
     }),
+    prisma.invoice.groupBy({
+      by: ['clientId'],
+      where: { status: 'PAID' },
+      _sum: { amount: true },
+      orderBy: { _sum: { amount: 'desc' } },
+      take: 5,
+    }),
   ]);
+
+  const top5Users = await prisma.user.findMany({
+    where: { id: { in: top5Revenue.map(r => r.clientId) } },
+    select: { id: true, name: true, email: true },
+  });
+  const topClients = top5Revenue.map(r => ({
+    id: r.clientId,
+    name: top5Users.find(u => u.id === r.clientId)?.name ?? r.clientId,
+    email: top5Users.find(u => u.id === r.clientId)?.email ?? '',
+    totalRevenue: r._sum.amount ?? 0,
+  }));
 
   // CA variation vs previous month
   const thisMonthAmt = monthlyRevenue._sum.amount ?? 0;
@@ -120,7 +141,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     fr: {
       title: 'Tableau de bord',
       caMonthly: 'CA mensuel',
-      animauxHeberges: 'Animaux hébergés',
+      animauxHeberges: 'Pension actuelle',
       pending: 'En attente',
       totalClients: 'Total clients',
       pension: 'Pension',
@@ -132,11 +153,16 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       viewAll: 'Voir tout',
       revenueTitle: 'CA mensuel — 12 derniers mois',
       thisMth: 'ce mois',
+      top5: 'Top 5 clients',
+      cats: 'Chats',
+      dogs: 'Chiens',
+      places: 'places',
+      revenue: 'CA total',
     },
     en: {
       title: 'Dashboard',
       caMonthly: 'Monthly revenue',
-      animauxHeberges: 'Boarded animals',
+      animauxHeberges: 'Current boarders',
       pending: 'Pending',
       totalClients: 'Total clients',
       pension: 'Boarding',
@@ -148,6 +174,11 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       viewAll: 'View all',
       revenueTitle: 'Monthly revenue — last 12 months',
       thisMth: 'this month',
+      top5: 'Top 5 clients',
+      cats: 'Cats',
+      dogs: 'Dogs',
+      places: 'spots',
+      revenue: 'Total revenue',
     },
   };
 
@@ -212,8 +243,23 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <div className="w-10 h-10 rounded-lg bg-gold-50 flex items-center justify-center mb-3">
               <Calendar className="h-5 w-5 text-gold-500" />
             </div>
-            <div className="text-xl font-bold text-charcoal">{currentBoarders}</div>
-            <div className="text-xs text-gray-500 mt-0.5">{l.animauxHeberges}</div>
+            <div className="text-xs text-gray-500 mb-2">{l.animauxHeberges}</div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">🐱 {l.cats}</span>
+                <span className="text-sm font-bold text-charcoal">{currentCatBoarders}<span className="text-xs font-normal text-gray-400"> / 10</span></span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full">
+                <div className="h-1.5 bg-gold-400 rounded-full transition-all" style={{ width: `${Math.min(100, (currentCatBoarders / 10) * 100)}%` }} />
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs text-gray-500">🐕 {l.dogs}</span>
+                <span className="text-sm font-bold text-charcoal">{currentDogBoarders}<span className="text-xs font-normal text-gray-400"> / 50</span></span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full">
+                <div className="h-1.5 bg-charcoal rounded-full transition-all" style={{ width: `${Math.min(100, (currentDogBoarders / 50) * 100)}%` }} />
+              </div>
+            </div>
           </div>
         </Link>
 
@@ -299,6 +345,33 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
           </div>
         </div>
       </div>
+
+      {/* Top 5 clients */}
+      {topClients.length > 0 && (
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card mt-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-charcoal">{l.top5}</h2>
+            <Link href={`/${locale}/admin/clients`} className="text-xs text-gold-600 hover:underline">{l.viewAll}</Link>
+          </div>
+          <div className="space-y-3">
+            {topClients.map((client, i) => (
+              <Link key={client.id} href={`/${locale}/admin/clients/${client.id}`}>
+                <div className="flex items-center gap-3 py-2 hover:bg-ivory-50 -mx-2 px-2 rounded transition-colors">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                    style={{ background: ['#C9A84C','#9CA3AF','#CD7F32','#E5E7EB','#E5E7EB'][i], color: i < 3 ? '#fff' : '#374151' }}>
+                    {i + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-charcoal truncate">{client.name}</p>
+                    <p className="text-xs text-gray-400 truncate">{client.email}</p>
+                  </div>
+                  <span className="text-sm font-semibold text-gold-700 flex-shrink-0">{formatMAD(client.totalRevenue)}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Row 3 — Client insights */}
       <div className="grid grid-cols-2 gap-4 mt-6">

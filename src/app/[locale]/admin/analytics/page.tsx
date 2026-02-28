@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { formatMAD } from '@/lib/utils';
 import AnalyticsCharts from './AnalyticsCharts';
-import OccupancyGauge from '@/components/admin/OccupancyGauge';
 
 interface PageProps { params: { locale: string } }
 
@@ -23,15 +22,21 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const start2026 = new Date('2026-01-01T00:00:00.000Z');
   const end2026 = new Date('2026-12-31T23:59:59.999Z');
 
+  const boardingNow = {
+    serviceType: 'BOARDING' as const,
+    status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+    startDate: { lte: now }, endDate: { gte: now },
+  };
+
   const [
     invoices2026,
     thisMonthRevenue,
     lastMonthRevenue,
     pendingCount,
-    currentBoarders,
+    currentCatBoarders,
+    currentDogBoarders,
     newClientsThisMonth,
     totalClients,
-    capacitySetting,
     boardingTotal,
     taxiTotal,
     groomingTotal,
@@ -56,16 +61,10 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       _sum: { amount: true },
     }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
-    prisma.booking.count({
-      where: {
-        serviceType: 'BOARDING',
-        status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
-        startDate: { lte: now }, endDate: { gte: now },
-      },
-    }),
+    prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingNow } }),
+    prisma.bookingPet.count({ where: { pet: { species: 'DOG' }, booking: boardingNow } }),
     prisma.user.count({ where: { role: 'CLIENT', createdAt: { gte: thisMonthStart, lte: thisMonthEnd } } }),
     prisma.user.count({ where: { role: 'CLIENT' } }),
-    prisma.setting?.findUnique({ where: { key: 'max_capacity' } }),
     prisma.invoiceItem.aggregate({ where: { description: { contains: 'Pension' } }, _sum: { total: true } }),
     prisma.invoiceItem.aggregate({ where: { description: { contains: 'Taxi' } }, _sum: { total: true } }),
     prisma.invoiceItem.aggregate({ where: { description: { contains: 'Toilettage' } }, _sum: { total: true } }),
@@ -111,7 +110,8 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const monthVariation = lastMonthAmt > 0
     ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
     : 0;
-  const maxCapacity = parseInt(capacitySetting?.value ?? '10');
+  const CAT_CAPACITY = 10;
+  const DOG_CAPACITY = 50;
 
   const avgNights = completedBoardings.length > 0
     ? completedBoardings.reduce((sum, b) => {
@@ -184,9 +184,28 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         </div>
 
         {/* Taux d'occupation */}
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
-          <p className="text-xs text-gray-500 mb-1">{l.occupancyRate}</p>
-          <OccupancyGauge current={currentBoarders} capacity={maxCapacity} locale={locale} />
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
+          <p className="text-xs text-gray-500 mb-4">{l.occupancyRate}</p>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-sm font-medium text-charcoal">🐱 {locale === 'fr' ? 'Chats' : 'Cats'}</span>
+                <span className="text-sm font-bold text-charcoal">{currentCatBoarders}<span className="text-xs font-normal text-gray-400"> / {CAT_CAPACITY}</span></span>
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full">
+                <div className="h-2 bg-gold-400 rounded-full transition-all" style={{ width: `${Math.min(100, (currentCatBoarders / CAT_CAPACITY) * 100)}%` }} />
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-sm font-medium text-charcoal">🐕 {locale === 'fr' ? 'Chiens' : 'Dogs'}</span>
+                <span className="text-sm font-bold text-charcoal">{currentDogBoarders}<span className="text-xs font-normal text-gray-400"> / {DOG_CAPACITY}</span></span>
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full">
+                <div className="h-2 bg-charcoal rounded-full transition-all" style={{ width: `${Math.min(100, (currentDogBoarders / DOG_CAPACITY) * 100)}%` }} />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Pending */}

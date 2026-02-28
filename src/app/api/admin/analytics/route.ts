@@ -62,14 +62,21 @@ export async function GET(request: Request) {
   const lastMonthStart = startOfMonth(subMonths(now, 1));
   const lastMonthEnd = endOfMonth(subMonths(now, 1));
 
+  const boardingNow = {
+    serviceType: 'BOARDING' as const,
+    status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+    startDate: { lte: now },
+    endDate: { gte: now },
+  };
+
   const [
     thisMonthRevenue,
     lastMonthRevenue,
     pendingCount,
-    currentBoarders,
+    currentCatBoarders,
+    currentDogBoarders,
     newClientsThisMonth,
     totalClients,
-    capacitySetting,
   ] = await Promise.all([
     prisma.invoice.aggregate({
       where: { status: 'PAID', paidAt: { gte: thisMonthStart, lte: thisMonthEnd } },
@@ -80,26 +87,20 @@ export async function GET(request: Request) {
       _sum: { amount: true },
     }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
-    prisma.booking.count({
-      where: {
-        serviceType: 'BOARDING',
-        status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
-        startDate: { lte: now },
-        endDate: { gte: now },
-      },
-    }),
+    prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingNow } }),
+    prisma.bookingPet.count({ where: { pet: { species: 'DOG' }, booking: boardingNow } }),
     prisma.user.count({
       where: { role: 'CLIENT', createdAt: { gte: thisMonthStart, lte: thisMonthEnd } },
     }),
     prisma.user.count({ where: { role: 'CLIENT' } }),
-    prisma.setting?.findUnique({ where: { key: 'max_capacity' } }),
   ]);
 
   const thisMonthAmt = thisMonthRevenue._sum.amount ?? 0;
   const lastMonthAmt = lastMonthRevenue._sum.amount ?? 0;
   const monthVariation =
     lastMonthAmt > 0 ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10 : 0;
-  const maxCapacity = parseInt(capacitySetting?.value ?? '10');
+  const currentBoarders = currentCatBoarders + currentDogBoarders;
+  const maxCapacity = 60; // cats: 10, dogs: 50
 
   // ── Revenue breakdown all-time (via InvoiceItem) ──────────────────────────
   const [boardingTotal, taxiTotal, groomingTotal] = await Promise.all([
@@ -169,6 +170,10 @@ export async function GET(request: Request) {
     lastMonthRevenue: lastMonthAmt,
     monthVariation,
     currentBoarders,
+    currentCatBoarders,
+    currentDogBoarders,
+    catCapacity: 10,
+    dogCapacity: 50,
     maxCapacity,
     pendingReservations: pendingCount,
     newClientsThisMonth,
