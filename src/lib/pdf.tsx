@@ -3,7 +3,7 @@ import path from 'path';
 import { renderToBuffer, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 import { formatDateShort, formatMAD } from '@/lib/utils';
 
-const LOGO_PATH = path.resolve(process.cwd(), 'public', 'logo.png');
+const LOGO_PATH = path.resolve(process.cwd(), 'public', 'logo_rgba.png');
 
 const styles = StyleSheet.create({
   page: {
@@ -15,7 +15,8 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 32,
     paddingBottom: 20,
     borderBottomWidth: 2,
