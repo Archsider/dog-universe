@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { FileText, Download, Calendar, CheckCircle2, Clock, Package, Car } from 'lucide-react';
+import { FileText, Download, Calendar, CheckCircle2, Clock, Package, Car, Banknote, CreditCard, Receipt, Building2 } from 'lucide-react';
 import { formatDate, formatMAD } from '@/lib/utils';
 
 interface PageProps { params: { locale: string } }
@@ -41,6 +41,8 @@ export default async function InvoicesPage({ params: { locale } }: PageProps) {
       statusPaid: 'Payée',
       statusPending: 'En attente',
       statusCancelled: 'Annulée',
+      paymentMethods: { CASH: 'Espèces', CARD: 'Carte bancaire', CHECK: 'Chèque', TRANSFER: 'Virement bancaire' },
+      paymentBy: 'Réglé par',
     },
     en: {
       title: 'My invoices',
@@ -55,6 +57,8 @@ export default async function InvoicesPage({ params: { locale } }: PageProps) {
       statusPaid: 'Paid',
       statusPending: 'Pending',
       statusCancelled: 'Cancelled',
+      paymentMethods: { CASH: 'Cash', CARD: 'Credit card', CHECK: 'Check', TRANSFER: 'Bank transfer' },
+      paymentBy: 'Paid by',
     },
   };
   const t = l[locale as keyof typeof l] || l.fr;
@@ -115,6 +119,11 @@ export default async function InvoicesPage({ params: { locale } }: PageProps) {
                         {t.issued} {formatDate(invoice.issuedAt, locale)}
                         {isPaid && invoice.paidAt && (
                           <span className="ml-2 text-green-600">· {t.paid} {formatDate(invoice.paidAt, locale)}</span>
+                        )}
+                        {isPaid && invoice.paymentMethod && (
+                          <span className="ml-2 font-medium text-green-700">
+                            · {t.paymentBy} : {t.paymentMethods[invoice.paymentMethod as keyof typeof t.paymentMethods] ?? invoice.paymentMethod}
+                          </span>
                         )}
                       </div>
                     </div>

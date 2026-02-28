@@ -149,6 +149,7 @@ interface InvoiceData {
   status: string;
   issuedAt: Date;
   paidAt?: Date | null;
+  paymentMethod?: string | null;
   notes?: string | null;
   client: {
     name: string;
@@ -168,6 +169,13 @@ interface InvoiceData {
     bookingPets?: { pet: { name: string } }[];
   } | null;
 }
+
+const PAYMENT_LABELS: Record<string, string> = {
+  CASH: 'Espèces',
+  CARD: 'Carte bancaire',
+  CHECK: 'Chèque',
+  TRANSFER: 'Virement bancaire',
+};
 
 function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
   const isPaid = invoice.status === 'PAID';
@@ -200,6 +208,11 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
             {invoice.paidAt && (
               <Text style={styles.invoiceMeta}>
                 Payée le : {formatDateShort(invoice.paidAt, 'fr')}
+              </Text>
+            )}
+            {invoice.paymentMethod && (
+              <Text style={styles.invoiceMeta}>
+                Mode de paiement : {PAYMENT_LABELS[invoice.paymentMethod] ?? invoice.paymentMethod}
               </Text>
             )}
           </View>

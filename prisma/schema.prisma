@@ -149,6 +149,7 @@ model Invoice {
   status        String   @default("PENDING") // "PAID" | "PENDING"
   pdfUrl        String?
   notes         String?
+  paymentMethod String?  // "CASH" | "CARD" | "CHECK" | "TRANSFER"
   issuedAt      DateTime @default(now())
   paidAt        DateTime?
   createdAt     DateTime @default(now())

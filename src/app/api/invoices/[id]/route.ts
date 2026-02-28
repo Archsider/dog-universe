@@ -50,6 +50,7 @@ export async function PATCH(request: Request, { params }: Params) {
   if (body.status) updateData.status = body.status;
   if (body.status === 'PAID') {
     updateData.paidAt = new Date();
+    if (body.paymentMethod) updateData.paymentMethod = body.paymentMethod;
   }
   if (body.notes !== undefined) updateData.notes = body.notes;
 
