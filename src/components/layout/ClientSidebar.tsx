@@ -13,7 +13,6 @@ import {
   Bell,
   User,
   LogOut,
-  History,
   Menu,
   X,
 } from 'lucide-react';
@@ -40,8 +39,7 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
   const navItems: NavItem[] = [
     { href: `/${locale}/client/dashboard`, label: t('dashboard'), icon: LayoutDashboard },
     { href: `/${locale}/client/pets`, label: t('pets'), icon: PawPrint },
-    { href: `/${locale}/client/bookings/new`, label: t('bookings'), icon: Calendar },
-    { href: `/${locale}/client/history`, label: t('history'), icon: History },
+    { href: `/${locale}/client/history`, label: t('bookings'), icon: Calendar },
     { href: `/${locale}/client/invoices`, label: t('invoices'), icon: FileText },
     { href: `/${locale}/client/notifications`, label: t('notifications'), icon: Bell },
     { href: `/${locale}/client/profile`, label: t('profile'), icon: User },
@@ -66,7 +64,7 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href) ||
-            (item.href.includes('/bookings/new') && pathname.includes('/bookings'));
+            (item.href.includes('/history') && pathname.includes('/bookings'));
           const Icon = item.icon;
           const isNotifications = item.href.includes('/notifications');
 
