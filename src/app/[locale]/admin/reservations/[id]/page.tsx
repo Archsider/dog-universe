@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import ReservationActions from './ReservationActions';
 import DeleteBookingButton from './DeleteBookingButton';
+import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -127,7 +128,27 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
                 </a>
               </div>
             ) : (
-              <p className="text-sm text-gray-400">{l.noInvoice}</p>
+              <div className="space-y-3">
+                <p className="text-sm text-gray-400">{l.noInvoice}</p>
+                <CreateInvoiceFromBookingButton
+                  bookingId={booking.id}
+                  clientId={booking.client.id}
+                  serviceType={booking.serviceType}
+                  nights={nights}
+                  petNames={booking.bookingPets.map(bp => bp.pet.name).join(', ')}
+                  boardingDetail={booking.boardingDetail ? {
+                    pricePerNight: booking.boardingDetail.pricePerNight,
+                    includeGrooming: booking.boardingDetail.includeGrooming,
+                    groomingPrice: booking.boardingDetail.groomingPrice,
+                    taxiAddonPrice: booking.boardingDetail.taxiAddonPrice,
+                  } : null}
+                  taxiDetail={booking.taxiDetail ? {
+                    taxiType: booking.taxiDetail.taxiType,
+                    price: booking.taxiDetail.price,
+                  } : null}
+                  locale={locale}
+                />
+              </div>
             )}
           </div>
         </div>
