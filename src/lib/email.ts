@@ -63,7 +63,7 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -164,6 +164,24 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         <p>Your invoice <strong>${data.invoiceNumber}</strong> for <strong>${data.amount}</strong> is now available in your client portal.</p>
         <p>Log in to view and download it as PDF.</p>
         <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    booking_reminder: {
+      subjectFr: `🐾 Rappel : votre séjour commence dans 2 jours — Dog Universe`,
+      subjectEn: `🐾 Reminder: your stay starts in 2 days — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+        <p>Petit rappel : votre réservation <strong>${data.bookingRef}</strong> pour <strong>${data.petName}</strong> commence <strong>dans 2 jours</strong>, le <strong>${data.startDate}</strong>.</p>
+        <p style="color: #6B7280; font-size: 14px;">Service : ${data.service}</p>
+        <p>Si vous avez des questions ou souhaitez modifier votre réservation, n'hésitez pas à nous contacter.</p>
+        <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+        <p>Just a reminder: your booking <strong>${data.bookingRef}</strong> for <strong>${data.petName}</strong> starts <strong>in 2 days</strong>, on <strong>${data.startDate}</strong>.</p>
+        <p style="color: #6B7280; font-size: 14px;">Service: ${data.service}</p>
+        <p>If you have any questions or would like to modify your booking, please feel free to contact us.</p>
+        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
     reset_password: {

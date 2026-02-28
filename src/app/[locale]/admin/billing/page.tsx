@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { FileText, Download } from 'lucide-react';
+import { FileText, Download, FileDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getInvoiceStatusColor } from '@/lib/utils';
 import CreateInvoiceButton from './CreateInvoiceButton';
@@ -85,11 +85,19 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <div className="text-right">
             <div className="text-xs text-gray-400">{l.totalRevenue}</div>
             <div className="font-bold text-gold-600">{formatMAD(totalRevenue._sum.amount || 0)}</div>
           </div>
+          <a
+            href={`/api/admin/invoices/export?status=${status}&year=${new Date().getFullYear()}`}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white border border-ivory-200 hover:border-gold-300 text-gray-600 hover:text-gold-700 rounded-lg font-medium transition-colors"
+            title={locale === 'fr' ? 'Exporter en CSV' : 'Export CSV'}
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            {locale === 'fr' ? 'Export CSV' : 'Export CSV'}
+          </a>
         </div>
       </div>
 

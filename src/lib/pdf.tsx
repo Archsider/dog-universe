@@ -15,7 +15,7 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 32,
     paddingBottom: 20,
@@ -187,8 +187,17 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
         {/* Header */}
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Image src={LOGO_PATH} style={{ width: 60, height: 60, objectFit: 'contain' }} />
-            <Text style={{ fontSize: 26, fontFamily: 'Helvetica-Bold', color: '#C9A84C' }}>DOG UNIVERSE</Text>
+            <Image src={LOGO_PATH} style={{ width: 52, height: 52, objectFit: 'contain' }} />
+            <View>
+              <Text style={{ fontSize: 22, fontFamily: 'Helvetica-Bold', color: '#C9A84C' }}>DOG UNIVERSE</Text>
+              <Text style={{ fontSize: 8, color: '#9CA3AF', marginTop: 2 }}>Pension & Services pour animaux</Text>
+            </View>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>Marrakech, Maroc</Text>
+            <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>+212 669 183 981</Text>
+            <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>contact@doguniverse.ma</Text>
+            <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>RC : 87023 — ICE : 002035800000002</Text>
           </View>
         </View>
 
@@ -274,9 +283,16 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
               </View>
             ))}
 
+            {/* TVA mention */}
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 6, paddingHorizontal: 8 }}>
+              <Text style={{ fontSize: 8, color: '#9CA3AF', fontStyle: 'italic' }}>
+                TVA non applicable — Art. 91-I-3° du CGI marocain
+              </Text>
+            </View>
+
             {/* Total */}
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>TOTAL</Text>
+              <Text style={styles.totalLabel}>TOTAL TTC</Text>
               <Text style={styles.totalAmount}>{formatMAD(invoice.amount)}</Text>
             </View>
           </View>
@@ -292,8 +308,8 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
 
         {/* Footer */}
         <Text style={styles.footer}>
-          DOG UNIVERSE SARLAU — Marrakech — RC : 87023 — ICE : 002035800000002
-          {'\n'}+212 669 183 981 — Merci pour votre confiance.
+          DOG UNIVERSE SARLAU — Marrakech, Maroc — RC : 87023 — ICE : 002035800000002
+          {'\n'}contact@doguniverse.ma — +212 669 183 981 — Merci pour votre confiance.
         </Text>
       </Page>
     </Document>

@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus } from 'lucide-react';
+import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import RevenueChartWrapper from './RevenueChartWrapper';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -41,6 +41,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     loyalClientsGroups,
     newClientsThisMonth,
     top5Revenue,
+    pendingInvoicesAgg,
+    bookingsWithoutInvoice,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'CLIENT' } }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
@@ -88,6 +90,17 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       _sum: { amount: true },
       orderBy: { _sum: { amount: 'desc' } },
       take: 5,
+    }),
+    prisma.invoice.aggregate({
+      where: { status: 'PENDING' },
+      _sum: { amount: true },
+      _count: { id: true },
+    }),
+    prisma.booking.count({
+      where: {
+        status: { in: ['CONFIRMED', 'COMPLETED', 'IN_PROGRESS'] },
+        invoice: null,
+      },
     }),
   ]);
 
@@ -143,6 +156,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   const monthlyBoardingRevenue = monthlyBoardingInvoices.reduce((sum, inv) => sum + inv.amount, 0) - monthlyGroomingRevenue;
   const monthlyTaxiRevenue = monthlyTaxiAgg._sum.amount ?? 0;
   const loyalClients = loyalClientsGroups.length;
+  const pendingInvoicesAmount = pendingInvoicesAgg._sum.amount ?? 0;
+  const pendingInvoicesCount = pendingInvoicesAgg._count.id ?? 0;
 
   const labels = {
     fr: {
@@ -165,6 +180,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       dogs: 'Chiens',
       places: 'places',
       revenue: 'CA total',
+      pendingInvoices: 'Factures en attente',
+      noInvoice: 'Réserv. sans facture',
     },
     en: {
       title: 'Dashboard',
@@ -186,6 +203,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       dogs: 'Dogs',
       places: 'spots',
       revenue: 'Total revenue',
+      pendingInvoices: 'Pending invoices',
+      noInvoice: 'Bookings w/o invoice',
     },
   };
 
@@ -320,6 +339,38 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
           <div className="text-xs text-purple-600 mt-1">{l.thisMth}</div>
         </div>
       </div>
+
+      {/* Row 2b — Finance alerts */}
+      {(pendingInvoicesCount > 0 || bookingsWithoutInvoice > 0) && (
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          {pendingInvoicesCount > 0 && (
+            <Link href={`/${locale}/admin/billing?status=PENDING`}>
+              <div className="bg-white rounded-xl border border-orange-200/60 p-4 shadow-card hover:shadow-card-hover transition-shadow flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
+                  <Receipt className="h-5 w-5 text-orange-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-lg font-bold text-charcoal">{formatMAD(pendingInvoicesAmount)}</div>
+                  <div className="text-xs text-gray-500">{l.pendingInvoices} <span className="font-medium text-orange-600">({pendingInvoicesCount})</span></div>
+                </div>
+              </div>
+            </Link>
+          )}
+          {bookingsWithoutInvoice > 0 && (
+            <Link href={`/${locale}/admin/billing`}>
+              <div className="bg-white rounded-xl border border-red-200/60 p-4 shadow-card hover:shadow-card-hover transition-shadow flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+                  <FileWarning className="h-5 w-5 text-red-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-lg font-bold text-charcoal">{bookingsWithoutInvoice}</div>
+                  <div className="text-xs text-gray-500">{l.noInvoice}</div>
+                </div>
+              </div>
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Chart + Recent bookings */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
