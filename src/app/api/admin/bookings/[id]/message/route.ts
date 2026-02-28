@@ -29,7 +29,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   await createAdminMessageNotification(
     booking.client.id,
     messageFr,
-    messageEn || messageFr
+    messageEn || messageFr,
+    booking.id
   );
 
   const locale = booking.client.language ?? 'fr';

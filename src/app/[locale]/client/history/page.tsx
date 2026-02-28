@@ -173,7 +173,8 @@ export default async function HistoryPage({ params: { locale }, searchParams }: 
             const isDimmed = booking.status === 'CANCELLED' || booking.status === 'REJECTED';
 
             return (
-              <div key={booking.id} className={`bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card ${isDimmed ? 'opacity-60' : ''}`}>
+              <div key={booking.id} className={`bg-white rounded-xl border border-[#F0D98A]/40 shadow-card ${isDimmed ? 'opacity-60' : ''}`}>
+                <Link href={`/${locale}/client/bookings/${booking.id}`} className="block p-5 hover:bg-ivory-50/50 rounded-t-xl transition-colors">
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div className="flex items-center gap-3">
                     <div className={`p-2.5 rounded-xl flex-shrink-0 ${isBoarding ? 'bg-gold-50' : 'bg-blue-50'}`}>
@@ -213,7 +214,7 @@ export default async function HistoryPage({ params: { locale }, searchParams }: 
                 )}
 
                 {booking.stayPhotos && booking.stayPhotos.length > 0 && (
-                  <div className="mb-3">
+                  <div className="mb-1">
                     <div className="flex items-center gap-1.5 text-xs text-gold-600 font-medium mb-2">
                       <Camera className="h-3.5 w-3.5" />
                       {booking.stayPhotos.length} {t.photos}
@@ -227,8 +228,9 @@ export default async function HistoryPage({ params: { locale }, searchParams }: 
                     </div>
                   </div>
                 )}
+                </Link>
 
-                <div className="flex items-center justify-between gap-3 pt-3 border-t border-ivory-100">
+                <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-ivory-100">
                   <div className="flex items-center gap-2 min-w-0">
                     {booking.invoice ? (
                       <Link href={`/${locale}/client/invoices`} className="flex items-center gap-1.5 text-sm text-gold-600 hover:text-gold-700 font-medium">

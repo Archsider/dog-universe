@@ -17,6 +17,7 @@ interface CreateNotificationData {
   titleEn: string;
   messageFr: string;
   messageEn: string;
+  metadata?: Record<string, string>;
 }
 
 export async function createNotification(data: CreateNotificationData) {
@@ -28,6 +29,7 @@ export async function createNotification(data: CreateNotificationData) {
       titleEn: data.titleEn,
       messageFr: data.messageFr,
       messageEn: data.messageEn,
+      metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
       read: false,
     },
   });
@@ -117,7 +119,8 @@ export async function createLoyaltyUpdateNotification(
 export async function createStayPhotoNotification(
   userId: string,
   petName: string,
-  bookingRef: string
+  bookingRef: string,
+  bookingId: string
 ) {
   return createNotification({
     userId,
@@ -126,13 +129,15 @@ export async function createStayPhotoNotification(
     titleEn: '📸 New stay photos',
     messageFr: `De nouvelles photos de ${petName} ont été publiées pour votre réservation (réf. ${bookingRef}).`,
     messageEn: `New photos of ${petName} have been posted for your booking (ref. ${bookingRef}).`,
+    metadata: { bookingId },
   });
 }
 
 export async function createAdminMessageNotification(
   userId: string,
   messageFr: string,
-  messageEn: string
+  messageEn: string,
+  bookingId?: string
 ) {
   return createNotification({
     userId,
@@ -141,6 +146,7 @@ export async function createAdminMessageNotification(
     titleEn: 'Message from Dog Universe',
     messageFr,
     messageEn,
+    metadata: bookingId ? { bookingId } : undefined,
   });
 }
 

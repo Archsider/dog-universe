@@ -57,7 +57,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const petName = booking.bookingPets[0]?.pet.name ?? 'votre animal';
   const bookingRef = booking.id.slice(0, 8).toUpperCase();
 
-  await createStayPhotoNotification(booking.client.id, petName, bookingRef);
+  await createStayPhotoNotification(booking.client.id, petName, bookingRef, booking.id);
 
   const locale = booking.client.language ?? 'fr';
   const { subject, html } = getEmailTemplate(

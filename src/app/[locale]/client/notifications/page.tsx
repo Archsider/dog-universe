@@ -2,9 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useLocale } from 'next-intl';
-import { CheckCheck, Loader2, BellOff } from 'lucide-react';
+import {
+  CheckCheck, Loader2, BellOff, Camera, MessageSquare,
+  CheckCircle2, XCircle, Bell, Star, Receipt, CalendarClock,
+  ArrowRight,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
+import Link from 'next/link';
 
 interface Notification {
   id: string;
@@ -13,8 +18,25 @@ interface Notification {
   messageFr: string;
   messageEn: string;
   type: string;
+  metadata: string | null;
   read: boolean;
   createdAt: string;
+}
+
+const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
+  BOOKING_CONFIRMATION: { icon: CalendarClock,  color: 'text-amber-600',  bg: 'bg-amber-50' },
+  BOOKING_VALIDATION:   { icon: CheckCircle2,   color: 'text-green-600',  bg: 'bg-green-50' },
+  BOOKING_REFUSAL:      { icon: XCircle,        color: 'text-red-500',    bg: 'bg-red-50' },
+  STAY_REMINDER:        { icon: Bell,           color: 'text-blue-500',   bg: 'bg-blue-50' },
+  INVOICE_AVAILABLE:    { icon: Receipt,        color: 'text-purple-500', bg: 'bg-purple-50' },
+  ADMIN_MESSAGE:        { icon: MessageSquare,  color: 'text-gold-600',   bg: 'bg-gold-50' },
+  STAY_PHOTO:           { icon: Camera,         color: 'text-gold-600',   bg: 'bg-gold-50' },
+  LOYALTY_UPDATE:       { icon: Star,           color: 'text-gold-500',   bg: 'bg-gold-50' },
+};
+
+function parseMetadata(raw: string | null): Record<string, string> {
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch { return {}; }
 }
 
 export default function NotificationsPage() {
@@ -24,13 +46,30 @@ export default function NotificationsPage() {
   const [markingAll, setMarkingAll] = useState(false);
 
   const labels = {
-    fr: { title: 'Notifications', empty: 'Aucune notification', markAllRead: 'Tout marquer comme lu', markRead: 'Lu' },
-    en: { title: 'Notifications', empty: 'No notifications', markAllRead: 'Mark all as read', markRead: 'Read' },
+    fr: {
+      title: 'Notifications',
+      empty: 'Aucune notification',
+      markAllRead: 'Tout marquer comme lu',
+      markRead: 'Lu',
+      viewBooking: 'Voir la réservation',
+      viewPhotos: 'Voir les photos',
+    },
+    en: {
+      title: 'Notifications',
+      empty: 'No notifications',
+      markAllRead: 'Mark all as read',
+      markRead: 'Read',
+      viewBooking: 'View booking',
+      viewPhotos: 'View photos',
+    },
   };
   const l = labels[locale as keyof typeof labels] || labels.fr;
 
   useEffect(() => {
-    fetch('/api/notifications').then(r => r.json()).then(data => { setNotifications(data); setLoading(false); }).catch(() => setLoading(false));
+    fetch('/api/notifications')
+      .then(r => r.json())
+      .then(data => { setNotifications(data); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
   const markRead = async (id: string) => {
@@ -58,7 +97,9 @@ export default function NotificationsPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
-          {unreadCount > 0 && <span className="bg-gold-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{unreadCount}</span>}
+          {unreadCount > 0 && (
+            <span className="bg-gold-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{unreadCount}</span>
+          )}
         </div>
         {unreadCount > 0 && (
           <Button variant="outline" size="sm" onClick={markAllRead} disabled={markingAll}>
@@ -75,25 +116,56 @@ export default function NotificationsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {notifications.map((n) => (
-            <div key={n.id} className={`bg-white rounded-xl border p-4 transition-all ${n.read ? 'border-ivory-200' : 'border-gold-300 bg-gold-50/30'}`}>
-              <div className="flex items-start gap-3">
-                <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${n.read ? 'bg-gray-200' : 'bg-gold-500'}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className={`font-medium text-sm ${n.read ? 'text-charcoal' : 'font-semibold text-charcoal'}`}>{getTitle(n)}</p>
-                      <p className="text-sm text-gray-500 mt-0.5">{getMessage(n)}</p>
-                      <p className="text-xs text-gray-400 mt-1">{formatRelativeTime(new Date(n.createdAt), locale)}</p>
+          {notifications.map((n) => {
+            const cfg = TYPE_CONFIG[n.type] ?? { icon: Bell, color: 'text-gray-500', bg: 'bg-gray-50' };
+            const Icon = cfg.icon;
+            const meta = parseMetadata(n.metadata);
+            const bookingId = meta.bookingId;
+            const showBookingLink = !!bookingId && (n.type === 'STAY_PHOTO' || n.type === 'ADMIN_MESSAGE');
+
+            return (
+              <div
+                key={n.id}
+                className={`bg-white rounded-xl border p-4 transition-all ${n.read ? 'border-ivory-200' : 'border-gold-300 bg-gold-50/20'}`}
+                onClick={() => { if (!n.read) markRead(n.id); }}
+              >
+                <div className="flex items-start gap-3">
+                  {/* Icon */}
+                  <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${cfg.bg}`}>
+                    <Icon className={`h-4 w-4 ${cfg.color}`} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`text-sm ${n.read ? 'font-medium text-charcoal' : 'font-semibold text-charcoal'}`}>
+                        {getTitle(n)}
+                      </p>
+                      {!n.read && (
+                        <span className="flex-shrink-0 w-2 h-2 rounded-full bg-gold-500 mt-1.5" />
+                      )}
                     </div>
-                    {!n.read && (
-                      <button onClick={() => markRead(n.id)} className="text-xs text-gold-600 hover:underline flex-shrink-0 mt-0.5">{l.markRead}</button>
-                    )}
+
+                    <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">{getMessage(n)}</p>
+
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-gray-400">{formatRelativeTime(new Date(n.createdAt), locale)}</p>
+
+                      {showBookingLink && (
+                        <Link
+                          href={`/${locale}/client/bookings/${bookingId}`}
+                          onClick={e => e.stopPropagation()}
+                          className={`flex items-center gap-1 text-xs font-medium ${cfg.color} hover:underline`}
+                        >
+                          {n.type === 'STAY_PHOTO' ? l.viewPhotos : l.viewBooking}
+                          <ArrowRight className="h-3 w-3" />
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

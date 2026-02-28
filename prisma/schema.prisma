@@ -181,11 +181,12 @@ model InvoiceItem {
 model Notification {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // "BOOKING_CONFIRMATION" | "BOOKING_VALIDATION" | "BOOKING_REFUSAL" | "STAY_REMINDER" | "INVOICE_AVAILABLE" | "ADMIN_MESSAGE" | "LOYALTY_UPDATE"
+  type      String   // "BOOKING_CONFIRMATION" | "BOOKING_VALIDATION" | "BOOKING_REFUSAL" | "STAY_REMINDER" | "INVOICE_AVAILABLE" | "ADMIN_MESSAGE" | "STAY_PHOTO" | "LOYALTY_UPDATE"
   titleFr   String
   titleEn   String
   messageFr String
   messageEn String
+  metadata  String?  // JSON string e.g. {"bookingId":"..."}
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
