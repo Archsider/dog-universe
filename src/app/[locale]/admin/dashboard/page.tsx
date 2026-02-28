@@ -91,6 +91,13 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     }),
   ]);
 
+  const capacitySettings = await prisma.setting.findMany({
+    where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
+  });
+  const capMap = Object.fromEntries(capacitySettings.map(s => [s.key, parseInt(s.value, 10)]));
+  const capacityDog = capMap.capacity_dog ?? 50;
+  const capacityCat = capMap.capacity_cat ?? 10;
+
   const top5Users = await prisma.user.findMany({
     where: { id: { in: top5Revenue.map(r => r.clientId) } },
     select: { id: true, name: true, email: true },
@@ -247,17 +254,17 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-500">🐱 {l.cats}</span>
-                <span className="text-sm font-bold text-charcoal">{currentCatBoarders}<span className="text-xs font-normal text-gray-400"> / 10</span></span>
+                <span className="text-sm font-bold text-charcoal">{currentCatBoarders}<span className="text-xs font-normal text-gray-400"> / {capacityCat}</span></span>
               </div>
               <div className="h-1.5 bg-gray-100 rounded-full">
-                <div className="h-1.5 bg-gold-400 rounded-full transition-all" style={{ width: `${Math.min(100, (currentCatBoarders / 10) * 100)}%` }} />
+                <div className="h-1.5 bg-gold-400 rounded-full transition-all" style={{ width: `${Math.min(100, (currentCatBoarders / capacityCat) * 100)}%` }} />
               </div>
               <div className="flex items-center justify-between pt-1">
                 <span className="text-xs text-gray-500">🐕 {l.dogs}</span>
-                <span className="text-sm font-bold text-charcoal">{currentDogBoarders}<span className="text-xs font-normal text-gray-400"> / 50</span></span>
+                <span className="text-sm font-bold text-charcoal">{currentDogBoarders}<span className="text-xs font-normal text-gray-400"> / {capacityDog}</span></span>
               </div>
               <div className="h-1.5 bg-gray-100 rounded-full">
-                <div className="h-1.5 bg-charcoal rounded-full transition-all" style={{ width: `${Math.min(100, (currentDogBoarders / 50) * 100)}%` }} />
+                <div className="h-1.5 bg-charcoal rounded-full transition-all" style={{ width: `${Math.min(100, (currentDogBoarders / capacityDog) * 100)}%` }} />
               </div>
             </div>
           </div>

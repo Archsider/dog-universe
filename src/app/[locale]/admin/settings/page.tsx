@@ -17,6 +17,8 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   taxi_standard: '150',
   taxi_vet: '300',
   taxi_airport: '300',
+  capacity_dog: '50',
+  capacity_cat: '10',
 };
 
 export default async function AdminSettingsPage({ params: { locale } }: PageProps) {
