@@ -93,6 +93,7 @@ model Booking {
   boardingDetail BoardingDetail?
   taxiDetail     TaxiDetail?
   invoice        Invoice?
+  stayPhotos     StayPhoto[]
 
   @@index([clientId])
   @@index([status])
@@ -240,6 +241,18 @@ model Setting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+model StayPhoto {
+  id        String   @id @default(cuid())
+  bookingId String
+  url       String
+  caption   String?
+  createdAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
 }
 
 model PasswordResetToken {

@@ -8,6 +8,8 @@ import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import ReservationActions from './ReservationActions';
 import DeleteBookingButton from './DeleteBookingButton';
 import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
+import StayPhotosSection from './StayPhotosSection';
+import AdminMessageSection from './AdminMessageSection';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -224,8 +226,16 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
           </div>
 
           <ReservationActions booking={{ id: booking.id, status: booking.status }} locale={locale} />
+          <AdminMessageSection bookingId={booking.id} locale={locale} />
         </div>
       </div>
+
+      {/* Stay photos — full width below the grid */}
+      {isBoarding && (
+        <div className="mt-4">
+          <StayPhotosSection bookingId={booking.id} locale={locale} />
+        </div>
+      )}
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
   X,
   ShieldCheck,
   Settings,
+  UserCircle,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -45,6 +46,7 @@ export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
     { href: `/${locale}/admin/analytics`, labelKey: 'analytics', icon: BarChart3 },
     { href: `/${locale}/admin/logs`, labelKey: 'logs', icon: ScrollText },
     { href: `/${locale}/admin/settings`, labelKey: 'settings', icon: Settings },
+    { href: `/${locale}/admin/profile`, labelKey: 'profile', icon: UserCircle },
   ];
 
   const SidebarContent = () => (

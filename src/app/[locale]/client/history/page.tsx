@@ -2,7 +2,8 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { Calendar, PawPrint, Package, Car, Plus, FileText, Clock, CheckCircle2, XCircle, AlertCircle, PlayCircle } from 'lucide-react';
+import { Calendar, PawPrint, Package, Car, Plus, FileText, Clock, CheckCircle2, XCircle, AlertCircle, PlayCircle, Camera } from 'lucide-react';
+import Image from 'next/image';
 import { formatDate, formatMAD } from '@/lib/utils';
 import CancelBookingButton from './CancelBookingButton';
 
@@ -49,6 +50,7 @@ export default async function HistoryPage({ params: { locale }, searchParams }: 
       boardingDetail: true,
       taxiDetail: true,
       invoice: { select: { id: true, invoiceNumber: true, amount: true, status: true } },
+      stayPhotos: { orderBy: { createdAt: 'asc' as const } },
     },
     orderBy: { startDate: 'desc' },
   });
@@ -65,6 +67,7 @@ export default async function HistoryPage({ params: { locale }, searchParams }: 
       title: 'Mes réservations',
       newBooking: 'Nouvelle réservation',
       all: 'Toutes',
+      photos: 'photos du séjour',
       noBookings: 'Aucune réservation',
       noBookingsDesc: "Vous n'avez pas encore effectué de réservation.",
       boarding: 'Pension',
@@ -83,6 +86,7 @@ export default async function HistoryPage({ params: { locale }, searchParams }: 
       title: 'My bookings',
       newBooking: 'New booking',
       all: 'All',
+      photos: 'stay photos',
       noBookings: 'No bookings',
       noBookingsDesc: "You haven't made any bookings yet.",
       boarding: 'Boarding',
@@ -206,6 +210,22 @@ export default async function HistoryPage({ params: { locale }, searchParams }: 
 
                 {booking.notes && (
                   <p className="text-xs text-gray-400 italic mb-3 px-1">{t.notes} : {booking.notes}</p>
+                )}
+
+                {booking.stayPhotos && booking.stayPhotos.length > 0 && (
+                  <div className="mb-3">
+                    <div className="flex items-center gap-1.5 text-xs text-gold-600 font-medium mb-2">
+                      <Camera className="h-3.5 w-3.5" />
+                      {booking.stayPhotos.length} {t.photos}
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {booking.stayPhotos.map(photo => (
+                        <div key={photo.id} className="flex-shrink-0 rounded-lg overflow-hidden border border-[#F0D98A]/30 w-20 h-20">
+                          <Image src={photo.url} alt={photo.caption || ''} width={80} height={80} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
 
                 <div className="flex items-center justify-between gap-3 pt-3 border-t border-ivory-100">

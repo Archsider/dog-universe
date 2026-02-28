@@ -8,7 +8,7 @@ const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE ?? '10485760'); // 10 M
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const ALLOWED_DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
 
-export type UploadType = 'pet-photo' | 'document';
+export type UploadType = 'pet-photo' | 'document' | 'stay-photo';
 
 export interface UploadResult {
   url: string;
@@ -26,7 +26,7 @@ export async function uploadFile(
   }
 
   const allowedTypes =
-    uploadType === 'pet-photo' ? ALLOWED_IMAGE_TYPES : ALLOWED_DOCUMENT_TYPES;
+    uploadType === 'document' ? ALLOWED_DOCUMENT_TYPES : ALLOWED_IMAGE_TYPES;
 
   if (!allowedTypes.includes(file.type)) {
     throw new Error(`File type not allowed: ${file.type}`);
@@ -34,7 +34,7 @@ export async function uploadFile(
 
   const ext = getExtension(file.type);
   const filename = `${uuidv4()}${ext}`;
-  const subfolder = uploadType === 'pet-photo' ? 'pets' : 'documents';
+  const subfolder = uploadType === 'stay-photo' ? 'stays' : uploadType === 'pet-photo' ? 'pets' : 'documents';
   const dir = path.join(process.cwd(), UPLOAD_DIR, subfolder);
 
   await mkdir(dir, { recursive: true });

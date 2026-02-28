@@ -61,7 +61,8 @@
       "billing": "Facturation",
       "analytics": "Analytiques",
       "logs": "Journaux",
-      "settings": "Paramètres"
+      "settings": "Paramètres",
+      "profile": "Mon profil"
     }
   },
   "auth": {
@@ -334,6 +335,7 @@
       "STAY_REMINDER": "Rappel de séjour",
       "INVOICE_AVAILABLE": "Nouvelle facture",
       "ADMIN_MESSAGE": "Message de Dog Universe",
+      "STAY_PHOTO": "Photos de séjour",
       "LOYALTY_UPDATE": "Mise à jour du grade fidélité"
     }
   },

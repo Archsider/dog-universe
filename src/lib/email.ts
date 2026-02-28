@@ -63,7 +63,7 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -182,6 +182,42 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         <p style="color: #6B7280; font-size: 14px;">Service: ${data.service}</p>
         <p>If you have any questions or would like to modify your booking, please feel free to contact us.</p>
         <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    stay_photo: {
+      subjectFr: `📸 Nouvelles photos de ${data.petName} disponibles — Dog Universe`,
+      subjectEn: `📸 New photos of ${data.petName} available — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+        <p>De nouvelles photos de <strong>${data.petName}</strong> ont été publiées pour votre réservation <strong>${data.bookingRef}</strong>.</p>
+        <p>Connectez-vous à votre espace client pour les consulter !</p>
+        <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+        <p>New photos of <strong>${data.petName}</strong> have been posted for your booking <strong>${data.bookingRef}</strong>.</p>
+        <p>Log in to your client portal to see them!</p>
+        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    admin_message: {
+      subjectFr: `💬 Message de Dog Universe`,
+      subjectEn: `💬 Message from Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0; color: #2C2C2C;">${data.message}</p>
+        </div>
+        ${data.bookingRef ? `<p style="color: #6B7280; font-size: 13px;">Réservation : ${data.bookingRef}</p>` : ''}
+        <p>Cordialement,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0; color: #2C2C2C;">${data.message}</p>
+        </div>
+        ${data.bookingRef ? `<p style="color: #6B7280; font-size: 13px;">Booking: ${data.bookingRef}</p>` : ''}
+        <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
     reset_password: {

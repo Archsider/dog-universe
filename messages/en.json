@@ -61,7 +61,8 @@
       "billing": "Billing",
       "analytics": "Analytics",
       "logs": "Logs",
-      "settings": "Settings"
+      "settings": "Settings",
+      "profile": "My Profile"
     }
   },
   "auth": {
@@ -334,6 +335,7 @@
       "STAY_REMINDER": "Stay reminder",
       "INVOICE_AVAILABLE": "New invoice",
       "ADMIN_MESSAGE": "Message from Dog Universe",
+      "STAY_PHOTO": "Stay photos",
       "LOYALTY_UPDATE": "Loyalty grade update"
     }
   },

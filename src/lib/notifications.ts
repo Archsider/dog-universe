@@ -7,6 +7,7 @@ export type NotificationType =
   | 'STAY_REMINDER'
   | 'INVOICE_AVAILABLE'
   | 'ADMIN_MESSAGE'
+  | 'STAY_PHOTO'
   | 'LOYALTY_UPDATE';
 
 interface CreateNotificationData {
@@ -110,6 +111,21 @@ export async function createLoyaltyUpdateNotification(
     titleEn: 'Loyalty grade updated',
     messageFr: `Félicitations ! Votre grade de fidélité a été mis à jour : ${gradeLabels.fr[grade] ?? grade}.`,
     messageEn: `Congratulations! Your loyalty grade has been updated: ${gradeLabels.en[grade] ?? grade}.`,
+  });
+}
+
+export async function createStayPhotoNotification(
+  userId: string,
+  petName: string,
+  bookingRef: string
+) {
+  return createNotification({
+    userId,
+    type: 'STAY_PHOTO',
+    titleFr: '📸 Nouvelles photos de séjour',
+    titleEn: '📸 New stay photos',
+    messageFr: `De nouvelles photos de ${petName} ont été publiées pour votre réservation (réf. ${bookingRef}).`,
+    messageEn: `New photos of ${petName} have been posted for your booking (ref. ${bookingRef}).`,
   });
 }
 
