@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt } from 'lucide-react';
+import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, LogIn, LogOut } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import RevenueChartWrapper from './RevenueChartWrapper';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -14,6 +14,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
 
   const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
   const thisMonthStart = startOfMonth(now);
   const thisMonthEnd = endOfMonth(now);
   const lastMonthStart = startOfMonth(subMonths(now, 1));
@@ -43,6 +45,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     top5Revenue,
     pendingInvoicesAgg,
     bookingsWithoutInvoice,
+    todayCheckIns,
+    todayCheckOuts,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'CLIENT' } }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
@@ -100,6 +104,29 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       where: {
         status: { in: ['CONFIRMED', 'COMPLETED', 'IN_PROGRESS'] },
         invoice: null,
+      },
+    }),
+    prisma.booking.findMany({
+      where: {
+        serviceType: 'BOARDING',
+        status: { in: ['CONFIRMED', 'PENDING'] },
+        startDate: { gte: todayStart, lte: todayEnd },
+      },
+      include: {
+        client: { select: { name: true } },
+        bookingPets: { include: { pet: { select: { name: true, species: true } } } },
+      },
+      orderBy: { arrivalTime: 'asc' },
+    }),
+    prisma.booking.findMany({
+      where: {
+        serviceType: 'BOARDING',
+        status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+        endDate: { gte: todayStart, lte: todayEnd },
+      },
+      include: {
+        client: { select: { name: true } },
+        bookingPets: { include: { pet: { select: { name: true, species: true } } } },
       },
     }),
   ]);
@@ -182,6 +209,9 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       revenue: 'CA total',
       pendingInvoices: 'Factures en attente',
       noInvoice: 'Réserv. sans facture',
+      checkInsToday: "Arrivées aujourd'hui",
+      checkOutsToday: "Départs aujourd'hui",
+      noMovement: 'Aucun mouvement',
     },
     en: {
       title: 'Dashboard',
@@ -205,6 +235,9 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       revenue: 'Total revenue',
       pendingInvoices: 'Pending invoices',
       noInvoice: 'Bookings w/o invoice',
+      checkInsToday: 'Check-ins today',
+      checkOutsToday: 'Check-outs today',
+      noMovement: 'No movement',
     },
   };
 
@@ -369,6 +402,78 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
               </div>
             </Link>
           )}
+        </div>
+      )}
+
+      {/* Arrivées / Départs du jour */}
+      {(todayCheckIns.length > 0 || todayCheckOuts.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+          {/* Check-ins */}
+          <div className="bg-white rounded-xl border border-green-200/60 p-5 shadow-card">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0">
+                <LogIn className="h-4 w-4 text-green-600" />
+              </div>
+              <h2 className="font-semibold text-charcoal text-sm">{l.checkInsToday}</h2>
+              <span className="ml-auto text-xs font-bold text-green-700 bg-green-50 rounded-full px-2 py-0.5">
+                {todayCheckIns.length}
+              </span>
+            </div>
+            {todayCheckIns.length === 0 ? (
+              <p className="text-xs text-gray-400">{l.noMovement}</p>
+            ) : (
+              <div className="space-y-2">
+                {todayCheckIns.map(b => (
+                  <Link key={b.id} href={`/${locale}/admin/reservations/${b.id}`}>
+                    <div className="flex items-center gap-2 py-1.5 hover:bg-ivory-50 -mx-2 px-2 rounded transition-colors">
+                      <span className="text-base">{b.bookingPets[0]?.pet.species === 'CAT' ? '🐱' : '🐶'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-charcoal truncate">
+                          {b.bookingPets.map(bp => bp.pet.name).join(', ')}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">{b.client.name}</p>
+                      </div>
+                      {b.arrivalTime && (
+                        <span className="text-xs text-green-600 font-medium flex-shrink-0">{b.arrivalTime}</span>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Check-outs */}
+          <div className="bg-white rounded-xl border border-blue-200/60 p-5 shadow-card">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <LogOut className="h-4 w-4 text-blue-600" />
+              </div>
+              <h2 className="font-semibold text-charcoal text-sm">{l.checkOutsToday}</h2>
+              <span className="ml-auto text-xs font-bold text-blue-700 bg-blue-50 rounded-full px-2 py-0.5">
+                {todayCheckOuts.length}
+              </span>
+            </div>
+            {todayCheckOuts.length === 0 ? (
+              <p className="text-xs text-gray-400">{l.noMovement}</p>
+            ) : (
+              <div className="space-y-2">
+                {todayCheckOuts.map(b => (
+                  <Link key={b.id} href={`/${locale}/admin/reservations/${b.id}`}>
+                    <div className="flex items-center gap-2 py-1.5 hover:bg-ivory-50 -mx-2 px-2 rounded transition-colors">
+                      <span className="text-base">{b.bookingPets[0]?.pet.species === 'CAT' ? '🐱' : '🐶'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-charcoal truncate">
+                          {b.bookingPets.map(bp => bp.pet.name).join(', ')}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">{b.client.name}</p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

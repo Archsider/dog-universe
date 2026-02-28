@@ -2,6 +2,7 @@ import { auth } from '../../../../auth';
 import { redirect } from 'next/navigation';
 import { AdminSidebar } from '@/components/layout/AdminSidebar';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
+import { prisma } from '@/lib/prisma';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,9 +14,11 @@ export default async function AdminLayout({ children, params: { locale } }: Layo
   if (!session?.user) redirect(`/${locale}/auth/login`);
   if (session.user.role !== 'ADMIN') redirect(`/${locale}/client/dashboard`);
 
+  const pendingCount = await prisma.booking.count({ where: { status: 'PENDING' } });
+
   return (
     <div className="min-h-screen bg-ivory-50 flex">
-      <AdminSidebar />
+      <AdminSidebar pendingCount={pendingCount} />
       <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
         {/* Top bar */}
         <header className="sticky top-0 z-30 h-16 bg-white border-b border-ivory-200 flex items-center justify-between px-4 lg:px-6">

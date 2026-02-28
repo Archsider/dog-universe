@@ -28,6 +28,15 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
 
   if (!booking) notFound();
 
+  const CANCELLATION_REASONS: Record<string, { fr: string; en: string }> = {
+    plans_changed:  { fr: 'Changement de plans',            en: 'Plans changed' },
+    emergency:      { fr: 'Urgence personnelle',             en: 'Personal emergency' },
+    found_other:    { fr: 'Autre solution trouvée',          en: 'Found another solution' },
+    dates_changed:  { fr: 'Dates modifiées',                 en: 'Dates changed' },
+    price:          { fr: 'Raison financière',               en: 'Financial reason' },
+    other:          { fr: 'Autre',                           en: 'Other' },
+  };
+
   const labels = {
     fr: {
       back: 'Réservations',
@@ -44,6 +53,7 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
       invoice: 'Facture liée',
       noInvoice: 'Aucune facture',
       notes: 'Notes client',
+      cancelReason: "Motif d'annulation",
     },
     en: {
       back: 'Bookings',
@@ -60,6 +70,7 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
       invoice: 'Invoice',
       noInvoice: 'No invoice',
       notes: 'Client notes',
+      cancelReason: 'Cancellation reason',
     },
   };
 
@@ -199,6 +210,14 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
                 <div className="mt-2 pt-2 border-t border-ivory-100">
                   <p className="text-gray-500 text-xs mb-1">{l.notes}</p>
                   <p className="text-charcoal">{booking.notes}</p>
+                </div>
+              )}
+              {booking.cancellationReason && (
+                <div className="mt-2 pt-2 border-t border-red-100">
+                  <p className="text-red-400 text-xs mb-1">{l.cancelReason}</p>
+                  <p className="text-charcoal font-medium">
+                    {CANCELLATION_REASONS[booking.cancellationReason]?.[locale as 'fr' | 'en'] ?? booking.cancellationReason}
+                  </p>
                 </div>
               )}
             </div>
