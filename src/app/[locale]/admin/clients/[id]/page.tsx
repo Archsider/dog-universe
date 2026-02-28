@@ -8,7 +8,7 @@ import { formatMAD, formatDate, getInitials, getBookingStatusColor } from '@/lib
 import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
 import ClientDetailActions from './ClientDetailActions';
 import DeleteClientButton from './DeleteClientButton';
-import CreateAnimalModal from '../CreateAnimalModal';
+import CreateAnimalModal from '../../animals/CreateAnimalModal';
 
 interface PageProps { params: { locale: string; id: string } }
 
