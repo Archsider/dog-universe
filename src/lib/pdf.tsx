@@ -179,14 +179,11 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
         <View style={styles.header}>
           <View>
             <Image src={LOGO_PATH} style={{ width: 120, height: 45, objectFit: 'contain' }} />
-            <Text style={[{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#C9A84C', marginTop: 5 }]}>DOG UNIVERSE</Text>
-            <Text style={[styles.companySubtitle, { marginTop: 1 }]}>SARLAU — Dr el Caid Souihla Saada, Marrakech</Text>
+            <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: '#C9A84C', marginTop: 6 }}>DOG UNIVERSE</Text>
+            <Text style={[styles.companySubtitle, { marginTop: 2 }]}>SARLAU — Dr el Caid Souihla Saada, Marrakech</Text>
           </View>
           <View style={styles.companyDetails}>
-            <Text>contact@doguniverse.ma</Text>
-            <Text>www.doguniverse.ma</Text>
-            <Text>+212 600-000000</Text>
-            <Text>Marrakech, Maroc</Text>
+            <Text style={{ fontFamily: 'Helvetica-Bold', color: '#C9A84C', fontSize: 10 }}>+212 669 183 981</Text>
             <Text style={{ marginTop: 4 }}>RC : 87023</Text>
             <Text>ICE : 002035800000002</Text>
           </View>
@@ -287,8 +284,8 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
 
         {/* Footer */}
         <Text style={styles.footer}>
-          Dog Universe SARLAU — Dr el Caid Souihla Saada, Marrakech — RC : 87023 — ICE : 002035800000002
-          {'\n'}contact@doguniverse.ma — www.doguniverse.ma — Merci pour votre confiance.
+          DOG UNIVERSE SARLAU — Marrakech — RC : 87023 — ICE : 002035800000002
+          {'\n'}+212 669 183 981 — Merci pour votre confiance.
         </Text>
       </Page>
     </Document>
