@@ -17,7 +17,7 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
   if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
 
   const client = await prisma.user.findUnique({
-    where: { id },
+    where: { id, role: { in: ['CLIENT', 'ADMIN'] } },
     include: {
       loyaltyGrade: true,
       pets: { include: { _count: { select: { bookingPets: true } } } },
@@ -32,7 +32,7 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
     },
   });
 
-  if (!client || client.role !== 'CLIENT') notFound();
+  if (!client) notFound();
 
   const sl: Record<string, Record<string, string>> = {
     fr: { PENDING: 'En attente', CONFIRMED: 'Confirmé', CANCELLED: 'Annulé', REJECTED: 'Refusé', COMPLETED: 'Terminé', IN_PROGRESS: 'En cours' },
@@ -87,7 +87,7 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
             <h3 className="font-semibold text-charcoal text-sm mb-3">{l.loyalty}</h3>
             <div className="mb-3"><LoyaltyBadge grade={grade} locale={locale} /></div>
-            <ClientDetailActions clientId={id} currentGrade={grade} locale={locale} />
+            <ClientDetailActions clientId={id} currentGrade={grade} currentRole={client.role} locale={locale} />
           </div>
         </div>
 

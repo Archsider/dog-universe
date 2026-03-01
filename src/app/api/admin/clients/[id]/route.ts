@@ -71,6 +71,7 @@ export async function PATCH(request: Request, { params }: Params) {
   const updateData: Record<string, unknown> = {};
   if (body.name !== undefined) updateData.name = body.name;
   if (body.phone !== undefined) updateData.phone = body.phone;
+  if (body.role !== undefined && ['CLIENT', 'ADMIN'].includes(body.role)) updateData.role = body.role;
 
   await prisma.user.update({ where: { id }, data: updateData });
 
