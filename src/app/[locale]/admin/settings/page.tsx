@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import PricingForm from './PricingForm';
 import DangerZone from './DangerZone';
+import TestEmailPanel from './TestEmailPanel';
 
 interface PageProps { params: { locale: string } }
 
@@ -34,6 +35,7 @@ export default async function AdminSettingsPage({ params: { locale } }: PageProp
   return (
     <div className="space-y-8">
       <PricingForm initialValues={settings} />
+      <TestEmailPanel />
       <DangerZone locale={locale} />
     </div>
   );
