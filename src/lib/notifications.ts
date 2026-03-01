@@ -8,7 +8,8 @@ export type NotificationType =
   | 'INVOICE_AVAILABLE'
   | 'ADMIN_MESSAGE'
   | 'STAY_PHOTO'
-  | 'LOYALTY_UPDATE';
+  | 'LOYALTY_UPDATE'
+  | 'WELCOME';
 
 interface CreateNotificationData {
   userId: string;
@@ -147,6 +148,17 @@ export async function createAdminMessageNotification(
     messageFr,
     messageEn,
     metadata: bookingId ? { bookingId } : undefined,
+  });
+}
+
+export async function createWelcomeNotification(userId: string, clientName: string) {
+  return createNotification({
+    userId,
+    type: 'WELCOME',
+    titleFr: 'Bienvenue chez Dog Universe !',
+    titleEn: 'Welcome to Dog Universe!',
+    messageFr: `Bonjour ${clientName}, votre compte a bien été créé. Vous pouvez dès maintenant réserver nos services pour votre compagnon.`,
+    messageEn: `Hello ${clientName}, your account has been created. You can now book our services for your companion.`,
   });
 }
 

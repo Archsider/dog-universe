@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { createWelcomeNotification } from '@/lib/notifications';
 
 export async function POST(request: Request) {
   try {
@@ -54,7 +55,10 @@ export async function POST(request: Request) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
     const loginUrl = `${appUrl}/${language ?? 'fr'}/auth/login`;
     const { subject, html } = getEmailTemplate('welcome', { clientName: user.name, loginUrl }, language ?? 'fr');
-    await sendEmail({ to: user.email, subject, html });
+    await Promise.all([
+      sendEmail({ to: user.email, subject, html }),
+      createWelcomeNotification(user.id, user.name),
+    ]);
 
     return NextResponse.json({
       id: user.id,
