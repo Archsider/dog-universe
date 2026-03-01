@@ -43,7 +43,7 @@ export async function sendEmail({
   subject: string;
   html: string;
   text?: string;
-}): Promise<void> {
+}): Promise<{ success: boolean; error?: string }> {
   try {
     const transport = await getTransporter();
     const info = await transport.sendMail({
@@ -57,9 +57,11 @@ export async function sendEmail({
     if (process.env.NODE_ENV !== 'production') {
       console.log('📧 Email sent:', nodemailer.getTestMessageUrl(info));
     }
+    return { success: true };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error('Failed to send email:', error);
-    // Don't throw - email failures shouldn't break the main flow
+    return { success: false, error: message };
   }
 }
 
