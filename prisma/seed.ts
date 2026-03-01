@@ -479,9 +479,6 @@ async function main() {
   console.log('✅ Action logs created');
 
   console.log('\n🎉 Database seeded successfully!');
-  console.log('\n📋 Test accounts:');
-  console.log('   Admin:  admin@doguniverse.ma  / Admin2024!');
-  console.log('   Client: marie.dupont@email.com / Marie2024!');
 }
 
 main()
