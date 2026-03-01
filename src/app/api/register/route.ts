@@ -55,9 +55,18 @@ export async function POST(request: Request) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
     const loginUrl = `${appUrl}/${language ?? 'fr'}/auth/login`;
     const { subject, html } = getEmailTemplate('welcome', { clientName: user.name, loginUrl }, language ?? 'fr');
+
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { email: true } });
+    const adminUrl = `${appUrl}/fr/admin/clients`;
+    const adminEmailData = { clientName: user.name, clientEmail: user.email, clientPhone: user.phone ?? '', adminUrl };
+
     await Promise.all([
       sendEmail({ to: user.email, subject, html }),
       createWelcomeNotification(user.id, user.name),
+      ...admins.map(admin => {
+        const { subject: s, html: h } = getEmailTemplate('admin_new_client', adminEmailData, 'fr');
+        return sendEmail({ to: admin.email, subject: s, html: h });
+      }),
     ]);
 
     return NextResponse.json({

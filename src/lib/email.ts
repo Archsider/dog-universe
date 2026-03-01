@@ -87,7 +87,7 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'welcome', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'welcome' | 'admin_new_client', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -268,6 +268,38 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
           </a>
         </p>
         <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    admin_new_client: {
+      subjectFr: `🐾 Nouveau client inscrit — ${data.clientName}`,
+      subjectEn: `🐾 New client registered — ${data.clientName}`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Nouveau client inscrit</h2>
+        <p>Un nouveau client vient de créer un compte sur Dog Universe.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px; color: #6B7280; width: 120px;">Nom</td><td style="padding: 8px; font-weight: bold;">${data.clientName}</td></tr>
+          <tr style="background:#F5EDD8;"><td style="padding: 8px; color: #6B7280;">Email</td><td style="padding: 8px;">${data.clientEmail}</td></tr>
+          ${data.clientPhone ? `<tr><td style="padding: 8px; color: #6B7280;">Téléphone</td><td style="padding: 8px;">${data.clientPhone}</td></tr>` : ''}
+        </table>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${data.adminUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Voir dans l'administration
+          </a>
+        </p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">New client registered</h2>
+        <p>A new client just created an account on Dog Universe.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px; color: #6B7280; width: 120px;">Name</td><td style="padding: 8px; font-weight: bold;">${data.clientName}</td></tr>
+          <tr style="background:#F5EDD8;"><td style="padding: 8px; color: #6B7280;">Email</td><td style="padding: 8px;">${data.clientEmail}</td></tr>
+          ${data.clientPhone ? `<tr><td style="padding: 8px; color: #6B7280;">Phone</td><td style="padding: 8px;">${data.clientPhone}</td></tr>` : ''}
+        </table>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${data.adminUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            View in administration
+          </a>
+        </p>
       `,
     },
     reset_password: {
