@@ -63,7 +63,7 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'welcome', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -218,6 +218,32 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         </div>
         ${data.bookingRef ? `<p style="color: #6B7280; font-size: 13px;">Booking: ${data.bookingRef}</p>` : ''}
         <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    welcome: {
+      subjectFr: '🐾 Bienvenue chez Dog Universe !',
+      subjectEn: '🐾 Welcome to Dog Universe!',
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bienvenue ${data.clientName} !</h2>
+        <p>Votre compte Dog Universe a bien été créé. Nous sommes ravis de vous accueillir dans notre communauté.</p>
+        <p>Vous pouvez dès à présent vous connecter et réserver nos services pour votre compagnon.</p>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${data.loginUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Accéder à mon espace
+          </a>
+        </p>
+        <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Welcome ${data.clientName}!</h2>
+        <p>Your Dog Universe account has been created. We are delighted to welcome you to our community.</p>
+        <p>You can now log in and book our services for your companion.</p>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${data.loginUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Go to my account
+          </a>
+        </p>
+        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
     reset_password: {
