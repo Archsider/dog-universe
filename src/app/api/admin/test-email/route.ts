@@ -29,5 +29,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: result.error }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, to });
+  const isDev = process.env.NODE_ENV !== 'production';
+  return NextResponse.json({
+    success: true,
+    to,
+    ...(isDev && result.previewUrl
+      ? {
+          previewUrl: result.previewUrl,
+          note: "Mode développement : l'email n'est pas envoyé réellement. Ouvrez previewUrl pour le voir.",
+        }
+      : {}),
+  });
 }

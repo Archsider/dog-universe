@@ -10,6 +10,8 @@ async function getTransporter(): Promise<nodemailer.Transporter> {
       host: process.env.EMAIL_SERVER_HOST,
       port: parseInt(process.env.EMAIL_SERVER_PORT ?? '587'),
       secure: false,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
       auth: {
         user: process.env.EMAIL_SERVER_USER,
         pass: process.env.EMAIL_SERVER_PASSWORD,
@@ -27,7 +29,6 @@ async function getTransporter(): Promise<nodemailer.Transporter> {
         pass: testAccount.pass,
       },
     });
-    console.log('📧 Ethereal test account:', testAccount.user);
   }
 
   return transporter;
@@ -43,7 +44,7 @@ export async function sendEmail({
   subject: string;
   html: string;
   text?: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; error?: string; previewUrl?: string }> {
   try {
     const transport = await getTransporter();
     const info = await transport.sendMail({
@@ -55,12 +56,33 @@ export async function sendEmail({
     });
 
     if (process.env.NODE_ENV !== 'production') {
-      console.log('📧 Email sent:', nodemailer.getTestMessageUrl(info));
+      const previewUrl = nodemailer.getTestMessageUrl(info) || undefined;
+      console.log('');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📧 EMAIL DEV — L\'email N\'est PAS envoyé réellement');
+      console.log(`   À : ${to}`);
+      console.log(`   Sujet : ${subject}`);
+      if (previewUrl) console.log(`   Voir l'email ici : ${previewUrl}`);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('');
+      return { success: true, previewUrl: typeof previewUrl === 'string' ? previewUrl : undefined };
     }
+
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error('Failed to send email:', error);
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[EMAIL ERROR] Échec envoi email', {
+        to,
+        subject,
+        host: process.env.EMAIL_SERVER_HOST,
+        port: process.env.EMAIL_SERVER_PORT,
+        user: process.env.EMAIL_SERVER_USER,
+        error: message,
+      });
+    } else {
+      console.error('[EMAIL ERROR]', message);
+    }
     return { success: false, error: message };
   }
 }
