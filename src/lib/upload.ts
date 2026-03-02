@@ -1,8 +1,7 @@
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { supabaseAdmin } from './supabase';
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './public/uploads';
+const BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? 'uploads';
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE ?? '10485760'); // 10 MB
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -34,25 +33,37 @@ export async function uploadFile(
 
   const ext = getExtension(file.type);
   const filename = `${uuidv4()}${ext}`;
-  const subfolder = uploadType === 'stay-photo' ? 'stays' : uploadType === 'pet-photo' ? 'pets' : 'documents';
-  const dir = path.join(process.cwd(), UPLOAD_DIR, subfolder);
-
-  await mkdir(dir, { recursive: true });
+  const subfolder =
+    uploadType === 'stay-photo' ? 'stays' : uploadType === 'pet-photo' ? 'pets' : 'documents';
+  const storagePath = `${subfolder}/${filename}`;
 
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
-  const filePath = path.join(dir, filename);
 
-  await writeFile(filePath, buffer);
+  const { error } = await supabaseAdmin.storage
+    .from(BUCKET)
+    .upload(storagePath, buffer, { contentType: file.type, upsert: false });
 
-  const url = `/uploads/${subfolder}/${filename}`;
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+
+  const { data } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(storagePath);
 
   return {
-    url,
+    url: data.publicUrl,
     filename,
     mimeType: file.type,
     size: file.size,
   };
+}
+
+export async function deleteFile(url: string): Promise<void> {
+  const supabaseUrl = process.env.SUPABASE_URL!;
+  // Extract the storage path from the public URL
+  // Public URL format: {supabaseUrl}/storage/v1/object/public/{bucket}/{path}
+  const prefix = `${supabaseUrl}/storage/v1/object/public/${BUCKET}/`;
+  if (!url.startsWith(prefix)) return;
+  const storagePath = url.slice(prefix.length);
+  await supabaseAdmin.storage.from(BUCKET).remove([storagePath]);
 }
 
 function getExtension(mimeType: string): string {
@@ -67,6 +78,7 @@ function getExtension(mimeType: string): string {
 }
 
 export function getPublicUrl(filePath: string): string {
+  if (filePath.startsWith('http')) return filePath;
   if (filePath.startsWith('/')) return filePath;
   return `/${filePath}`;
 }
