@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import { cn } from '@/lib/utils';
 
-export function NotificationBell() {
+export function NotificationBell({ href }: { href?: string }) {
   const locale = useLocale();
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -31,7 +31,7 @@ export function NotificationBell() {
 
   return (
     <Link
-      href={`/${locale}/client/notifications`}
+      href={href ?? `/${locale}/client/notifications`}
       className="relative flex items-center justify-center h-9 w-9 rounded-full hover:bg-gold-50 transition-colors"
     >
       <Bell className="h-5 w-5 text-charcoal/70" />

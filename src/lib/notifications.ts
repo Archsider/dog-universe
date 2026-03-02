@@ -163,7 +163,7 @@ export async function createWelcomeNotification(userId: string, clientName: stri
   });
 }
 
-export async function createAdminNewClientNotification(adminId: string, clientName: string, clientEmail: string) {
+export async function createAdminNewClientNotification(adminId: string, clientId: string, clientName: string, clientEmail: string) {
   return createNotification({
     userId: adminId,
     type: 'NEW_CLIENT',
@@ -171,6 +171,7 @@ export async function createAdminNewClientNotification(adminId: string, clientNa
     titleEn: '👤 New client registered',
     messageFr: `${clientName} (${clientEmail}) vient de créer un compte.`,
     messageEn: `${clientName} (${clientEmail}) just created an account.`,
+    metadata: { clientId },
   });
 }
 

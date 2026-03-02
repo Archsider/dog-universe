@@ -2,6 +2,7 @@ import { auth } from '../../../../auth';
 import { redirect } from 'next/navigation';
 import { AdminSidebar } from '@/components/layout/AdminSidebar';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
+import { NotificationBell } from '@/components/shared/NotificationBell';
 import { prisma } from '@/lib/prisma';
 
 interface LayoutProps {
@@ -25,6 +26,7 @@ export default async function AdminLayout({ children, params: { locale } }: Layo
           <div className="lg:hidden w-8" />
           <div className="flex items-center gap-1 ml-auto">
             <span className="text-xs text-gray-500 mr-2 hidden sm:block">Admin</span>
+            <NotificationBell href={`/${locale}/admin/notifications`} />
             <LanguageSwitcher />
           </div>
         </header>

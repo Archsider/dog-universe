@@ -67,7 +67,7 @@ export async function POST(request: Request) {
         const { subject: s, html: h } = getEmailTemplate('admin_new_client', adminEmailData, 'fr');
         return [
           sendEmail({ to: admin.email, subject: s, html: h }),
-          createAdminNewClientNotification(admin.id, user.name, user.email),
+          createAdminNewClientNotification(admin.id, user.id, user.name, user.email),
         ];
       }),
     ]);
