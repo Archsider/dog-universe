@@ -39,10 +39,19 @@ export default function AdminNotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
+  const [filter, setFilter] = useState<string>('ALL');
 
   const l = locale === 'en'
-    ? { title: 'Notifications', empty: 'No notifications', markAllRead: 'Mark all as read', viewClient: 'View client' }
-    : { title: 'Notifications', empty: 'Aucune notification', markAllRead: 'Tout marquer comme lu', viewClient: 'Voir le client' };
+    ? {
+        title: 'Notifications', empty: 'No notifications',
+        markAllRead: 'Mark all as read', viewClient: 'View client',
+        filters: { ALL: 'All', NEW_CLIENT: 'New clients', BOOKING_CONFIRMATION: 'Bookings' },
+      }
+    : {
+        title: 'Notifications', empty: 'Aucune notification',
+        markAllRead: 'Tout marquer comme lu', viewClient: 'Voir le client',
+        filters: { ALL: 'Tout', NEW_CLIENT: 'Nouveaux clients', BOOKING_CONFIRMATION: 'Réservations' },
+      };
 
   useEffect(() => {
     fetch('/api/notifications')
@@ -67,13 +76,21 @@ export default function AdminNotificationsPage() {
   const getMessage = (n: Notification) => locale === 'en' ? n.messageEn : n.messageFr;
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  const FILTER_GROUPS: Record<string, string[]> = {
+    ALL: [],
+    NEW_CLIENT: ['NEW_CLIENT'],
+    BOOKING_CONFIRMATION: ['BOOKING_CONFIRMATION', 'BOOKING_VALIDATION', 'BOOKING_REFUSAL'],
+  };
+
+  const visible = filter === 'ALL' ? notifications : notifications.filter(n => FILTER_GROUPS[filter]?.includes(n.type));
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-[400px]"><Loader2 className="h-8 w-8 animate-spin text-gold-500" /></div>;
   }
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
           {unreadCount > 0 && (
@@ -88,14 +105,31 @@ export default function AdminNotificationsPage() {
         )}
       </div>
 
-      {notifications.length === 0 ? (
+      {/* Filtres */}
+      <div className="flex gap-2 mb-4">
+        {Object.keys(FILTER_GROUPS).map(key => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              filter === key
+                ? 'bg-gold-500 text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:border-gold-300'
+            }`}
+          >
+            {l.filters[key as keyof typeof l.filters]}
+          </button>
+        ))}
+      </div>
+
+      {visible.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-[#F0D98A]/40">
           <BellOff className="h-12 w-12 mx-auto mb-3 text-gray-300" />
           <p className="text-gray-500">{l.empty}</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {notifications.map((n) => {
+          {visible.map((n) => {
             const cfg = TYPE_CONFIG[n.type] ?? { icon: Bell, color: 'text-gray-500', bg: 'bg-gray-50' };
             const Icon = cfg.icon;
             const meta = parseMetadata(n.metadata);

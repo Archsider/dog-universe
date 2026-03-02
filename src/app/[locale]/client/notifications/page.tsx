@@ -44,6 +44,7 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
+  const [filter, setFilter] = useState<string>('ALL');
 
   const labels = {
     fr: {
@@ -53,6 +54,14 @@ export default function NotificationsPage() {
       markRead: 'Lu',
       viewBooking: 'Voir la réservation',
       viewPhotos: 'Voir les photos',
+      filters: {
+        ALL: 'Tout',
+        BOOKING_CONFIRMATION: 'Réservations',
+        INVOICE_AVAILABLE: 'Factures',
+        STAY_PHOTO: 'Photos',
+        ADMIN_MESSAGE: 'Messages',
+        LOYALTY_UPDATE: 'Fidélité',
+      },
     },
     en: {
       title: 'Notifications',
@@ -61,6 +70,14 @@ export default function NotificationsPage() {
       markRead: 'Read',
       viewBooking: 'View booking',
       viewPhotos: 'View photos',
+      filters: {
+        ALL: 'All',
+        BOOKING_CONFIRMATION: 'Bookings',
+        INVOICE_AVAILABLE: 'Invoices',
+        STAY_PHOTO: 'Photos',
+        ADMIN_MESSAGE: 'Messages',
+        LOYALTY_UPDATE: 'Loyalty',
+      },
     },
   };
   const l = labels[locale as keyof typeof labels] || labels.fr;
@@ -88,13 +105,24 @@ export default function NotificationsPage() {
   const getMessage = (n: Notification) => locale === 'en' ? n.messageEn : n.messageFr;
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  const FILTER_GROUPS: Record<string, string[]> = {
+    ALL: [],
+    BOOKING_CONFIRMATION: ['BOOKING_CONFIRMATION', 'BOOKING_VALIDATION', 'BOOKING_REFUSAL', 'STAY_REMINDER'],
+    INVOICE_AVAILABLE: ['INVOICE_AVAILABLE'],
+    STAY_PHOTO: ['STAY_PHOTO'],
+    ADMIN_MESSAGE: ['ADMIN_MESSAGE'],
+    LOYALTY_UPDATE: ['LOYALTY_UPDATE'],
+  };
+
+  const visible = filter === 'ALL' ? notifications : notifications.filter(n => FILTER_GROUPS[filter]?.includes(n.type));
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-[400px]"><Loader2 className="h-8 w-8 animate-spin text-gold-500" /></div>;
   }
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
           {unreadCount > 0 && (
@@ -109,14 +137,31 @@ export default function NotificationsPage() {
         )}
       </div>
 
-      {notifications.length === 0 ? (
+      {/* Filtres */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar">
+        {Object.keys(FILTER_GROUPS).map(key => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              filter === key
+                ? 'bg-gold-500 text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:border-gold-300'
+            }`}
+          >
+            {l.filters[key as keyof typeof l.filters]}
+          </button>
+        ))}
+      </div>
+
+      {visible.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-[#F0D98A]/40">
           <BellOff className="h-12 w-12 mx-auto mb-3 text-gray-300" />
           <p className="text-gray-500">{l.empty}</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {notifications.map((n) => {
+          {visible.map((n) => {
             const cfg = TYPE_CONFIG[n.type] ?? { icon: Bell, color: 'text-gray-500', bg: 'bg-gray-50' };
             const Icon = cfg.icon;
             const meta = parseMetadata(n.metadata);

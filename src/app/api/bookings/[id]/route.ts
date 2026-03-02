@@ -50,16 +50,21 @@ export async function PATCH(request: Request, { params }: Params) {
 
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Client can only cancel their own pending bookings
+  // Client can only cancel or modify dates (PENDING only) of their own bookings
   if (session.user.role === 'CLIENT') {
     if (booking.clientId !== session.user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
-    if (body.status !== 'CANCELLED') {
-      return NextResponse.json({ error: 'Clients can only cancel bookings' }, { status: 403 });
+    const isCancel = body.status === 'CANCELLED';
+    const isDateChange = !body.status && (body.startDate || body.endDate || body.notes !== undefined);
+    if (!isCancel && !isDateChange) {
+      return NextResponse.json({ error: 'Clients can only cancel or modify pending bookings' }, { status: 403 });
     }
-    if (!['PENDING', 'CONFIRMED'].includes(booking.status)) {
+    if (isCancel && !['PENDING', 'CONFIRMED'].includes(booking.status)) {
       return NextResponse.json({ error: 'Cannot cancel this booking' }, { status: 400 });
+    }
+    if (isDateChange && booking.status !== 'PENDING') {
+      return NextResponse.json({ error: 'Can only modify pending bookings' }, { status: 400 });
     }
   }
 

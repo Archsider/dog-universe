@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, PlayCircle, Flag, ChevronDown } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface Props {
@@ -12,43 +11,47 @@ interface Props {
   locale: string;
 }
 
+interface ActionDef {
+  status: string;
+  labelFr: string;
+  labelEn: string;
+  icon: React.ElementType;
+  className: string;
+}
+
+const TRANSITIONS: Record<string, ActionDef[]> = {
+  PENDING: [
+    { status: 'CONFIRMED', labelFr: 'Confirmer', labelEn: 'Confirm',    icon: CheckCircle2, className: 'bg-green-600 hover:bg-green-700 text-white border-0' },
+    { status: 'REJECTED',  labelFr: 'Refuser',   labelEn: 'Reject',     icon: XCircle,      className: 'bg-red-500 hover:bg-red-600 text-white border-0' },
+  ],
+  CONFIRMED: [
+    { status: 'IN_PROGRESS', labelFr: 'Démarrer',  labelEn: 'Start stay', icon: PlayCircle, className: 'bg-blue-600 hover:bg-blue-700 text-white border-0' },
+    { status: 'CANCELLED',   labelFr: 'Annuler',   labelEn: 'Cancel',     icon: XCircle,    className: 'text-red-500 border-red-200 hover:bg-red-50' },
+  ],
+  IN_PROGRESS: [
+    { status: 'COMPLETED', labelFr: 'Terminer', labelEn: 'Complete', icon: Flag, className: 'bg-charcoal hover:bg-charcoal/80 text-white border-0' },
+  ],
+};
+
+const ALL_STATUSES: ActionDef[] = [
+  { status: 'PENDING',     labelFr: 'En attente', labelEn: 'Pending',     icon: Loader2,      className: '' },
+  { status: 'CONFIRMED',   labelFr: 'Confirmé',   labelEn: 'Confirmed',   icon: CheckCircle2, className: '' },
+  { status: 'IN_PROGRESS', labelFr: 'En cours',   labelEn: 'In progress', icon: PlayCircle,   className: '' },
+  { status: 'COMPLETED',   labelFr: 'Terminé',    labelEn: 'Completed',   icon: Flag,         className: '' },
+  { status: 'CANCELLED',   labelFr: 'Annulé',     labelEn: 'Cancelled',   icon: XCircle,      className: '' },
+  { status: 'REJECTED',    labelFr: 'Refusé',     labelEn: 'Rejected',    icon: XCircle,      className: '' },
+];
+
 export default function ReservationActions({ booking, locale }: Props) {
-  const [status, setStatus] = useState(booking.status);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const router = useRouter();
+  const isFr = locale !== 'en';
 
-  const labels = {
-    fr: {
-      updateStatus: 'Modifier le statut',
-      save: 'Enregistrer',
-      success: 'Statut mis à jour',
-      error: 'Erreur',
-      PENDING: 'En attente',
-      CONFIRMED: 'Confirmer',
-      IN_PROGRESS: 'En cours',
-      COMPLETED: 'Terminé',
-      CANCELLED: 'Annuler',
-      REJECTED: 'Refuser',
-    },
-    en: {
-      updateStatus: 'Update status',
-      save: 'Save',
-      success: 'Status updated',
-      error: 'Error',
-      PENDING: 'Pending',
-      CONFIRMED: 'Confirm',
-      IN_PROGRESS: 'In progress',
-      COMPLETED: 'Completed',
-      CANCELLED: 'Cancel',
-      REJECTED: 'Reject',
-    },
-  };
+  const label = (a: ActionDef) => isFr ? a.labelFr : a.labelEn;
 
-  const l = labels[locale as keyof typeof labels] || labels.fr;
-
-  const handleSave = async () => {
-    if (status === booking.status) return;
-    setSaving(true);
+  const updateStatus = async (status: string) => {
+    setSaving(status);
     try {
       const res = await fetch(`/api/admin/bookings/${booking.id}`, {
         method: 'PATCH',
@@ -56,33 +59,74 @@ export default function ReservationActions({ booking, locale }: Props) {
         body: JSON.stringify({ status }),
       });
       if (!res.ok) throw new Error('Failed');
-      toast({ title: l.success, variant: 'success' });
+      toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
       router.refresh();
     } catch {
-      toast({ title: l.error, variant: 'destructive' });
+      toast({ title: isFr ? 'Erreur' : 'Error', variant: 'destructive' });
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   };
 
+  const quickActions = TRANSITIONS[booking.status] ?? [];
+
   return (
     <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-      <h3 className="font-semibold text-charcoal mb-3 text-sm">{l.updateStatus}</h3>
-      <div className="flex gap-2">
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="flex-1">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REJECTED'].map(s => (
-              <SelectItem key={s} value={s}>{l[s as keyof typeof l] || s}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button onClick={handleSave} disabled={saving || status === booking.status}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        </Button>
-      </div>
+      <h3 className="font-semibold text-charcoal mb-3 text-sm">
+        {isFr ? 'Actions' : 'Actions'}
+      </h3>
+
+      {quickActions.length > 0 && (
+        <div className="flex gap-2 flex-wrap mb-3">
+          {quickActions.map(action => {
+            const Icon = action.icon;
+            const isLoading = saving === action.status;
+            return (
+              <Button
+                key={action.status}
+                size="sm"
+                onClick={() => updateStatus(action.status)}
+                disabled={!!saving}
+                className={action.className}
+                variant="outline"
+              >
+                {isLoading
+                  ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  : <Icon className="h-4 w-4 mr-1.5" />}
+                {label(action)}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+
+      <button
+        onClick={() => setShowAll(v => !v)}
+        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+      >
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAll ? 'rotate-180' : ''}`} />
+        {isFr ? 'Autre statut…' : 'Other status…'}
+      </button>
+
+      {showAll && (
+        <div className="flex gap-1.5 flex-wrap mt-2 pt-2 border-t border-gray-100">
+          {ALL_STATUSES.filter(a => a.status !== booking.status).map(action => {
+            const Icon = action.icon;
+            const isLoading = saving === action.status;
+            return (
+              <button
+                key={action.status}
+                onClick={() => updateStatus(action.status)}
+                disabled={!!saving}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-gray-600 border border-gray-200 hover:border-gold-300 hover:bg-gold-50 transition-colors disabled:opacity-50"
+              >
+                {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Icon className="h-3 w-3" />}
+                {label(action)}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import Image from 'next/image';
 import {
   ArrowLeft, Calendar, PawPrint, Package, Car,
   FileText, Camera, MessageSquare, CheckCircle2,
-  XCircle, AlertCircle, PlayCircle, Clock,
+  XCircle, AlertCircle, PlayCircle, Clock, Pencil,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
@@ -126,6 +126,7 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
     ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
   const canCancel = ['PENDING', 'CONFIRMED'].includes(booking.status);
+  const canEdit = booking.status === 'PENDING';
   const StatusIcon = STATUS_ICONS[booking.status] || AlertCircle;
   const statusLabel = t.statusLabels[booking.status as keyof typeof t.statusLabels] || booking.status;
 
@@ -146,7 +147,18 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
           </div>
           <p className="text-xs text-gray-400">{formatDate(booking.createdAt, locale)}</p>
         </div>
-        {canCancel && <CancelBookingButton bookingId={booking.id} locale={locale} />}
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <Link
+              href={`/${locale}/client/bookings/${booking.id}/edit`}
+              className="flex items-center gap-1.5 text-sm text-charcoal/60 hover:text-charcoal border border-gray-200 rounded-md px-3 py-1.5 transition-colors"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              {locale === 'en' ? 'Edit' : 'Modifier'}
+            </Link>
+          )}
+          {canCancel && <CancelBookingButton bookingId={booking.id} locale={locale} />}
+        </div>
       </div>
 
       <div className="space-y-4">
