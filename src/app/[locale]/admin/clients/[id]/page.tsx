@@ -53,7 +53,7 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
   const invStatusLbls = isl[locale] || isl.fr;
 
   const totalRevenue = client.invoices.filter(i => i.status === 'PAID').reduce((sum, i) => sum + i.amount, 0);
-  const grade = client.loyaltyGrade?.grade || 'BRONZE';
+  const grade = client.loyaltyGrade?.grade || 'MEMBER';
 
   return (
     <div className="max-w-4xl mx-auto">

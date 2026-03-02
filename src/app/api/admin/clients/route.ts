@@ -103,7 +103,7 @@ export async function POST(request: Request) {
   });
 
   await prisma.loyaltyGrade.create({
-    data: { clientId: user.id, grade: 'BRONZE', isOverride: false },
+    data: { clientId: user.id, grade: 'MEMBER', isOverride: false },
   });
 
   await logAction({

@@ -76,8 +76,8 @@ export async function PATCH(request: Request, { params }: Params) {
         where: { clientId: invoice.clientId, status: 'COMPLETED' },
       });
 
-      const { calculateSuggestedGrade } = await import('@/lib/loyalty');
-      const suggestedGrade = calculateSuggestedGrade(totalStays, totalPaid._sum.amount ?? 0);
+      const { computeGradeFromStats } = await import('@/lib/loyalty');
+      const suggestedGrade = computeGradeFromStats(totalStays, totalPaid._sum.amount ?? 0);
 
       const currentGrade = await prisma.loyaltyGrade.findUnique({
         where: { clientId: invoice.clientId },

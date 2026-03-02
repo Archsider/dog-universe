@@ -89,7 +89,7 @@ export default function ClientDetailActions({ clientId, currentGrade, currentRol
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'].map(g => (
+            {['MEMBER', 'SILVER', 'GOLD', 'PLATINUM'].map(g => (
               <SelectItem key={g} value={g}>{g}</SelectItem>
             ))}
           </SelectContent>

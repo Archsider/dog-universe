@@ -9,20 +9,26 @@ interface LoyaltyBadgeProps {
 }
 
 const gradeConfig = {
-  BRONZE: {
-    fr: 'Bronze',
-    en: 'Bronze',
+  MEMBER: {
+    fr: 'Member',
+    en: 'Member',
+    className: 'text-amber-800 bg-amber-50 border-amber-300',
+    Icon: Medal,
+  },
+  BRONZE: { // backward compat alias
+    fr: 'Member',
+    en: 'Member',
     className: 'text-amber-800 bg-amber-50 border-amber-300',
     Icon: Medal,
   },
   SILVER: {
-    fr: 'Argent',
+    fr: 'Silver',
     en: 'Silver',
     className: 'text-slate-700 bg-slate-100 border-slate-300',
     Icon: Star,
   },
   GOLD: {
-    fr: 'Or',
+    fr: 'Gold',
     en: 'Gold',
     className: 'text-yellow-800 bg-yellow-50 border-yellow-400',
     Icon: Award,
@@ -49,7 +55,7 @@ export function LoyaltyBadge({
   size = 'md',
   showIcon = true,
 }: LoyaltyBadgeProps) {
-  const config = gradeConfig[grade as keyof typeof gradeConfig] ?? gradeConfig.BRONZE;
+  const config = gradeConfig[grade as keyof typeof gradeConfig] ?? gradeConfig.MEMBER;
   const label = locale === 'en' ? config.en : config.fr;
   const { Icon } = config;
 

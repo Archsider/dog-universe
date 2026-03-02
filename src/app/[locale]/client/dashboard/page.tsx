@@ -3,10 +3,11 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
-import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
+import { LoyaltyCard } from '@/components/client/LoyaltyCard';
 import { PawPrint, Calendar, FileText, History, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { formatDate, formatDateShort, formatMAD, calculateNights } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { subMonths } from 'date-fns';
 
 type Params = { locale: string };
 
@@ -55,7 +56,30 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
     _sum: { amount: true },
   });
 
-  const grade = loyaltyGrade?.grade ?? 'BRONZE';
+  // 24-month rolling window for loyalty stats
+  const since24m = subMonths(new Date(), 24);
+
+  const bookings24m = await prisma.booking.findMany({
+    where: {
+      clientId: session.user.id,
+      status: 'COMPLETED',
+      startDate: { gte: since24m },
+    },
+    include: { boardingDetail: true },
+  });
+
+  const nights24m = bookings24m.reduce((sum, b) => {
+    if (b.serviceType !== 'BOARDING' || !b.endDate) return sum;
+    return sum + Math.max(0, Math.floor((b.endDate.getTime() - b.startDate.getTime()) / 86400000));
+  }, 0);
+
+  const invoices24m = await prisma.invoice.aggregate({
+    where: { clientId: session.user.id, status: 'PAID', issuedAt: { gte: since24m } },
+    _sum: { amount: true },
+  });
+  const amount24m = invoices24m._sum.amount ?? 0;
+
+  const grade = loyaltyGrade?.grade ?? 'MEMBER';
 
   const statusColors: Record<string, string> = {
     PENDING: 'pending',
@@ -85,7 +109,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
           <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{t('stats.pets')}</p>
           <p className="text-3xl font-serif font-bold text-charcoal mt-1">{pets.length}</p>
@@ -100,13 +124,10 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
             {formatMAD(totalSpent._sum.amount ?? 0)}
           </p>
         </div>
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-          <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{t('stats.loyalty')}</p>
-          <div className="mt-2">
-            <LoyaltyBadge grade={grade} locale={locale} size="md" />
-          </div>
-        </div>
       </div>
+
+      {/* Loyalty Card */}
+      <LoyaltyCard grade={grade} nights24m={nights24m} amount24m={amount24m} locale={locale} />
 
       {/* Quick Actions */}
       <div>

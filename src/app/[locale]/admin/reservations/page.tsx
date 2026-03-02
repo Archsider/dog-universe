@@ -2,9 +2,8 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { Calendar, ChevronRight, Package, Car } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
+import { Calendar } from 'lucide-react';
+import ReservationsTable from './ReservationsTable';
 
 interface PageProps {
   params: { locale: string };
@@ -79,58 +78,12 @@ export default async function AdminReservationsPage({ params: { locale }, search
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card overflow-hidden">
-        {bookings.length === 0 ? (
-          <div className="text-center py-12 text-gray-400"><Calendar className="h-10 w-10 mx-auto mb-3 opacity-30" /><p>{l.noBookings}</p></div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-ivory-200 bg-ivory-50">
-                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">ID</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">{l.client}</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden sm:table-cell">{l.animals}</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden md:table-cell">{l.dates}</th>
-                  <th className="text-center text-xs font-semibold text-gray-500 px-4 py-3">Statut</th>
-                  <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3 hidden lg:table-cell">{l.total}</th>
-                  <th className="px-4 py-3 w-8" />
-                </tr>
-              </thead>
-              <tbody>
-                {bookings.map(booking => {
-                  const isBoarding = booking.serviceType === 'BOARDING';
-                  return (
-                    <tr key={booking.id} className="border-b border-ivory-100 last:border-0 hover:bg-ivory-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          {isBoarding ? <Package className="h-4 w-4 text-gold-400" /> : <Car className="h-4 w-4 text-blue-400" />}
-                          <span className="font-mono text-xs text-gray-500">{booking.id.slice(0, 8)}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Link href={`/${locale}/admin/clients/${booking.client.id}`} className="text-sm font-medium text-charcoal hover:text-gold-600">{booking.client.name}</Link>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{booking.bookingPets.map(bp => bp.pet.name).join(', ')}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">
-                        {formatDate(booking.startDate, locale)}{booking.endDate ? ` → ${formatDate(booking.endDate, locale)}` : ''}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge className={`text-xs ${getBookingStatusColor(booking.status)}`}>{statusLbls[booking.status]}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-medium text-charcoal hidden lg:table-cell">
-                        {booking.invoice ? formatMAD(booking.invoice.amount) : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Link href={`/${locale}/admin/reservations/${booking.id}`}><ChevronRight className="h-4 w-4 text-gray-400 hover:text-gold-500" /></Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <ReservationsTable
+        bookings={bookings as Parameters<typeof ReservationsTable>[0]['bookings']}
+        locale={locale}
+        statusLbls={statusLbls}
+        noBookings={l.noBookings}
+      />
     </div>
   );
 }

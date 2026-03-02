@@ -16,7 +16,7 @@ export async function PUT(request: Request, { params }: Params) {
   const { id } = await params;
   const { grade } = await request.json();
 
-  if (!['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'].includes(grade)) {
+  if (!['MEMBER', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM'].includes(grade)) {
     return NextResponse.json({ error: 'Invalid grade' }, { status: 400 });
   }
 

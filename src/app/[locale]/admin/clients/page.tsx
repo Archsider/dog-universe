@@ -49,7 +49,7 @@ export default async function AdminClientsPage({ params: { locale }, searchParam
     en: { title: 'Clients', search: 'Search...', all: 'All', name: 'Name', email: 'Email', pets: 'Pets', stays: 'Stays', revenue: 'Revenue', grade: 'Grade', noClients: 'No clients', clients: 'clients' },
   };
   const l = labels[locale as keyof typeof labels] || labels.fr;
-  const grades = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];
+  const grades = ['MEMBER', 'SILVER', 'GOLD', 'PLATINUM'];
 
   return (
     <div>
@@ -93,7 +93,7 @@ export default async function AdminClientsPage({ params: { locale }, searchParam
               <tbody>
                 {filteredClients.map(client => {
                   const totalRevenue = client.invoices.reduce((sum, inv) => sum + inv.amount, 0);
-                  const grade = client.loyaltyGrade?.grade || 'BRONZE';
+                  const grade = client.loyaltyGrade?.grade || 'MEMBER';
                   return (
                     <tr key={client.id} className="border-b border-ivory-100 last:border-0 hover:bg-ivory-50 transition-colors">
                       <td className="px-4 py-3">

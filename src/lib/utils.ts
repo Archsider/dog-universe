@@ -72,18 +72,19 @@ export function generateInvoiceNumber(counter: number): string {
 
 export function getLoyaltyGradeColor(grade: string): string {
   switch (grade) {
-    case 'BRONZE': return 'text-amber-700 bg-amber-50 border-amber-200';
-    case 'SILVER': return 'text-slate-600 bg-slate-50 border-slate-200';
-    case 'GOLD': return 'text-yellow-700 bg-yellow-50 border-yellow-200';
+    case 'MEMBER':
+    case 'BRONZE':   return 'text-amber-700 bg-amber-50 border-amber-200';
+    case 'SILVER':   return 'text-slate-600 bg-slate-50 border-slate-200';
+    case 'GOLD':     return 'text-yellow-700 bg-yellow-50 border-yellow-200';
     case 'PLATINUM': return 'text-indigo-700 bg-indigo-50 border-indigo-200';
-    default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    default:         return 'text-gray-600 bg-gray-50 border-gray-200';
   }
 }
 
 export function getLoyaltyGradeLabel(grade: string, locale: string = 'fr'): string {
   const labels: Record<string, Record<string, string>> = {
-    fr: { BRONZE: 'Bronze', SILVER: 'Argent', GOLD: 'Or', PLATINUM: 'Platine' },
-    en: { BRONZE: 'Bronze', SILVER: 'Silver', GOLD: 'Gold', PLATINUM: 'Platinum' },
+    fr: { MEMBER: 'Member', BRONZE: 'Member', SILVER: 'Silver', GOLD: 'Gold', PLATINUM: 'Platine' },
+    en: { MEMBER: 'Member', BRONZE: 'Member', SILVER: 'Silver', GOLD: 'Gold', PLATINUM: 'Platinum' },
   };
   return labels[locale]?.[grade] ?? grade;
 }

@@ -104,8 +104,8 @@ export async function createLoyaltyUpdateNotification(
   locale: string = 'fr'
 ) {
   const gradeLabels: Record<string, Record<string, string>> = {
-    fr: { BRONZE: 'Bronze', SILVER: 'Argent', GOLD: 'Or', PLATINUM: 'Platine' },
-    en: { BRONZE: 'Bronze', SILVER: 'Silver', GOLD: 'Gold', PLATINUM: 'Platinum' },
+    fr: { MEMBER: 'Member', BRONZE: 'Member', SILVER: 'Silver', GOLD: 'Gold', PLATINUM: 'Platine' },
+    en: { MEMBER: 'Member', BRONZE: 'Member', SILVER: 'Silver', GOLD: 'Gold', PLATINUM: 'Platinum' },
   };
 
   return createNotification({
