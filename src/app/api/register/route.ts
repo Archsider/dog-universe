@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
-import { createWelcomeNotification } from '@/lib/notifications';
+import { createWelcomeNotification, createAdminNewClientNotification } from '@/lib/notifications';
 
 export async function POST(request: Request) {
   try {
@@ -56,18 +56,25 @@ export async function POST(request: Request) {
     const loginUrl = `${appUrl}/${language ?? 'fr'}/auth/login`;
     const { subject, html } = getEmailTemplate('welcome', { clientName: user.name, loginUrl }, language ?? 'fr');
 
-    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { email: true } });
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true, email: true } });
     const adminUrl = `${appUrl}/fr/admin/clients`;
     const adminEmailData = { clientName: user.name, clientEmail: user.email, clientPhone: user.phone ?? '', adminUrl };
 
-    await Promise.all([
+    const results = await Promise.allSettled([
       sendEmail({ to: user.email, subject, html }),
       createWelcomeNotification(user.id, user.name),
-      ...admins.map(admin => {
+      ...admins.flatMap(admin => {
         const { subject: s, html: h } = getEmailTemplate('admin_new_client', adminEmailData, 'fr');
-        return sendEmail({ to: admin.email, subject: s, html: h });
+        return [
+          sendEmail({ to: admin.email, subject: s, html: h }),
+          createAdminNewClientNotification(admin.id, user.name, user.email),
+        ];
       }),
     ]);
+
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') console.error(`[REGISTER] post-register task ${i} failed:`, r.reason);
+    });
 
     return NextResponse.json({
       id: user.id,

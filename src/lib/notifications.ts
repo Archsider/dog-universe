@@ -9,7 +9,8 @@ export type NotificationType =
   | 'ADMIN_MESSAGE'
   | 'STAY_PHOTO'
   | 'LOYALTY_UPDATE'
-  | 'WELCOME';
+  | 'WELCOME'
+  | 'NEW_CLIENT';
 
 interface CreateNotificationData {
   userId: string;
@@ -159,6 +160,17 @@ export async function createWelcomeNotification(userId: string, clientName: stri
     titleEn: 'Welcome to Dog Universe!',
     messageFr: `Bonjour ${clientName}, votre compte a bien été créé. Vous pouvez dès maintenant réserver nos services pour votre compagnon.`,
     messageEn: `Hello ${clientName}, your account has been created. You can now book our services for your companion.`,
+  });
+}
+
+export async function createAdminNewClientNotification(adminId: string, clientName: string, clientEmail: string) {
+  return createNotification({
+    userId: adminId,
+    type: 'NEW_CLIENT',
+    titleFr: '👤 Nouveau client inscrit',
+    titleEn: '👤 New client registered',
+    messageFr: `${clientName} (${clientEmail}) vient de créer un compte.`,
+    messageEn: `${clientName} (${clientEmail}) just created an account.`,
   });
 }
 
