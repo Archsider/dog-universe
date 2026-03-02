@@ -51,9 +51,15 @@ export async function POST(request: Request) {
         await sendEmail({ to: booking.client.email, subject, html });
       }
 
+      const actionMap: Record<string, string> = {
+        CONFIRMED: LOG_ACTIONS.BOOKING_CONFIRMED,
+        REJECTED: LOG_ACTIONS.BOOKING_REJECTED,
+        CANCELLED: LOG_ACTIONS.BOOKING_CANCELLED,
+        COMPLETED: LOG_ACTIONS.BOOKING_COMPLETED,
+      };
       await logAction({
         userId: session.user.id,
-        action: LOG_ACTIONS.BOOKING_CONFIRMED,
+        action: actionMap[status] ?? LOG_ACTIONS.BOOKING_CONFIRMED,
         entityType: 'Booking',
         entityId: booking.id,
         details: { bulkStatus: status },

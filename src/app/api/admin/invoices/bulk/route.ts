@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
   await logAction({
     userId: session.user.id,
-    action: LOG_ACTIONS.INVOICE_CREATED,
+    action: status === 'PAID' ? LOG_ACTIONS.INVOICE_PAID : LOG_ACTIONS.INVOICE_CREATED,
     entityType: 'Invoice',
     entityId: 'bulk',
     details: { ids, status },

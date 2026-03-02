@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, PawPrint, Edit, Plus, FileText, Shield } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { calculateAge, formatDateShort, formatDateShort as fds, formatMAD } from '@/lib/utils';
+import { calculateAge, formatDateShort, formatMAD } from '@/lib/utils';
 import VaccinationSection from '@/components/pets/VaccinationSection';
 import DocumentSection from '@/components/pets/DocumentSection';
 

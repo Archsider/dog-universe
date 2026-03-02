@@ -42,7 +42,13 @@ export default async function AdminClientsPage({ params: { locale }, searchParam
     prisma.user.count({ where }),
   ]);
 
-  const filteredClients = gradeFilter ? clients.filter(c => c.loyaltyGrade?.grade === gradeFilter) : clients;
+  const filteredClients = gradeFilter
+    ? clients.filter(c => {
+        const grade = c.loyaltyGrade?.grade ?? 'MEMBER';
+        if (gradeFilter === 'MEMBER') return grade === 'MEMBER' || grade === 'BRONZE';
+        return grade === gradeFilter;
+      })
+    : clients;
 
   const labels = {
     fr: { title: 'Clients', search: 'Rechercher...', all: 'Tous', name: 'Nom', email: 'Email', pets: 'Animaux', stays: 'Séjours', revenue: 'Revenu', grade: 'Grade', noClients: 'Aucun client', clients: 'clients' },

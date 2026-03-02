@@ -2,7 +2,6 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { Calendar } from 'lucide-react';
 import ReservationsTable from './ReservationsTable';
 
 interface PageProps {

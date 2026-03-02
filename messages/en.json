@@ -62,7 +62,8 @@
       "analytics": "Analytics",
       "logs": "Logs",
       "settings": "Settings",
-      "profile": "My Profile"
+      "profile": "My Profile",
+      "notifications": "Notifications"
     }
   },
   "auth": {
