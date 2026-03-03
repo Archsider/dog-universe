@@ -79,7 +79,6 @@ export async function POST(request: Request) {
     }).catch((e: unknown) => console.error('[REGISTER] emailVerificationToken create failed:', e));
 
     const verifyUrl = `${appUrl}/api/auth/verify-email?token=${verifyToken}`;
-    const loginUrl = `${appUrl}/${locale}/auth/login`;
 
     const { subject: verifySubject, html: verifyHtml } = getEmailTemplate(
       'email_verification',
