@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
-import { addHours } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
@@ -65,24 +63,13 @@ export async function POST(request: Request) {
       details: { email: user.email },
     });
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://dog-universe.vercel.app';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
     const locale = language ?? 'fr';
-
-    // Create email verification token (expires in 24h, non-blocking)
-    const verifyToken = randomUUID();
-    await prisma.emailVerificationToken.create({
-      data: {
-        userId: user.id,
-        token: verifyToken,
-        expiresAt: addHours(new Date(), 24),
-      },
-    }).catch((e: unknown) => console.error('[REGISTER] emailVerificationToken create failed:', e));
-
-    const verifyUrl = `${appUrl}/api/auth/verify-email?token=${verifyToken}`;
+    const loginUrl = `${appUrl}/${locale}/auth/login`;
 
     const { subject: verifySubject, html: verifyHtml } = getEmailTemplate(
-      'email_verification',
-      { clientName: user.name, verifyUrl },
+      'welcome',
+      { clientName: user.name, loginUrl },
       locale
     );
 
