@@ -48,14 +48,14 @@ export async function POST(request: Request) {
       },
     });
 
-    // Create default loyalty grade
+    // Create default loyalty grade (non-blocking)
     await prisma.loyaltyGrade.create({
       data: {
         clientId: user.id,
-        grade: 'MEMBER',
+        grade: 'BRONZE',
         isOverride: false,
       },
-    });
+    }).catch((e: unknown) => console.error('[REGISTER] loyaltyGrade create failed:', e));
 
     await logAction({
       userId: user.id,
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://dog-universe.vercel.app';
     const locale = language ?? 'fr';
 
-    // Create email verification token (expires in 24h)
+    // Create email verification token (expires in 24h, non-blocking)
     const verifyToken = randomUUID();
     await prisma.emailVerificationToken.create({
       data: {
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
         token: verifyToken,
         expiresAt: addHours(new Date(), 24),
       },
-    });
+    }).catch((e: unknown) => console.error('[REGISTER] emailVerificationToken create failed:', e));
 
     const verifyUrl = `${appUrl}/api/auth/verify-email?token=${verifyToken}`;
     const loginUrl = `${appUrl}/${locale}/auth/login`;
