@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { createAdminNewPetNotification } from '@/lib/notifications';
 
 export async function GET() {
   const session = await auth();
@@ -51,6 +52,26 @@ export async function POST(request: Request) {
       entityId: pet.id,
       details: { name: pet.name, species: pet.species },
     });
+
+    // Notify all admins about the new pet (fire-and-forget)
+    if (session.user.role === 'CLIENT') {
+      const [admins, owner] = await Promise.all([
+        prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } }),
+        prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true } }),
+      ]);
+      await Promise.allSettled(
+        admins.map(admin =>
+          createAdminNewPetNotification(
+            admin.id,
+            owner?.name ?? 'Un client',
+            pet.name,
+            pet.species,
+            pet.id,
+            session.user.id
+          )
+        )
+      );
+    }
 
     return NextResponse.json(pet, { status: 201 });
   } catch (error) {

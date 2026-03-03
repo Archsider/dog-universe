@@ -3,8 +3,17 @@ import { randomUUID } from 'crypto';
 import { addHours } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { checkRateLimit, getIp } from '@/lib/ratelimit';
 
 export async function POST(request: Request) {
+  // Rate limit: max 3 reset requests per IP per 15 minutes
+  const ip = getIp(request);
+  const rl = checkRateLimit(`reset-password:${ip}`, 3, 15 * 60_000);
+  if (!rl.allowed) {
+    // Still return ok to prevent timing attacks
+    return NextResponse.json({ message: 'ok' });
+  }
+
   try {
     const { email, locale = 'fr' } = await request.json();
 

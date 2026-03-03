@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingValidationNotification, createBookingRefusalNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { sendSms, smsBookingConfirmed, smsBookingCancelled } from '@/lib/sms';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth();
@@ -69,6 +70,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }, userLang);
       await sendEmail({ to: booking.client.email, subject, html });
 
+      if (booking.client.phone) {
+        await sendSms({
+          to: booking.client.phone,
+          message: smsBookingConfirmed({
+            clientName: booking.client.name,
+            bookingRef,
+            petNames,
+            dates,
+            locale: userLang,
+          }),
+        });
+      }
+
       await logAction({
         userId: session.user.id,
         action: LOG_ACTIONS.BOOKING_CONFIRMED,
@@ -84,6 +98,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         petName: petNames,
       }, userLang);
       await sendEmail({ to: booking.client.email, subject, html });
+
+      if (booking.client.phone) {
+        await sendSms({
+          to: booking.client.phone,
+          message: smsBookingCancelled({ bookingRef, locale: userLang }),
+        });
+      }
 
       await logAction({
         userId: session.user.id,

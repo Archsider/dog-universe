@@ -10,7 +10,8 @@ export type NotificationType =
   | 'STAY_PHOTO'
   | 'LOYALTY_UPDATE'
   | 'WELCOME'
-  | 'NEW_CLIENT';
+  | 'NEW_CLIENT'
+  | 'NEW_PET';
 
 interface CreateNotificationData {
   userId: string;
@@ -172,6 +173,44 @@ export async function createAdminNewClientNotification(adminId: string, clientId
     messageFr: `${clientName} (${clientEmail}) vient de créer un compte.`,
     messageEn: `${clientName} (${clientEmail}) just created an account.`,
     metadata: { clientId },
+  });
+}
+
+export async function createAdminNewPetNotification(
+  adminId: string,
+  clientName: string,
+  petName: string,
+  species: string,
+  petId: string,
+  clientId: string
+) {
+  const speciesLabelFr = species === 'DOG' ? 'chien' : 'chat';
+  const speciesLabelEn = species === 'DOG' ? 'dog' : 'cat';
+  return createNotification({
+    userId: adminId,
+    type: 'NEW_PET',
+    titleFr: '🐾 Nouvel animal ajouté',
+    titleEn: '🐾 New pet added',
+    messageFr: `${clientName} a ajouté un ${speciesLabelFr} : ${petName}.`,
+    messageEn: `${clientName} added a ${speciesLabelEn}: ${petName}.`,
+    metadata: { petId, clientId },
+  });
+}
+
+export async function createStayReminderNotification(
+  userId: string,
+  petName: string,
+  startDate: string,
+  bookingId: string
+) {
+  return createNotification({
+    userId,
+    type: 'STAY_REMINDER',
+    titleFr: '🐾 Rappel de séjour',
+    titleEn: '🐾 Stay reminder',
+    messageFr: `Le séjour de ${petName} commence dans 2 jours (${startDate}). Pensez à préparer ses affaires !`,
+    messageEn: `${petName}'s stay starts in 2 days (${startDate}). Don't forget to pack their belongings!`,
+    metadata: { bookingId },
   });
 }
 

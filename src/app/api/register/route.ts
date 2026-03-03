@@ -1,11 +1,24 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
+import { addHours } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { createWelcomeNotification, createAdminNewClientNotification } from '@/lib/notifications';
+import { checkRateLimit, getIp } from '@/lib/ratelimit';
 
 export async function POST(request: Request) {
+  // Rate limit: max 5 registrations per IP per 10 minutes
+  const ip = getIp(request);
+  const rl = checkRateLimit(`register:${ip}`, 5, 10 * 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'RATE_LIMIT', message: 'Too many requests. Please try again later.' },
+      { status: 429 }
+    );
+  }
+
   try {
     const { name, email, phone, password, language } = await request.json();
 
@@ -52,16 +65,34 @@ export async function POST(request: Request) {
       details: { email: user.email },
     });
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
-    const loginUrl = `${appUrl}/${language ?? 'fr'}/auth/login`;
-    const { subject, html } = getEmailTemplate('welcome', { clientName: user.name, loginUrl }, language ?? 'fr');
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://dog-universe.vercel.app';
+    const locale = language ?? 'fr';
+
+    // Create email verification token (expires in 24h)
+    const verifyToken = randomUUID();
+    await prisma.emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        token: verifyToken,
+        expiresAt: addHours(new Date(), 24),
+      },
+    });
+
+    const verifyUrl = `${appUrl}/api/auth/verify-email?token=${verifyToken}`;
+    const loginUrl = `${appUrl}/${locale}/auth/login`;
+
+    const { subject: verifySubject, html: verifyHtml } = getEmailTemplate(
+      'email_verification',
+      { clientName: user.name, verifyUrl },
+      locale
+    );
 
     const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true, email: true } });
     const adminUrl = `${appUrl}/fr/admin/clients`;
     const adminEmailData = { clientName: user.name, clientEmail: user.email, clientPhone: user.phone ?? '', adminUrl };
 
     const results = await Promise.allSettled([
-      sendEmail({ to: user.email, subject, html }),
+      sendEmail({ to: user.email, subject: verifySubject, html: verifyHtml }),
       createWelcomeNotification(user.id, user.name),
       ...admins.flatMap(admin => {
         const { subject: s, html: h } = getEmailTemplate('admin_new_client', adminEmailData, 'fr');

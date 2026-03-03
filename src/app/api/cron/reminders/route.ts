@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { createStayReminderNotification } from '@/lib/notifications';
+import { sendSms, smsBookingReminder } from '@/lib/sms';
 
 /**
- * POST /api/cron/reminders
+ * GET /api/cron/reminders
  * Called daily by Vercel Cron (see vercel.json).
- * Sends a J-2 reminder email to clients whose boarding starts in 2 days.
+ * Sends a J-2 reminder email + in-app notification + SMS to clients whose boarding starts in 2 days.
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -31,7 +33,7 @@ export async function GET(request: Request) {
       startDate: { gte: rangeStart, lte: rangeEnd },
     },
     include: {
-      client: { select: { name: true, email: true, language: true } },
+      client: { select: { id: true, name: true, email: true, phone: true, language: true } },
       bookingPets: { include: { pet: { select: { name: true } } } },
     },
   });
@@ -49,6 +51,7 @@ export async function GET(request: Request) {
         month: 'long',
       });
 
+      // Email
       const { subject, html } = getEmailTemplate(
         'booking_reminder',
         {
@@ -60,8 +63,29 @@ export async function GET(request: Request) {
         },
         locale,
       );
-
       await sendEmail({ to: booking.client.email, subject, html });
+
+      // In-app notification
+      await createStayReminderNotification(
+        booking.client.id,
+        petNames,
+        startDate,
+        booking.id
+      );
+
+      // SMS (fire-and-forget if not configured)
+      if (booking.client.phone) {
+        await sendSms({
+          to: booking.client.phone,
+          message: smsBookingReminder({
+            clientName: booking.client.name,
+            petNames,
+            date: startDate,
+            locale,
+          }),
+        });
+      }
+
       sent++;
     } catch (err) {
       errors.push(`${booking.id}: ${String(err)}`);

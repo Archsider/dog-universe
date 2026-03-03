@@ -87,7 +87,7 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'welcome' | 'admin_new_client', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'welcome' | 'admin_new_client' | 'email_verification', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -300,6 +300,32 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
             View in administration
           </a>
         </p>
+      `,
+    },
+    email_verification: {
+      subjectFr: '✉️ Vérifiez votre adresse e-mail — Dog Universe',
+      subjectEn: '✉️ Verify your email address — Dog Universe',
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+        <p>Merci de vous être inscrit sur Dog Universe. Pour activer votre compte, veuillez vérifier votre adresse e-mail.</p>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${data.verifyUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Vérifier mon adresse e-mail
+          </a>
+        </p>
+        <p style="color: #6B7280; font-size: 13px;">Ce lien expire dans 24 heures. Si vous n'avez pas créé de compte, ignorez cet e-mail.</p>
+        <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+        <p>Thank you for registering on Dog Universe. To activate your account, please verify your email address.</p>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${data.verifyUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Verify my email address
+          </a>
+        </p>
+        <p style="color: #6B7280; font-size: 13px;">This link expires in 24 hours. If you didn't create an account, please ignore this email.</p>
+        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
     reset_password: {

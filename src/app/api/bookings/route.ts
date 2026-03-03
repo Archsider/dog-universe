@@ -5,6 +5,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingConfirmationNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { formatDate } from '@/lib/utils';
+import { checkRateLimit, getIp } from '@/lib/ratelimit';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -42,6 +43,17 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Rate limit clients: max 10 bookings per hour per user
+  if (session.user.role === 'CLIENT') {
+    const rl = checkRateLimit(`booking:${session.user.id}`, 10, 60 * 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'RATE_LIMIT', message: 'Too many booking requests. Please try again later.' },
+        { status: 429 }
+      );
+    }
+  }
 
   try {
     const body = await request.json();
@@ -83,6 +95,77 @@ export async function POST(request: Request) {
       });
       if (pets.length !== petIds.length) {
         return NextResponse.json({ error: 'INVALID_PETS' }, { status: 400 });
+      }
+    }
+
+    // Conflict detection for BOARDING: check pet availability + capacity
+    if (serviceType === 'BOARDING' && startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      // Check if any of the requested pets are already in an active boarding for overlapping dates
+      const petConflicts = await prisma.bookingPet.findMany({
+        where: {
+          petId: { in: petIds },
+          booking: {
+            serviceType: 'BOARDING',
+            status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
+            startDate: { lt: end },
+            endDate: { gt: start },
+          },
+        },
+        include: { pet: { select: { name: true } } },
+      });
+
+      if (petConflicts.length > 0) {
+        const conflictedNames = [...new Set(petConflicts.map(c => c.pet.name))].join(', ');
+        return NextResponse.json(
+          { error: 'PET_ALREADY_BOOKED', message: conflictedNames },
+          { status: 409 }
+        );
+      }
+
+      // Check boarding capacity from settings
+      const [dogCapSetting, catCapSetting] = await Promise.all([
+        prisma.setting.findUnique({ where: { key: 'capacity_dogs' } }),
+        prisma.setting.findUnique({ where: { key: 'capacity_cats' } }),
+      ]);
+      const dogCapacity = parseInt(dogCapSetting?.value ?? '10');
+      const catCapacity = parseInt(catCapSetting?.value ?? '5');
+
+      // Count active boarders during the requested period
+      const overlappingBoardings = await prisma.booking.findMany({
+        where: {
+          serviceType: 'BOARDING',
+          status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
+          startDate: { lt: end },
+          endDate: { gt: start },
+        },
+        include: { bookingPets: { include: { pet: { select: { species: true } } } } },
+      });
+
+      let currentDogs = 0;
+      let currentCats = 0;
+      for (const b of overlappingBoardings) {
+        for (const bp of b.bookingPets) {
+          if (bp.pet.species === 'DOG') currentDogs++;
+          else if (bp.pet.species === 'CAT') currentCats++;
+        }
+      }
+
+      // Count requested species
+      const requestedPets = await prisma.pet.findMany({
+        where: { id: { in: petIds } },
+        select: { species: true },
+      });
+      const requestedDogs = requestedPets.filter(p => p.species === 'DOG').length;
+      const requestedCats = requestedPets.filter(p => p.species === 'CAT').length;
+
+      if (currentDogs + requestedDogs > dogCapacity) {
+        return NextResponse.json({ error: 'CAPACITY_DOGS_FULL' }, { status: 409 });
+      }
+      if (currentCats + requestedCats > catCapacity) {
+        return NextResponse.json({ error: 'CAPACITY_CATS_FULL' }, { status: 409 });
       }
     }
 
