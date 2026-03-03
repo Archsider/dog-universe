@@ -13,6 +13,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
   const clientId = searchParams.get('clientId');
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
+  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '20')));
 
   const where: Record<string, unknown> = {};
 
@@ -24,21 +26,26 @@ export async function GET(request: Request) {
 
   if (status) where.status = status;
 
-  const invoices = await prisma.invoice.findMany({
-    where,
-    include: {
-      client: { select: { id: true, name: true, email: true } },
-      booking: {
-        include: {
-          bookingPets: { include: { pet: { select: { name: true } } } },
+  const [invoices, total] = await Promise.all([
+    prisma.invoice.findMany({
+      where,
+      include: {
+        client: { select: { id: true, name: true, email: true } },
+        booking: {
+          include: {
+            bookingPets: { include: { pet: { select: { name: true } } } },
+          },
         },
+        items: true,
       },
-      items: true,
-    },
-    orderBy: { issuedAt: 'desc' },
-  });
+      orderBy: { issuedAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.invoice.count({ where }),
+  ]);
 
-  return NextResponse.json(invoices);
+  return NextResponse.json({ invoices, total, page, limit });
 }
 
 export async function POST(request: Request) {

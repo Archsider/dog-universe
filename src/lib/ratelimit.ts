@@ -55,9 +55,16 @@ export function checkRateLimit(
   return { allowed: true, remaining: limit - entry.count, resetAt: entry.resetAt };
 }
 
-/** Extract IP from Next.js request headers */
+/** Extract IP from Next.js request headers.
+ * Prefers x-real-ip (set by Vercel/Nginx, not spoofable by client).
+ * Falls back to last entry in x-forwarded-for (added by the closest trusted proxy). */
 export function getIp(request: Request): string {
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
   const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) return forwarded.split(',')[0].trim();
-  return request.headers.get('x-real-ip') ?? 'unknown';
+  if (forwarded) {
+    const ips = forwarded.split(',').map(ip => ip.trim());
+    return ips[ips.length - 1]; // last entry is added by the closest trusted proxy
+  }
+  return 'unknown';
 }

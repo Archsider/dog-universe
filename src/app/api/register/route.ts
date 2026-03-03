@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     await prisma.loyaltyGrade.create({
       data: {
         clientId: user.id,
-        grade: 'BRONZE',
+        grade: 'MEMBER',
         isOverride: false,
       },
     }).catch((e: unknown) => console.error('[REGISTER] loyaltyGrade create failed:', e));

@@ -73,11 +73,8 @@ export async function sendEmail({
     const message = error instanceof Error ? error.message : String(error);
     if (process.env.NODE_ENV === 'production') {
       console.error('[EMAIL ERROR] Échec envoi email', {
-        to,
+        to: to.replace(/(?<=.).(?=.*@)/g, '*'), // mask local part
         subject,
-        host: process.env.EMAIL_SERVER_HOST,
-        port: process.env.EMAIL_SERVER_PORT,
-        user: process.env.EMAIL_SERVER_USER,
         error: message,
       });
     } else {

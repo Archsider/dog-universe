@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { createBookingValidationNotification, createBookingRefusalNotification } from '@/lib/notifications';
+import { createBookingValidationNotification, createBookingRefusalNotification, createBookingInProgressNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendSms, smsBookingConfirmed, smsBookingCancelled } from '@/lib/sms';
 
@@ -133,6 +133,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       await logAction({
         userId: session.user.id,
         action: status === 'REJECTED' ? LOG_ACTIONS.BOOKING_REJECTED : LOG_ACTIONS.BOOKING_CANCELLED,
+        entityType: 'Booking',
+        entityId: params.id,
+        details: { from: booking.status, to: status },
+      });
+    } else if (status === 'IN_PROGRESS') {
+      await createBookingInProgressNotification(booking.clientId, bookingRef, petNames);
+      await logAction({
+        userId: session.user.id,
+        action: LOG_ACTIONS.BOOKING_CONFIRMED,
         entityType: 'Booking',
         entityId: params.id,
         details: { from: booking.status, to: status },

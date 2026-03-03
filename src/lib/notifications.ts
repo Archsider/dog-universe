@@ -69,6 +69,21 @@ export async function createBookingValidationNotification(
   });
 }
 
+export async function createBookingInProgressNotification(
+  userId: string,
+  bookingRef: string,
+  petName: string
+) {
+  return createNotification({
+    userId,
+    type: 'BOOKING_VALIDATION',
+    titleFr: 'Séjour commencé',
+    titleEn: 'Stay in progress',
+    messageFr: `Le séjour de ${petName} a commencé. Réf. : ${bookingRef}`,
+    messageEn: `${petName}'s stay has started. Ref: ${bookingRef}`,
+  });
+}
+
 export async function createBookingRefusalNotification(
   userId: string,
   bookingRef: string,

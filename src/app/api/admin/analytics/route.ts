@@ -11,7 +11,7 @@ export async function GET(request: Request) {
 
   const now = new Date();
   const { searchParams } = new URL(request.url);
-  const periodMonths = parseInt(searchParams.get('months') ?? '1');
+  const periodMonths = Math.min(24, Math.max(1, parseInt(searchParams.get('months') ?? '1')));
 
   // ── Current year yearly chart (single query, grooming breakdown) ─────────
   const currentYear = now.getUTCFullYear();

@@ -14,6 +14,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
   const clientId = searchParams.get('clientId');
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
+  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '20')));
 
   const where: Record<string, unknown> = {};
 
@@ -25,19 +27,24 @@ export async function GET(request: Request) {
 
   if (status) where.status = status;
 
-  const bookings = await prisma.booking.findMany({
-    where,
-    include: {
-      client: { select: { id: true, name: true, email: true } },
-      bookingPets: { include: { pet: true } },
-      boardingDetail: true,
-      taxiDetail: true,
-      invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
-    },
-    orderBy: { startDate: 'desc' },
-  });
+  const [bookings, total] = await Promise.all([
+    prisma.booking.findMany({
+      where,
+      include: {
+        client: { select: { id: true, name: true, email: true } },
+        bookingPets: { include: { pet: true } },
+        boardingDetail: true,
+        taxiDetail: true,
+        invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
+      },
+      orderBy: { startDate: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.booking.count({ where }),
+  ]);
 
-  return NextResponse.json(bookings);
+  return NextResponse.json({ bookings, total, page, limit });
 }
 
 export async function POST(request: Request) {

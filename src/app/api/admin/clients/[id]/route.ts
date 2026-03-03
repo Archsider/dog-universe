@@ -18,8 +18,8 @@ export async function GET(_req: Request, { params }: Params) {
     include: {
       pets: {
         include: {
-          vaccinations: { orderBy: { date: 'desc' } },
-          documents: { orderBy: { uploadedAt: 'desc' } },
+          vaccinations: { orderBy: { date: 'desc' }, take: 10 },
+          documents: { orderBy: { uploadedAt: 'desc' }, take: 5 },
         },
       },
       loyaltyGrade: true,
@@ -31,10 +31,12 @@ export async function GET(_req: Request, { params }: Params) {
           invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
         },
         orderBy: { startDate: 'desc' },
+        take: 20,
       },
       invoices: {
         include: { items: true },
         orderBy: { issuedAt: 'desc' },
+        take: 20,
       },
     },
   });

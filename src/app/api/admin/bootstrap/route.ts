@@ -1,43 +1,41 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
-// Route temporaire — À SUPPRIMER après utilisation
-const SECRET = process.env.CRON_SECRET;
-const TARGET_EMAIL = 'khtabe.mehdi@gmail.com';
+// One-time bootstrap route — DELETE after first use
+export async function POST(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  const secret = process.env.BOOTSTRAP_SECRET ?? process.env.CRON_SECRET;
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const secret = searchParams.get('secret');
-
-  if (!SECRET || secret !== SECRET) {
+  if (!secret || authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: TARGET_EMAIL } });
-
-  if (existing) {
-    await prisma.user.update({
-      where: { email: TARGET_EMAIL },
-      data: { role: 'ADMIN' },
-    });
-    return NextResponse.json({ message: `✅ ${TARGET_EMAIL} est maintenant ADMIN` });
+  const targetEmail = process.env.ADMIN_BOOTSTRAP_EMAIL;
+  if (!targetEmail) {
+    return NextResponse.json({ error: 'ADMIN_BOOTSTRAP_EMAIL env var not set' }, { status: 500 });
   }
 
-  const passwordHash = await bcrypt.hash('ChangeMe2024!', 12);
+  const existing = await prisma.user.findUnique({ where: { email: targetEmail } });
+
+  if (existing) {
+    await prisma.user.update({ where: { email: targetEmail }, data: { role: 'ADMIN' } });
+    return NextResponse.json({ message: `${targetEmail} promoted to ADMIN` });
+  }
+
+  const tempPassword = crypto.randomBytes(16).toString('hex');
+  const passwordHash = await bcrypt.hash(tempPassword, 12);
   await prisma.user.create({
     data: {
-      email: TARGET_EMAIL,
-      name: 'Mehdi Khtabe',
+      email: targetEmail,
+      name: 'Admin',
       passwordHash,
       role: 'ADMIN',
       language: 'fr',
     },
   });
 
-  return NextResponse.json({
-    message: `✅ Compte ADMIN créé`,
-    email: TARGET_EMAIL,
-    password: 'ChangeMe2024! (change-le via reset mot de passe)',
-  });
+  // Password only returned once — store it immediately
+  return NextResponse.json({ message: 'Admin account created', tempPassword });
 }
