@@ -134,8 +134,8 @@ export async function POST(request: Request) {
 
       // Check boarding capacity from settings
       const [dogCapSetting, catCapSetting] = await Promise.all([
-        prisma.setting.findUnique({ where: { key: 'capacity_dogs' } }),
-        prisma.setting.findUnique({ where: { key: 'capacity_cats' } }),
+        prisma.setting.findUnique({ where: { key: 'capacity_dog' } }),
+        prisma.setting.findUnique({ where: { key: 'capacity_cat' } }),
       ]);
       const dogCapacity = parseInt(dogCapSetting?.value ?? '10');
       const catCapacity = parseInt(catCapSetting?.value ?? '5');
@@ -168,31 +168,33 @@ export async function POST(request: Request) {
       }
     }
 
-    // Generate booking reference
-    const count = await prisma.booking.count();
-    const year = new Date().getFullYear();
-    const bookingRef = `DU-${year}-${String(count + 1).padStart(4, '0')}`;
-
     const clientId = session.user.role === 'CLIENT' ? session.user.id : body.clientId;
+    const year = new Date().getFullYear();
 
-    const booking = await prisma.booking.create({
-      data: {
-        clientId,
-        serviceType,
-        status: session.user.role === 'ADMIN' ? 'CONFIRMED' : 'PENDING',
-        startDate: new Date(startDate),
-        endDate: endDate ? new Date(endDate) : null,
-        arrivalTime: arrivalTime || null,
-        notes: notes?.trim() || null,
-        totalPrice: totalPrice ?? 0,
-        bookingPets: {
-          create: petIds.map((petId: string) => ({ petId })),
+    // Generate unique booking reference atomically inside a transaction
+    const { booking, bookingRef } = await prisma.$transaction(async (tx) => {
+      const count = await tx.booking.count();
+      const ref = `DU-${year}-${String(count + 1).padStart(4, '0')}`;
+      const b = await tx.booking.create({
+        data: {
+          clientId,
+          serviceType,
+          status: session.user.role === 'ADMIN' ? 'CONFIRMED' : 'PENDING',
+          startDate: new Date(startDate),
+          endDate: endDate ? new Date(endDate) : null,
+          arrivalTime: arrivalTime || null,
+          notes: notes?.trim() || null,
+          totalPrice: totalPrice ?? 0,
+          bookingPets: {
+            create: petIds.map((petId: string) => ({ petId })),
+          },
         },
-      },
-      include: {
-        bookingPets: { include: { pet: true } },
-        client: true,
-      },
+        include: {
+          bookingPets: { include: { pet: true } },
+          client: true,
+        },
+      });
+      return { booking: b, bookingRef: ref };
     });
 
     // Create service-specific details

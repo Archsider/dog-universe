@@ -33,13 +33,21 @@ export async function GET(request: Request) {
   const status = searchParams.get('status');
   const year = searchParams.get('year');
 
+  const VALID_STATUSES = ['PAID', 'PENDING', 'CANCELLED'];
+  if (status && !VALID_STATUSES.includes(status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+  }
+  const yearNum = year ? parseInt(year, 10) : null;
+  if (year && (isNaN(yearNum!) || yearNum! < 2000 || yearNum! > 2100)) {
+    return NextResponse.json({ error: 'Invalid year' }, { status: 400 });
+  }
+
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
-  if (year) {
-    const y = parseInt(year);
+  if (yearNum) {
     where.issuedAt = {
-      gte: new Date(`${y}-01-01`),
-      lte: new Date(`${y}-12-31T23:59:59`),
+      gte: new Date(`${yearNum}-01-01`),
+      lte: new Date(`${yearNum}-12-31T23:59:59`),
     };
   }
 
@@ -82,7 +90,7 @@ export async function GET(request: Request) {
     '\uFEFF' + // BOM for Excel
     [headers.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
 
-  const filename = `factures_doguniverse_${year ?? new Date().getFullYear()}.csv`;
+  const filename = `factures_doguniverse_${yearNum ?? new Date().getFullYear()}.csv`;
 
   return new NextResponse(csv, {
     status: 200,

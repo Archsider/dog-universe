@@ -52,7 +52,7 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
 
   const bookingMessages = adminMessages.filter(n => {
     if (!n.metadata) return false;
-    try { return JSON.parse(n.metadata).bookingId === id; } catch { return false; }
+    try { return (n.metadata as Record<string, string>).bookingId === id; } catch { return false; }
   });
 
   const l = {

@@ -32,7 +32,7 @@ export async function createNotification(data: CreateNotificationData) {
       titleEn: data.titleEn,
       messageFr: data.messageFr,
       messageEn: data.messageEn,
-      metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
+      metadata: data.metadata ?? undefined,
       read: false,
     },
   });

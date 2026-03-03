@@ -99,6 +99,8 @@ model Booking {
   @@index([clientId])
   @@index([status])
   @@index([startDate])
+  @@index([status, startDate, endDate])
+  @@index([clientId, status])
 }
 
 model BookingPet {
@@ -164,6 +166,7 @@ model Invoice {
 
   @@index([clientId])
   @@index([status])
+  @@index([status, issuedAt])
 }
 
 model InvoiceItem {
@@ -187,7 +190,7 @@ model Notification {
   titleEn   String
   messageFr String
   messageEn String
-  metadata  String?  // JSON string e.g. {"bookingId":"..."}
+  metadata  Json?    // e.g. {"bookingId":"..."}
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -195,6 +198,7 @@ model Notification {
 
   @@index([userId])
   @@index([read])
+  @@index([userId, read, createdAt])
 }
 
 model LoyaltyGrade {
