@@ -200,7 +200,7 @@ model Notification {
 model LoyaltyGrade {
   id         String    @id @default(cuid())
   clientId   String    @unique
-  grade      String    @default("BRONZE") // "BRONZE" | "SILVER" | "GOLD" | "PLATINUM"
+  grade      String    @default("MEMBER") // "MEMBER" | "SILVER" | "GOLD" | "PLATINUM"
   isOverride Boolean   @default(false)
   overrideBy String?
   overrideAt DateTime?

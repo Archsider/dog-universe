@@ -59,7 +59,7 @@ export default function RegisterPage() {
         if (data.error === 'EMAIL_TAKEN') {
           setError(t('errors.emailTaken'));
         } else {
-          setError(data.message ?? locale === 'fr' ? 'Erreur lors de la création du compte' : 'Error creating account');
+          setError(data.message ?? (locale === 'fr' ? 'Erreur lors de la création du compte' : 'Error creating account'));
         }
         setLoading(false);
         return;

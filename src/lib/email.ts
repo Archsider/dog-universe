@@ -87,7 +87,14 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'welcome' | 'admin_new_client' | 'email_verification', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return String(text ?? '').replace(/[&<>"']/g, m => map[m]);
+}
+
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'welcome' | 'admin_new_client' | 'email_verification', rawData: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+  // Escape all user-supplied data to prevent XSS in email HTML
+  const data = Object.fromEntries(Object.entries(rawData).map(([k, v]) => [k, escapeHtml(v)]));
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;

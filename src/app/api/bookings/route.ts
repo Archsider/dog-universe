@@ -133,25 +133,17 @@ export async function POST(request: Request) {
       const dogCapacity = parseInt(dogCapSetting?.value ?? '10');
       const catCapacity = parseInt(catCapSetting?.value ?? '5');
 
-      // Count active boarders during the requested period
-      const overlappingBoardings = await prisma.booking.findMany({
-        where: {
-          serviceType: 'BOARDING',
-          status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
-          startDate: { lt: end },
-          endDate: { gt: start },
-        },
-        include: { bookingPets: { include: { pet: { select: { species: true } } } } },
-      });
-
-      let currentDogs = 0;
-      let currentCats = 0;
-      for (const b of overlappingBoardings) {
-        for (const bp of b.bookingPets) {
-          if (bp.pet.species === 'DOG') currentDogs++;
-          else if (bp.pet.species === 'CAT') currentCats++;
-        }
-      }
+      // Count active boarders during the requested period (2 aggregation queries instead of N+1)
+      const overlapFilter = {
+        serviceType: 'BOARDING' as const,
+        status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
+        startDate: { lt: end },
+        endDate: { gt: start },
+      };
+      const [currentDogs, currentCats] = await Promise.all([
+        prisma.bookingPet.count({ where: { pet: { species: 'DOG' }, booking: overlapFilter } }),
+        prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: overlapFilter } }),
+      ]);
 
       // Count requested species
       const requestedPets = await prisma.pet.findMany({

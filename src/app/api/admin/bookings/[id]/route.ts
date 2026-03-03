@@ -36,6 +36,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const body = await request.json();
   const { status, notes } = body;
 
+  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REJECTED'];
+  if (status && !VALID_STATUSES.includes(status)) {
+    return NextResponse.json({ error: 'INVALID_STATUS' }, { status: 400 });
+  }
+
   const booking = await prisma.booking.findUnique({
     where: { id: params.id },
     include: {
@@ -44,6 +49,25 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     },
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // Validate status transition
+  if (status && status !== booking.status) {
+    const validTransitions: Record<string, string[]> = {
+      PENDING:     ['CONFIRMED', 'REJECTED', 'CANCELLED'],
+      CONFIRMED:   ['IN_PROGRESS', 'CANCELLED'],
+      IN_PROGRESS: ['COMPLETED', 'CANCELLED'],
+      COMPLETED:   [],
+      CANCELLED:   [],
+      REJECTED:    [],
+    };
+    const allowed = validTransitions[booking.status] ?? [];
+    if (!allowed.includes(status)) {
+      return NextResponse.json(
+        { error: 'INVALID_TRANSITION', message: `Cannot transition from ${booking.status} to ${status}` },
+        { status: 422 }
+      );
+    }
+  }
 
   const updated = await prisma.booking.update({
     where: { id: params.id },

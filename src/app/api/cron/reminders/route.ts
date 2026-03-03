@@ -18,13 +18,15 @@ export async function GET(request: Request) {
   }
 
   const now = new Date();
-  // Target: bookings whose startDate falls in [now+2d 00:00, now+2d 23:59]
-  const dayAfterTomorrow = new Date(now);
-  dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
-  const rangeStart = new Date(dayAfterTomorrow);
-  rangeStart.setHours(0, 0, 0, 0);
-  const rangeEnd = new Date(dayAfterTomorrow);
-  rangeEnd.setHours(23, 59, 59, 999);
+  // Target: bookings whose startDate falls on the day 2 days from now in Morocco time (UTC+1).
+  // Vercel runs in UTC; we use setUTCHours with the Morocco offset so the window is correct.
+  const MOROCCO_UTC_OFFSET = 1; // Africa/Casablanca is UTC+1 year-round (no DST)
+  const targetDateUTC = new Date(now);
+  targetDateUTC.setUTCDate(targetDateUTC.getUTCDate() + 2);
+  const rangeStart = new Date(targetDateUTC);
+  rangeStart.setUTCHours(0 - MOROCCO_UTC_OFFSET, 0, 0, 0); // 00:00 Morocco = 23:00 UTC prev day
+  const rangeEnd = new Date(targetDateUTC);
+  rangeEnd.setUTCHours(24 - MOROCCO_UTC_OFFSET - 1, 59, 59, 999); // 23:59 Morocco = 22:59 UTC
 
   const bookings = await prisma.booking.findMany({
     where: {

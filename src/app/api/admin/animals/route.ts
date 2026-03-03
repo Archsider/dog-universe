@@ -12,6 +12,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('search') ?? '';
   const species = searchParams.get('species') ?? '';
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
 
   const where: Record<string, unknown> = {};
 
@@ -25,18 +27,23 @@ export async function GET(request: Request) {
 
   if (species) where.species = species;
 
-  const pets = await prisma.pet.findMany({
-    where,
-    include: {
-      owner: { select: { id: true, name: true, email: true } },
-      vaccinations: { orderBy: { date: 'desc' }, take: 5 },
-      documents: { orderBy: { uploadedAt: 'desc' }, take: 3 },
-      _count: { select: { bookingPets: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  const [pets, total] = await Promise.all([
+    prisma.pet.findMany({
+      where,
+      include: {
+        owner: { select: { id: true, name: true, email: true } },
+        vaccinations: { orderBy: { date: 'desc' }, take: 5 },
+        documents: { orderBy: { uploadedAt: 'desc' }, take: 3 },
+        _count: { select: { bookingPets: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.pet.count({ where }),
+  ]);
 
-  return NextResponse.json(pets);
+  return NextResponse.json({ pets, total, page, limit });
 }
 
 export async function POST(request: Request) {
