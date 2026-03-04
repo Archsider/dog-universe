@@ -1,15 +1,22 @@
 // Dog Universe — Loyalty system
 // Grades: MEMBER → SILVER → GOLD → PLATINUM
-// Criteria: 24-month rolling window, nights OR amount (MAD)
+// Criteria: 24-month rolling window, nights OR points
+// Points: 10 pts/boarding night · 15 pts/grooming · 10 pts/transport
 // BRONZE is kept as an alias for MEMBER (backward compatibility)
 
 export type Grade = 'MEMBER' | 'SILVER' | 'GOLD' | 'PLATINUM';
 
-export const GRADE_THRESHOLDS: Record<Grade, { nights: number; amount: number }> = {
-  MEMBER:   { nights: 0,   amount: 0 },
-  SILVER:   { nights: 40,  amount: 10000 },
-  GOLD:     { nights: 90,  amount: 25000 },
-  PLATINUM: { nights: 160, amount: 40000 },
+export const POINTS_PER_SERVICE = {
+  BOARDING_PER_NIGHT: 10,
+  GROOMING: 15,
+  PET_TAXI: 10,
+} as const;
+
+export const GRADE_THRESHOLDS: Record<Grade, { nights: number; points: number }> = {
+  MEMBER:   { nights: 0,   points: 0 },
+  SILVER:   { nights: 40,  points: 500 },
+  GOLD:     { nights: 90,  points: 1500 },
+  PLATINUM: { nights: 160, points: 3000 },
 };
 
 export type GradeBenefit = { textFr: string; textEn: string };
@@ -41,10 +48,10 @@ export function normalizeGrade(grade: string): Grade {
 }
 
 /** Compute the grade from rolling 24-month stats */
-export function computeGradeFromStats(nights: number, amount: number): Grade {
-  if (nights >= GRADE_THRESHOLDS.PLATINUM.nights || amount >= GRADE_THRESHOLDS.PLATINUM.amount) return 'PLATINUM';
-  if (nights >= GRADE_THRESHOLDS.GOLD.nights     || amount >= GRADE_THRESHOLDS.GOLD.amount)     return 'GOLD';
-  if (nights >= GRADE_THRESHOLDS.SILVER.nights   || amount >= GRADE_THRESHOLDS.SILVER.amount)   return 'SILVER';
+export function computeGradeFromStats(nights: number, points: number): Grade {
+  if (nights >= GRADE_THRESHOLDS.PLATINUM.nights || points >= GRADE_THRESHOLDS.PLATINUM.points) return 'PLATINUM';
+  if (nights >= GRADE_THRESHOLDS.GOLD.nights     || points >= GRADE_THRESHOLDS.GOLD.points)     return 'GOLD';
+  if (nights >= GRADE_THRESHOLDS.SILVER.nights   || points >= GRADE_THRESHOLDS.SILVER.points)   return 'SILVER';
   return 'MEMBER';
 }
 
@@ -65,25 +72,25 @@ export function getNextGrade(grade: Grade): Grade | null {
 export interface LoyaltyProgress {
   percent: number;
   nightsNeeded: number;
-  amountNeeded: number;
+  pointsNeeded: number;
 }
 
-export function getProgressToNext(nights: number, amount: number, currentGrade: Grade): LoyaltyProgress {
+export function getProgressToNext(nights: number, points: number, currentGrade: Grade): LoyaltyProgress {
   const next = getNextGrade(currentGrade);
-  if (!next) return { percent: 100, nightsNeeded: 0, amountNeeded: 0 };
+  if (!next) return { percent: 100, nightsNeeded: 0, pointsNeeded: 0 };
 
   const cur = GRADE_THRESHOLDS[currentGrade];
   const tgt = GRADE_THRESHOLDS[next];
 
   const nightsRange = tgt.nights - cur.nights;
-  const amountRange = tgt.amount - cur.amount;
+  const pointsRange = tgt.points - cur.points;
   const nightsPct   = nightsRange > 0 ? Math.min(100, Math.round(((nights - cur.nights) / nightsRange) * 100)) : 0;
-  const amountPct   = amountRange > 0 ? Math.min(100, Math.round(((amount - cur.amount) / amountRange) * 100)) : 0;
+  const pointsPct   = pointsRange > 0 ? Math.min(100, Math.round(((points - cur.points) / pointsRange) * 100)) : 0;
 
   return {
-    percent:      Math.max(0, Math.max(nightsPct, amountPct)),
+    percent:      Math.max(0, Math.max(nightsPct, pointsPct)),
     nightsNeeded: Math.max(0, tgt.nights - nights),
-    amountNeeded: Math.max(0, tgt.amount - amount),
+    pointsNeeded: Math.max(0, tgt.points - points),
   };
 }
 

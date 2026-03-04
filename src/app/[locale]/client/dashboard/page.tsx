@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { LoyaltyCard } from '@/components/client/LoyaltyCard';
 import { PawPrint, Calendar, FileText, History, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { formatDate, formatDateShort, formatMAD, calculateNights } from '@/lib/utils';
+import { POINTS_PER_SERVICE } from '@/lib/loyalty';
 import { Badge } from '@/components/ui/badge';
 import { subMonths } from 'date-fns';
 
@@ -59,25 +60,43 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
   // 24-month rolling window for loyalty stats
   const since24m = subMonths(new Date(), 24);
 
-  const bookings24m = await prisma.booking.findMany({
-    where: {
-      clientId: session.user.id,
-      status: 'COMPLETED',
-      startDate: { gte: since24m },
-    },
-    include: { boardingDetail: true },
-  });
+  const [boardings24m, groomingCount24m, taxiCount24m] = await Promise.all([
+    prisma.booking.findMany({
+      where: {
+        clientId: session.user.id,
+        serviceType: 'BOARDING',
+        status: 'COMPLETED',
+        startDate: { gte: since24m },
+      },
+      select: { startDate: true, endDate: true },
+    }),
+    prisma.booking.count({
+      where: {
+        clientId: session.user.id,
+        serviceType: 'GROOMING',
+        status: 'COMPLETED',
+        startDate: { gte: since24m },
+      },
+    }),
+    prisma.booking.count({
+      where: {
+        clientId: session.user.id,
+        serviceType: 'PET_TAXI',
+        status: 'COMPLETED',
+        startDate: { gte: since24m },
+      },
+    }),
+  ]);
 
-  const nights24m = bookings24m.reduce((sum, b) => {
-    if (b.serviceType !== 'BOARDING' || !b.endDate) return sum;
+  const nights24m = boardings24m.reduce((sum, b) => {
+    if (!b.endDate) return sum;
     return sum + Math.max(0, Math.floor((b.endDate.getTime() - b.startDate.getTime()) / 86400000));
   }, 0);
 
-  const invoices24m = await prisma.invoice.aggregate({
-    where: { clientId: session.user.id, status: 'PAID', issuedAt: { gte: since24m } },
-    _sum: { amount: true },
-  });
-  const amount24m = invoices24m._sum.amount ?? 0;
+  const points24m =
+    nights24m * POINTS_PER_SERVICE.BOARDING_PER_NIGHT +
+    groomingCount24m * POINTS_PER_SERVICE.GROOMING +
+    taxiCount24m * POINTS_PER_SERVICE.PET_TAXI;
 
   const grade = loyaltyGrade?.grade ?? 'MEMBER';
 
@@ -127,7 +146,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       </div>
 
       {/* Loyalty Card */}
-      <LoyaltyCard grade={grade} nights24m={nights24m} amount24m={amount24m} locale={locale} />
+      <LoyaltyCard grade={grade} nights24m={nights24m} points24m={points24m} locale={locale} />
 
       {/* Quick Actions */}
       <div>

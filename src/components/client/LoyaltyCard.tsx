@@ -1,13 +1,12 @@
 import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
 import { GRADE_BENEFITS, GRADE_THRESHOLDS, getNextGrade, getProgressToNext, normalizeGrade } from '@/lib/loyalty';
 import type { Grade } from '@/lib/loyalty';
-import { formatMAD } from '@/lib/utils';
-import { CheckCircle2, Moon, Gem } from 'lucide-react';
+import { CheckCircle2, Moon, Star } from 'lucide-react';
 
 interface LoyaltyCardProps {
   grade: string;
   nights24m: number;
-  amount24m: number;
+  points24m: number;
   locale: string;
 }
 
@@ -18,11 +17,11 @@ const GRADE_EMOJI: Record<Grade, string> = {
   PLATINUM: '💎',
 };
 
-export function LoyaltyCard({ grade: rawGrade, nights24m, amount24m, locale }: LoyaltyCardProps) {
+export function LoyaltyCard({ grade: rawGrade, nights24m, points24m, locale }: LoyaltyCardProps) {
   const isFr = locale !== 'en';
   const grade = normalizeGrade(rawGrade);
   const next = getNextGrade(grade);
-  const progress = getProgressToNext(nights24m, amount24m, grade);
+  const progress = getProgressToNext(nights24m, points24m, grade);
   const benefits = GRADE_BENEFITS[grade];
   const nextThreshold = next ? GRADE_THRESHOLDS[next] : null;
 
@@ -31,29 +30,25 @@ export function LoyaltyCard({ grade: rawGrade, nights24m, amount24m, locale }: L
         title: 'Programme fidélité',
         since: 'sur 24 mois glissants',
         nights: 'nuits',
-        spent: 'dépensé',
+        points: 'points',
         progressTo: 'Progression vers',
         nightsLeft: 'nuits restantes',
-        amountLeft: 'restants',
+        pointsLeft: 'points restants',
         benefits: 'Vos avantages',
         noBenefits: 'Atteignez le niveau Silver pour débloquer vos premiers avantages.',
         platinum: 'Vous êtes au niveau maximum.',
-        nightsOr: 'nuits ou',
-        toReach: 'pour atteindre',
       }
     : {
         title: 'Loyalty Program',
         since: 'over 24 rolling months',
         nights: 'nights',
-        spent: 'spent',
+        points: 'points',
         progressTo: 'Progress toward',
         nightsLeft: 'nights remaining',
-        amountLeft: 'remaining',
+        pointsLeft: 'points remaining',
         benefits: 'Your benefits',
         noBenefits: 'Reach Silver to unlock your first benefits.',
         platinum: 'You have reached the highest tier.',
-        nightsOr: 'nights or',
-        toReach: 'to reach',
       };
 
   return (
@@ -76,8 +71,8 @@ export function LoyaltyCard({ grade: rawGrade, nights24m, amount24m, locale }: L
               </div>
               <div className="w-px h-8 bg-white/20" />
               <div className="text-center">
-                <p className="text-[#C9A84C] font-bold text-sm">{formatMAD(amount24m)}</p>
-                <p className="text-white/50 text-xs">{t.spent}</p>
+                <p className="text-[#C9A84C] font-bold text-sm">{points24m} pts</p>
+                <p className="text-white/50 text-xs">{t.points}</p>
               </div>
             </div>
             <p className="text-white/30 text-xs mt-1">{t.since}</p>
@@ -108,13 +103,13 @@ export function LoyaltyCard({ grade: rawGrade, nights24m, amount24m, locale }: L
                   <span className="font-medium text-charcoal">{progress.nightsNeeded}</span> {t.nightsLeft}
                 </p>
               )}
-              {progress.nightsNeeded > 0 && progress.amountNeeded > 0 && (
+              {progress.nightsNeeded > 0 && progress.pointsNeeded > 0 && (
                 <span className="text-xs text-gray-300">{isFr ? 'ou' : 'or'}</span>
               )}
-              {progress.amountNeeded > 0 && (
+              {progress.pointsNeeded > 0 && (
                 <p className="text-xs text-gray-400 flex items-center gap-1">
-                  <Gem className="h-3 w-3" />
-                  <span className="font-medium text-charcoal">{formatMAD(progress.amountNeeded)}</span> {t.amountLeft}
+                  <Star className="h-3 w-3" />
+                  <span className="font-medium text-charcoal">{progress.pointsNeeded}</span> {t.pointsLeft}
                 </p>
               )}
             </div>

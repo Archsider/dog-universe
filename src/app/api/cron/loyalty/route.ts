@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { computeGradeFromStats, isUpgrade } from '@/lib/loyalty';
+import { computeGradeFromStats, isUpgrade, POINTS_PER_SERVICE } from '@/lib/loyalty';
 import { createLoyaltyUpdateNotification } from '@/lib/notifications';
 
 /**
@@ -41,35 +41,50 @@ export async function GET(request: Request) {
         continue;
       }
 
-      // Compute rolling 24-month stats: nights boarded + amount paid
-      const completedBoardings = await prisma.booking.findMany({
-        where: {
-          clientId: client.id,
-          serviceType: 'BOARDING',
-          status: 'COMPLETED',
-          startDate: { gte: since24Months },
-        },
-        select: {
-          startDate: true,
-          endDate: true,
-          invoice: { select: { amount: true, status: true } },
-        },
-      });
+      // Compute rolling 24-month stats: boarding nights + points from all services
+      const [completedBoardings, groomingCount, taxiCount] = await Promise.all([
+        prisma.booking.findMany({
+          where: {
+            clientId: client.id,
+            serviceType: 'BOARDING',
+            status: 'COMPLETED',
+            startDate: { gte: since24Months },
+          },
+          select: { startDate: true, endDate: true },
+        }),
+        prisma.booking.count({
+          where: {
+            clientId: client.id,
+            serviceType: 'GROOMING',
+            status: 'COMPLETED',
+            startDate: { gte: since24Months },
+          },
+        }),
+        prisma.booking.count({
+          where: {
+            clientId: client.id,
+            serviceType: 'PET_TAXI',
+            status: 'COMPLETED',
+            startDate: { gte: since24Months },
+          },
+        }),
+      ]);
 
       let nights = 0;
-      let amountPaid = 0;
 
       for (const booking of completedBoardings) {
         if (booking.startDate && booking.endDate) {
           const diffMs = booking.endDate.getTime() - booking.startDate.getTime();
           nights += Math.ceil(diffMs / (1000 * 60 * 60 * 24));
         }
-        if (booking.invoice?.status === 'PAID') {
-          amountPaid += booking.invoice.amount;
-        }
       }
 
-      const newGrade = computeGradeFromStats(nights, amountPaid);
+      const points =
+        nights * POINTS_PER_SERVICE.BOARDING_PER_NIGHT +
+        groomingCount * POINTS_PER_SERVICE.GROOMING +
+        taxiCount * POINTS_PER_SERVICE.PET_TAXI;
+
+      const newGrade = computeGradeFromStats(nights, points);
       const currentGrade = client.loyaltyGrade?.grade ?? 'MEMBER';
 
       if (newGrade === currentGrade) continue;
