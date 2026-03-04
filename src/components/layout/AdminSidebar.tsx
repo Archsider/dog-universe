@@ -21,6 +21,7 @@ import {
   Settings,
   UserCircle,
   Bell,
+  Gift,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -31,7 +32,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
+export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0 }: { pendingCount?: number; pendingClaimsCount?: number }) {
   const t = useTranslations('nav.admin');
   const locale = useLocale();
   const pathname = usePathname();
@@ -43,6 +44,7 @@ export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
     { href: `/${locale}/admin/animals`, labelKey: 'animals', icon: PawPrint },
     { href: `/${locale}/admin/calendar`, labelKey: 'calendar', icon: Calendar },
     { href: `/${locale}/admin/reservations`, labelKey: 'reservations', icon: ClipboardList },
+    { href: `/${locale}/admin/benefit-claims`, labelKey: 'benefitClaims', icon: Gift },
     { href: `/${locale}/admin/billing`, labelKey: 'billing', icon: Receipt },
     { href: `/${locale}/admin/analytics`, labelKey: 'analytics', icon: BarChart3 },
     { href: `/${locale}/admin/logs`, labelKey: 'logs', icon: ScrollText },
@@ -70,6 +72,7 @@ export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
           const isActive = pathname.startsWith(item.href);
           const Icon = item.icon;
           const isReservations = item.href.includes('/reservations');
+          const isBenefitClaims = item.href.includes('/benefit-claims');
 
           return (
             <Link
@@ -88,6 +91,11 @@ export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
               {isReservations && pendingCount > 0 && (
                 <span className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-amber-500 text-white text-xs font-bold">
                   {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
+              )}
+              {isBenefitClaims && pendingClaimsCount > 0 && (
+                <span className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-gold-500 text-white text-xs font-bold">
+                  {pendingClaimsCount > 99 ? '99+' : pendingClaimsCount}
                 </span>
               )}
             </Link>

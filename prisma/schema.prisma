@@ -27,6 +27,7 @@ model User {
   actionLogs         ActionLog[]
   adminNotes         AdminNote[]    @relation("NoteAuthor")
   passwordResets     PasswordResetToken[]
+  benefitClaims      BenefitClaim[]
 }
 
 model Pet {
@@ -272,4 +273,22 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
+}
+
+model BenefitClaim {
+  id         String    @id @default(cuid())
+  clientId   String
+  benefitKey String    // "VET_CHECKUP" | "PET_TRANSPORT" | "BIRTHDAY_SURPRISE"
+  status     String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  note       String?   // Note optionnelle du client
+  adminNote  String?   // Réponse de l'admin
+  approvedBy String?
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, benefitKey, status])
+  @@index([status, createdAt])
 }

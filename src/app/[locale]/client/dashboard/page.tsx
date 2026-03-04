@@ -20,7 +20,8 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
   const t = await getTranslations('dashboard');
 
   // Fetch all data in parallel
-  const [pets, upcomingBookings, recentInvoices, loyaltyGrade] = await Promise.all([
+  const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+  const [pets, upcomingBookings, recentInvoices, loyaltyGrade, claimsThisYear] = await Promise.all([
     prisma.pet.findMany({
       where: { ownerId: session.user.id },
       orderBy: { createdAt: 'asc' },
@@ -46,6 +47,10 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       take: 3,
     }),
     prisma.loyaltyGrade.findUnique({ where: { clientId: session.user.id } }),
+    prisma.benefitClaim.findMany({
+      where: { clientId: session.user.id, createdAt: { gte: startOfYear } },
+      select: { benefitKey: true, status: true },
+    }),
   ]);
 
   const totalStays = await prisma.booking.count({
@@ -146,7 +151,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       </div>
 
       {/* Loyalty Card */}
-      <LoyaltyCard grade={grade} nights24m={nights24m} points24m={points24m} locale={locale} />
+      <LoyaltyCard grade={grade} nights24m={nights24m} points24m={points24m} locale={locale} claims={claimsThisYear} />
 
       {/* Quick Actions */}
       <div>

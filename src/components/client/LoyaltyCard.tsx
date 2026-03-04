@@ -1,13 +1,20 @@
 import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
-import { GRADE_BENEFITS, GRADE_THRESHOLDS, getNextGrade, getProgressToNext, normalizeGrade } from '@/lib/loyalty';
-import type { Grade } from '@/lib/loyalty';
+import { GRADE_BENEFITS, GRADE_THRESHOLDS, CLAIMABLE_BENEFIT_META, getNextGrade, getProgressToNext, normalizeGrade } from '@/lib/loyalty';
+import type { Grade, ClaimableBenefitKey } from '@/lib/loyalty';
 import { CheckCircle2, Moon, Star } from 'lucide-react';
+import { BenefitClaimButton } from './BenefitClaimButton';
+
+export interface BenefitClaimSummary {
+  benefitKey: string;
+  status: string;
+}
 
 interface LoyaltyCardProps {
   grade: string;
   nights24m: number;
   points24m: number;
   locale: string;
+  claims?: BenefitClaimSummary[];
 }
 
 const GRADE_EMOJI: Record<Grade, string> = {
@@ -17,7 +24,7 @@ const GRADE_EMOJI: Record<Grade, string> = {
   PLATINUM: '💎',
 };
 
-export function LoyaltyCard({ grade: rawGrade, nights24m, points24m, locale }: LoyaltyCardProps) {
+export function LoyaltyCard({ grade: rawGrade, nights24m, points24m, locale, claims = [] }: LoyaltyCardProps) {
   const isFr = locale !== 'en';
   const grade = normalizeGrade(rawGrade);
   const next = getNextGrade(grade);
@@ -127,12 +134,32 @@ export function LoyaltyCard({ grade: rawGrade, nights24m, points24m, locale }: L
             <p className="text-xs text-gray-400 italic">{t.noBenefits}</p>
           ) : (
             <ul className="space-y-1.5">
-              {benefits.map((b, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-charcoal">
-                  <CheckCircle2 className="h-4 w-4 text-gold-500 flex-shrink-0 mt-0.5" />
-                  {isFr ? b.textFr : b.textEn}
-                </li>
-              ))}
+              {benefits.map((b, i) => {
+                const claimKey = b.claimKey as ClaimableBenefitKey | undefined;
+                const claimsForKey = claimKey ? claims.filter((c) => c.benefitKey === claimKey) : [];
+                const pendingClaim = claimsForKey.find((c) => c.status === 'PENDING');
+                const existingStatus = pendingClaim?.status ?? null;
+                const approvedCount = claimsForKey.filter((c) => c.status === 'APPROVED').length;
+                const quota = claimKey ? (CLAIMABLE_BENEFIT_META[claimKey].quotaByGrade[grade] ?? 0) : 0;
+                const quotaReached = approvedCount >= quota && quota > 0;
+
+                return (
+                  <li key={i} className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 text-sm text-charcoal">
+                      <CheckCircle2 className="h-4 w-4 text-gold-500 flex-shrink-0 mt-0.5" />
+                      {isFr ? b.textFr : b.textEn}
+                    </div>
+                    {claimKey && (
+                      <BenefitClaimButton
+                        benefitKey={claimKey}
+                        existingStatus={existingStatus}
+                        quotaReached={quotaReached}
+                        locale={locale}
+                      />
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

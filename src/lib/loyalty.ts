@@ -19,24 +19,53 @@ export const GRADE_THRESHOLDS: Record<Grade, { nights: number; points: number }>
   PLATINUM: { nights: 160, points: 3000 },
 };
 
-export type GradeBenefit = { textFr: string; textEn: string };
+export type ClaimableBenefitKey = 'VET_CHECKUP' | 'PET_TRANSPORT' | 'BIRTHDAY_SURPRISE';
+
+export const CLAIMABLE_BENEFIT_META: Record<ClaimableBenefitKey, {
+  minGrade: Grade;
+  /** Max allowed APPROVED claims per calendar year, per grade */
+  quotaByGrade: Partial<Record<Grade, number>>;
+  labelFr: string;
+  labelEn: string;
+}> = {
+  VET_CHECKUP: {
+    minGrade: 'SILVER',
+    quotaByGrade: { SILVER: 1, GOLD: 1, PLATINUM: 1 },
+    labelFr: '1 check-up vétérinaire offert par an',
+    labelEn: '1 complimentary vet check-up per year',
+  },
+  PET_TRANSPORT: {
+    minGrade: 'GOLD',
+    quotaByGrade: { GOLD: 1, PLATINUM: 2 },
+    labelFr: 'Transport animalier offert par an',
+    labelEn: 'Complimentary pet transport per year',
+  },
+  BIRTHDAY_SURPRISE: {
+    minGrade: 'PLATINUM',
+    quotaByGrade: { PLATINUM: 1 },
+    labelFr: 'Surprise anniversaire annuelle pour votre animal',
+    labelEn: 'Annual birthday surprise for your pet',
+  },
+};
+
+export type GradeBenefit = { textFr: string; textEn: string; claimKey?: ClaimableBenefitKey };
 
 export const GRADE_BENEFITS: Record<Grade, GradeBenefit[]> = {
   MEMBER: [],
   SILVER: [
     { textFr: 'Priorité sur les demandes de réservation',         textEn: 'Priority on booking requests' },
-    { textFr: '1 check-up vétérinaire offert par an',             textEn: '1 complimentary vet check-up per year' },
+    { textFr: '1 check-up vétérinaire offert par an',             textEn: '1 complimentary vet check-up per year',         claimKey: 'VET_CHECKUP' },
   ],
   GOLD: [
     { textFr: '-10% sur les séances de toilettage',               textEn: '-10% on all grooming sessions' },
-    { textFr: '1 transport animalier offert par an',              textEn: '1 complimentary pet transport per year' },
+    { textFr: '1 transport animalier offert par an',              textEn: '1 complimentary pet transport per year',         claimKey: 'PET_TRANSPORT' },
     { textFr: 'Réservation anticipée haute saison',               textEn: 'Early access to peak season booking' },
   ],
   PLATINUM: [
     { textFr: '-15% sur les séances de toilettage',               textEn: '-15% on all grooming sessions' },
-    { textFr: '2 transports animaliers offerts par an',           textEn: '2 complimentary pet transports per year' },
+    { textFr: '2 transports animaliers offerts par an',           textEn: '2 complimentary pet transports per year',        claimKey: 'PET_TRANSPORT' },
     { textFr: 'Check-in prioritaire à chaque séjour',             textEn: 'Priority check-in for every stay' },
-    { textFr: 'Surprise anniversaire annuelle pour votre animal', textEn: 'Annual birthday surprise for your pet' },
+    { textFr: 'Surprise anniversaire annuelle pour votre animal', textEn: 'Annual birthday surprise for your pet',          claimKey: 'BIRTHDAY_SURPRISE' },
   ],
 };
 
