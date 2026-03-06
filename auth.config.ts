@@ -10,7 +10,7 @@ export const authConfig = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id!;
-        token.role = user.role as 'ADMIN' | 'CLIENT';
+        token.role = user.role as 'SUPERADMIN' | 'ADMIN' | 'CLIENT';
         token.language = (user as { language?: string }).language ?? 'fr';
       }
       return token;

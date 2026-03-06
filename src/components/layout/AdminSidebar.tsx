@@ -25,7 +25,6 @@ import {
   Crown,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -39,8 +38,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, role }:
   const locale = useLocale();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { data: session } = useSession();
-  const effectiveRole = role ?? session?.user?.role;
+  const effectiveRole = role;
 
   const navItems: NavItem[] = [
     { href: `/${locale}/admin/dashboard`, labelKey: 'dashboard', icon: LayoutDashboard },
