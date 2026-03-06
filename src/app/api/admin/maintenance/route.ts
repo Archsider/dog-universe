@@ -31,7 +31,7 @@ async function handleMaintenance() {
 
   // 1. Delete khtabe.mehd@gmail.com and all their data
   const toDelete = await prisma.user.findUnique({
-    where: { email: 'khtabe.mehd@gmail.com' },
+    where: { email: 'khtabe.mehdi@gmail.com' },
     include: {
       pets: { include: { bookingPets: true } },
       bookings: true,
@@ -59,9 +59,9 @@ async function handleMaintenance() {
       prisma.pet.deleteMany({ where: { ownerId: toDelete.id } }),
       prisma.user.delete({ where: { id: toDelete.id } }),
     ]);
-    results.push(`✓ Compte khtabe.mehd@gmail.com supprimé`);
+    results.push(`✓ Compte khtabe.mehdi@gmail.com supprimé`);
   } else {
-    results.push(`⚠ khtabe.mehd@gmail.com introuvable`);
+    results.push(`⚠ khtabe.mehdi@gmail.com introuvable`);
   }
 
   // 2. Promote admin@doguniverse.ma to SUPERADMIN
