@@ -109,6 +109,12 @@ export async function POST(request: Request) {
       }
     }
 
+    // Fetch pets with species — used for pricing and capacity checks
+    const petsForPricing = await prisma.pet.findMany({
+      where: { id: { in: petIds } },
+      select: { id: true, name: true, species: true },
+    });
+
     // Conflict detection for BOARDING: check pet availability + capacity
     if (serviceType === 'BOARDING' && startDate && endDate) {
       const start = new Date(startDate);
@@ -156,13 +162,8 @@ export async function POST(request: Request) {
         prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: overlapFilter } }),
       ]);
 
-      // Count requested species
-      const requestedPets = await prisma.pet.findMany({
-        where: { id: { in: petIds } },
-        select: { species: true },
-      });
-      const requestedDogs = requestedPets.filter(p => p.species === 'DOG').length;
-      const requestedCats = requestedPets.filter(p => p.species === 'CAT').length;
+      const requestedDogs = petsForPricing.filter(p => p.species === 'DOG').length;
+      const requestedCats = petsForPricing.filter(p => p.species === 'CAT').length;
 
       if (currentDogs + requestedDogs > dogCapacity) {
         return NextResponse.json({ error: 'CAPACITY_DOGS_FULL' }, { status: 409 });
@@ -170,6 +171,42 @@ export async function POST(request: Request) {
       if (currentCats + requestedCats > catCapacity) {
         return NextResponse.json({ error: 'CAPACITY_CATS_FULL' }, { status: 409 });
       }
+    }
+
+    // Server-side price computation
+    const pricing = await getPricingSettings();
+    let totalPrice = 0;
+    let computedGroomingPrice = 0;
+    let computedTaxiAddonPrice = 0;
+
+    if (serviceType === 'BOARDING' && endDate) {
+      const nights = Math.round(
+        (new Date(endDate).getTime() - new Date(startDate).getTime()) / 86_400_000
+      );
+      const groomingMap: Record<string, GroomingSize> = {};
+      if (includeGrooming && groomingSize) {
+        petsForPricing
+          .filter(p => p.species === 'DOG')
+          .forEach(dog => { groomingMap[dog.id] = groomingSize as GroomingSize; });
+      }
+      const breakdown = calculateBoardingBreakdown(
+        nights,
+        petsForPricing,
+        includeGrooming ? groomingMap : undefined,
+        taxiGoEnabled,
+        taxiReturnEnabled,
+        pricing,
+      );
+      totalPrice = breakdown.total;
+      computedGroomingPrice = breakdown.items
+        .filter(i => i.descriptionEn.startsWith('Grooming'))
+        .reduce((s, i) => s + i.total, 0);
+      computedTaxiAddonPrice = breakdown.items
+        .filter(i => i.descriptionEn.startsWith('Pet Taxi'))
+        .reduce((s, i) => s + i.total, 0);
+    } else if (serviceType === 'PET_TAXI') {
+      const breakdown = calculateTaxiPrice((taxiType ?? 'STANDARD') as TaxiType, pricing);
+      totalPrice = breakdown.total;
     }
 
     const clientId = session.user.role === 'CLIENT' ? session.user.id : body.clientId;
@@ -208,7 +245,7 @@ export async function POST(request: Request) {
           bookingId: booking.id,
           includeGrooming: includeGrooming ?? false,
           groomingSize: groomingSize || null,
-          groomingPrice: groomingPrice ?? 0,
+          groomingPrice: computedGroomingPrice,
           pricePerNight: pricePerNight ?? 0,
           taxiGoEnabled: taxiGoEnabled ?? false,
           taxiGoDate: taxiGoDate || null,
@@ -218,7 +255,7 @@ export async function POST(request: Request) {
           taxiReturnDate: taxiReturnDate || null,
           taxiReturnTime: taxiReturnTime || null,
           taxiReturnAddress: taxiReturnAddress || null,
-          taxiAddonPrice: taxiAddonPrice ?? 0,
+          taxiAddonPrice: computedTaxiAddonPrice,
         },
       });
     } else if (serviceType === 'PET_TAXI') {
@@ -226,7 +263,7 @@ export async function POST(request: Request) {
         data: {
           bookingId: booking.id,
           taxiType: taxiType ?? 'STANDARD',
-          price: totalPrice ?? 150,
+          price: totalPrice,
         },
       });
     }
