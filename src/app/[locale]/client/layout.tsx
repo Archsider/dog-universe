@@ -21,7 +21,7 @@ export default async function ClientLayout({
     redirect(`/${locale}/auth/login`);
   }
 
-  if (session.user.role === 'ADMIN') {
+  if (['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
     redirect(`/${locale}/admin/dashboard`);
   }
 

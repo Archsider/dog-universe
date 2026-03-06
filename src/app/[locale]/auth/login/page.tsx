@@ -45,7 +45,7 @@ export default function LoginPage() {
       const sessionRes = await fetch('/api/auth/session');
       const session = await sessionRes.json();
 
-      if (session?.user?.role === 'ADMIN') {
+      if (['ADMIN', 'SUPERADMIN'].includes(session?.user?.role)) {
         router.push(`/${locale}/admin/dashboard`);
       } else {
         router.push(`/${locale}/client/dashboard`);
