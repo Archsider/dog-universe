@@ -6,6 +6,13 @@ import { createBookingConfirmationNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { formatDate } from '@/lib/utils';
 import { checkRateLimit, getIp } from '@/lib/ratelimit';
+import {
+  getPricingSettings,
+  calculateBoardingBreakdown,
+  calculateTaxiPrice,
+  getGroomingPriceForPet,
+} from '@/lib/pricing';
+import type { GroomingSize, TaxiType } from '@/lib/pricing';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -71,11 +78,9 @@ export async function POST(request: Request) {
       endDate,
       arrivalTime,
       notes,
-      totalPrice,
       // Boarding specific
       includeGrooming,
       groomingSize,
-      groomingPrice,
       pricePerNight,
       // Boarding taxi addon
       taxiGoEnabled,
@@ -86,7 +91,6 @@ export async function POST(request: Request) {
       taxiReturnDate,
       taxiReturnTime,
       taxiReturnAddress,
-      taxiAddonPrice,
       // Taxi specific
       taxiType,
     } = body;
