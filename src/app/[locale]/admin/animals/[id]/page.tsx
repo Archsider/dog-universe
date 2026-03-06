@@ -11,7 +11,7 @@ interface PageProps { params: { locale: string; id: string } }
 
 export default async function AdminAnimalDetailPage({ params: { locale, id } }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) redirect(`/${locale}/auth/login`);
 
   const pet = await prisma.pet.findUnique({
     where: { id },

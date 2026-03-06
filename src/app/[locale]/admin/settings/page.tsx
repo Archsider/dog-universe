@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS: Record<string, string> = {
 
 export default async function AdminSettingsPage({ params: { locale } }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) redirect(`/${locale}/auth/login`);
 
   const rows = await prisma.setting?.findMany() ?? [];
   const settings = { ...DEFAULT_SETTINGS };

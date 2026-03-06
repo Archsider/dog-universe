@@ -13,7 +13,7 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
   const sp = await searchParams;
 
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) redirect(`/${locale}/auth/login`);
 
   const now = new Date();
   const year = parseInt(sp.year ?? String(now.getFullYear()));

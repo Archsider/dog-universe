@@ -18,7 +18,7 @@ const BENEFIT_LABELS: Record<string, { fr: string; en: string }> = {
 
 export default async function AdminBenefitClaimsPage({ params: { locale }, searchParams }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) redirect(`/${locale}/auth/login`);
 
   const isFr = locale !== 'en';
   const statusFilter = searchParams.status || 'PENDING';

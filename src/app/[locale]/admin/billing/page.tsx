@@ -13,7 +13,7 @@ interface PageProps {
 
 export default async function AdminBillingPage({ params: { locale }, searchParams }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) redirect(`/${locale}/auth/login`);
 
   const status = searchParams.status || '';
   const page = parseInt(searchParams.page || '1');
