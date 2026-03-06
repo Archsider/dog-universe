@@ -1,5 +1,4 @@
 import type { NextAuthConfig } from 'next-auth';
-import { prisma } from '@/lib/prisma';
 
 export const authConfig = {
   providers: [],
@@ -10,20 +9,9 @@ export const authConfig = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        // Fresh login — populate from the user object
         token.id = user.id!;
         token.role = user.role as 'SUPERADMIN' | 'ADMIN' | 'CLIENT';
         token.language = (user as { language?: string }).language ?? 'fr';
-      } else if (token.id) {
-        // Subsequent requests — re-read role from DB so changes take effect immediately
-        const fresh = await prisma.user.findUnique({
-          where: { id: token.id },
-          select: { role: true, language: true },
-        });
-        if (fresh) {
-          token.role = fresh.role as 'SUPERADMIN' | 'ADMIN' | 'CLIENT';
-          token.language = fresh.language ?? token.language;
-        }
       }
       return token;
     },

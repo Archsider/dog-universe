@@ -40,4 +40,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
+  callbacks: {
+    ...authConfig.callbacks,
+    async jwt({ token, user }) {
+      if (user) {
+        // Fresh login
+        token.id = user.id!;
+        token.role = user.role as 'SUPERADMIN' | 'ADMIN' | 'CLIENT';
+        token.language = (user as { language?: string }).language ?? 'fr';
+      } else if (token.id) {
+        // Re-read role from DB on every token refresh (role changes apply immediately)
+        const fresh = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { role: true, language: true },
+        });
+        if (fresh) {
+          token.role = fresh.role as 'SUPERADMIN' | 'ADMIN' | 'CLIENT';
+          token.language = fresh.language ?? (token.language as string);
+        }
+      }
+      return token;
+    },
+  },
 });
