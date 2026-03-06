@@ -53,7 +53,7 @@ vi.mock('@/lib/log', () => ({
 }));
 
 vi.mock('@/lib/ratelimit', () => ({
-  checkRateLimit: vi.fn().mockReturnValue({ allowed: true }),
+  checkRateLimit: vi.fn().mockReturnValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60_000 }),
   getIp: vi.fn().mockReturnValue('127.0.0.1'),
 }));
 
@@ -121,7 +121,7 @@ describe('POST /api/bookings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(auth).mockResolvedValue(clientSession as never);
-    vi.mocked(checkRateLimit).mockReturnValue({ allowed: true });
+    vi.mocked(checkRateLimit).mockReturnValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60_000 });
 
     // Default: no conflicts, no existing boarders, enough capacity
     vi.mocked(prisma.pet.findMany).mockResolvedValue([mockDog] as never);
@@ -139,7 +139,7 @@ describe('POST /api/bookings', () => {
           create: vi.fn().mockResolvedValue(createdBooking),
         },
       };
-      return (callback as (tx: typeof tx) => Promise<unknown>)(tx);
+      return (callback as (arg: unknown) => Promise<unknown>)(tx);
     });
   });
 
@@ -252,7 +252,7 @@ describe('POST /api/bookings', () => {
 
   // ── Rate limiting ─────────────────────────────────────────────
   it('returns 429 when client exceeds booking rate limit', async () => {
-    vi.mocked(checkRateLimit).mockReturnValue({ allowed: false });
+    vi.mocked(checkRateLimit).mockReturnValue({ allowed: false, remaining: 0, resetAt: Date.now() + 60_000 });
     const res = await POST(boardingRequest());
     expect(res.status).toBe(429);
     expect((await res.json()).error).toBe('RATE_LIMIT');
@@ -260,7 +260,7 @@ describe('POST /api/bookings', () => {
 
   it('does not rate-limit admin users', async () => {
     vi.mocked(auth).mockResolvedValue(adminSession as never);
-    vi.mocked(checkRateLimit).mockReturnValue({ allowed: false }); // would block a client
+    vi.mocked(checkRateLimit).mockReturnValue({ allowed: false, remaining: 0, resetAt: Date.now() + 60_000 }); // would block a client
 
     // For admin, ownership check is skipped; only pricing pets fetched
     vi.mocked(prisma.pet.findMany).mockResolvedValue([mockDog] as never);
@@ -335,7 +335,7 @@ describe('POST /api/bookings', () => {
           }),
         },
       };
-      return (callback as (tx: typeof tx) => Promise<unknown>)(tx);
+      return (callback as (arg: unknown) => Promise<unknown>)(tx);
     });
 
     await POST(boardingRequest({ clientId: 'client-1' }));
@@ -357,7 +357,7 @@ describe('POST /api/bookings', () => {
           }),
         },
       };
-      return (callback as (tx: typeof tx) => Promise<unknown>)(tx);
+      return (callback as (arg: unknown) => Promise<unknown>)(tx);
     });
 
     await POST(boardingRequest({ clientId: 'client-1' }));
@@ -380,7 +380,7 @@ describe('POST /api/bookings', () => {
           }),
         },
       };
-      return (callback as (tx: typeof tx) => Promise<unknown>)(tx);
+      return (callback as (arg: unknown) => Promise<unknown>)(tx);
     });
 
     await POST(boardingRequest());
@@ -401,7 +401,7 @@ describe('POST /api/bookings', () => {
           create: vi.fn().mockImplementation(async () => createdBooking),
         },
       };
-      const result = await (callback as (tx: typeof tx) => Promise<{ booking: unknown; bookingRef: string }>)(tx);
+      const result = await (callback as (arg: unknown) => Promise<{ booking: unknown; bookingRef: string }>)(tx);
       capturedRef = result.bookingRef;
       return result;
     });

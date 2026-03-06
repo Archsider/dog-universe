@@ -21,7 +21,7 @@ vi.mock('@/lib/email', () => ({
 }));
 
 vi.mock('@/lib/ratelimit', () => ({
-  checkRateLimit: vi.fn().mockReturnValue({ allowed: true }),
+  checkRateLimit: vi.fn().mockReturnValue({ allowed: true, remaining: 2, resetAt: Date.now() + 900_000 }),
   getIp: vi.fn().mockReturnValue('127.0.0.1'),
 }));
 
@@ -67,7 +67,7 @@ const mockUser = {
 describe('POST /api/reset-password — request reset', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(checkRateLimit).mockReturnValue({ allowed: true });
+    vi.mocked(checkRateLimit).mockReturnValue({ allowed: true, remaining: 2, resetAt: Date.now() + 900_000 });
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
   });
 
@@ -86,7 +86,7 @@ describe('POST /api/reset-password — request reset', () => {
   });
 
   it('returns 200 ok when rate limited (to prevent timing attacks)', async () => {
-    vi.mocked(checkRateLimit).mockReturnValue({ allowed: false });
+    vi.mocked(checkRateLimit).mockReturnValue({ allowed: false, remaining: 0, resetAt: Date.now() + 900_000 });
     const res = await POST(postRequest({ email: 'alice@example.com' }));
     expect(res.status).toBe(200);
     expect((await res.json()).message).toBe('ok');
