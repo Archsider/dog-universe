@@ -2,6 +2,18 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 // One-time maintenance route — protected by service role key
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const token = searchParams.get('token');
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!key || token !== key) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  return handleMaintenance();
+}
+
 export async function POST(request: Request) {
   const authHeader = request.headers.get('authorization');
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -9,6 +21,11 @@ export async function POST(request: Request) {
   if (!key || authHeader !== `Bearer ${key}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  return handleMaintenance();
+}
+
+async function handleMaintenance() {
 
   const results: string[] = [];
 
@@ -47,9 +64,9 @@ export async function POST(request: Request) {
     results.push(`⚠ khtabe.mehd@gmail.com introuvable`);
   }
 
-  // 2. Promote doguniverse.ma account to SUPERADMIN
-  const doguser = await prisma.user.findFirst({
-    where: { email: { contains: 'doguniverse' } },
+  // 2. Promote admin@doguniverse.ma to SUPERADMIN
+  const doguser = await prisma.user.findUnique({
+    where: { email: 'admin@doguniverse.ma' },
     select: { id: true, email: true, name: true, role: true },
   });
 
