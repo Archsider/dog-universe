@@ -53,9 +53,10 @@ export async function GET(_req: Request, { params }: Params) {
     orderBy: { createdAt: 'desc' },
   });
 
+  const { passwordHash: _, ...clientSafe } = client; // _ intentionally unused
+
   return NextResponse.json({
-    ...client,
-    passwordHash: undefined,
+    ...clientSafe,
     totalRevenue,
     adminNotes,
   });

@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       locale
     );
 
-    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true, email: true } });
+    const admins = await prisma.user.findMany({ where: { role: { in: ['ADMIN', 'SUPERADMIN'] } }, select: { id: true, email: true } });
     const adminUrl = `${appUrl}/fr/admin/clients`;
     const adminEmailData = { clientName: user.name, clientEmail: user.email, clientPhone: user.phone ?? '', adminUrl };
 

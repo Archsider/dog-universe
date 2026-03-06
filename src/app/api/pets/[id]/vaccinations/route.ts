@@ -12,7 +12,7 @@ export async function POST(request: Request, { params }: Params) {
   const pet = await prisma.pet.findUnique({ where: { id } });
 
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (session.user.role !== 'ADMIN' && pet.ownerId !== session.user.id) {
+  if (!['ADMIN', 'SUPERADMIN'].includes(session.user.role) && pet.ownerId !== session.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -48,7 +48,7 @@ export async function DELETE(request: Request, { params }: Params) {
 
   const pet = await prisma.pet.findUnique({ where: { id } });
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (session.user.role !== 'ADMIN' && pet.ownerId !== session.user.id) {
+  if (!['ADMIN', 'SUPERADMIN'].includes(session.user.role) && pet.ownerId !== session.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

@@ -136,7 +136,7 @@ export async function PATCH(request: Request, { params }: Params) {
     });
   }
 
-  if (body.status === 'CANCELLED' && session.user.role === 'ADMIN') {
+  if (body.status === 'CANCELLED' && ['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
     await createBookingRefusalNotification(updated.clientId, id, body.reason);
     const { subject, html } = getEmailTemplate('booking_refused', {
       clientName: updated.client.name,
@@ -154,7 +154,7 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   // Update grooming add-on if admin changes it
-  if (session.user.role === 'ADMIN' && body.includeGrooming !== undefined) {
+  if (['ADMIN', 'SUPERADMIN'].includes(session.user.role) && body.includeGrooming !== undefined) {
     await prisma.boardingDetail.upsert({
       where: { bookingId: id },
       update: {

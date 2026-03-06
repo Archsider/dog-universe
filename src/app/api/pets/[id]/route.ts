@@ -34,7 +34,7 @@ export async function GET(_req: Request, { params }: Params) {
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   // Clients can only access their own pets
-  if (session.user.role !== 'ADMIN' && pet.ownerId !== session.user.id) {
+  if (!['ADMIN', 'SUPERADMIN'].includes(session.user.role) && pet.ownerId !== session.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -50,7 +50,7 @@ export async function PATCH(_req: Request, { params }: Params) {
   const pet = await prisma.pet.findUnique({ where: { id } });
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  if (session.user.role !== 'ADMIN' && pet.ownerId !== session.user.id) {
+  if (!['ADMIN', 'SUPERADMIN'].includes(session.user.role) && pet.ownerId !== session.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

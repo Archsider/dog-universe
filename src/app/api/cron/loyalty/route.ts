@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -42,6 +42,7 @@ export async function GET(request: Request) {
       }
 
       // Compute rolling 24-month stats: boarding nights + points from all services
+      // Note: GROOMING is an add-on to BOARDING (boardingDetail.includeGrooming), not a separate serviceType
       const [completedBoardings, groomingCount, taxiCount] = await Promise.all([
         prisma.booking.findMany({
           where: {
@@ -55,9 +56,10 @@ export async function GET(request: Request) {
         prisma.booking.count({
           where: {
             clientId: client.id,
-            serviceType: 'GROOMING',
+            serviceType: 'BOARDING',
             status: 'COMPLETED',
             startDate: { gte: since24Months },
+            boardingDetail: { includeGrooming: true },
           },
         }),
         prisma.booking.count({

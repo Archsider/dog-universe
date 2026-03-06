@@ -30,7 +30,7 @@ export default function TestEmailPanel() {
 
   return (
     <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card p-6">
-      <h2 className="text-lg font-serif font-semibold text-charcoal mb-1">Test d'envoi d'email</h2>
+      <h2 className="text-lg font-serif font-semibold text-charcoal mb-1">Test d&apos;envoi d&apos;email</h2>
       <p className="text-sm text-gray-500 mb-4">Envoie un email de bienvenue test pour vérifier la configuration SMTP.</p>
       <div className="flex gap-2">
         <Input

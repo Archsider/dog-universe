@@ -41,7 +41,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
   });
 
   if (!pet) notFound();
-  if (session.user.role !== 'ADMIN' && pet.ownerId !== session.user.id) {
+  if (!['ADMIN', 'SUPERADMIN'].includes(session.user.role) && pet.ownerId !== session.user.id) {
     redirect(`/${locale}/client/pets`);
   }
 

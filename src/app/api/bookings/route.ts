@@ -220,7 +220,7 @@ export async function POST(request: Request) {
         data: {
           clientId,
           serviceType,
-          status: session.user.role === 'ADMIN' ? 'CONFIRMED' : 'PENDING',
+          status: ['ADMIN', 'SUPERADMIN'].includes(session.user.role) ? 'CONFIRMED' : 'PENDING',
           startDate: new Date(startDate),
           endDate: endDate ? new Date(endDate) : null,
           arrivalTime: arrivalTime || null,

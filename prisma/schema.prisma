@@ -14,7 +14,7 @@ model User {
   name          String
   phone         String?
   passwordHash  String
-  role          String   @default("CLIENT") // "ADMIN" | "CLIENT"
+  role          String   @default("CLIENT") // "SUPERADMIN" | "ADMIN" | "CLIENT"
   language      String   @default("fr")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
