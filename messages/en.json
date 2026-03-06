@@ -64,7 +64,8 @@
       "logs": "Logs",
       "settings": "Settings",
       "profile": "My Profile",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "admins": "Admin Management"
     }
   },
   "auth": {

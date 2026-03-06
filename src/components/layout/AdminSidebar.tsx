@@ -22,8 +22,10 @@ import {
   UserCircle,
   Bell,
   Gift,
+  Crown,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -32,11 +34,13 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0 }: { pendingCount?: number; pendingClaimsCount?: number }) {
+export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, role }: { pendingCount?: number; pendingClaimsCount?: number; role?: string }) {
   const t = useTranslations('nav.admin');
   const locale = useLocale();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { data: session } = useSession();
+  const effectiveRole = role ?? session?.user?.role;
 
   const navItems: NavItem[] = [
     { href: `/${locale}/admin/dashboard`, labelKey: 'dashboard', icon: LayoutDashboard },
@@ -51,6 +55,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0 }: { pen
     { href: `/${locale}/admin/notifications`, labelKey: 'notifications', icon: Bell },
     { href: `/${locale}/admin/settings`, labelKey: 'settings', icon: Settings },
     { href: `/${locale}/admin/profile`, labelKey: 'profile', icon: UserCircle },
+    ...(effectiveRole === 'SUPERADMIN' ? [{ href: `/${locale}/admin/admins`, labelKey: 'admins', icon: Crown }] : []),
   ];
 
   const SidebarContent = () => (
@@ -60,8 +65,8 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0 }: { pen
         <Link href={`/${locale}/admin/dashboard`} className="block">
           <Image src="/logo.png" alt="Dog Universe" width={140} height={50} className="object-contain" priority />
           <div className="flex items-center gap-1.5 mt-1">
-            <ShieldCheck className="h-3 w-3 text-gold-500" />
-            <p className="text-xs text-gold-600 font-medium">Administration</p>
+            {effectiveRole === 'SUPERADMIN' ? <Crown className="h-3 w-3 text-gold-500" /> : <ShieldCheck className="h-3 w-3 text-gold-500" />}
+            <p className="text-xs text-gold-600 font-medium">{effectiveRole === 'SUPERADMIN' ? 'Super Admin' : 'Administration'}</p>
           </div>
         </Link>
       </div>

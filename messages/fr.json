@@ -64,7 +64,8 @@
       "logs": "Journaux",
       "settings": "Paramètres",
       "profile": "Mon profil",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "admins": "Gestion admins"
     }
   },
   "auth": {

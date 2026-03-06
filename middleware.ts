@@ -61,7 +61,7 @@ export default auth(async function middleware(req: NextRequest) {
   if (isPublicPath(pathname)) {
     // If logged in and trying to access auth pages, redirect to dashboard
     if (session && (pathname.includes('/auth/login') || pathname.includes('/auth/register'))) {
-      const redirectPath = session.user.role === 'ADMIN'
+      const redirectPath = ['ADMIN', 'SUPERADMIN'].includes(session.user.role)
         ? `/${locale}/admin/dashboard`
         : `/${locale}/client/dashboard`;
       return NextResponse.redirect(new URL(redirectPath, req.url));
@@ -78,7 +78,7 @@ export default auth(async function middleware(req: NextRequest) {
   }
 
   // Admin-only routes
-  if (isAdminRoute && session?.user?.role !== 'ADMIN') {
+  if (isAdminRoute && !['ADMIN', 'SUPERADMIN'].includes(session?.user?.role ?? '')) {
     return NextResponse.redirect(new URL(`/${locale}/client/dashboard`, req.url));
   }
 

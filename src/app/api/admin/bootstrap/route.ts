@@ -17,11 +17,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'ADMIN_BOOTSTRAP_EMAIL env var not set' }, { status: 500 });
   }
 
+  const targetRole = (process.env.ADMIN_BOOTSTRAP_ROLE ?? 'ADMIN') as 'ADMIN' | 'SUPERADMIN';
+
   const existing = await prisma.user.findUnique({ where: { email: targetEmail } });
 
   if (existing) {
-    await prisma.user.update({ where: { email: targetEmail }, data: { role: 'ADMIN' } });
-    return NextResponse.json({ message: `${targetEmail} promoted to ADMIN` });
+    await prisma.user.update({ where: { email: targetEmail }, data: { role: targetRole } });
+    return NextResponse.json({ message: `${targetEmail} promoted to ${targetRole}` });
   }
 
   const tempPassword = crypto.randomBytes(16).toString('hex');
@@ -31,11 +33,11 @@ export async function POST(request: Request) {
       email: targetEmail,
       name: 'Admin',
       passwordHash,
-      role: 'ADMIN',
+      role: targetRole,
       language: 'fr',
     },
   });
 
   // Password only returned once — store it immediately
-  return NextResponse.json({ message: 'Admin account created', tempPassword });
+  return NextResponse.json({ message: `${targetRole} account created`, tempPassword });
 }
