@@ -88,6 +88,8 @@ export async function PATCH(request: Request, { params }: Params) {
           where: { clientId: invoice.clientId },
           data: { grade: suggestedGrade },
         });
+        const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
+        await createLoyaltyUpdateNotification(invoice.clientId, suggestedGrade, client.language || 'fr');
       }
     }
   }

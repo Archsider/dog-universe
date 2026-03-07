@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
 import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
+import { getNextGradeInfo, getGradeLabel } from '@/lib/loyalty';
 import { PawPrint, Calendar, FileText, History, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { formatDate, formatDateShort, formatMAD, calculateNights } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +57,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
   });
 
   const grade = loyaltyGrade?.grade ?? 'BRONZE';
+  const nextGradeInfo = getNextGradeInfo(totalStays);
 
   const statusColors: Record<string, string> = {
     PENDING: 'pending',
@@ -100,11 +102,31 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
             {formatMAD(totalSpent._sum.amount ?? 0)}
           </p>
         </div>
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card col-span-2 lg:col-span-1">
           <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{t('stats.loyalty')}</p>
-          <div className="mt-2">
+          <div className="mt-2 mb-3">
             <LoyaltyBadge grade={grade} locale={locale} size="md" />
           </div>
+          {nextGradeInfo.nextGrade ? (
+            <>
+              <div className="w-full bg-ivory-100 rounded-full h-1.5 mb-1.5">
+                <div
+                  className="h-1.5 rounded-full bg-gradient-to-r from-gold-400 to-gold-600 transition-all"
+                  style={{ width: `${nextGradeInfo.progressPercent}%` }}
+                />
+              </div>
+              <p className="text-xs text-charcoal/50">
+                {locale === 'fr'
+                  ? `${nextGradeInfo.staysToNext} séjour${nextGradeInfo.staysToNext > 1 ? 's' : ''} pour ${getGradeLabel(nextGradeInfo.nextGrade, 'fr')}`
+                  : `${nextGradeInfo.staysToNext} stay${nextGradeInfo.staysToNext > 1 ? 's' : ''} to reach ${getGradeLabel(nextGradeInfo.nextGrade, 'en')}`
+                }
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-gold-600 font-medium">
+              {locale === 'fr' ? '🏆 Grade maximum atteint !' : '🏆 Maximum grade reached!'}
+            </p>
+          )}
         </div>
       </div>
 

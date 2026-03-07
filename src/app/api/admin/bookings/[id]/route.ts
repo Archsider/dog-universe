@@ -92,6 +92,34 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         entityId: params.id,
         details: { from: booking.status, to: status },
       });
+    } else if (status === 'COMPLETED') {
+      await logAction({
+        userId: session.user.id,
+        action: LOG_ACTIONS.BOOKING_COMPLETED,
+        entityType: 'Booking',
+        entityId: params.id,
+        details: { from: booking.status, to: status },
+      });
+
+      // Recalculate loyalty grade on booking completion
+      try {
+        const { calculateSuggestedGrade } = await import('@/lib/loyalty');
+        const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
+        const [totalStays, totalPaid, currentGrade] = await Promise.all([
+          prisma.booking.count({ where: { clientId: booking.clientId, status: 'COMPLETED' } }),
+          prisma.invoice.aggregate({ where: { clientId: booking.clientId, status: 'PAID' }, _sum: { amount: true } }),
+          prisma.loyaltyGrade.findUnique({ where: { clientId: booking.clientId } }),
+        ]);
+        // +1 because the current booking was just set to COMPLETED but DB count may not reflect it yet
+        const suggestedGrade = calculateSuggestedGrade(totalStays + 1, totalPaid._sum.amount ?? 0);
+        if (currentGrade && !currentGrade.isOverride && currentGrade.grade !== suggestedGrade) {
+          await prisma.loyaltyGrade.update({
+            where: { clientId: booking.clientId },
+            data: { grade: suggestedGrade },
+          });
+          await createLoyaltyUpdateNotification(booking.clientId, suggestedGrade, booking.client.language || 'fr');
+        }
+      } catch { /* non-blocking */ }
     } else {
       await logAction({
         userId: session.user.id,
