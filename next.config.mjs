@@ -7,6 +7,12 @@ const nextConfig = {
   images: {
     remotePatterns: [],
   },
+  outputFileTracingExcludes: {
+    '*': [
+      '.next/cache/**',
+      'node_modules/.cache/**',
+    ],
+  },
   experimental: {
     serverComponentsExternalPackages: ['@react-pdf/renderer', 'sharp'],
   },
