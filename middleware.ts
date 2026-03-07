@@ -37,11 +37,16 @@ export default auth(async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Explicit root redirect — next-intl won't always catch this before auth wrapper
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL('/fr', req.url));
+  }
+
   // Apply i18n middleware
   const intlResponse = intlMiddleware(req);
   if (intlResponse) {
-    // If it's a redirect (for locale prefix), let it through
-    if (intlResponse.status === 307 || intlResponse.status === 308) {
+    // Let through any redirect (locale prefix etc.)
+    if (intlResponse.status >= 300 && intlResponse.status < 400) {
       return intlResponse;
     }
   }
@@ -75,7 +80,8 @@ export default auth(async function middleware(req: NextRequest) {
   }
 
   // Admin-only routes
-  if (isAdminRoute && session?.user?.role !== 'ADMIN') {
+  const role = session?.user?.role;
+  if (isAdminRoute && role !== 'ADMIN' && role !== 'SUPERADMIN') {
     return NextResponse.redirect(new URL(`/${locale}/client/dashboard`, req.url));
   }
 
