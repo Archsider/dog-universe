@@ -184,8 +184,8 @@ function ContractPDFDocument({ data }: { data: ContractPDFData }) {
             </View>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontSize: 8, color: '#6B7280' }}>RC : 87023 — ICE : 002035800000002</Text>
-            <Text style={{ fontSize: 8, color: '#6B7280', marginTop: 2 }}>+212 669 183 981</Text>
+            <Text style={{ fontSize: 8, color: '#6B7280' }}>RC : 87023 — IF : 25081867 — ICE : 002035800000002</Text>
+            <Text style={{ fontSize: 8, color: '#6B7280', marginTop: 2 }}>Tél : 00212669183981</Text>
             <Text style={{ fontSize: 8, color: '#6B7280', marginTop: 2 }}>contact@doguniverse.ma</Text>
           </View>
         </View>
@@ -206,6 +206,9 @@ function ContractPDFDocument({ data }: { data: ContractPDFData }) {
         <View style={styles.signatureSection}>
           {/* Client signature */}
           <View style={styles.signatureBox}>
+            <Text style={{ fontSize: 8, color: '#374151', marginBottom: 6, fontStyle: 'italic' }}>
+              Lu et accepté — J'ai pris connaissance des conditions générales ci-dessus et je les accepte sans réserve.
+            </Text>
             <Text style={styles.signatureLabel}>Signature du client</Text>
             <Text style={{ fontSize: 8, color: '#374151', marginBottom: 4 }}>{data.clientName}</Text>
             <Image
@@ -231,7 +234,7 @@ function ContractPDFDocument({ data }: { data: ContractPDFData }) {
 
         {/* Footer */}
         <Text style={styles.footer}>
-          {`Contrat version ${data.version ?? '1.0'} — Signé électroniquement par ${data.clientEmail} le ${signedAtStr}\nDOG UNIVERSE SARLAU — RC 87023 — ICE 002035800000002 — Marrakech, Maroc`}
+          {`Contrat version ${data.version ?? '1.0'} — Signé électroniquement par ${data.clientEmail} le ${signedAtStr}\nDOG UNIVERSE SARLAU — RC : 87023 — IF : 25081867 — ICE : 002035800000002 — Tél : 00212669183981 — contact@doguniverse.ma — Marrakech, Maroc`}
         </Text>
       </Page>
     </Document>
