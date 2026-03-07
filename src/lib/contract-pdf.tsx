@@ -3,7 +3,8 @@ import path from 'path';
 import { renderToBuffer, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 
 const LOGO_PATH = path.resolve(process.cwd(), 'public', 'logo_rgba.png');
-const STAMP_PATH = path.resolve(process.cwd(), 'public', 'stamp.png');
+// stamp.png est dans /private/ (PAS dans /public/) → jamais servi comme fichier statique
+const STAMP_PATH = path.resolve(process.cwd(), 'private', 'stamp.png');
 
 const styles = StyleSheet.create({
   page: {
