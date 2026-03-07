@@ -12,7 +12,7 @@ interface LayoutProps {
 export default async function AdminLayout({ children, params: { locale } }: LayoutProps) {
   const session = await auth();
   if (!session?.user) redirect(`/${locale}/auth/login`);
-  if (session.user.role !== 'ADMIN') redirect(`/${locale}/client/dashboard`);
+  if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/client/dashboard`);
 
   const pendingCount = await prisma.booking.count({ where: { status: 'PENDING' } });
 

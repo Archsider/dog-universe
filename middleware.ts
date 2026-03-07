@@ -63,7 +63,7 @@ export default auth(async function middleware(req: NextRequest) {
   if (isPublicPath(pathname)) {
     // If logged in and trying to access auth pages, redirect to dashboard
     if (session && (pathname.includes('/auth/login') || pathname.includes('/auth/register'))) {
-      const redirectPath = session.user.role === 'ADMIN'
+      const redirectPath = (session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN')
         ? `/${locale}/admin/dashboard`
         : `/${locale}/client/dashboard`;
       return NextResponse.redirect(new URL(redirectPath, req.url));

@@ -36,7 +36,7 @@ export async function GET(_req: Request, { params }: Params) {
 
 export async function PATCH(request: Request, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

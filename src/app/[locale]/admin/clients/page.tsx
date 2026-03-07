@@ -14,7 +14,7 @@ interface PageProps {
 
 export default async function AdminClientsPage({ params: { locale }, searchParams }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const q = searchParams.q || '';
   const gradeFilter = searchParams.grade || '';

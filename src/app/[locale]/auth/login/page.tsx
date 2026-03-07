@@ -45,7 +45,7 @@ export default function LoginPage() {
       const sessionRes = await fetch('/api/auth/session');
       const session = await sessionRes.json();
 
-      if (session?.user?.role === 'ADMIN') {
+      if (session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPERADMIN') {
         router.push(`/${locale}/admin/dashboard`);
       } else {
         router.push(`/${locale}/client/dashboard`);
@@ -133,32 +133,6 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Demo credentials */}
-          <div className="mt-6 pt-5 border-t border-gray-100">
-            <p className="text-xs text-charcoal/50 text-center mb-3">
-              {locale === 'fr' ? 'Comptes de démonstration' : 'Demo accounts'}
-            </p>
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => { setEmail('marie.dupont@email.com'); setPassword('Marie2024!'); }}
-                className="w-full text-left text-xs bg-[#FAF6F0] hover:bg-gold-50 border border-[#E2C048]/30 rounded-md px-3 py-2 transition-colors"
-              >
-                <span className="font-medium text-charcoal/70">Client:</span>{' '}
-                <span className="text-gold-700">marie.dupont@email.com</span>
-                <span className="text-charcoal/50"> / Marie2024!</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail('admin@doguniverse.ma'); setPassword('Admin2024!'); }}
-                className="w-full text-left text-xs bg-[#FAF6F0] hover:bg-gold-50 border border-[#E2C048]/30 rounded-md px-3 py-2 transition-colors"
-              >
-                <span className="font-medium text-charcoal/70">Admin:</span>{' '}
-                <span className="text-gold-700">admin@doguniverse.ma</span>
-                <span className="text-charcoal/50"> / Admin2024!</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Links */}

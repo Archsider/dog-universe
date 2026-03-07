@@ -15,7 +15,7 @@ interface PageProps { params: { locale: string; id: string } }
 
 export default async function AdminReservationDetailPage({ params: { locale, id } }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const booking = await prisma.booking.findUnique({
     where: { id },

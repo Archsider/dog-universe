@@ -8,7 +8,7 @@ interface Params { params: { id: string } }
 
 export async function POST(request: NextRequest, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

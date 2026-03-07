@@ -11,7 +11,7 @@ interface PageProps { params: { locale: string } }
 
 export default async function AdminDashboardPage({ params: { locale } }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);

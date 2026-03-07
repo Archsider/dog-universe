@@ -9,7 +9,7 @@ export default async function Home({ params }: { params: Promise<Params> }) {
   const session = await auth();
 
   if (session?.user) {
-    if (session.user.role === 'ADMIN') {
+    if (session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN') {
       redirect(`/${locale}/admin/dashboard`);
     } else {
       redirect(`/${locale}/client/dashboard`);
