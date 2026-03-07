@@ -23,8 +23,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
   }
 
-  if (!['ADMIN', 'SUPERADMIN'].includes(role)) {
-    return NextResponse.json({ error: 'Invalid role. Must be ADMIN or SUPERADMIN' }, { status: 400 });
+  if (!['ADMIN', 'SUPERADMIN', 'CLIENT'].includes(role)) {
+    return NextResponse.json({ error: 'Invalid role. Must be ADMIN, SUPERADMIN or CLIENT' }, { status: 400 });
   }
 
   const user = await prisma.user.findUnique({ where: { id } });

@@ -13,15 +13,12 @@ export default function ChangeRoleButton({ userId, currentRole, locale }: Props)
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const newRole = currentRole === 'SUPERADMIN' ? 'ADMIN' : 'SUPERADMIN';
-  const label = locale === 'fr'
-    ? (currentRole === 'SUPERADMIN' ? 'Rétrograder ADMIN' : 'Promouvoir SUPERADMIN')
-    : (currentRole === 'SUPERADMIN' ? 'Demote to ADMIN' : 'Promote to SUPERADMIN');
-
-  const handleClick = async () => {
-    if (!confirm(locale === 'fr'
+  const changeRole = async (newRole: string) => {
+    const label = locale === 'fr' ? newRole : newRole;
+    const confirmMsg = locale === 'fr'
       ? `Changer ce rôle en ${newRole} ?`
-      : `Change this role to ${newRole}?`)) return;
+      : `Change this role to ${newRole}?`;
+    if (!confirm(confirmMsg)) return;
 
     setLoading(true);
     try {
@@ -40,16 +37,33 @@ export default function ChangeRoleButton({ userId, currentRole, locale }: Props)
   };
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={loading}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-50 ${
-        currentRole === 'SUPERADMIN'
-          ? 'border-gray-200 text-gray-600 hover:bg-gray-50'
-          : 'border-gold-200 text-gold-700 hover:bg-gold-50'
-      }`}
-    >
-      {loading ? '...' : label}
-    </button>
+    <div className="flex items-center gap-2 justify-end">
+      {currentRole === 'SUPERADMIN' ? (
+        <button
+          onClick={() => changeRole('ADMIN')}
+          disabled={loading}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
+          {loading ? '...' : (locale === 'fr' ? 'Rétrograder ADMIN' : 'Demote to ADMIN')}
+        </button>
+      ) : (
+        <>
+          <button
+            onClick={() => changeRole('SUPERADMIN')}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gold-200 text-gold-700 hover:bg-gold-50 transition-colors disabled:opacity-50"
+          >
+            {loading ? '...' : (locale === 'fr' ? 'Promouvoir SUPERADMIN' : 'Promote to SUPERADMIN')}
+          </button>
+          <button
+            onClick={() => changeRole('CLIENT')}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+          >
+            {loading ? '...' : (locale === 'fr' ? 'Retirer admin' : 'Remove admin')}
+          </button>
+        </>
+      )}
+    </div>
   );
 }
