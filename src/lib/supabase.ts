@@ -1,13 +1,18 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+let _client: SupabaseClient | null = null;
+
+function getSupabaseAdmin(): SupabaseClient {
+  if (!_client) {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) throw new Error('Supabase env vars not configured');
+    _client = createClient(url, key, { auth: { persistSession: false } });
+  }
+  return _client;
+}
+
 const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'uploads';
-
-// Server-side admin client (service role key — never expose to client)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false },
-});
 
 /**
  * Upload a buffer to Supabase Storage and return the public URL.
@@ -20,7 +25,8 @@ export async function uploadBuffer(
   key: string,
   mimeType: string
 ): Promise<string> {
-  const { error } = await supabaseAdmin.storage
+  const client = getSupabaseAdmin();
+  const { error } = await client.storage
     .from(bucket)
     .upload(key, buffer, {
       contentType: mimeType,
@@ -31,6 +37,6 @@ export async function uploadBuffer(
     throw new Error(`Supabase upload failed: ${error.message}`);
   }
 
-  const { data } = supabaseAdmin.storage.from(bucket).getPublicUrl(key);
+  const { data } = client.storage.from(bucket).getPublicUrl(key);
   return data.publicUrl;
 }
