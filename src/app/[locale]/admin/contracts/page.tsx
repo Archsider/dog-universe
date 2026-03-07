@@ -1,7 +1,7 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import { FileText, CheckCircle2, XCircle, Download } from 'lucide-react';
+import { FileText, CheckCircle2, XCircle, Download, Eye } from 'lucide-react';
 import { getInitials, formatDate } from '@/lib/utils';
 
 interface PageProps { params: { locale: string } }
@@ -169,15 +169,25 @@ export default async function AdminContractsPage({ params: { locale } }: PagePro
                     </td>
                     <td className="px-4 py-3 text-right">
                       {client.contract?.pdfUrl ? (
-                        <a
-                          href={client.contract.pdfUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gold-200 text-gold-700 hover:bg-gold-50 text-xs font-medium transition-colors"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          {l.download}
-                        </a>
+                        <div className="flex items-center justify-end gap-1">
+                          <a
+                            href={client.contract.pdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={locale === 'fr' ? 'Aperçu' : 'Preview'}
+                            className="p-1.5 text-gray-400 hover:text-gold-600 rounded transition-colors"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </a>
+                          <a
+                            href={client.contract.pdfUrl}
+                            download
+                            title={l.download}
+                            className="p-1.5 text-gray-400 hover:text-gold-600 rounded transition-colors"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </div>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
                       )}

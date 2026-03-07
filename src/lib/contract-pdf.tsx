@@ -106,59 +106,99 @@ interface ContractPDFData {
 const CONTRACT_TEXT = [
   {
     title: 'PRÉAMBULE',
-    content: `Le présent contrat établit les conditions générales régissant le séjour de votre animal dans notre établissement DOG UNIVERSE. En signant ce contrat, le propriétaire (ci-après "le client") accepte l'ensemble des conditions ci-dessous.`,
+    content: `Le présent contrat définit les conditions générales régissant le séjour de l'animal au sein de l'établissement DOG UNIVERSE, pension animale située à Marrakech.\nEn signant ce document, le propriétaire de l'animal (ci-après « le client ») reconnaît avoir pris connaissance de l'ensemble des dispositions et accepte les obligations réciproques entre lui-même et DOG UNIVERSE (ci-après « la pension »).`,
   },
   {
     title: 'Article 1 — Engagement de la pension',
-    content: `DOG UNIVERSE s'engage à accueillir votre animal dans les meilleures conditions possibles, en lui fournissant les soins nécessaires, une alimentation adaptée et un environnement sécurisé. La pension dispose de toutes les autorisations nécessaires à l'exercice de son activité.`,
+    content: `DOG UNIVERSE s'engage à accueillir l'animal dans des conditions professionnelles garantissant sécurité, hygiène et bien-être.\nLa pension fournit notamment :\n• un espace de repos sécurisé • un accès permanent à l'eau potable • une surveillance quotidienne • un environnement propre et entretenu • des interactions adaptées.`,
   },
   {
-    title: 'Article 2 — Santé, vaccinations et antiparasitaire',
-    content: `Tous les animaux accueillis doivent être en bonne santé apparente au moment du dépôt. Le client s'engage à fournir le carnet de santé de l'animal avec les vaccinations à jour obligatoires (rage, typhus, coryza pour les chats ; rage, CHPPI pour les chiens). Un traitement antiparasitaire (puce et ver) doit avoir été administré dans les 30 jours précédant le séjour. Tout animal présentant des signes de maladie contagieuse pourra être refusé ou isolé. La pension ne saurait être tenue responsable des maladies contractées par voie aérienne ou contact indirect.`,
+    title: 'Article 2 — Conditions sanitaires et vaccinations',
+    content: `Le client certifie que son animal est en bonne santé apparente au moment de l'admission. Le carnet de santé doit être présenté.\nVaccinations obligatoires — Chiens : rage • CHPPI (Carré, hépatite, parvovirose, parainfluenza, leptospirose) — Chats : rage • typhus • coryza.\nDOG UNIVERSE se réserve le droit de refuser l'admission d'un animal présentant : diarrhée • vomissements • toux • lésions suspectes • signes de maladie contagieuse.`,
   },
   {
-    title: 'Article 3 — Alimentation',
-    content: `La pension fournit une alimentation de qualité adaptée à chaque animal. Le client peut fournir la nourriture habituelle de son animal pour éviter tout trouble digestif lié au changement d'alimentation. Les régimes spéciaux et médicamenteux doivent être signalés à l'admission et accompagnés d'une ordonnance si nécessaire.`,
+    title: 'Article 3 — État de l\'animal à l\'admission',
+    content: `Un contrôle visuel de l'animal est réalisé lors de l'arrivée. Toute anomalie visible pourra être signalée au client. En l'absence de remarque particulière, l'animal est considéré comme admis en bon état apparent.`,
   },
   {
-    title: 'Article 4 — Informations obligatoires',
-    content: `Le client s'engage à fournir toutes les informations nécessaires concernant les habitudes, comportements particuliers, traitements médicaux en cours, et tout antécédent de morsure ou d'agressivité de l'animal. Toute dissimulation d'information pouvant mettre en danger le personnel ou les autres animaux engage la responsabilité exclusive du client.`,
+    title: 'Article 4 — Informations obligatoires du client',
+    content: `Le client s'engage à communiquer toutes les informations importantes concernant son animal :\n• habitudes alimentaires • allergies • traitements médicaux • comportement • antécédents de morsure • peurs ou particularités comportementales.\nToute omission engage la responsabilité du client.`,
   },
   {
-    title: 'Article 5 — Femelles en chaleur',
-    content: `Les femelles en chaleur sont acceptées sous réserve de disponibilité. Un supplément tarifaire de 30 DH/jour sera appliqué pour les contraintes supplémentaires de gestion. Le client doit informer la pension de l'état de chaleur de son animal au moment de la réservation.`,
+    title: 'Article 5 — Alimentation et ration quotidienne',
+    content: `Le client doit fournir la nourriture habituelle de son animal pour toute la durée du séjour, ou acheter l'alimentation directement auprès de DOG UNIVERSE. La nourriture fournie doit être clairement identifiée, en quantité suffisante et accompagnée du grammage quotidien habituel.\nDOG UNIVERSE peut ajuster raisonnablement les rations selon l'activité, le stress, les conditions climatiques ou l'état de l'animal.\nUn animal peut temporairement refuser de s'alimenter lors de l'adaptation. En cas de refus prolongé ou préoccupant, DOG UNIVERSE informera le client et pourra adapter l'alimentation ou consulter un vétérinaire (frais à la charge du client).\nSi la nourriture fournie est insuffisante, DOG UNIVERSE fournira une alimentation équivalente facturée au client.`,
   },
   {
-    title: 'Article 6 — Urgences médicales',
-    content: `En cas d'urgence médicale, DOG UNIVERSE s'engage à contacter immédiatement le client ou son représentant désigné. Si le client est injoignable, la pension est autorisée à faire appel à un vétérinaire d'urgence. Les frais vétérinaires engagés dans ce cadre sont intégralement à la charge du client. La pension ne saurait être tenue responsable du décès ou de la détérioration de l'état de santé d'un animal nécessitant des soins vétérinaires urgents.`,
+    title: 'Article 6 — Femelles en chaleur',
+    content: `Les femelles en chaleur peuvent être acceptées sous réserve de disponibilité. Un supplément de 30 DH par jour peut être appliqué.`,
   },
   {
-    title: 'Article 7 — Modalités financières',
-    content: `Le tarif applicable est celui en vigueur au jour de la réservation. Pour les séjours supérieurs à un mois, un acompte de 50% est exigé à la réservation. Le jour de départ est comptabilisé dans la durée du séjour. Le solde est dû intégralement au moment du départ de l'animal.`,
+    title: 'Article 7 — Responsabilité civile du propriétaire',
+    content: `Le client demeure responsable du comportement de son animal. En cas de dommages causés par l'animal au personnel, à d'autres animaux ou aux installations, le client s'engage à assumer l'ensemble des frais.`,
   },
   {
-    title: 'Article 8 — Annulation et départ anticipé',
-    content: `Toute annulation intervenant moins de 72 heures avant la date prévue de dépôt, ou tout départ anticipé, donnera lieu à la facturation de 50% du montant total du séjour prévu. Les cas de force majeure seront examinés individuellement.`,
+    title: 'Article 8 — Jeux et interactions entre animaux',
+    content: `Les interactions sociales et les jeux font partie du fonctionnement normal d'une pension. Malgré une surveillance adaptée, il peut survenir : griffures superficielles • morsures de jeu • irritations cutanées • blessures mineures.\nDOG UNIVERSE ne pourra être tenue responsable sauf en cas de manquement démontré à l'obligation de surveillance.`,
   },
   {
-    title: 'Article 9 — Hygiène et responsabilité',
-    content: `La pension maintient des standards élevés d'hygiène et de propreté. Tout animal présentant une parasitose lors de son admission sera traité aux frais du client. La pension décline toute responsabilité en cas d'accident, blessure ou décès résultant d'une bagarre entre animaux ou d'un comportement imprévisible de l'animal.`,
+    title: 'Article 9 — Réactions allergiques',
+    content: `Certains animaux peuvent présenter des réactions allergiques liées au stress, à l'environnement, à l'alimentation ou à des facteurs externes. DOG UNIVERSE ne pourra être tenue responsable de ces réactions en l'absence de faute.`,
   },
   {
-    title: 'Article 10 — Effets personnels',
-    content: `La pension ne saurait être tenue responsable de la perte, dégradation ou destruction d'effets personnels (jouets, coussins, laisses, etc.) apportés par le client. Il est conseillé de limiter les objets personnels au strict nécessaire.`,
+    title: 'Article 10 — Stress et adaptation',
+    content: `Le séjour en pension peut provoquer : diarrhée passagère • perte d'appétit • fatigue • modification comportementale. Ces réactions liées au changement d'environnement ne peuvent engager la responsabilité de la pension.`,
   },
   {
-    title: 'Article 11 — Droit à l\'image',
-    content: `Le client autorise DOG UNIVERSE à prendre des photos et vidéos de son animal durant le séjour, et à les publier sur les réseaux sociaux et supports de communication de la pension, à des fins promotionnelles uniquement. Le client peut refuser cette autorisation en le signalant expressément à l'admission.`,
+    title: 'Article 11 — Maladies contagieuses',
+    content: `Certaines maladies peuvent être en incubation avant l'arrivée de l'animal, notamment : la parvovirose canine • la toux du chenil • certaines infections parasitaires.\nDOG UNIVERSE ne pourra être tenue responsable d'une maladie résultant d'une incubation antérieure à l'admission. La vaccination réduit le risque mais ne garantit pas une protection absolue.`,
   },
   {
-    title: 'Article 12 — Refus d\'admission',
-    content: `DOG UNIVERSE se réserve le droit de refuser tout animal présentant un danger pour le personnel ou les autres pensionnaires, dont les vaccinations sont insuffisantes, ou dont l'état de santé nécessite des soins vétérinaires immédiats.`,
+    title: 'Article 12 — Urgences vétérinaires et mandat sanitaire',
+    content: `En cas d'urgence médicale, DOG UNIVERSE contactera le client. Si celui-ci est injoignable, la pension est autorisée à consulter un vétérinaire.\nPar la signature du présent contrat, le client donne mandat sanitaire exprès à DOG UNIVERSE pour autoriser toute intervention vétérinaire jugée nécessaire en cas d'urgence. Le client s'engage à régler l'intégralité des frais vétérinaires.`,
   },
   {
-    title: 'Article 13 — Réserves et réclamations',
-    content: `Toute réclamation concernant le séjour devra être formulée dans un délai de 48 heures suivant le départ de l'animal. Passé ce délai, aucune réclamation ne pourra être prise en compte. En cas de litige, les parties s'engagent à rechercher une solution amiable avant tout recours judiciaire.`,
+    title: 'Article 13 — Modalités financières',
+    content: `Paiement :\n• Séjour < 7 jours : paiement intégral\n• Séjour 7 jours à 1 mois : acompte 30 %\n• Séjour > 1 mois : acompte 50 %\nModes de paiement : espèces • virement • chèque.\nLes dates réservées constituent un engagement ferme. En cas de reprise anticipée de l'animal, l'intégralité du séjour réservé reste due. Tout jour entamé est dû.`,
+  },
+  {
+    title: 'Article 14 — Sécurité sanitaire et obligations antiparasitaires',
+    content: `DOG UNIVERSE applique des protocoles d'hygiène stricts. Le client doit justifier d'un traitement antiparasitaire administré dans les 30 jours précédant l'admission. L'admission peut être refusée en l'absence de traitement récent.\nSi des parasites sont détectés, DOG UNIVERSE procédera à un traitement curatif. Les frais ainsi qu'un forfait de désinfection (150 DH) seront facturés.`,
+  },
+  {
+    title: 'Article 15 — Effets personnels',
+    content: `DOG UNIVERSE décline toute responsabilité concernant la perte ou la détérioration d'objets personnels.`,
+  },
+  {
+    title: 'Article 16 — Droit à l\'image',
+    content: `Le client autorise DOG UNIVERSE à utiliser les photos et vidéos de son animal à des fins promotionnelles.`,
+  },
+  {
+    title: 'Article 17 — Horaires d\'admission',
+    content: `Horaires d'admission : Lundi au samedi : 10h00 – 17h00.\nToute admission hors horaires pourra être refusée ou facturée.`,
+  },
+  {
+    title: 'Article 18 — Non récupération de l\'animal',
+    content: `Le client doit récupérer son animal à la date prévue. Après 10 jours sans nouvelles et après l'envoi d'une mise en demeure, l'animal pourra être considéré comme abandonné. DOG UNIVERSE pourra le confier aux autorités ou à une association.`,
+  },
+  {
+    title: 'Article 19 — Limitation de responsabilité',
+    content: `La responsabilité de DOG UNIVERSE est limitée au montant total du séjour facturé, sauf en cas de faute lourde ou intentionnelle.`,
+  },
+  {
+    title: 'Article 20 — Réclamations',
+    content: `Toute réclamation doit être formulée par écrit dans un délai de 48 heures après le départ de l'animal.`,
+  },
+  {
+    title: 'Article 21 — Données personnelles',
+    content: `Les données collectées sont nécessaires à la gestion du séjour. Conformément à la loi marocaine 09-08, le client dispose d'un droit d'accès, de rectification et de suppression. Les données sont conservées 2 ans.`,
+  },
+  {
+    title: 'Article 22 — Litiges',
+    content: `Les parties rechercheront une solution amiable. À défaut, les tribunaux compétents seront ceux de Marrakech.`,
+  },
+  {
+    title: 'Article 23 — Intégralité du contrat',
+    content: `Le présent contrat constitue l'intégralité de l'accord entre les parties. Toute modification doit être faite par écrit.`,
   },
 ];
 
