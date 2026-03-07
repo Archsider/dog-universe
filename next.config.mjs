@@ -7,17 +7,18 @@ const nextConfig = {
   images: {
     remotePatterns: [],
   },
-  outputFileTracingExcludes: {
-    '*': [
-      '.next/cache/**',
-      'node_modules/.cache/**',
-    ],
-  },
   experimental: {
     serverComponentsExternalPackages: ['@react-pdf/renderer', 'sharp'],
   },
   webpack: (config) => {
     config.resolve.alias.canvas = false;
+    // On Vercel, move webpack cache to /tmp so it's not picked up by output file tracing
+    if (process.env.VERCEL) {
+      config.cache = {
+        type: 'filesystem',
+        cacheDirectory: '/tmp/webpack-cache',
+      };
+    }
     return config;
   },
 };
