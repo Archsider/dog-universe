@@ -6,7 +6,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 export async function GET(request: Request) {
   const session = await auth();
-  if (!session?.user || ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && session.user.role !== 'SUPERADMIN')) {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user || ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && session.user.role !== 'SUPERADMIN')) {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

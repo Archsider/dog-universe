@@ -9,7 +9,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function PUT(request: Request, { params }: Params) {
   const session = await auth();
-  if (!session?.user || ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && session.user.role !== 'SUPERADMIN')) {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

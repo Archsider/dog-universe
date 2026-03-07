@@ -7,7 +7,7 @@ import { sendEmail, getEmailTemplate } from '@/lib/email';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth();
-  if (!session?.user || ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && session.user.role !== 'SUPERADMIN')) {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth();
-  if (!session?.user || ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && session.user.role !== 'SUPERADMIN')) {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -108,7 +108,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const session = await auth();
-  if (!session?.user || ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && session.user.role !== 'SUPERADMIN')) {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

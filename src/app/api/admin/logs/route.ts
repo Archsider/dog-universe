@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(request: Request) {
   const session = await auth();
-  if (!session?.user || ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && session.user.role !== 'SUPERADMIN')) {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
