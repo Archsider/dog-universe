@@ -16,72 +16,13 @@ interface InvoiceItem {
 interface Props {
   bookingId: string;
   clientId: string;
-  serviceType: string;
-  nights: number;
-  petNames: string;
-  boardingDetail?: {
-    pricePerNight: number;
-    includeGrooming: boolean;
-    groomingPrice: number;
-    taxiAddonPrice: number;
-  } | null;
-  taxiDetail?: {
-    taxiType: string;
-    price: number;
-  } | null;
   locale: string;
 }
 
-const TAXI_TYPE_LABELS: Record<string, string> = {
-  STANDARD: 'Standard',
-  VET: 'Vétérinaire',
-  AIRPORT: 'Aéroport',
-};
-
-function buildInitialItems(props: Props): InvoiceItem[] {
-  const { serviceType, nights, petNames, boardingDetail, taxiDetail } = props;
-  const items: InvoiceItem[] = [];
-
-  if (serviceType === 'BOARDING' && boardingDetail) {
-    items.push({
-      description: `Pension ${petNames} — ${nights} nuit${nights > 1 ? 's' : ''}`,
-      quantity: nights,
-      unitPrice: boardingDetail.pricePerNight,
-      total: boardingDetail.pricePerNight * nights,
-    });
-    if (boardingDetail.includeGrooming) {
-      items.push({
-        description: `Toilettage — ${petNames}`,
-        quantity: 1,
-        unitPrice: boardingDetail.groomingPrice,
-        total: boardingDetail.groomingPrice,
-      });
-    }
-    if (boardingDetail.taxiAddonPrice > 0) {
-      items.push({
-        description: 'Taxi animalier (aller/retour)',
-        quantity: 1,
-        unitPrice: boardingDetail.taxiAddonPrice,
-        total: boardingDetail.taxiAddonPrice,
-      });
-    }
-  } else if (serviceType === 'PET_TAXI' && taxiDetail) {
-    const label = TAXI_TYPE_LABELS[taxiDetail.taxiType] ?? taxiDetail.taxiType;
-    items.push({
-      description: `Taxi animalier ${label} — ${petNames}`,
-      quantity: 1,
-      unitPrice: taxiDetail.price,
-      total: taxiDetail.price,
-    });
-  }
-
-  return items;
-}
-
-export default function CreateInvoiceFromBookingButton(props: Props) {
-  const { bookingId, clientId, locale } = props;
+export default function CreateInvoiceFromBookingButton({ bookingId, clientId, locale }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const router = useRouter();
 
@@ -96,12 +37,20 @@ export default function CreateInvoiceFromBookingButton(props: Props) {
     success: isFr ? 'Facture créée' : 'Invoice created',
     error: isFr ? 'Erreur' : 'Error',
     total: isFr ? 'Total TTC' : 'Total',
-    unitPrice: isFr ? 'Prix unitaire (MAD)' : 'Unit price (MAD)',
   };
 
-  const handleOpen = () => {
-    setItems(buildInitialItems(props));
+  const handleOpen = async () => {
     setOpen(true);
+    setFetching(true);
+    try {
+      const res = await fetch(`/api/admin/reservations/${bookingId}/invoice-items`);
+      const data = await res.json();
+      setItems(data.items ?? []);
+    } catch {
+      setItems([]);
+    } finally {
+      setFetching(false);
+    }
   };
 
   const updateUnitPrice = (index: number, value: string) => {
@@ -166,7 +115,11 @@ export default function CreateInvoiceFromBookingButton(props: Props) {
                 <span className="text-right">Total</span>
               </div>
 
-              {items.map((item, i) => (
+              {fetching ? (
+                <div className="px-4 py-6 flex justify-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-gold-400" />
+                </div>
+              ) : items.map((item, i) => (
                 <div key={i} className="px-4 py-3 grid grid-cols-[1fr_48px_120px_80px] gap-2 border-t border-ivory-100 text-sm items-center">
                   <span className="text-charcoal text-xs">{item.description}</span>
                   <span className="text-center text-gray-500">{item.quantity}</span>
@@ -183,10 +136,12 @@ export default function CreateInvoiceFromBookingButton(props: Props) {
                 </div>
               ))}
 
+              {!fetching && (
               <div className="px-4 py-3 border-t border-[#F0D98A]/60 bg-ivory-50 flex justify-between items-center">
                 <span className="text-sm font-bold text-charcoal">{l.total}</span>
                 <span className="text-base font-bold text-gold-600">{formatMAD(total)}</span>
               </div>
+              )}
             </div>
 
             <div className="flex gap-3">

@@ -146,19 +146,6 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
                 <CreateInvoiceFromBookingButton
                   bookingId={booking.id}
                   clientId={booking.client.id}
-                  serviceType={booking.serviceType}
-                  nights={nights}
-                  petNames={booking.bookingPets.map(bp => bp.pet.name).join(', ')}
-                  boardingDetail={booking.boardingDetail ? {
-                    pricePerNight: booking.boardingDetail.pricePerNight,
-                    includeGrooming: booking.boardingDetail.includeGrooming,
-                    groomingPrice: booking.boardingDetail.groomingPrice,
-                    taxiAddonPrice: booking.boardingDetail.taxiAddonPrice,
-                  } : null}
-                  taxiDetail={booking.taxiDetail ? {
-                    taxiType: booking.taxiDetail.taxiType,
-                    price: booking.taxiDetail.price,
-                  } : null}
                   locale={locale}
                 />
               </div>

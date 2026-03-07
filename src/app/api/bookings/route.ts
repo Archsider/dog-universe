@@ -5,6 +5,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingConfirmationNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { formatDate } from '@/lib/utils';
+import { getPricingSettings } from '@/lib/pricing';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -115,13 +116,34 @@ export async function POST(request: Request) {
 
     // Create service-specific details
     if (serviceType === 'BOARDING') {
+      // Auto-calculate pricePerNight from settings if not explicitly provided
+      let resolvedPricePerNight = pricePerNight ?? 0;
+      if (!resolvedPricePerNight) {
+        try {
+          const pricing = await getPricingSettings();
+          const pets = await prisma.pet.findMany({ where: { id: { in: petIds } }, select: { species: true } });
+          const nights = endDate
+            ? Math.max(0, Math.floor((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)))
+            : 0;
+          const dogs = pets.filter(p => p.species === 'DOG');
+          const cats = pets.filter(p => p.species === 'CAT');
+          if (dogs.length === 1 && cats.length === 0) {
+            resolvedPricePerNight = nights > pricing.long_stay_threshold ? pricing.boarding_dog_long_stay : pricing.boarding_dog_per_night;
+          } else if (dogs.length > 1) {
+            resolvedPricePerNight = pricing.boarding_dog_multi;
+          } else if (cats.length > 0 && dogs.length === 0) {
+            resolvedPricePerNight = pricing.boarding_cat_per_night;
+          }
+        } catch { /* fallback to 0 */ }
+      }
+
       await prisma.boardingDetail.create({
         data: {
           bookingId: booking.id,
           includeGrooming: includeGrooming ?? false,
           groomingSize: groomingSize || null,
           groomingPrice: groomingPrice ?? 0,
-          pricePerNight: pricePerNight ?? 0,
+          pricePerNight: resolvedPricePerNight,
           taxiGoEnabled: taxiGoEnabled ?? false,
           taxiGoDate: taxiGoDate || null,
           taxiGoTime: taxiGoTime || null,
