@@ -62,7 +62,9 @@
       "analytics": "Analytiques",
       "logs": "Journaux",
       "settings": "Paramètres",
-      "profile": "Mon profil"
+      "profile": "Mon profil",
+      "contracts": "Contrats",
+      "users": "Utilisateurs"
     }
   },
   "auth": {

@@ -20,6 +20,8 @@ import {
   ShieldCheck,
   Settings,
   UserCircle,
+  FileText,
+  UserCog,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -30,7 +32,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
+export function AdminSidebar({ pendingCount = 0, userRole = 'ADMIN' }: { pendingCount?: number; userRole?: string }) {
   const t = useTranslations('nav.admin');
   const locale = useLocale();
   const pathname = usePathname();
@@ -43,10 +45,14 @@ export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
     { href: `/${locale}/admin/calendar`, labelKey: 'calendar', icon: Calendar },
     { href: `/${locale}/admin/reservations`, labelKey: 'reservations', icon: ClipboardList },
     { href: `/${locale}/admin/billing`, labelKey: 'billing', icon: Receipt },
+    { href: `/${locale}/admin/contracts`, labelKey: 'contracts', icon: FileText },
     { href: `/${locale}/admin/analytics`, labelKey: 'analytics', icon: BarChart3 },
     { href: `/${locale}/admin/logs`, labelKey: 'logs', icon: ScrollText },
     { href: `/${locale}/admin/settings`, labelKey: 'settings', icon: Settings },
     { href: `/${locale}/admin/profile`, labelKey: 'profile', icon: UserCircle },
+    ...(userRole === 'SUPERADMIN'
+      ? [{ href: `/${locale}/admin/users`, labelKey: 'users', icon: UserCog }]
+      : []),
   ];
 
   const SidebarContent = () => (
