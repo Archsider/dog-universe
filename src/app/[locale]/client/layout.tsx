@@ -4,6 +4,8 @@ import { ClientSidebar } from '@/components/layout/ClientSidebar';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { NotificationBell } from '@/components/shared/NotificationBell';
 import { getUnreadCount } from '@/lib/notifications';
+import { prisma } from '@/lib/prisma';
+import { ContractGate } from '@/components/contract/ContractGate';
 
 type Params = { locale: string };
 
@@ -21,11 +23,19 @@ export default async function ClientLayout({
     redirect(`/${locale}/auth/login`);
   }
 
-  if (session.user.role === 'ADMIN') {
+  if (session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN') {
     redirect(`/${locale}/admin/dashboard`);
   }
 
-  const unreadCount = await getUnreadCount(session.user.id);
+  const [unreadCount, contract] = await Promise.all([
+    getUnreadCount(session.user.id),
+    prisma.clientContract.findUnique({
+      where: { clientId: session.user.id },
+      select: { id: true },
+    }),
+  ]);
+
+  const hasContract = !!contract;
 
   return (
     <div className="flex min-h-screen bg-[#FAF6F0]">
@@ -41,7 +51,9 @@ export default async function ClientLayout({
 
         {/* Page content */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in">
-          {children}
+          <ContractGate hasContract={hasContract} clientName={session.user.name ?? ''}>
+            {children}
+          </ContractGate>
         </main>
       </div>
     </div>

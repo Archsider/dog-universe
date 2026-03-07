@@ -27,6 +27,7 @@ model User {
   actionLogs    ActionLog[]
   adminNotes    AdminNote[]    @relation("NoteAuthor")
   passwordResets PasswordResetToken[]
+  contract      ClientContract?
 }
 
 model Pet {
@@ -269,3 +270,17 @@ model PasswordResetToken {
 
   @@index([token])
 }
+
+model ClientContract {
+  id          String   @id @default(cuid())
+  clientId    String   @unique
+  signedAt    DateTime @default(now())
+  pdfUrl      String   // Supabase Storage URL
+  storageKey  String   // e.g. contracts/{clientId}.pdf
+  ipAddress   String?
+  version     String   @default("1.0")
+  createdAt   DateTime @default(now())
+
+  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+

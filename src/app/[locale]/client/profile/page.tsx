@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useLocale } from 'next-intl';
-import { User, Lock, Loader2, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, Loader2, CheckCircle, AlertCircle, Eye, EyeOff, FileText, Download } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,12 @@ interface UserProfile {
   name: string;
   email: string;
   phone: string | null;
+}
+
+interface ContractInfo {
+  signedAt: string;
+  pdfUrl: string;
+  version: string;
 }
 
 export default function ProfilePage() {
@@ -31,6 +37,7 @@ export default function ProfilePage() {
 
   const [form, setForm] = useState({ name: '', phone: '' });
   const [pwForm, setPwForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [contract, setContract] = useState<ContractInfo | null>(null);
 
   const labels = {
     fr: {
@@ -76,14 +83,15 @@ export default function ProfilePage() {
   const l = labels[locale as keyof typeof labels] || labels.fr;
 
   useEffect(() => {
-    fetch('/api/profile')
-      .then(r => r.json())
-      .then(data => {
-        setProfile(data);
-        setForm({ name: data.name || '', phone: data.phone || '' });
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    Promise.all([
+      fetch('/api/profile').then(r => r.json()),
+      fetch('/api/contracts/sign').then(r => r.json()),
+    ]).then(([profileData, contractData]) => {
+      setProfile(profileData);
+      setForm({ name: profileData.name || '', phone: profileData.phone || '' });
+      if (contractData.contract) setContract(contractData.contract);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -176,6 +184,47 @@ export default function ProfilePage() {
             {saving ? l.saving : l.saveProfile}
           </Button>
         </form>
+      </div>
+
+      {/* Contract section */}
+      <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+        <div className="flex items-center gap-2 mb-4">
+          <FileText className="h-5 w-5 text-gold-500" />
+          <h2 className="font-semibold text-charcoal">
+            {locale === 'fr' ? 'Contrat de pension' : 'Boarding contract'}
+          </h2>
+        </div>
+        {contract ? (
+          <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-green-800">
+                {locale === 'fr' ? 'Contrat signé' : 'Contract signed'}
+              </p>
+              <p className="text-xs text-green-600 mt-0.5">
+                {locale === 'fr' ? 'Le' : 'On'}{' '}
+                {new Date(contract.signedAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
+                  year: 'numeric', month: 'long', day: 'numeric',
+                })}
+                {' — '}v{contract.version}
+              </p>
+            </div>
+            <a
+              href={contract.pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-sm font-medium text-green-700 hover:text-green-900 underline"
+            >
+              <Download className="h-4 w-4" />
+              {locale === 'fr' ? 'Télécharger' : 'Download'}
+            </a>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">
+            {locale === 'fr'
+              ? 'Aucun contrat signé. Vous serez invité à signer à votre prochaine connexion.'
+              : 'No contract signed yet. You will be prompted to sign on your next login.'}
+          </p>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">

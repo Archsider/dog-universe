@@ -1,0 +1,96 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '../../../../../auth';
+import { prisma } from '@/lib/prisma';
+import { generateContractPDF } from '@/lib/contract-pdf';
+import { uploadBuffer } from '@/lib/supabase';
+
+export async function POST(req: NextRequest) {
+  const session = await auth();
+
+  if (!session?.user || session.user.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const clientId = session.user.id;
+
+  // Check if already signed
+  const existing = await prisma.clientContract.findUnique({
+    where: { clientId },
+  });
+  if (existing) {
+    return NextResponse.json(
+      { error: 'Contract already signed', pdfUrl: existing.pdfUrl },
+      { status: 409 }
+    );
+  }
+
+  let signatureDataUrl: string;
+  try {
+    const body = await req.json();
+    signatureDataUrl = body.signatureDataUrl;
+    if (!signatureDataUrl || !signatureDataUrl.startsWith('data:image/png;base64,')) {
+      return NextResponse.json({ error: 'Invalid signature data' }, { status: 400 });
+    }
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+
+  const client = await prisma.user.findUnique({
+    where: { id: clientId },
+    select: { name: true, email: true },
+  });
+  if (!client) {
+    return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+  }
+
+  const ipAddress =
+    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+    req.headers.get('x-real-ip') ??
+    undefined;
+
+  const signedAt = new Date();
+
+  // Generate PDF server-side (stamp is embedded here — stamp file never sent to browser)
+  const pdfBuffer = await generateContractPDF({
+    clientName: client.name,
+    clientEmail: client.email,
+    signedAt,
+    signatureDataUrl,
+    ipAddress,
+    version: '1.0',
+  });
+
+  // Upload to Supabase Storage
+  const storageKey = `contracts/${clientId}.pdf`;
+  const pdfUrl = await uploadBuffer(pdfBuffer, storageKey, 'application/pdf');
+
+  // Save contract record in DB
+  const contract = await prisma.clientContract.create({
+    data: {
+      clientId,
+      signedAt,
+      pdfUrl,
+      storageKey,
+      ipAddress,
+      version: '1.0',
+    },
+  });
+
+  return NextResponse.json({ success: true, pdfUrl: contract.pdfUrl });
+}
+
+export async function GET() {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const clientId = session.user.id;
+
+  const contract = await prisma.clientContract.findUnique({
+    where: { clientId },
+    select: { signedAt: true, pdfUrl: true, version: true },
+  });
+
+  return NextResponse.json({ contract });
+}

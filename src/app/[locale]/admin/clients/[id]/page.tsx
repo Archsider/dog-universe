@@ -2,7 +2,7 @@ import { auth } from '../../../../../../auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { ArrowLeft, PawPrint, Calendar, MessageSquare } from 'lucide-react';
+import { ArrowLeft, PawPrint, Calendar, MessageSquare, FileText, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatMAD, formatDate, getInitials, getBookingStatusColor } from '@/lib/utils';
 import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
@@ -14,12 +14,13 @@ interface PageProps { params: { locale: string; id: string } }
 
 export default async function AdminClientDetailPage({ params: { locale, id } }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const client = await prisma.user.findUnique({
     where: { id },
     include: {
       loyaltyGrade: true,
+      contract: { select: { signedAt: true, pdfUrl: true, version: true } },
       pets: { include: { _count: { select: { bookingPets: true } } } },
       bookings: {
         include: { bookingPets: { include: { pet: { select: { name: true } } } } },
@@ -88,6 +89,45 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
             <h3 className="font-semibold text-charcoal text-sm mb-3">{l.loyalty}</h3>
             <div className="mb-3"><LoyaltyBadge grade={grade} locale={locale} /></div>
             <ClientDetailActions clientId={id} currentGrade={grade} locale={locale} />
+          </div>
+
+          {/* Contract card */}
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
+            <div className="flex items-center gap-2 mb-3">
+              <FileText className="h-4 w-4 text-gold-500" />
+              <h3 className="font-semibold text-charcoal text-sm">
+                {locale === 'fr' ? 'Contrat signé' : 'Signed contract'}
+              </h3>
+            </div>
+            {client.contract ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                    ✓ {locale === 'fr' ? 'Signé' : 'Signed'}
+                  </span>
+                  <span className="text-xs text-gray-400">v{client.contract.version}</span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  {new Date(client.contract.signedAt).toLocaleDateString(
+                    locale === 'fr' ? 'fr-FR' : 'en-US',
+                    { year: 'numeric', month: 'long', day: 'numeric' }
+                  )}
+                </p>
+                <a
+                  href={client.contract.pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900 underline font-medium"
+                >
+                  <Download className="h-3 w-3" />
+                  {locale === 'fr' ? 'Télécharger le PDF' : 'Download PDF'}
+                </a>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic">
+                {locale === 'fr' ? 'Pas encore signé' : 'Not yet signed'}
+              </p>
+            )}
           </div>
         </div>
 
