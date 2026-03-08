@@ -25,7 +25,7 @@ async function main() {
   await prisma.user.deleteMany();
 
   // Create admin account
-  const adminPassword = await bcrypt.hash('Admin2024!', 12);
+  const adminPassword = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD ?? 'change-me-admin', 12);
   const admin = await prisma.user.create({
     data: {
       email: 'admin@doguniverse.ma',
@@ -39,7 +39,7 @@ async function main() {
   console.log('✅ Admin account created:', admin.email);
 
   // Create client account - Marie Dupont
-  const clientPassword = await bcrypt.hash('Marie2024!', 12);
+  const clientPassword = await bcrypt.hash(process.env.SEED_CLIENT_PASSWORD ?? 'change-me-client', 12);
   const marie = await prisma.user.create({
     data: {
       email: 'marie.dupont@email.com',
@@ -480,8 +480,8 @@ async function main() {
 
   console.log('\n🎉 Database seeded successfully!');
   console.log('\n📋 Test accounts:');
-  console.log('   Admin:  admin@doguniverse.ma  / Admin2024!');
-  console.log('   Client: marie.dupont@email.com / Marie2024!');
+  console.log('   Admin:  admin@doguniverse.ma  / (see SEED_ADMIN_PASSWORD in .env)');
+  console.log('   Client: marie.dupont@email.com / (see SEED_CLIENT_PASSWORD in .env)');
 }
 
 main()
