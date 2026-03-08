@@ -56,7 +56,7 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
 
       {/* User info */}
       <div className="px-6 py-4 border-b border-[#F0D98A]/20">
-        <p className="text-xs text-muted-foreground">Connecté en tant que</p>
+        <p className="text-xs text-muted-foreground">{t('connectedAs')}</p>
         <p className="text-sm font-semibold text-charcoal truncate mt-0.5">{userName}</p>
       </div>
 

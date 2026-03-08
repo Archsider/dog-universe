@@ -52,6 +52,7 @@
     "notifications": "Notifications",
     "profile": "Mon profil",
     "logout": "Se déconnecter",
+    "connectedAs": "Connecté en tant que",
     "admin": {
       "dashboard": "Tableau de bord",
       "clients": "Clients",

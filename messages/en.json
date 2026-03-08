@@ -52,6 +52,7 @@
     "notifications": "Notifications",
     "profile": "My Profile",
     "logout": "Sign Out",
+    "connectedAs": "Signed in as",
     "admin": {
       "dashboard": "Dashboard",
       "clients": "Clients",
