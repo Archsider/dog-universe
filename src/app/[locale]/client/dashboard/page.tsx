@@ -84,12 +84,8 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         <p className="text-charcoal/60 mt-1">{t('subtitle')}</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-          <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{t('stats.pets')}</p>
-          <p className="text-3xl font-serif font-bold text-charcoal mt-1">{pets.length}</p>
-        </div>
+      {/* Stats + Carte membre */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
           <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{t('stats.totalStays')}</p>
           <p className="text-3xl font-serif font-bold text-charcoal mt-1">{totalStays}</p>
@@ -100,10 +96,54 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
             {formatMAD(totalSpent._sum.amount ?? 0)}
           </p>
         </div>
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-          <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{t('stats.loyalty')}</p>
-          <div className="mt-2">
-            <LoyaltyBadge grade={grade} locale={locale} size="md" />
+
+        {/* Carte de membre */}
+        <div className="col-span-2 lg:col-span-1 relative overflow-hidden rounded-xl border border-[#F0D98A]/60 p-5 shadow-card bg-gradient-to-br from-[#2C2C2C] to-[#1a1a1a] text-white">
+          {/* Fond décoratif */}
+          <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-[#F0D98A]/10" />
+          <div className="absolute -right-2 -bottom-8 h-32 w-32 rounded-full bg-[#F0D98A]/5" />
+
+          <div className="relative space-y-3">
+            <div className="flex items-start justify-between">
+              <p className="text-[10px] uppercase tracking-widest text-white/50 font-medium">Dog Universe</p>
+              <LoyaltyBadge grade={grade} locale={locale} size="sm" />
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium">
+                {locale === 'fr' ? 'Membre' : 'Member'}
+              </p>
+              <p className="text-base font-serif font-semibold text-white leading-tight">
+                {session.user.name}
+              </p>
+            </div>
+
+            {pets.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-white/40 font-medium">
+                  {pets.length === 1
+                    ? (pets[0].species === 'CAT'
+                        ? (locale === 'fr' ? 'Chat' : 'Cat')
+                        : (locale === 'fr' ? 'Chien' : 'Dog'))
+                    : (locale === 'fr' ? 'Animaux' : 'Pets')}
+                </p>
+                <p className="text-sm text-white/90 font-medium">
+                  {pets.map((p) => p.name).join(' · ')}
+                </p>
+              </div>
+            )}
+
+            <div className="pt-1 flex items-center gap-1.5">
+              {[...Array(4)].map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1 flex-1 rounded-full ${
+                    i < Math.min(totalStays, 4) ? 'bg-[#F0D98A]' : 'bg-white/20'
+                  }`}
+                />
+              ))}
+              <span className="text-[10px] text-white/40 ml-1">{totalStays} {locale === 'fr' ? 'séj.' : 'stays'}</span>
+            </div>
           </div>
         </div>
       </div>
