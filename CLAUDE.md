@@ -351,8 +351,8 @@ TWILIO_PHONE_NUMBER=
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | `admin@doguniverse.ma` | `Admin2024!` |
-| Client | `marie.dupont@email.com` | `Marie2024!` |
+| Admin | `admin@doguniverse.ma` | `[SECRET REDACTED]` |
+| Client | `marie.dupont@email.com` | `[SECRET REDACTED]` |
 
 ---
 
