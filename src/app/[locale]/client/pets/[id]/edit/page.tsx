@@ -97,7 +97,10 @@ export default function EditPetPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.species) return;
+    if (!form.name || !form.species || !form.dateOfBirth) {
+      toast({ title: fr ? 'Nom, espèce et date de naissance sont obligatoires' : 'Name, species and date of birth are required', variant: 'destructive' });
+      return;
+    }
     setLoading(true);
     try {
       let photoUrl = currentPhotoUrl;
@@ -220,8 +223,8 @@ export default function EditPetPage() {
                 <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder={fr ? 'Golden Retriever...' : 'Golden Retriever...'} />
               </div>
               <div>
-                <Label htmlFor="dob">{fr ? 'Date de naissance' : 'Date of birth'}</Label>
-                <Input id="dob" type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
+                <Label htmlFor="dob">{fr ? 'Date de naissance' : 'Date of birth'} *</Label>
+                <Input id="dob" type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} required className="mt-1" max={new Date().toISOString().split('T')[0]} />
               </div>
             </div>
 

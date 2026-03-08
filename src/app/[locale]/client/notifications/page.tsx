@@ -5,7 +5,7 @@ import { useLocale } from 'next-intl';
 import {
   CheckCheck, Loader2, BellOff, Camera, MessageSquare,
   CheckCircle2, XCircle, Bell, Star, Receipt, CalendarClock,
-  ArrowRight,
+  ArrowRight, Cake,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
@@ -32,6 +32,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   ADMIN_MESSAGE:        { icon: MessageSquare,  color: 'text-gold-600',   bg: 'bg-gold-50' },
   STAY_PHOTO:           { icon: Camera,         color: 'text-gold-600',   bg: 'bg-gold-50' },
   LOYALTY_UPDATE:       { icon: Star,           color: 'text-gold-500',   bg: 'bg-gold-50' },
+  PET_BIRTHDAY:         { icon: Cake,           color: 'text-pink-500',   bg: 'bg-pink-50' },
 };
 
 function parseMetadata(raw: string | null): Record<string, string> {

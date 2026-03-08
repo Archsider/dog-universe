@@ -62,8 +62,8 @@ export default function NewPetPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.species) {
-      toast({ title: fr ? 'Champs manquants' : 'Missing fields', variant: 'destructive' });
+    if (!form.name || !form.species || !form.dateOfBirth) {
+      toast({ title: fr ? 'Nom, espèce et date de naissance sont obligatoires' : 'Name, species and date of birth are required', variant: 'destructive' });
       return;
     }
     setLoading(true);
@@ -178,8 +178,8 @@ export default function NewPetPage() {
                 <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder={fr ? 'Golden Retriever...' : 'Golden Retriever...'} />
               </div>
               <div>
-                <Label htmlFor="dob">{t('form.dateOfBirth')}</Label>
-                <Input id="dob" type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
+                <Label htmlFor="dob">{t('form.dateOfBirth')} *</Label>
+                <Input id="dob" type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} required className="mt-1" max={new Date().toISOString().split('T')[0]} />
               </div>
             </div>
 
