@@ -13,8 +13,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!['APPROVED', 'REJECTED'].includes(action)) {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   }
-  if (action === 'REJECTED' && !rejectionReason?.trim()) {
-    return NextResponse.json({ error: 'Rejection reason required' }, { status: 400 });
+  if (action === 'REJECTED' && (!rejectionReason?.trim() || rejectionReason.trim().length < 3)) {
+    return NextResponse.json({ error: 'Rejection reason required (min 3 characters)' }, { status: 400 });
   }
 
   const claim = await prisma.loyaltyBenefitClaim.update({

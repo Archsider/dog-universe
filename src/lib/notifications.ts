@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { sendEmail, getEmailTemplate } from './email';
 
 export type NotificationType =
   | 'BOOKING_CONFIRMATION'
@@ -8,7 +9,8 @@ export type NotificationType =
   | 'INVOICE_AVAILABLE'
   | 'ADMIN_MESSAGE'
   | 'STAY_PHOTO'
-  | 'LOYALTY_UPDATE';
+  | 'LOYALTY_UPDATE'
+  | 'PET_BIRTHDAY';
 
 interface CreateNotificationData {
   userId: string;
@@ -106,7 +108,7 @@ export async function createLoyaltyUpdateNotification(
     en: { BRONZE: 'Bronze', SILVER: 'Silver', GOLD: 'Gold', PLATINUM: 'Platinum' },
   };
 
-  return createNotification({
+  const notification = await createNotification({
     userId,
     type: 'LOYALTY_UPDATE',
     titleFr: 'Grade de fidélité mis à jour',
@@ -114,6 +116,18 @@ export async function createLoyaltyUpdateNotification(
     messageFr: `Félicitations ! Votre grade de fidélité a été mis à jour : ${gradeLabels.fr[grade] ?? grade}.`,
     messageEn: `Congratulations! Your loyalty grade has been updated: ${gradeLabels.en[grade] ?? grade}.`,
   });
+
+  // Send email notification (non-blocking)
+  try {
+    const client = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+    if (client) {
+      const gradeLabel = locale === 'fr' ? (gradeLabels.fr[grade] ?? grade) : (gradeLabels.en[grade] ?? grade);
+      const { subject, html } = getEmailTemplate('loyalty_update', { clientName: client.name, grade: gradeLabel }, locale);
+      await sendEmail({ to: client.email, subject, html });
+    }
+  } catch { /* non-blocking */ }
+
+  return notification;
 }
 
 export async function createStayPhotoNotification(

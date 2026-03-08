@@ -47,7 +47,8 @@ export function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-export function calculateAge(dateOfBirth: Date | string, locale: string = 'fr'): string {
+export function calculateAge(dateOfBirth: Date | string | null | undefined, locale: string = 'fr'): string {
+  if (!dateOfBirth) return locale === 'en' ? 'Unknown age' : 'Âge inconnu';
   const dob = typeof dateOfBirth === 'string' ? new Date(dateOfBirth) : dateOfBirth;
   const years = Math.floor(differenceInDays(new Date(), dob) / 365);
   if (locale === 'en') return `${years} year${years > 1 ? 's' : ''}`;

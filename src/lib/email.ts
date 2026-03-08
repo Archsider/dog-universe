@@ -63,7 +63,7 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -218,6 +218,26 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         </div>
         ${data.bookingRef ? `<p style="color: #6B7280; font-size: 13px;">Booking: ${data.bookingRef}</p>` : ''}
         <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    loyalty_update: {
+      subjectFr: `⭐ Votre grade de fidélité a évolué — Dog Universe`,
+      subjectEn: `⭐ Your loyalty grade has been updated — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+        <p>Félicitations ! Votre fidélité a été récompensée.</p>
+        <p>Votre grade est maintenant : <strong style="color: #C9A84C; font-size: 18px;">${data.grade}</strong></p>
+        ${data.totalStays ? `<p style="color: #6B7280; font-size: 14px;">Séjours complétés : ${data.totalStays}</p>` : ''}
+        <p>Connectez-vous à votre espace client pour découvrir vos nouveaux avantages.</p>
+        <p>Merci pour votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+        <p>Congratulations! Your loyalty has been rewarded.</p>
+        <p>Your grade is now: <strong style="color: #C9A84C; font-size: 18px;">${data.grade}</strong></p>
+        ${data.totalStays ? `<p style="color: #6B7280; font-size: 14px;">Completed stays: ${data.totalStays}</p>` : ''}
+        <p>Log in to your client portal to discover your new benefits.</p>
+        <p>Thank you for your loyalty,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
     reset_password: {

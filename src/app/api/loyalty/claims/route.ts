@@ -2,11 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { GRADE_BENEFITS, Grade } from '@/lib/loyalty';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+
+let ratelimit: Ratelimit | null = null;
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  ratelimit = new Ratelimit({
+    redis: Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(5, '1 h'),
+    prefix: 'loyalty_claims',
+  });
+}
 
 // POST /api/loyalty/claims — client submits a benefit claim
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  if (ratelimit) {
+    const { success } = await ratelimit.limit(session.user.id);
+    if (!success) {
+      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
+    }
+  }
 
   const { benefitKey } = await req.json();
   if (!benefitKey) return NextResponse.json({ error: 'benefitKey required' }, { status: 400 });
