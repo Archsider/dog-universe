@@ -92,13 +92,17 @@ export async function POST(request: Request) {
     const year = new Date().getFullYear();
     const bookingRef = `DU-${year}-${String(count + 1).padStart(4, '0')}`;
 
-    const clientId = session.user.role === 'CLIENT' ? session.user.id : body.clientId;
+    const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN';
+    const clientId = isAdmin ? body.clientId : session.user.id;
+    if (!clientId) {
+      return NextResponse.json({ error: 'MISSING_CLIENT_ID' }, { status: 400 });
+    }
 
     const booking = await prisma.booking.create({
       data: {
         clientId,
         serviceType,
-        status: session.user.role === 'ADMIN' ? 'CONFIRMED' : 'PENDING',
+        status: isAdmin ? 'CONFIRMED' : 'PENDING',
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         arrivalTime: arrivalTime || null,

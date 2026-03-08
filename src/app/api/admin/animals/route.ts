@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
   const { ownerId, name, species, breed, gender, dateOfBirth } = await request.json();
 
-  if (!ownerId || !name || !species) {
+  if (!ownerId || !name || !species || !dateOfBirth) {
     return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
   }
 

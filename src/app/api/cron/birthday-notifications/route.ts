@@ -3,10 +3,11 @@ import { prisma } from '@/lib/prisma';
 
 // GET /api/cron/birthday-notifications
 // Called daily by Vercel Cron (see vercel.json) or any cron scheduler.
-// Protected by CRON_SECRET environment variable.
+// Protected by CRON_SECRET environment variable via Authorization: Bearer header.
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret') ?? req.nextUrl.searchParams.get('secret');
-  if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {
+  const authHeader = req.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -38,11 +39,12 @@ export async function GET(req: NextRequest) {
     const speciesEn = pet.species === 'DOG' ? 'dog' : 'cat';
 
     // Avoid duplicate if we already sent one today for this pet
+    // Use specific JSON key-value pattern to avoid partial UUID collisions
     const alreadySent = await prisma.notification.findFirst({
       where: {
         userId: pet.ownerId,
         type: 'PET_BIRTHDAY',
-        metadata: { contains: pet.id },
+        metadata: { contains: `"petId":"${pet.id}"` },
         createdAt: { gte: new Date(today.getFullYear(), today.getMonth(), today.getDate()) },
       },
     });

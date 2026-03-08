@@ -65,7 +65,8 @@
       "profile": "My Profile",
       "contracts": "Contracts",
       "users": "Users",
-      "loyalty": "Loyalty Claims"
+      "loyalty": "Loyalty Claims",
+      "logout": "Sign Out"
     }
   },
   "auth": {

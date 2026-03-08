@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const bookings = await prisma.booking.findMany({
     where: {
       serviceType: 'BOARDING',
-      status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+      status: 'CONFIRMED',
       startDate: { gte: rangeStart, lte: rangeEnd },
     },
     include: {

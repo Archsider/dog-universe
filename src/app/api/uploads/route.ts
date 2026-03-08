@@ -8,12 +8,13 @@ export async function POST(request: Request) {
 
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const rawFile = formData.get('file');
     const uploadType = (formData.get('type') as UploadType) ?? 'pet-photo';
 
-    if (!file) {
+    if (!rawFile || !(rawFile instanceof File)) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
+    const file = rawFile;
 
     const result = await uploadFile(file, uploadType);
     return NextResponse.json(result, { status: 201 });

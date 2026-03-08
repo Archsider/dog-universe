@@ -38,5 +38,8 @@ export async function uploadBuffer(
   }
 
   const { data } = client.storage.from(bucket).getPublicUrl(key);
+  if (!data?.publicUrl) {
+    throw new Error(`Supabase getPublicUrl returned empty URL for key: ${key}`);
+  }
   return data.publicUrl;
 }

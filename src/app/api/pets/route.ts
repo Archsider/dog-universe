@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       behaviorWithDogs, behaviorWithCats, behaviorWithHumans, notes,
     } = body;
 
-    if (!name || !species) {
+    if (!name || !species || !dateOfBirth) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
     }
 

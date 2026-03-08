@@ -65,7 +65,8 @@
       "profile": "Mon profil",
       "contracts": "Contrats",
       "users": "Utilisateurs",
-      "loyalty": "Réclamations fidélité"
+      "loyalty": "Réclamations fidélité",
+      "logout": "Déconnexion"
     }
   },
   "auth": {

@@ -114,7 +114,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, userRol
           className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-charcoal/70 hover:text-red-600 hover:bg-red-50 transition-colors w-full"
         >
           <LogOut className="h-4 w-4" />
-          <span>Déconnexion</span>
+          <span>{t('logout')}</span>
         </button>
       </div>
     </div>

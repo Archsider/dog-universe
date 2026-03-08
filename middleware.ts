@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from './auth';
 import createMiddleware from 'next-intl/middleware';
 import { routing } from './src/i18n/routing';
+import type { Session } from 'next-auth';
 
 const intlMiddleware = createMiddleware(routing);
 
@@ -51,9 +52,8 @@ export default auth(async function middleware(req: NextRequest) {
     }
   }
 
-  // Get session from the augmented request
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const session = (req as any).auth;
+  // Get session from the NextAuth-augmented request
+  const session = (req as NextRequest & { auth: Session | null }).auth;
 
   // Extract locale from pathname
   const localeMatch = pathname.match(/^\/(fr|en)/);
