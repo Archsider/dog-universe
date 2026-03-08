@@ -57,6 +57,32 @@ export function isUpgrade(oldGrade: Grade, newGrade: Grade): boolean {
 
 export const ALL_GRADES: Grade[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];
 
+export interface GradeBenefit {
+  labelFr: string;
+  labelEn: string;
+}
+
+export const GRADE_BENEFITS: Record<Grade, GradeBenefit[]> = {
+  BRONZE: [],
+  SILVER: [
+    { labelFr: 'Priorité de réservation', labelEn: 'Booking priority' },
+    { labelFr: '5% de réduction sur le toilettage', labelEn: '5% grooming discount' },
+  ],
+  GOLD: [
+    { labelFr: 'Priorité de réservation', labelEn: 'Booking priority' },
+    { labelFr: '10% de réduction sur le toilettage', labelEn: '10% grooming discount' },
+    { labelFr: '1 séance de toilettage offerte / an', labelEn: '1 free grooming session / year' },
+    { labelFr: '2 trajets Pet Taxi offerts / an', labelEn: '2 free Pet Taxi rides / year' },
+  ],
+  PLATINUM: [
+    { labelFr: 'Priorité absolue de réservation', labelEn: 'Absolute booking priority' },
+    { labelFr: '15% de réduction sur le toilettage', labelEn: '15% grooming discount' },
+    { labelFr: '2 séances de toilettage offertes / an', labelEn: '2 free grooming sessions / year' },
+    { labelFr: '3 trajets Pet Taxi offerts / an', labelEn: '3 free Pet Taxi rides / year' },
+    { labelFr: 'Assistance vétérinaire prioritaire', labelEn: 'Priority veterinary assistance' },
+  ],
+};
+
 export interface NextGradeInfo {
   nextGrade: Grade | null;
   staysToNext: number;

@@ -12,99 +12,74 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 
-interface PetData {
-  id: string;
-  name: string;
-  species: string;
-  breed: string | null;
-  dateOfBirth: string | null;
-  gender: string | null;
-  notes: string | null;
-  photoUrl: string | null;
-}
+const BEHAVIOR_OPTIONS = [
+  { value: 'SOCIABLE', fr: 'Sociable', en: 'Sociable' },
+  { value: 'TOLERANT', fr: 'Tolérant', en: 'Tolerant' },
+  { value: 'MONITOR', fr: 'À surveiller', en: 'Needs monitoring' },
+  { value: 'REACTIVE', fr: 'Réactif', en: 'Reactive' },
+];
+
+type FormState = {
+  name: string; species: string; breed: string; dateOfBirth: string; gender: string;
+  isNeutered: string; microchipNumber: string; tattooNumber: string; weight: string;
+  vetName: string; vetPhone: string;
+  allergies: string; currentMedication: string;
+  behaviorWithDogs: string; behaviorWithCats: string; behaviorWithHumans: string;
+  notes: string;
+};
+
+const EMPTY_FORM: FormState = {
+  name: '', species: '', breed: '', dateOfBirth: '', gender: '',
+  isNeutered: '', microchipNumber: '', tattooNumber: '', weight: '',
+  vetName: '', vetPhone: '',
+  allergies: '', currentMedication: '',
+  behaviorWithDogs: '', behaviorWithCats: '', behaviorWithHumans: '',
+  notes: '',
+};
 
 export default function EditPetPage() {
   const locale = useLocale();
   const router = useRouter();
   const params = useParams();
   const petId = params.id as string;
+  const fr = locale === 'fr';
 
-  const [pet, setPet] = useState<PetData | null>(null);
-  const [form, setForm] = useState({ name: '', species: '', breed: '', dateOfBirth: '', gender: '', notes: '' });
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
 
-  const labels = {
-    fr: {
-      title: 'Modifier l\'animal',
-      back: 'Retour',
-      photo: 'Photo',
-      name: 'Nom',
-      species: 'Espèce',
-      breed: 'Race',
-      dob: 'Date de naissance',
-      gender: 'Sexe',
-      notes: 'Notes',
-      save: 'Enregistrer',
-      cancel: 'Annuler',
-      saving: 'Enregistrement...',
-      uploadPhoto: 'Changer la photo',
-      dog: 'Chien',
-      cat: 'Chat',
-      male: 'Mâle',
-      female: 'Femelle',
-      chooseSpecies: 'Choisir une espèce',
-      chooseGender: 'Sexe',
-      notesPlaceholder: 'Régime alimentaire, médicaments, comportement...',
-      breedPlaceholder: 'Golden Retriever, Persan...',
-      success: 'Animal modifié !',
-      error: 'Erreur',
-    },
-    en: {
-      title: 'Edit pet',
-      back: 'Back',
-      photo: 'Photo',
-      name: 'Name',
-      species: 'Species',
-      breed: 'Breed',
-      dob: 'Date of birth',
-      gender: 'Gender',
-      notes: 'Notes',
-      save: 'Save',
-      cancel: 'Cancel',
-      saving: 'Saving...',
-      uploadPhoto: 'Change photo',
-      dog: 'Dog',
-      cat: 'Cat',
-      male: 'Male',
-      female: 'Female',
-      chooseSpecies: 'Choose species',
-      chooseGender: 'Gender',
-      notesPlaceholder: 'Diet, medications, behavior...',
-      breedPlaceholder: 'Golden Retriever, Persian...',
-      success: 'Pet updated!',
-      error: 'Error',
-    },
-  };
-
-  const l = labels[locale as keyof typeof labels] || labels.fr;
+  const set = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm(p => ({ ...p, [field]: e.target.value }));
+  const setSel = (field: keyof FormState) => (v: string) => setForm(p => ({ ...p, [field]: v }));
 
   useEffect(() => {
     fetch(`/api/pets/${petId}`)
       .then(r => r.json())
       .then(data => {
-        setPet(data);
+        setCurrentPhotoUrl(data.photoUrl || null);
+        setPhotoPreview(data.photoUrl || null);
         setForm({
           name: data.name || '',
           species: data.species || '',
           breed: data.breed || '',
           dateOfBirth: data.dateOfBirth ? data.dateOfBirth.split('T')[0] : '',
           gender: data.gender || '',
+          isNeutered: data.isNeutered === true ? 'true' : data.isNeutered === false ? 'false' : '',
+          microchipNumber: data.microchipNumber || '',
+          tattooNumber: data.tattooNumber || '',
+          weight: data.weight !== null && data.weight !== undefined ? String(data.weight) : '',
+          vetName: data.vetName || '',
+          vetPhone: data.vetPhone || '',
+          allergies: data.allergies || '',
+          currentMedication: data.currentMedication || '',
+          behaviorWithDogs: data.behaviorWithDogs || '',
+          behaviorWithCats: data.behaviorWithCats || '',
+          behaviorWithHumans: data.behaviorWithHumans || '',
           notes: data.notes || '',
         });
-        setPhotoPreview(data.photoUrl || null);
         setFetching(false);
       })
       .catch(() => setFetching(false));
@@ -125,30 +100,36 @@ export default function EditPetPage() {
     if (!form.name || !form.species) return;
     setLoading(true);
     try {
-      let photoUrl = pet?.photoUrl ?? null;
+      let photoUrl = currentPhotoUrl;
       if (photoFile) {
         const formData = new FormData();
         formData.append('file', photoFile);
         formData.append('type', 'pet-photo');
         const uploadRes = await fetch('/api/uploads', { method: 'POST', body: formData });
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          photoUrl = uploadData.url;
-        }
+        if (uploadRes.ok) photoUrl = (await uploadRes.json()).url;
       }
+
+      const payload = {
+        ...form,
+        photoUrl,
+        isNeutered: form.isNeutered === '' ? null : form.isNeutered === 'true',
+        weight: form.weight ? parseFloat(form.weight) : null,
+      };
+
       const res = await fetch(`/api/pets/${petId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, photoUrl }),
+        body: JSON.stringify(payload),
       });
+
       if (res.ok) {
-        toast({ title: l.success, variant: 'success' });
+        toast({ title: fr ? 'Animal modifié !' : 'Pet updated!', variant: 'success' });
         router.push(`/${locale}/client/pets/${petId}`);
       } else {
         throw new Error('Failed');
       }
     } catch {
-      toast({ title: l.error, variant: 'destructive' });
+      toast({ title: fr ? 'Erreur' : 'Error', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -168,14 +149,17 @@ export default function EditPetPage() {
         <Link href={`/${locale}/client/pets/${petId}`} className="text-charcoal/50 hover:text-charcoal">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
+        <h1 className="text-2xl font-serif font-bold text-charcoal">
+          {fr ? "Modifier l'animal" : 'Edit pet'}
+        </h1>
       </div>
 
       <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-8 shadow-card">
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-8">
+
           {/* Photo */}
           <div>
-            <Label>{l.photo}</Label>
+            <Label>{fr ? 'Photo' : 'Photo'}</Label>
             <div className="mt-2 flex items-center gap-4">
               <div className="h-20 w-20 rounded-full bg-gold-50 border-2 border-gold-200 flex items-center justify-center overflow-hidden flex-shrink-0">
                 {photoPreview ? (
@@ -186,62 +170,168 @@ export default function EditPetPage() {
               </div>
               <label className="cursor-pointer flex items-center gap-2 text-sm text-gold-600 hover:text-gold-700 border border-gold-300 rounded-md px-3 py-2 transition-colors">
                 <Upload className="h-4 w-4" />
-                {l.uploadPhoto}
+                {fr ? 'Changer la photo' : 'Change photo'}
                 <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
               </label>
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="name">{l.name} *</Label>
-            <Input id="name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required className="mt-1" />
-          </div>
+          {/* Identité */}
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
+              {fr ? 'Identité' : 'Identity'}
+            </h3>
 
-          <div>
-            <Label>{l.species} *</Label>
-            <Select value={form.species} onValueChange={v => setForm(p => ({ ...p, species: v }))}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder={l.chooseSpecies} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="DOG">{l.dog}</SelectItem>
-                <SelectItem value="CAT">{l.cat}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="breed">{l.breed}</Label>
-            <Input id="breed" value={form.breed} onChange={e => setForm(p => ({ ...p, breed: e.target.value }))} className="mt-1" placeholder={l.breedPlaceholder} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="dob">{l.dob}</Label>
-              <Input id="dob" type="date" value={form.dateOfBirth} onChange={e => setForm(p => ({ ...p, dateOfBirth: e.target.value }))} className="mt-1" max={new Date().toISOString().split('T')[0]} />
+              <Label htmlFor="name">{fr ? 'Nom' : 'Name'} *</Label>
+              <Input id="name" value={form.name} onChange={set('name')} required className="mt-1" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{fr ? 'Espèce' : 'Species'} *</Label>
+                <Select value={form.species} onValueChange={setSel('species')}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DOG">{fr ? 'Chien' : 'Dog'}</SelectItem>
+                    <SelectItem value="CAT">{fr ? 'Chat' : 'Cat'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{fr ? 'Sexe' : 'Gender'}</Label>
+                <Select value={form.gender} onValueChange={setSel('gender')}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={fr ? 'Sexe' : 'Gender'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MALE">{fr ? 'Mâle' : 'Male'}</SelectItem>
+                    <SelectItem value="FEMALE">{fr ? 'Femelle' : 'Female'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="breed">{fr ? 'Race' : 'Breed'}</Label>
+                <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder={fr ? 'Golden Retriever...' : 'Golden Retriever...'} />
+              </div>
+              <div>
+                <Label htmlFor="dob">{fr ? 'Date de naissance' : 'Date of birth'}</Label>
+                <Input id="dob" type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="weight">{fr ? 'Poids (kg)' : 'Weight (kg)'}</Label>
+                <Input id="weight" type="number" min="0" step="0.1" value={form.weight} onChange={set('weight')} className="mt-1" placeholder="4.5" />
+              </div>
+              <div>
+                <Label>{fr ? 'Statut reproductif' : 'Reproductive status'}</Label>
+                <Select value={form.isNeutered} onValueChange={setSel('isNeutered')}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">{fr ? 'Stérilisé(e) / Castré(e)' : 'Neutered / Spayed'}</SelectItem>
+                    <SelectItem value="false">{fr ? 'Non stérilisé(e)' : 'Not neutered'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="microchip">{fr ? 'N° de puce électronique' : 'Microchip number'}</Label>
+                <Input id="microchip" value={form.microchipNumber} onChange={set('microchipNumber')} className="mt-1" placeholder="250268500000000" />
+              </div>
+              <div>
+                <Label htmlFor="tattoo">{fr ? 'N° de tatouage' : 'Tattoo number'}</Label>
+                <Input id="tattoo" value={form.tattooNumber} onChange={set('tattooNumber')} className="mt-1" placeholder="ABC123" />
+              </div>
+            </div>
+          </section>
+
+          {/* Vétérinaire */}
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
+              {fr ? 'Vétérinaire' : 'Veterinarian'}
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="vetName">{fr ? 'Nom du vétérinaire' : 'Vet name'}</Label>
+                <Input id="vetName" value={form.vetName} onChange={set('vetName')} className="mt-1" placeholder="Dr. Martin" />
+              </div>
+              <div>
+                <Label htmlFor="vetPhone">{fr ? 'Téléphone vétérinaire' : 'Vet phone'}</Label>
+                <Input id="vetPhone" value={form.vetPhone} onChange={set('vetPhone')} className="mt-1" placeholder="+212 6 00 00 00 00" />
+              </div>
+            </div>
+          </section>
+
+          {/* Santé */}
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
+              {fr ? 'Santé' : 'Health'}
+            </h3>
+            <div>
+              <Label htmlFor="allergies">{fr ? 'Allergies / Conditions médicales' : 'Allergies / Medical conditions'}</Label>
+              <Textarea id="allergies" value={form.allergies} onChange={set('allergies')} className="mt-1" placeholder={fr ? 'Ex: allergie au poulet, dermatite...' : 'Ex: chicken allergy, dermatitis...'} rows={2} />
             </div>
             <div>
-              <Label>{l.gender}</Label>
-              <Select value={form.gender} onValueChange={v => setForm(p => ({ ...p, gender: v }))}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder={l.chooseGender} /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MALE">{l.male}</SelectItem>
-                  <SelectItem value="FEMALE">{l.female}</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="medication">{fr ? 'Médication en cours' : 'Current medication'}</Label>
+              <Textarea id="medication" value={form.currentMedication} onChange={set('currentMedication')} className="mt-1" placeholder={fr ? 'Ex: Apoquel 5mg, 1 cp/jour...' : 'Ex: Apoquel 5mg, 1 tab/day...'} rows={2} />
             </div>
-          </div>
+          </section>
 
-          <div>
-            <Label htmlFor="notes">{l.notes}</Label>
-            <Textarea id="notes" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} className="mt-1" placeholder={l.notesPlaceholder} rows={3} />
-          </div>
+          {/* Comportement */}
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
+              {fr ? 'Comportement' : 'Behavior'}
+            </h3>
+            {[
+              { field: 'behaviorWithDogs' as const, label: fr ? 'Avec les chiens' : 'With dogs' },
+              { field: 'behaviorWithCats' as const, label: fr ? 'Avec les chats' : 'With cats' },
+              { field: 'behaviorWithHumans' as const, label: fr ? 'Avec les humains' : 'With humans' },
+            ].map(({ field, label }) => (
+              <div key={field}>
+                <Label>{label}</Label>
+                <Select value={form[field]} onValueChange={setSel(field)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BEHAVIOR_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>{fr ? o.fr : o.en}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+          </section>
+
+          {/* Notes */}
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
+              {fr ? 'Notes spéciales' : 'Special notes'}
+            </h3>
+            <div>
+              <Label htmlFor="notes">{fr ? 'Instructions particulières' : 'Special instructions'}</Label>
+              <Textarea id="notes" value={form.notes} onChange={set('notes')} className="mt-1" placeholder={fr ? 'Régime alimentaire, habitudes, instructions spécifiques...' : 'Diet, habits, specific instructions...'} rows={3} />
+            </div>
+          </section>
 
           <div className="flex gap-3 pt-2">
             <Link href={`/${locale}/client/pets/${petId}`} className="flex-1">
-              <Button type="button" variant="outline" className="w-full">{l.cancel}</Button>
+              <Button type="button" variant="outline" className="w-full">{fr ? 'Annuler' : 'Cancel'}</Button>
             </Link>
             <Button type="submit" className="flex-1" disabled={loading}>
               {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {loading ? l.saving : l.save}
+              {loading ? (fr ? 'Enregistrement...' : 'Saving...') : (fr ? 'Enregistrer' : 'Save')}
             </Button>
           </div>
         </form>

@@ -56,7 +56,12 @@ export async function PATCH(_req: Request, { params }: Params) {
 
   try {
     const body = await _req.json();
-    const { name, species, breed, dateOfBirth, gender, photoUrl } = body;
+    const {
+      name, species, breed, dateOfBirth, gender, photoUrl,
+      isNeutered, microchipNumber, tattooNumber, weight,
+      vetName, vetPhone, allergies, currentMedication,
+      behaviorWithDogs, behaviorWithCats, behaviorWithHumans, notes,
+    } = body;
 
     const updated = await prisma.pet.update({
       where: { id },
@@ -67,6 +72,18 @@ export async function PATCH(_req: Request, { params }: Params) {
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         gender: gender || null,
         photoUrl: photoUrl || null,
+        isNeutered: isNeutered ?? null,
+        microchipNumber: microchipNumber?.trim() || null,
+        tattooNumber: tattooNumber?.trim() || null,
+        weight: weight ? Number(weight) : null,
+        vetName: vetName?.trim() || null,
+        vetPhone: vetPhone?.trim() || null,
+        allergies: allergies?.trim() || null,
+        currentMedication: currentMedication?.trim() || null,
+        behaviorWithDogs: behaviorWithDogs || null,
+        behaviorWithCats: behaviorWithCats || null,
+        behaviorWithHumans: behaviorWithHumans || null,
+        notes: notes?.trim() || null,
       },
     });
 

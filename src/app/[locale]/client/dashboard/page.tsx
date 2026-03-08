@@ -3,10 +3,10 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
-import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
-import { getNextGradeInfo, getGradeLabel } from '@/lib/loyalty';
-import { PawPrint, Calendar, FileText, History, Clock, CheckCircle, AlertCircle } from 'lucide-react';
-import { formatDate, formatDateShort, formatMAD, calculateNights } from '@/lib/utils';
+import { MemberCard } from '@/components/shared/MemberCard';
+import { Grade } from '@/lib/loyalty';
+import { PawPrint, Calendar, FileText, History, CheckCircle, AlertCircle } from 'lucide-react';
+import { formatDateShort, formatMAD } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
 type Params = { locale: string };
@@ -18,7 +18,6 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
   const t = await getTranslations('dashboard');
 
-  // Fetch all data in parallel
   const [pets, upcomingBookings, recentInvoices, loyaltyGrade] = await Promise.all([
     prisma.pet.findMany({
       where: { ownerId: session.user.id },
@@ -47,30 +46,21 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
     prisma.loyaltyGrade.findUnique({ where: { clientId: session.user.id } }),
   ]);
 
-  const totalStays = await prisma.booking.count({
-    where: { clientId: session.user.id, status: 'COMPLETED' },
-  });
+  const [totalStays, totalSpent] = await Promise.all([
+    prisma.booking.count({ where: { clientId: session.user.id, status: 'COMPLETED' } }),
+    prisma.invoice.aggregate({ where: { clientId: session.user.id, status: 'PAID' }, _sum: { amount: true } }),
+  ]);
 
-  const totalSpent = await prisma.invoice.aggregate({
-    where: { clientId: session.user.id, status: 'PAID' },
-    _sum: { amount: true },
-  });
-
-  const grade = loyaltyGrade?.grade ?? 'BRONZE';
-  const nextGradeInfo = getNextGradeInfo(totalStays);
+  const grade = (loyaltyGrade?.grade ?? 'BRONZE') as Grade;
+  const primaryPet = pets[0] ?? null;
 
   const statusColors: Record<string, string> = {
-    PENDING: 'pending',
-    CONFIRMED: 'confirmed',
-    COMPLETED: 'completed',
-    CANCELLED: 'cancelled',
+    PENDING: 'pending', CONFIRMED: 'confirmed', COMPLETED: 'completed', CANCELLED: 'cancelled',
   };
-
   const statusLabels: Record<string, Record<string, string>> = {
     fr: { PENDING: 'En attente', CONFIRMED: 'Confirmée', COMPLETED: 'Terminée', CANCELLED: 'Annulée' },
     en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', COMPLETED: 'Completed', CANCELLED: 'Cancelled' },
   };
-
   const serviceLabels: Record<string, Record<string, string>> = {
     fr: { BOARDING: 'Pension', PET_TAXI: 'Taxi animalier' },
     en: { BOARDING: 'Boarding', PET_TAXI: 'Pet Taxi' },
@@ -86,8 +76,19 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         <p className="text-charcoal/60 mt-1">{t('subtitle')}</p>
       </div>
 
+      {/* Member Card */}
+      <MemberCard
+        clientName={session.user.name}
+        petName={primaryPet?.name ?? null}
+        petCount={pets.length}
+        grade={grade}
+        totalStays={totalStays}
+        totalSpentMAD={totalSpent._sum.amount ?? 0}
+        locale={locale}
+      />
+
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
           <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{t('stats.pets')}</p>
           <p className="text-3xl font-serif font-bold text-charcoal mt-1">{pets.length}</p>
@@ -101,32 +102,6 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           <p className="text-2xl font-serif font-bold text-gold-600 mt-1">
             {formatMAD(totalSpent._sum.amount ?? 0)}
           </p>
-        </div>
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card col-span-2 lg:col-span-1">
-          <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{t('stats.loyalty')}</p>
-          <div className="mt-2 mb-3">
-            <LoyaltyBadge grade={grade} locale={locale} size="md" />
-          </div>
-          {nextGradeInfo.nextGrade ? (
-            <>
-              <div className="w-full bg-ivory-100 rounded-full h-1.5 mb-1.5">
-                <div
-                  className="h-1.5 rounded-full bg-gradient-to-r from-gold-400 to-gold-600 transition-all"
-                  style={{ width: `${nextGradeInfo.progressPercent}%` }}
-                />
-              </div>
-              <p className="text-xs text-charcoal/50">
-                {locale === 'fr'
-                  ? `${nextGradeInfo.staysToNext} séjour${nextGradeInfo.staysToNext > 1 ? 's' : ''} pour ${getGradeLabel(nextGradeInfo.nextGrade, 'fr')}`
-                  : `${nextGradeInfo.staysToNext} stay${nextGradeInfo.staysToNext > 1 ? 's' : ''} to reach ${getGradeLabel(nextGradeInfo.nextGrade, 'en')}`
-                }
-              </p>
-            </>
-          ) : (
-            <p className="text-xs text-gold-600 font-medium">
-              {locale === 'fr' ? '🏆 Grade maximum atteint !' : '🏆 Maximum grade reached!'}
-            </p>
-          )}
         </div>
       </div>
 

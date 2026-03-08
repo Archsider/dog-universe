@@ -39,6 +39,23 @@ model Pet {
   dateOfBirth DateTime?
   gender      String?  // "MALE" | "FEMALE"
   photoUrl    String?
+  // Identification
+  isNeutered      Boolean?
+  microchipNumber String?
+  tattooNumber    String?
+  weight          Float?   // kg
+  // Vet info
+  vetName         String?
+  vetPhone        String?
+  // Health
+  allergies         String?
+  currentMedication String?
+  // Behavior: "SOCIABLE" | "TOLERANT" | "MONITOR" | "REACTIVE"
+  behaviorWithDogs   String?
+  behaviorWithCats   String?
+  behaviorWithHumans String?
+  // Notes
+  notes             String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
