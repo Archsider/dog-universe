@@ -66,6 +66,10 @@ export async function PATCH(request: Request, { params }: Params) {
   // Admin can update any field
   const updateData: Record<string, unknown> = {};
 
+  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'CANCELLED', 'REJECTED', 'COMPLETED'];
+  if (body.status && !VALID_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+  }
   if (body.status) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
   if (body.cancellationReason !== undefined) updateData.cancellationReason = body.cancellationReason;

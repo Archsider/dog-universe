@@ -8,8 +8,9 @@ export async function POST(request: Request) {
   try {
     const { email, locale = 'fr' } = await request.json();
 
-    if (!email) {
-      return NextResponse.json({ message: 'ok' }); // Always return ok
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return NextResponse.json({ message: 'ok' }); // Always return ok to prevent enumeration
     }
 
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });

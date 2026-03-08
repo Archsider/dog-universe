@@ -13,8 +13,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('search') ?? '';
   const grade = searchParams.get('grade') ?? '';
-  const page = parseInt(searchParams.get('page') ?? '1');
-  const limit = parseInt(searchParams.get('limit') ?? '50');
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
+  const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') ?? '50')), 100);
 
   const where: Record<string, unknown> = { role: 'CLIENT' };
 
@@ -56,13 +56,16 @@ export async function GET(request: Request) {
     prisma.user.count({ where }),
   ]);
 
-  const clientsWithRevenue = clients.map((client) => ({
-    ...client,
-    totalRevenue: client.invoices.reduce((sum, inv) => sum + inv.amount, 0),
-    lastStay: client.bookings[0] ?? null,
-    totalStays: client._count.bookings,
-    passwordHash: undefined, // never expose
-  }));
+  const clientsWithRevenue = clients.map((client) => {
+    // Explicitly exclude passwordHash via destructuring (safer than `undefined` override)
+    const { passwordHash: _pw, ...safeClient } = client;
+    return {
+      ...safeClient,
+      totalRevenue: client.invoices.reduce((sum, inv) => sum + inv.amount, 0),
+      lastStay: client.bookings[0] ?? null,
+      totalStays: client._count.bookings,
+    };
+  });
 
   return NextResponse.json({ clients: clientsWithRevenue, total, page, limit });
 }

@@ -35,6 +35,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const body = await request.json();
   const { status, notes } = body;
 
+  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'CANCELLED', 'REJECTED', 'COMPLETED'];
+  if (status && !VALID_STATUSES.includes(status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+  }
+
   const booking = await prisma.booking.findUnique({
     where: { id: params.id },
     include: {

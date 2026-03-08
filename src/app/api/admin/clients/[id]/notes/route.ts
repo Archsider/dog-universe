@@ -17,6 +17,9 @@ export async function POST(request: Request, { params }: Params) {
   if (!content?.trim()) {
     return NextResponse.json({ error: 'MISSING_CONTENT' }, { status: 400 });
   }
+  if (content.length > 10000) {
+    return NextResponse.json({ error: 'CONTENT_TOO_LONG' }, { status: 400 });
+  }
 
   const note = await prisma.adminNote.create({
     data: {
