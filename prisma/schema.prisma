@@ -28,6 +28,8 @@ model User {
   adminNotes    AdminNote[]    @relation("NoteAuthor")
   passwordResets PasswordResetToken[]
   contract      ClientContract?
+  benefitClaims    LoyaltyBenefitClaim[]
+  reviewedClaims   LoyaltyBenefitClaim[] @relation("ClaimReviewer")
 }
 
 model Pet {
@@ -226,6 +228,26 @@ model LoyaltyGrade {
   updatedAt  DateTime  @updatedAt
 
   client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model LoyaltyBenefitClaim {
+  id          String   @id @default(cuid())
+  clientId    String
+  grade       String   // grade at time of claim
+  benefitKey  String   // e.g. "grooming_discount_10", "free_grooming", "pet_taxi_ride"
+  benefitLabelFr String
+  benefitLabelEn String
+  status      String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  rejectionReason String?
+  reviewedBy  String?  // admin user id
+  reviewedAt  DateTime?
+  claimedAt   DateTime @default(now())
+
+  client   User          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reviewer User?         @relation("ClaimReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([clientId])
+  @@index([status])
 }
 
 model AdminNote {

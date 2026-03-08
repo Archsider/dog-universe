@@ -58,28 +58,30 @@ export function isUpgrade(oldGrade: Grade, newGrade: Grade): boolean {
 export const ALL_GRADES: Grade[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];
 
 export interface GradeBenefit {
+  key: string;       // unique identifier for claiming
   labelFr: string;
   labelEn: string;
+  claimable: boolean; // false = automatic perk (booking priority), true = can be manually claimed
 }
 
 export const GRADE_BENEFITS: Record<Grade, GradeBenefit[]> = {
   BRONZE: [],
   SILVER: [
-    { labelFr: 'Priorité de réservation', labelEn: 'Booking priority' },
-    { labelFr: '5% de réduction sur le toilettage', labelEn: '5% grooming discount' },
+    { key: 'booking_priority', labelFr: 'Priorité de réservation', labelEn: 'Booking priority', claimable: false },
+    { key: 'grooming_discount_5', labelFr: '5% de réduction sur le toilettage', labelEn: '5% grooming discount', claimable: true },
   ],
   GOLD: [
-    { labelFr: 'Priorité de réservation', labelEn: 'Booking priority' },
-    { labelFr: '10% de réduction sur le toilettage', labelEn: '10% grooming discount' },
-    { labelFr: '1 séance de toilettage offerte / an', labelEn: '1 free grooming session / year' },
-    { labelFr: '2 trajets Pet Taxi offerts / an', labelEn: '2 free Pet Taxi rides / year' },
+    { key: 'booking_priority', labelFr: 'Priorité de réservation', labelEn: 'Booking priority', claimable: false },
+    { key: 'grooming_discount_10', labelFr: '10% de réduction sur le toilettage', labelEn: '10% grooming discount', claimable: true },
+    { key: 'free_grooming', labelFr: '1 séance de toilettage offerte / an', labelEn: '1 free grooming session / year', claimable: true },
+    { key: 'free_taxi_2', labelFr: '2 trajets Pet Taxi offerts / an', labelEn: '2 free Pet Taxi rides / year', claimable: true },
   ],
   PLATINUM: [
-    { labelFr: 'Priorité absolue de réservation', labelEn: 'Absolute booking priority' },
-    { labelFr: '15% de réduction sur le toilettage', labelEn: '15% grooming discount' },
-    { labelFr: '2 séances de toilettage offertes / an', labelEn: '2 free grooming sessions / year' },
-    { labelFr: '3 trajets Pet Taxi offerts / an', labelEn: '3 free Pet Taxi rides / year' },
-    { labelFr: 'Assistance vétérinaire prioritaire', labelEn: 'Priority veterinary assistance' },
+    { key: 'booking_priority_absolute', labelFr: 'Priorité absolue de réservation', labelEn: 'Absolute booking priority', claimable: false },
+    { key: 'grooming_discount_15', labelFr: '15% de réduction sur le toilettage', labelEn: '15% grooming discount', claimable: true },
+    { key: 'free_grooming_2', labelFr: '2 séances de toilettage offertes / an', labelEn: '2 free grooming sessions / year', claimable: true },
+    { key: 'free_taxi_3', labelFr: '3 trajets Pet Taxi offerts / an', labelEn: '3 free Pet Taxi rides / year', claimable: true },
+    { key: 'vet_priority', labelFr: 'Assistance vétérinaire prioritaire', labelEn: 'Priority veterinary assistance', claimable: true },
   ],
 };
 

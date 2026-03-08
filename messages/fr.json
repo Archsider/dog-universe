@@ -64,7 +64,8 @@
       "settings": "Paramètres",
       "profile": "Mon profil",
       "contracts": "Contrats",
-      "users": "Utilisateurs"
+      "users": "Utilisateurs",
+      "loyalty": "Réclamations fidélité"
     }
   },
   "auth": {

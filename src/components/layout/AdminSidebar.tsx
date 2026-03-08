@@ -22,6 +22,7 @@ import {
   UserCircle,
   FileText,
   UserCog,
+  Gift,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -32,7 +33,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-export function AdminSidebar({ pendingCount = 0, userRole = 'ADMIN' }: { pendingCount?: number; userRole?: string }) {
+export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, userRole = 'ADMIN' }: { pendingCount?: number; pendingClaimsCount?: number; userRole?: string }) {
   const t = useTranslations('nav.admin');
   const locale = useLocale();
   const pathname = usePathname();
@@ -46,6 +47,7 @@ export function AdminSidebar({ pendingCount = 0, userRole = 'ADMIN' }: { pending
     { href: `/${locale}/admin/reservations`, labelKey: 'reservations', icon: ClipboardList },
     { href: `/${locale}/admin/billing`, labelKey: 'billing', icon: Receipt },
     { href: `/${locale}/admin/contracts`, labelKey: 'contracts', icon: FileText },
+    { href: `/${locale}/admin/loyalty`, labelKey: 'loyalty', icon: Gift },
     { href: `/${locale}/admin/analytics`, labelKey: 'analytics', icon: BarChart3 },
     { href: `/${locale}/admin/logs`, labelKey: 'logs', icon: ScrollText },
     { href: `/${locale}/admin/settings`, labelKey: 'settings', icon: Settings },
@@ -74,6 +76,7 @@ export function AdminSidebar({ pendingCount = 0, userRole = 'ADMIN' }: { pending
           const isActive = pathname.startsWith(item.href);
           const Icon = item.icon;
           const isReservations = item.href.includes('/reservations');
+          const isLoyalty = item.href.includes('/loyalty');
 
           return (
             <Link
@@ -92,6 +95,11 @@ export function AdminSidebar({ pendingCount = 0, userRole = 'ADMIN' }: { pending
               {isReservations && pendingCount > 0 && (
                 <span className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-amber-500 text-white text-xs font-bold">
                   {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
+              )}
+              {isLoyalty && pendingClaimsCount > 0 && (
+                <span className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-gold-500 text-white text-xs font-bold">
+                  {pendingClaimsCount > 99 ? '99+' : pendingClaimsCount}
                 </span>
               )}
             </Link>

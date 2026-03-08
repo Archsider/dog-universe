@@ -18,9 +18,10 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
   const t = await getTranslations('dashboard');
 
-  const [pets, upcomingBookings, recentInvoices, loyaltyGrade] = await Promise.all([
+  const [pets, upcomingBookings, recentInvoices, loyaltyGrade, myClaims] = await Promise.all([
     prisma.pet.findMany({
       where: { ownerId: session.user.id },
+      select: { id: true, name: true, species: true, breed: true, photoUrl: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.booking.findMany({
@@ -44,6 +45,11 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       take: 3,
     }),
     prisma.loyaltyGrade.findUnique({ where: { clientId: session.user.id } }),
+    prisma.loyaltyBenefitClaim.findMany({
+      where: { clientId: session.user.id },
+      select: { benefitKey: true, status: true },
+      orderBy: { claimedAt: 'desc' },
+    }),
   ]);
 
   const [totalStays, totalSpent] = await Promise.all([
@@ -52,7 +58,6 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
   ]);
 
   const grade = (loyaltyGrade?.grade ?? 'BRONZE') as Grade;
-  const primaryPet = pets[0] ?? null;
 
   const statusColors: Record<string, string> = {
     PENDING: 'pending', CONFIRMED: 'confirmed', COMPLETED: 'completed', CANCELLED: 'cancelled',
@@ -78,13 +83,14 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
       {/* Member Card */}
       <MemberCard
+        clientId={session.user.id}
         clientName={session.user.name}
-        petName={primaryPet?.name ?? null}
-        petCount={pets.length}
+        pets={pets.map((p) => ({ name: p.name, species: p.species }))}
         grade={grade}
         totalStays={totalStays}
         totalSpentMAD={totalSpent._sum.amount ?? 0}
         locale={locale}
+        claims={myClaims as { benefitKey: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' }[]}
       />
 
       {/* Stats */}
