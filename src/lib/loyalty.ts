@@ -92,21 +92,23 @@ export interface NextGradeInfo {
   progressPercent: number; // 0-100
 }
 
-export function getNextGradeInfo(totalStays: number): NextGradeInfo {
-  if (totalStays >= STAY_THRESHOLDS.PLATINUM.min) {
+export function getNextGradeInfo(totalStays: number, currentGrade?: Grade): NextGradeInfo {
+  // If the actual grade (including manual overrides) is PLATINUM → max level
+  if (currentGrade === 'PLATINUM' || totalStays >= STAY_THRESHOLDS.PLATINUM.min) {
     return { nextGrade: null, staysToNext: 0, currentStays: totalStays, progressPercent: 100 };
   }
-  if (totalStays >= STAY_THRESHOLDS.GOLD.min) {
+  // Progress is always computed toward the grade above the current actual grade
+  if (currentGrade === 'GOLD' || totalStays >= STAY_THRESHOLDS.GOLD.min) {
     const staysToNext = STAY_THRESHOLDS.PLATINUM.min - totalStays;
     const progress = Math.round(((totalStays - STAY_THRESHOLDS.GOLD.min) / (STAY_THRESHOLDS.PLATINUM.min - STAY_THRESHOLDS.GOLD.min)) * 100);
-    return { nextGrade: 'PLATINUM', staysToNext, currentStays: totalStays, progressPercent: Math.min(progress, 99) };
+    return { nextGrade: 'PLATINUM', staysToNext, currentStays: totalStays, progressPercent: Math.min(Math.max(progress, 0), 99) };
   }
-  if (totalStays >= STAY_THRESHOLDS.SILVER.min) {
+  if (currentGrade === 'SILVER' || totalStays >= STAY_THRESHOLDS.SILVER.min) {
     const staysToNext = STAY_THRESHOLDS.GOLD.min - totalStays;
     const progress = Math.round(((totalStays - STAY_THRESHOLDS.SILVER.min) / (STAY_THRESHOLDS.GOLD.min - STAY_THRESHOLDS.SILVER.min)) * 100);
-    return { nextGrade: 'GOLD', staysToNext, currentStays: totalStays, progressPercent: Math.min(progress, 99) };
+    return { nextGrade: 'GOLD', staysToNext, currentStays: totalStays, progressPercent: Math.min(Math.max(progress, 0), 99) };
   }
   const staysToNext = STAY_THRESHOLDS.SILVER.min - totalStays;
   const progress = Math.round((totalStays / STAY_THRESHOLDS.SILVER.min) * 100);
-  return { nextGrade: 'SILVER', staysToNext, currentStays: totalStays, progressPercent: Math.min(progress, 99) };
+  return { nextGrade: 'SILVER', staysToNext, currentStays: totalStays, progressPercent: Math.min(Math.max(progress, 0), 99) };
 }

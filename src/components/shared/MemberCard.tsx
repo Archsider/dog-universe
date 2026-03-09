@@ -95,7 +95,7 @@ export function MemberCard({
   const fr = locale === 'fr';
   const style = GRADE_STYLES[grade];
   const Icon = style.icon;
-  const nextInfo = getNextGradeInfo(totalStays);
+  const nextInfo = getNextGradeInfo(totalStays, grade);
   const benefits = GRADE_BENEFITS[grade];
   const isPlatinum = grade === 'PLATINUM';
 
