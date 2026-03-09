@@ -31,7 +31,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return {
           id: user.id,
           email: user.email,
-          name: user.name,
+          name: user.name ?? user.email.split('@')[0],
           role: user.role as 'ADMIN' | 'CLIENT',
           language: user.language,
         };
