@@ -76,7 +76,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-serif font-bold text-charcoal">
-          {t('greeting', { name: session.user.name.split(' ')[0] })}
+          {t('greeting', { name: session.user.name?.split(' ')[0] ?? '' })}
         </h1>
         <p className="text-charcoal/60 mt-1">{t('subtitle')}</p>
       </div>
@@ -84,7 +84,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       {/* Member Card */}
       <MemberCard
         clientId={session.user.id}
-        clientName={session.user.name}
+        clientName={session.user.name ?? ''}
         pets={pets.map((p) => ({ name: p.name, species: p.species }))}
         grade={grade}
         totalStays={totalStays}
