@@ -77,6 +77,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
     }
 
+    // Validation horaires Pet Taxi : pas le dimanche, uniquement 10h-17h
+    if (serviceType === 'PET_TAXI') {
+      const taxiDate = new Date(startDate);
+      if (taxiDate.getDay() === 0) {
+        return NextResponse.json({ error: 'SUNDAY_NOT_ALLOWED' }, { status: 400 });
+      }
+      // Vérifier l'heure (depuis startDate ou arrivalTime)
+      let taxiHour: number | null = null;
+      let taxiMinute = 0;
+      if (body.arrivalTime && typeof body.arrivalTime === 'string') {
+        const parts = body.arrivalTime.split(':').map(Number);
+        taxiHour = parts[0] ?? null;
+        taxiMinute = parts[1] ?? 0;
+      } else {
+        taxiHour = taxiDate.getHours();
+        taxiMinute = taxiDate.getMinutes();
+      }
+      if (taxiHour !== null) {
+        const totalMinutes = taxiHour * 60 + taxiMinute;
+        if (totalMinutes < 10 * 60 || totalMinutes > 17 * 60) {
+          return NextResponse.json({ error: 'INVALID_TIME_SLOT' }, { status: 400 });
+        }
+      }
+    }
+
     // Verify pets belong to this client
     if (session.user.role === 'CLIENT') {
       const pets = await prisma.pet.findMany({

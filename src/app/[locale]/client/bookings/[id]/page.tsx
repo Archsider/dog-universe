@@ -6,7 +6,8 @@ import Image from 'next/image';
 import {
   ArrowLeft, Calendar, PawPrint, Package, Car,
   FileText, Camera, MessageSquare, CheckCircle2,
-  XCircle, AlertCircle, PlayCircle, Clock,
+  XCircle, AlertCircle, Clock,
+  Check, MapPin,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
@@ -14,14 +15,107 @@ import CancelBookingButton from '../../history/CancelBookingButton';
 
 interface PageProps { params: { locale: string; id: string } }
 
-const STATUS_ICONS: Record<string, React.ElementType> = {
-  PENDING:     AlertCircle,
-  CONFIRMED:   CheckCircle2,
-  IN_PROGRESS: PlayCircle,
-  COMPLETED:   CheckCircle2,
-  CANCELLED:   XCircle,
-  REJECTED:    XCircle,
-};
+// Stepper steps par pipeline
+const BOARDING_STEPS = [
+  { status: 'PENDING',     labelFr: 'Demande reçue',       labelEn: 'Request received',   descFr: 'Votre demande est en cours de traitement',        descEn: 'Your request is being processed' },
+  { status: 'CONFIRMED',   labelFr: 'Séjour confirmé',      labelEn: 'Stay confirmed',      descFr: 'Notre équipe a confirmé votre réservation',        descEn: 'Our team confirmed your booking' },
+  { status: 'IN_PROGRESS', labelFr: 'Dans nos murs',        labelEn: 'Currently staying',   descFr: 'Votre animal est avec nous',                       descEn: 'Your pet is with us' },
+  { status: 'COMPLETED',   labelFr: 'Séjour terminé',       labelEn: 'Stay completed',      descFr: 'Le séjour s\'est terminé avec succès',             descEn: 'The stay completed successfully' },
+];
+
+const TAXI_STEPS = [
+  { status: 'PENDING',     labelFr: 'Transport planifié',   labelEn: 'Transport planned',   descFr: 'Votre transport a été programmé',                  descEn: 'Your transport has been scheduled' },
+  { status: 'CONFIRMED',   labelFr: 'Chauffeur en route',   labelEn: 'Driver en route',     descFr: 'Le chauffeur est en chemin vers vous',             descEn: 'The driver is on the way' },
+  { status: 'IN_PROGRESS', labelFr: 'Animal à bord',        labelEn: 'Pet on board',        descFr: 'Votre animal est dans le véhicule',                descEn: 'Your pet is in the vehicle' },
+  { status: 'COMPLETED',   labelFr: 'Arrivé à destination', labelEn: 'Arrived',             descFr: 'Votre animal est arrivé à destination',            descEn: 'Your pet has arrived safely' },
+];
+
+const STATUS_ORDER = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED'];
+
+function BookingStepper({
+  status,
+  serviceType,
+  locale,
+}: {
+  status: string;
+  serviceType: string;
+  locale: string;
+}) {
+  const isFr = locale === 'fr';
+  const isCancelled = status === 'CANCELLED' || status === 'REJECTED';
+  const steps = serviceType === 'PET_TAXI' ? TAXI_STEPS : BOARDING_STEPS;
+  const currentIdx = STATUS_ORDER.indexOf(status);
+
+  if (isCancelled) {
+    return (
+      <div className="flex items-center gap-3 p-4 bg-red-50 rounded-xl border border-red-200">
+        <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+        <div>
+          <p className="font-semibold text-red-700 text-sm">
+            {status === 'CANCELLED'
+              ? (isFr ? 'Réservation annulée' : 'Booking cancelled')
+              : (isFr ? 'Réservation refusée' : 'Booking refused')}
+          </p>
+          <p className="text-xs text-red-500 mt-0.5">
+            {isFr ? 'Cette réservation n\'est plus active.' : 'This booking is no longer active.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-0">
+      {steps.map((step, idx) => {
+        const isDone = currentIdx > idx;
+        const isActive = currentIdx === idx;
+        const isFuture = currentIdx < idx;
+
+        return (
+          <div key={step.status} className="flex gap-4">
+            {/* Indicateur vertical */}
+            <div className="flex flex-col items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+                isDone
+                  ? 'bg-green-500 text-white'
+                  : isActive
+                  ? 'bg-charcoal text-white ring-4 ring-charcoal/10'
+                  : 'bg-ivory-100 text-gray-300 border border-ivory-200'
+              }`}>
+                {isDone ? (
+                  <Check className="h-4 w-4" />
+                ) : isActive ? (
+                  <span className="text-xs font-bold">{idx + 1}</span>
+                ) : (
+                  <span className="text-xs text-gray-300">{idx + 1}</span>
+                )}
+              </div>
+              {idx < steps.length - 1 && (
+                <div className={`w-0.5 flex-1 my-1 min-h-[20px] ${
+                  isDone ? 'bg-green-300' : 'bg-ivory-200'
+                }`} />
+              )}
+            </div>
+
+            {/* Contenu */}
+            <div className={`pb-4 flex-1 ${idx === steps.length - 1 ? 'pb-0' : ''}`}>
+              <p className={`text-sm font-semibold leading-tight mt-1 ${
+                isDone ? 'text-green-700' : isActive ? 'text-charcoal' : 'text-gray-300'
+              }`}>
+                {isFr ? step.labelFr : step.labelEn}
+              </p>
+              {isActive && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {isFr ? step.descFr : step.descEn}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default async function ClientBookingDetailPage({ params: { locale, id } }: PageProps) {
   const session = await auth();
@@ -81,11 +175,14 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
       messages: 'Messages de Dog Universe',
       noMessages: 'Aucun message pour l\'instant',
       cancel: 'Annuler la réservation',
+      progression: 'Suivi de votre réservation',
       statusLabels: {
         PENDING: 'En attente', CONFIRMED: 'Confirmée', IN_PROGRESS: 'En cours',
         COMPLETED: 'Terminée', CANCELLED: 'Annulée', REJECTED: 'Refusée',
       },
       taxiTypes: { STANDARD: 'Course standard', VET: 'Transport vétérinaire', AIRPORT: 'Navette aéroport' },
+      pickup: 'Départ',
+      dropoff: 'Arrivée',
     },
     en: {
       back: 'My bookings',
@@ -112,11 +209,14 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
       messages: 'Messages from Dog Universe',
       noMessages: 'No messages yet',
       cancel: 'Cancel booking',
+      progression: 'Booking progress',
       statusLabels: {
         PENDING: 'Pending', CONFIRMED: 'Confirmed', IN_PROGRESS: 'In progress',
         COMPLETED: 'Completed', CANCELLED: 'Cancelled', REJECTED: 'Rejected',
       },
       taxiTypes: { STANDARD: 'Standard ride', VET: 'Vet transport', AIRPORT: 'Airport shuttle' },
+      pickup: 'Pickup',
+      dropoff: 'Dropoff',
     },
   };
   const t = l[locale as keyof typeof l] || l.fr;
@@ -126,8 +226,11 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
     ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
   const canCancel = ['PENDING', 'CONFIRMED'].includes(booking.status);
-  const StatusIcon = STATUS_ICONS[booking.status] || AlertCircle;
   const statusLabel = t.statusLabels[booking.status as keyof typeof t.statusLabels] || booking.status;
+
+  // Parse taxi addresses from notes
+  const taxiDeparture = booking.notes?.match(/Départ:\s*([^|]+)/)?.[1]?.trim() ?? null;
+  const taxiArrival = booking.notes?.match(/Arrivée:\s*([^|]+)/)?.[1]?.trim() ?? null;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -140,7 +243,6 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="font-mono font-bold text-charcoal text-lg">{booking.id.slice(0, 8).toUpperCase()}</h1>
             <Badge className={getBookingStatusColor(booking.status)}>
-              <StatusIcon className="h-3 w-3 mr-1" />
               {statusLabel}
             </Badge>
           </div>
@@ -150,14 +252,28 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
       </div>
 
       <div className="space-y-4">
-        {/* Service + Dates */}
+        {/* Stepper de progression — card premium */}
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
           <div className="flex items-center gap-2 mb-4">
             <div className={`p-2 rounded-lg ${isBoarding ? 'bg-gold-50' : 'bg-blue-50'}`}>
-              {isBoarding ? <Package className="h-4 w-4 text-gold-500" /> : <Car className="h-4 w-4 text-blue-500" />}
+              {isBoarding
+                ? <Package className="h-4 w-4 text-gold-500" />
+                : <Car className="h-4 w-4 text-blue-500" />}
             </div>
-            <span className="font-semibold text-charcoal">{isBoarding ? t.boarding : t.taxi}</span>
+            <div>
+              <p className="font-semibold text-charcoal text-sm">{isBoarding ? t.boarding : t.taxi}</p>
+              <p className="text-xs text-gray-400">{t.progression}</p>
+            </div>
           </div>
+          <BookingStepper
+            status={booking.status}
+            serviceType={booking.serviceType}
+            locale={locale}
+          />
+        </div>
+
+        {/* Service + Dates */}
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
           <div className="space-y-2 text-sm">
             {isBoarding ? (
               <>
@@ -188,15 +304,33 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
                   <span className="text-gray-500 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{t.dates}</span>
                   <span className="font-medium text-charcoal">{formatDate(booking.startDate, locale)}</span>
                 </div>
+                {booking.arrivalTime && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />Heure</span>
+                    <span className="font-medium text-charcoal">{booking.arrivalTime}</span>
+                  </div>
+                )}
                 {booking.taxiDetail && (
                   <div className="flex justify-between">
                     <span className="text-gray-500">{t.taxiType}</span>
                     <span className="font-medium text-charcoal">{t.taxiTypes[booking.taxiDetail.taxiType as keyof typeof t.taxiTypes] || booking.taxiDetail.taxiType}</span>
                   </div>
                 )}
+                {taxiDeparture && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-green-500" />{t.pickup}</span>
+                    <span className="font-medium text-charcoal text-right">{taxiDeparture}</span>
+                  </div>
+                )}
+                {taxiArrival && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-red-400" />{t.dropoff}</span>
+                    <span className="font-medium text-charcoal text-right">{taxiArrival}</span>
+                  </div>
+                )}
               </>
             )}
-            {booking.notes && (
+            {booking.notes && !booking.notes.includes('Départ:') && !booking.notes.includes('Arrivée:') && (
               <div className="mt-2 pt-2 border-t border-ivory-100">
                 <p className="text-gray-400 text-xs mb-1">{t.notes}</p>
                 <p className="text-charcoal italic">{booking.notes}</p>

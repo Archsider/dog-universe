@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Package, Car, MapPin, Clock, CalendarDays, ChevronRight } from 'lucide-react';
+import { Package, Car, MapPin, Clock, CalendarDays, ChevronRight, ArrowRight, Loader2 } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
 export interface KanbanBooking {
   id: string;
@@ -23,18 +24,38 @@ interface Props {
 }
 
 const BOARDING_COLS = [
-  { status: 'PENDING',     label: { fr: 'Demande reçue',          en: 'Request received' },    color: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-400' },
-  { status: 'CONFIRMED',   label: { fr: 'Séjour confirmé',         en: 'Stay confirmed' },      color: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-400' },
-  { status: 'IN_PROGRESS', label: { fr: 'Dans nos murs',           en: 'Currently staying' },   color: 'bg-green-50  border-green-200',  dot: 'bg-green-400' },
-  { status: 'COMPLETED',   label: { fr: 'Séjour terminé',          en: 'Stay completed' },      color: 'bg-gray-50   border-gray-200',   dot: 'bg-gray-400' },
+  { status: 'PENDING',     label: { fr: 'Demande reçue',       en: 'Request received' },  color: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-400' },
+  { status: 'CONFIRMED',   label: { fr: 'Séjour confirmé',      en: 'Stay confirmed' },    color: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-400' },
+  { status: 'IN_PROGRESS', label: { fr: 'Dans nos murs',        en: 'Currently staying' }, color: 'bg-green-50  border-green-200',  dot: 'bg-green-400' },
+  { status: 'COMPLETED',   label: { fr: 'Séjour terminé',       en: 'Stay completed' },    color: 'bg-gray-50   border-gray-200',   dot: 'bg-gray-400' },
 ];
 
 const TAXI_COLS = [
-  { status: 'PENDING',     label: { fr: 'Transport planifié',      en: 'Transport planned' },   color: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-400' },
-  { status: 'CONFIRMED',   label: { fr: 'Chauffeur en route',      en: 'Driver en route' },     color: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-400' },
-  { status: 'IN_PROGRESS', label: { fr: 'Animal à bord',           en: 'Pet on board' },        color: 'bg-green-50  border-green-200',  dot: 'bg-green-400' },
-  { status: 'COMPLETED',   label: { fr: 'Arrivé à destination',    en: 'Arrived' },             color: 'bg-gray-50   border-gray-200',   dot: 'bg-gray-400' },
+  { status: 'PENDING',     label: { fr: 'Transport planifié',   en: 'Transport planned' }, color: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-400' },
+  { status: 'CONFIRMED',   label: { fr: 'Chauffeur en route',   en: 'Driver en route' },   color: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-400' },
+  { status: 'IN_PROGRESS', label: { fr: 'Animal à bord',        en: 'Pet on board' },      color: 'bg-green-50  border-green-200',  dot: 'bg-green-400' },
+  { status: 'COMPLETED',   label: { fr: 'Arrivé à destination', en: 'Arrived' },           color: 'bg-gray-50   border-gray-200',   dot: 'bg-gray-400' },
 ];
+
+// Centralisation des transitions : status courant → status suivant + label du bouton
+const NEXT_STATUS: Record<string, string> = {
+  PENDING: 'CONFIRMED',
+  CONFIRMED: 'IN_PROGRESS',
+  IN_PROGRESS: 'COMPLETED',
+};
+
+const ACTION_LABELS: Record<'BOARDING' | 'PET_TAXI', Record<string, { fr: string; en: string }>> = {
+  BOARDING: {
+    PENDING:     { fr: 'Confirmer le séjour',        en: 'Confirm stay' },
+    CONFIRMED:   { fr: 'Marquer dans nos murs',       en: 'Mark as staying' },
+    IN_PROGRESS: { fr: 'Clôturer le séjour',          en: 'Close stay' },
+  },
+  PET_TAXI: {
+    PENDING:     { fr: 'Chauffeur en route',           en: 'Driver en route' },
+    CONFIRMED:   { fr: 'Animal à bord',                en: 'Pet on board' },
+    IN_PROGRESS: { fr: 'Arrivé à destination',         en: 'Mark arrived' },
+  },
+};
 
 function parseAddresses(notes: string | null): { departure: string | null; arrival: string | null } {
   if (!notes) return { departure: null, arrival: null };
@@ -50,10 +71,74 @@ function formatShortDate(iso: string, locale: string): string {
   return new Date(iso).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', { day: '2-digit', month: 'short' });
 }
 
-function BoardingCard({ b, locale }: { b: KanbanBooking; locale: string }) {
+function ActionButton({
+  bookingId,
+  currentStatus,
+  pipeline,
+  locale,
+  onStatusChange,
+}: {
+  bookingId: string;
+  currentStatus: string;
+  pipeline: 'BOARDING' | 'PET_TAXI';
+  locale: string;
+  onStatusChange: (id: string, newStatus: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const nextStatus = NEXT_STATUS[currentStatus];
+  const actionLabels = ACTION_LABELS[pipeline][currentStatus];
+  if (!nextStatus || !actionLabels) return null;
+
+  const label = locale === 'fr' ? actionLabels.fr : actionLabels.en;
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      onStatusChange(bookingId, nextStatus);
+      toast({ title: locale === 'fr' ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
+    } catch {
+      toast({ title: locale === 'fr' ? 'Erreur' : 'Error', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <Link href={`/${locale}/admin/reservations/${b.id}`}>
-      <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-gold-300 hover:shadow-md transition-all group">
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium bg-charcoal/5 hover:bg-charcoal/10 text-charcoal border border-charcoal/10 hover:border-charcoal/20 transition-all disabled:opacity-50"
+    >
+      {loading ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <ArrowRight className="h-3 w-3 flex-shrink-0" />
+      )}
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+function BoardingCard({
+  b,
+  locale,
+  onStatusChange,
+}: {
+  b: KanbanBooking;
+  locale: string;
+  onStatusChange: (id: string, newStatus: string) => void;
+}) {
+  return (
+    <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-gold-300 hover:shadow-md transition-all group">
+      <Link href={`/${locale}/admin/reservations/${b.id}`} className="block">
         <div className="flex items-start justify-between gap-1 mb-2">
           <div>
             <p className="text-sm font-semibold text-charcoal leading-tight">{b.pets}</p>
@@ -69,16 +154,31 @@ function BoardingCard({ b, locale }: { b: KanbanBooking; locale: string }) {
           </span>
         </div>
         <p className="text-[10px] font-mono text-gray-300 mt-2">{b.id.slice(0, 8)}</p>
-      </div>
-    </Link>
+      </Link>
+      <ActionButton
+        bookingId={b.id}
+        currentStatus={b.status}
+        pipeline="BOARDING"
+        locale={locale}
+        onStatusChange={onStatusChange}
+      />
+    </div>
   );
 }
 
-function TaxiCard({ b, locale }: { b: KanbanBooking; locale: string }) {
+function TaxiCard({
+  b,
+  locale,
+  onStatusChange,
+}: {
+  b: KanbanBooking;
+  locale: string;
+  onStatusChange: (id: string, newStatus: string) => void;
+}) {
   const { departure, arrival } = parseAddresses(b.notes);
   return (
-    <Link href={`/${locale}/admin/reservations/${b.id}`}>
-      <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group">
+    <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group">
+      <Link href={`/${locale}/admin/reservations/${b.id}`} className="block">
         <div className="flex items-start justify-between gap-1 mb-2">
           <div>
             <p className="text-sm font-semibold text-charcoal leading-tight">{b.pets}</p>
@@ -115,8 +215,15 @@ function TaxiCard({ b, locale }: { b: KanbanBooking; locale: string }) {
           )}
         </div>
         <p className="text-[10px] font-mono text-gray-300 mt-2">{b.id.slice(0, 8)}</p>
-      </div>
-    </Link>
+      </Link>
+      <ActionButton
+        bookingId={b.id}
+        currentStatus={b.status}
+        pipeline="PET_TAXI"
+        locale={locale}
+        onStatusChange={onStatusChange}
+      />
+    </div>
   );
 }
 
@@ -125,11 +232,13 @@ function Column({
   bookings,
   locale,
   pipeline,
+  onStatusChange,
 }: {
   col: { status: string; label: { fr: string; en: string }; color: string; dot: string };
   bookings: KanbanBooking[];
   locale: string;
   pipeline: 'BOARDING' | 'PET_TAXI';
+  onStatusChange: (id: string, newStatus: string) => void;
 }) {
   const isFr = locale === 'fr';
   const label = isFr ? col.label.fr : col.label.en;
@@ -147,9 +256,9 @@ function Column({
         ) : (
           bookings.map((b) =>
             pipeline === 'BOARDING' ? (
-              <BoardingCard key={b.id} b={b} locale={locale} />
+              <BoardingCard key={b.id} b={b} locale={locale} onStatusChange={onStatusChange} />
             ) : (
-              <TaxiCard key={b.id} b={b} locale={locale} />
+              <TaxiCard key={b.id} b={b} locale={locale} onStatusChange={onStatusChange} />
             )
           )
         )}
@@ -158,12 +267,20 @@ function Column({
   );
 }
 
-export function ReservationsKanban({ bookings, locale }: Props) {
+export function ReservationsKanban({ bookings: initialBookings, locale }: Props) {
   const [pipeline, setPipeline] = useState<'BOARDING' | 'PET_TAXI'>('BOARDING');
+  const [bookings, setBookings] = useState<KanbanBooking[]>(initialBookings);
   const isFr = locale === 'fr';
 
   const cols = pipeline === 'BOARDING' ? BOARDING_COLS : TAXI_COLS;
   const filtered = bookings.filter((b) => b.serviceType === pipeline);
+
+  // Optimistic status update: move card to new column immediately
+  const handleStatusChange = (id: string, newStatus: string) => {
+    setBookings(prev =>
+      prev.map(b => b.id === id ? { ...b, status: newStatus } : b)
+    );
+  };
 
   return (
     <div>
@@ -205,6 +322,7 @@ export function ReservationsKanban({ bookings, locale }: Props) {
             bookings={filtered.filter((b) => b.status === col.status)}
             locale={locale}
             pipeline={pipeline}
+            onStatusChange={handleStatusChange}
           />
         ))}
       </div>
