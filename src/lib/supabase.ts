@@ -43,3 +43,15 @@ export async function uploadBuffer(
   }
   return data.publicUrl;
 }
+
+/**
+ * Delete a file from Supabase Storage.
+ * @param key Storage path, e.g. "contracts/abc123.pdf"
+ */
+export async function deleteFromStorage(key: string): Promise<void> {
+  const client = getSupabaseAdmin();
+  const { error } = await client.storage.from(bucket).remove([key]);
+  if (error) {
+    throw new Error(`Supabase delete failed: ${error.message}`);
+  }
+}

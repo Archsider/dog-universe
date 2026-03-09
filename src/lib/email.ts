@@ -63,7 +63,7 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -277,6 +277,34 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         <p>Unfortunately, your request for the benefit <strong>${data.benefitEn}</strong> could not be approved.</p>
         ${data.reason ? `<div style="background: #FEF2F2; border-left: 4px solid #EF4444; padding: 16px; border-radius: 4px; margin: 16px 0;"><p style="margin: 0; color: #991B1B;">Reason: ${data.reason}</p></div>` : ''}
         <p>If you have any questions, please feel free to contact us.</p>
+        <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    contract_reminder: {
+      subjectFr: '⚠️ Action requise : signature de votre contrat — Dog Universe',
+      subjectEn: '⚠️ Action required: sign your contract — Dog Universe',
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+        <p>Votre <strong>contrat d'hébergement</strong> est obligatoire pour accéder à votre espace client Dog Universe.</p>
+        <p>Pour le signer, connectez-vous à votre espace — le contrat vous sera présenté automatiquement :</p>
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${data.loginUrl}" style="display: inline-block; background: #C9A84C; color: white; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-size: 15px;">
+            Accéder à mon espace
+          </a>
+        </div>
+        <p style="color: #999; font-size: 13px;">Si vous avez des questions, n'hésitez pas à nous contacter par email ou téléphone.</p>
+        <p>Cordialement,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+        <p>Your <strong>boarding contract</strong> is required to access your Dog Universe client area.</p>
+        <p>To sign it, log in to your account — the contract will be presented to you automatically:</p>
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${data.loginUrl}" style="display: inline-block; background: #C9A84C; color: white; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-size: 15px;">
+            Access my account
+          </a>
+        </div>
+        <p style="color: #999; font-size: 13px;">If you have any questions, feel free to contact us by email or phone.</p>
         <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
       `,
     },

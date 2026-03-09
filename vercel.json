@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/birthday-notifications",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/contract-reminders",
+      "schedule": "0 8 * * 1"
     }
   ]
 }

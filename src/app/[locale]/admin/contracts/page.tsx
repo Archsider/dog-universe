@@ -1,12 +1,13 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import { FileText, CheckCircle2, XCircle, Download, Eye } from 'lucide-react';
-import { getInitials, formatDate } from '@/lib/utils';
+import { FileText, CheckCircle2, XCircle } from 'lucide-react';
+import ContractsManager from './ContractsManager';
 
-interface PageProps { params: { locale: string } }
+interface PageProps { params: Promise<{ locale: string }> }
 
-export default async function AdminContractsPage({ params: { locale } }: PageProps) {
+export default async function AdminContractsPage({ params }: PageProps) {
+  const { locale } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     redirect(`/${locale}/auth/login`);
@@ -15,7 +16,7 @@ export default async function AdminContractsPage({ params: { locale } }: PagePro
   const clients = await prisma.user.findMany({
     where: { role: 'CLIENT' },
     include: {
-      contract: { select: { signedAt: true, pdfUrl: true, version: true } },
+      contract: { select: { id: true, signedAt: true, pdfUrl: true, version: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -24,44 +25,14 @@ export default async function AdminContractsPage({ params: { locale } }: PagePro
   const unsigned = clients.filter(c => c.contract === null);
   const signedRate = clients.length > 0 ? Math.round((signed.length / clients.length) * 100) : 0;
 
-  const l = locale === 'fr' ? {
-    title: 'Contrats clients',
-    subtitle: 'Suivi de la signature des contrats d\'hébergement',
-    statSigned: 'Contrats signés',
-    statUnsigned: 'Non signés',
-    statRate: 'Taux de signature',
-    colClient: 'Client',
-    colEmail: 'Email',
-    colStatus: 'Statut',
-    colDate: 'Date de signature',
-    colVersion: 'Version',
-    colAction: '',
-    statusSigned: 'Signé',
-    statusUnsigned: 'Non signé',
-    download: 'Télécharger',
-    filterAll: 'Tous',
-    filterSigned: 'Signés',
-    filterUnsigned: 'Non signés',
-    noClients: 'Aucun client',
-  } : {
-    title: 'Client Contracts',
-    subtitle: 'Track boarding contract signatures',
-    statSigned: 'Signed contracts',
-    statUnsigned: 'Unsigned',
-    statRate: 'Signature rate',
-    colClient: 'Client',
-    colEmail: 'Email',
-    colStatus: 'Status',
-    colDate: 'Signed on',
-    colVersion: 'Version',
-    colAction: '',
-    statusSigned: 'Signed',
-    statusUnsigned: 'Unsigned',
-    download: 'Download',
-    filterAll: 'All',
-    filterSigned: 'Signed',
-    filterUnsigned: 'Unsigned',
-    noClients: 'No clients',
+  const isFr = locale === 'fr';
+  const l = {
+    title: isFr ? 'Contrats clients' : 'Client Contracts',
+    subtitle: isFr ? 'Suivi de la signature des contrats d\'hébergement' : 'Track boarding contract signatures',
+    statSigned: isFr ? 'Contrats signés' : 'Signed contracts',
+    statUnsigned: isFr ? 'Non signés' : 'Unsigned',
+    statRate: isFr ? 'Taux de signature' : 'Signature rate',
+    noClients: isFr ? 'Aucun client' : 'No clients',
   };
 
   return (
@@ -116,89 +87,24 @@ export default async function AdminContractsPage({ params: { locale } }: PagePro
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card overflow-hidden">
-        {clients.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p>{l.noClients}</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-ivory-200 bg-ivory-50">
-                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">{l.colClient}</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden md:table-cell">{l.colEmail}</th>
-                  <th className="text-center text-xs font-semibold text-gray-500 px-4 py-3">{l.colStatus}</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden sm:table-cell">{l.colDate}</th>
-                  <th className="text-center text-xs font-semibold text-gray-500 px-4 py-3 hidden lg:table-cell">{l.colVersion}</th>
-                  <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3">{l.colAction}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clients.map(client => (
-                  <tr key={client.id} className="border-b border-ivory-100 last:border-0 hover:bg-ivory-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gold-100 flex items-center justify-center text-xs font-semibold text-gold-700 flex-shrink-0">
-                          {getInitials(client.name)}
-                        </div>
-                        <span className="font-medium text-sm text-charcoal">{client.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">{client.email}</td>
-                    <td className="px-4 py-3 text-center">
-                      {client.contract ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium">
-                          <CheckCircle2 className="h-3 w-3" />
-                          {l.statusSigned}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 text-red-600 text-xs font-medium">
-                          <XCircle className="h-3 w-3" />
-                          {l.statusUnsigned}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">
-                      {client.contract ? formatDate(client.contract.signedAt.toISOString()) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-center text-sm text-gray-500 hidden lg:table-cell">
-                      {client.contract ? `v${client.contract.version}` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {client.contract?.pdfUrl ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <a
-                            href={client.contract.pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={locale === 'fr' ? 'Aperçu' : 'Preview'}
-                            className="p-1.5 text-gray-400 hover:text-gold-600 rounded transition-colors"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </a>
-                          <a
-                            href={client.contract.pdfUrl}
-                            download
-                            title={l.download}
-                            className="p-1.5 text-gray-400 hover:text-gold-600 rounded transition-colors"
-                          >
-                            <Download className="h-4 w-4" />
-                          </a>
-                        </div>
-                      ) : (
-                        <span className="text-gray-300 text-xs">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {clients.length === 0 ? (
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card text-center py-12 text-gray-400">
+          <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <p>{l.noClients}</p>
+        </div>
+      ) : (
+        <ContractsManager
+          clients={clients.map(c => ({
+            id: c.id,
+            name: c.name,
+            email: c.email,
+            contract: c.contract
+              ? { id: c.contract.id, signedAt: c.contract.signedAt, pdfUrl: c.contract.pdfUrl, version: c.contract.version }
+              : null,
+          }))}
+          locale={locale}
+        />
+      )}
     </div>
   );
 }
