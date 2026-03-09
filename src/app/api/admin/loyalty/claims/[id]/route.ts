@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { createLoyaltyClaimResultNotification } from '@/lib/notifications';
 
 // PATCH /api/admin/loyalty/claims/[id] — approve or reject a claim
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -27,6 +28,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     },
     include: { client: { select: { name: true, email: true } } },
   });
+
+  // Notify client (non-blocking)
+  createLoyaltyClaimResultNotification(
+    claim.clientId,
+    claim.benefitLabelFr,
+    claim.benefitLabelEn,
+    action as 'APPROVED' | 'REJECTED',
+    action === 'REJECTED' ? rejectionReason.trim() : null
+  ).catch(() => {});
 
   return NextResponse.json(claim);
 }

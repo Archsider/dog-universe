@@ -63,7 +63,7 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -238,6 +238,46 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         ${data.totalStays ? `<p style="color: #6B7280; font-size: 14px;">Completed stays: ${data.totalStays}</p>` : ''}
         <p>Log in to your client portal to discover your new benefits.</p>
         <p>Thank you for your loyalty,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    loyalty_claim_approved: {
+      subjectFr: `✅ Votre avantage fidélité a été accordé — Dog Universe`,
+      subjectEn: `✅ Your loyalty benefit has been granted — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+        <p>Excellente nouvelle ! Votre demande d'avantage a été <strong style="color: #16a34a;">accordée</strong>.</p>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0; font-weight: bold; color: #2C2C2C;">${data.benefitFr}</p>
+        </div>
+        <p>Notre équipe prendra contact avec vous pour la mise en place de cet avantage.</p>
+        <p>Merci pour votre fidélité,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+        <p>Great news! Your benefit request has been <strong style="color: #16a34a;">approved</strong>.</p>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0; font-weight: bold; color: #2C2C2C;">${data.benefitEn}</p>
+        </div>
+        <p>Our team will contact you shortly to arrange this benefit.</p>
+        <p>Thank you for your loyalty,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    loyalty_claim_rejected: {
+      subjectFr: `ℹ️ Votre réclamation d'avantage fidélité — Dog Universe`,
+      subjectEn: `ℹ️ Your loyalty benefit claim — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+        <p>Votre demande pour l'avantage <strong>${data.benefitFr}</strong> n'a malheureusement pas pu être accordée.</p>
+        ${data.reason ? `<div style="background: #FEF2F2; border-left: 4px solid #EF4444; padding: 16px; border-radius: 4px; margin: 16px 0;"><p style="margin: 0; color: #991B1B;">Motif : ${data.reason}</p></div>` : ''}
+        <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
+        <p>Cordialement,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+        <p>Unfortunately, your request for the benefit <strong>${data.benefitEn}</strong> could not be approved.</p>
+        ${data.reason ? `<div style="background: #FEF2F2; border-left: 4px solid #EF4444; padding: 16px; border-radius: 4px; margin: 16px 0;"><p style="margin: 0; color: #991B1B;">Reason: ${data.reason}</p></div>` : ''}
+        <p>If you have any questions, please feel free to contact us.</p>
+        <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
     reset_password: {

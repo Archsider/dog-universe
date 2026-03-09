@@ -164,6 +164,54 @@ export async function createAdminMessageNotification(
   });
 }
 
+export async function createLoyaltyClaimResultNotification(
+  userId: string,
+  benefitLabelFr: string,
+  benefitLabelEn: string,
+  status: 'APPROVED' | 'REJECTED',
+  rejectionReason?: string | null
+) {
+  const isApproved = status === 'APPROVED';
+
+  const notification = await createNotification({
+    userId,
+    type: 'LOYALTY_UPDATE',
+    titleFr: isApproved ? 'Avantage fidélité accordé' : 'Réclamation d\'avantage refusée',
+    titleEn: isApproved ? 'Loyalty benefit granted' : 'Benefit claim rejected',
+    messageFr: isApproved
+      ? `Votre demande pour « ${benefitLabelFr} » a été acceptée. Notre équipe vous contactera pour la mise en place.`
+      : `Votre demande pour « ${benefitLabelFr} » a été refusée.${rejectionReason ? ` Motif : ${rejectionReason}` : ''}`,
+    messageEn: isApproved
+      ? `Your request for "${benefitLabelEn}" has been approved. Our team will contact you shortly.`
+      : `Your request for "${benefitLabelEn}" has been rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
+  });
+
+  // Send email (non-blocking)
+  try {
+    const client = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true, language: true },
+    });
+    if (client) {
+      const locale = client.language ?? 'fr';
+      const templateType = isApproved ? 'loyalty_claim_approved' : 'loyalty_claim_rejected';
+      const { subject, html } = getEmailTemplate(
+        templateType,
+        {
+          clientName: client.name ?? client.email,
+          benefitFr: benefitLabelFr,
+          benefitEn: benefitLabelEn,
+          reason: rejectionReason ?? '',
+        },
+        locale
+      );
+      await sendEmail({ to: client.email, subject, html });
+    }
+  } catch { /* non-blocking */ }
+
+  return notification;
+}
+
 export async function getUnreadCount(userId: string): Promise<number> {
   return prisma.notification.count({
     where: { userId, read: false },

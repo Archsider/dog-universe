@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   X,
+  Gift,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,7 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
     { href: `/${locale}/client/pets`, label: t('pets'), icon: PawPrint },
     { href: `/${locale}/client/history`, label: t('bookings'), icon: Calendar },
     { href: `/${locale}/client/invoices`, label: t('invoices'), icon: FileText },
+    { href: `/${locale}/client/loyalty`, label: t('loyalty'), icon: Gift },
     { href: `/${locale}/client/notifications`, label: t('notifications'), icon: Bell },
     { href: `/${locale}/client/profile`, label: t('profile'), icon: User },
   ];
