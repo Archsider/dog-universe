@@ -36,6 +36,11 @@ const nextConfig = {
   images: {
     remotePatterns: [],
   },
+  // Bundle the private/ directory into the contract signing serverless function
+  // so that stamp.png is available on Vercel (not served publicly)
+  outputFileTracingIncludes: {
+    '/api/contracts/sign': ['./private/**/*'],
+  },
   experimental: {
     serverComponentsExternalPackages: ['@react-pdf/renderer', 'sharp'],
   },
