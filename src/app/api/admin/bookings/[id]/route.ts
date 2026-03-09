@@ -66,11 +66,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (status === 'CONFIRMED') {
       const dates = booking.startDate.toLocaleDateString('fr-MA');
       await createBookingValidationNotification(booking.clientId, bookingRef, petNames, dates);
-      const { subject, html } = getEmailTemplate('booking_confirmation', {
-        clientName: booking.client.name,
+      const { subject, html } = getEmailTemplate('booking_validated', {
+        clientName: booking.client.name ?? booking.client.email,
         bookingRef,
         service: booking.serviceType === 'BOARDING' ? (userLang === 'fr' ? 'Pension' : 'Boarding') : 'Pet Taxi',
         petName: petNames,
+        dates,
       }, userLang);
       await sendEmail({ to: booking.client.email, subject, html });
 
@@ -82,9 +83,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         details: { from: booking.status, to: status },
       });
     } else if (status === 'REJECTED' || status === 'CANCELLED') {
-      await createBookingRefusalNotification(booking.clientId, bookingRef, petNames);
+      await createBookingRefusalNotification(booking.clientId, bookingRef);
       const { subject, html } = getEmailTemplate('booking_refused', {
-        clientName: booking.client.name,
+        clientName: booking.client.name ?? booking.client.email,
         bookingRef,
         petName: petNames,
       }, userLang);
@@ -124,10 +125,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           await createLoyaltyUpdateNotification(booking.clientId, suggestedGrade, booking.client.language || 'fr');
         }
       } catch { /* non-blocking */ }
-    } else {
+    } else if (status === 'IN_PROGRESS') {
       await logAction({
         userId: session.user.id,
-        action: LOG_ACTIONS.BOOKING_COMPLETED,
+        action: 'BOOKING_IN_PROGRESS',
         entityType: 'Booking',
         entityId: params.id,
         details: { from: booking.status, to: status },

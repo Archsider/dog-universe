@@ -55,8 +55,8 @@ export async function GET(request: Request) {
       const { subject, html } = getEmailTemplate(
         'booking_reminder',
         {
-          clientName: booking.client.name,
-          bookingRef: booking.id.slice(-8).toUpperCase(),
+          clientName: booking.client.name ?? booking.client.email,
+          bookingRef: booking.id.slice(0, 8).toUpperCase(),
           petName: petNames,
           startDate,
           service: locale === 'fr' ? 'Pension' : 'Boarding',

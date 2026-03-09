@@ -22,24 +22,28 @@ export async function POST(request: Request) {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const user = await prisma.user.create({
-      data: {
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
-        phone: phone?.trim() || null,
-        passwordHash,
-        role: 'CLIENT',
-        language: language ?? 'fr',
-      },
-    });
+    const user = await prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          name: name.trim(),
+          email: email.toLowerCase().trim(),
+          phone: phone?.trim() || null,
+          passwordHash,
+          role: 'CLIENT',
+          language: language ?? 'fr',
+        },
+      });
 
-    // Create default loyalty grade
-    await prisma.loyaltyGrade.create({
-      data: {
-        clientId: user.id,
-        grade: 'BRONZE',
-        isOverride: false,
-      },
+      // Create default loyalty grade atomically with user creation
+      await tx.loyaltyGrade.create({
+        data: {
+          clientId: newUser.id,
+          grade: 'BRONZE',
+          isOverride: false,
+        },
+      });
+
+      return newUser;
     });
 
     await logAction({

@@ -11,10 +11,10 @@ export function AdminNotificationBell() {
 
   const fetchUnread = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications?unreadOnly=true&limit=99');
+      const res = await fetch('/api/notifications/count');
       if (res.ok) {
         const data = await res.json();
-        setUnreadCount(Array.isArray(data) ? data.length : 0);
+        setUnreadCount(typeof data.count === 'number' ? data.count : 0);
       }
     } catch { /* silent */ }
   }, []);

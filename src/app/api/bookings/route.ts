@@ -87,10 +87,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // Generate booking reference
-    const count = await prisma.booking.count();
-    const year = new Date().getFullYear();
-    const bookingRef = `DU-${year}-${String(count + 1).padStart(4, '0')}`;
+    // Booking reference: first 8 chars of UUID, uppercase — consistent across all systems
+    // (computed after booking.create below — placeholder until then)
+    let bookingRef = '';
 
     const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN';
     const clientId = isAdmin ? body.clientId : session.user.id;
@@ -117,6 +116,9 @@ export async function POST(request: Request) {
         client: true,
       },
     });
+
+    // Set booking reference using the actual ID (consistent across all systems)
+    bookingRef = booking.id.slice(0, 8).toUpperCase();
 
     // Create service-specific details
     if (serviceType === 'BOARDING') {

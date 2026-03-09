@@ -32,7 +32,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name ?? user.email.split('@')[0],
-          role: user.role as 'ADMIN' | 'CLIENT',
+          role: user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN',
           language: user.language,
         };
       },
@@ -46,7 +46,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id!;
-        token.role = user.role as 'ADMIN' | 'CLIENT';
+        token.role = user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
         token.language = (user as { language?: string }).language ?? 'fr';
       }
       return token;
