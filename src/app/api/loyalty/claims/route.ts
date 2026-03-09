@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { GRADE_BENEFITS, Grade } from '@/lib/loyalty';
+import { notifyAdminsNewLoyaltyClaim } from '@/lib/notifications';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
@@ -61,6 +62,16 @@ export async function POST(req: NextRequest) {
       benefitLabelEn: benefit.labelEn,
     },
   });
+
+  // Notify admins (non-blocking)
+  prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, email: true } })
+    .then((client) => notifyAdminsNewLoyaltyClaim(
+      client?.name ?? client?.email ?? 'Client',
+      benefit.labelFr,
+      benefit.labelEn,
+      claim.id
+    ))
+    .catch(() => {});
 
   return NextResponse.json(claim, { status: 201 });
 }

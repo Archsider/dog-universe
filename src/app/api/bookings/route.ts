@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { createBookingConfirmationNotification } from '@/lib/notifications';
+import { createBookingConfirmationNotification, notifyAdminsNewBooking } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { formatDate } from '@/lib/utils';
 import { getPricingSettings } from '@/lib/pricing';
@@ -178,6 +178,18 @@ export async function POST(request: Request) {
       bookingRef,
       petNames
     );
+
+    // Notify admins when a client (not admin) creates a booking
+    if (!isAdmin) {
+      notifyAdminsNewBooking(
+        booking.client.name ?? booking.client.email,
+        petNames,
+        serviceType === 'BOARDING' ? 'pension' : 'taxi animalier',
+        serviceType === 'BOARDING' ? 'boarding' : 'pet taxi',
+        bookingRef,
+        booking.id
+      ).catch(() => {});
+    }
 
     const serviceName = serviceType === 'BOARDING'
       ? (locale === 'fr' ? 'Pension' : 'Boarding')

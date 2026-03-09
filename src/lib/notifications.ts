@@ -10,7 +10,9 @@ export type NotificationType =
   | 'ADMIN_MESSAGE'
   | 'STAY_PHOTO'
   | 'LOYALTY_UPDATE'
-  | 'PET_BIRTHDAY';
+  | 'PET_BIRTHDAY'
+  | 'BOOKING_REQUEST'        // admin receives when a client creates a booking
+  | 'LOYALTY_CLAIM_PENDING'; // admin receives when a client submits a claim
 
 interface CreateNotificationData {
   userId: string;
@@ -210,6 +212,50 @@ export async function createLoyaltyClaimResultNotification(
   } catch { /* non-blocking */ }
 
   return notification;
+}
+
+// ─── Admin notification helpers ───────────────────────────────────────────────
+
+async function createAdminNotifications(data: Omit<CreateNotificationData, 'userId'>) {
+  const admins = await prisma.user.findMany({
+    where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+    select: { id: true },
+  });
+  return Promise.all(admins.map((admin) => createNotification({ ...data, userId: admin.id })));
+}
+
+export async function notifyAdminsNewBooking(
+  clientName: string,
+  petNames: string,
+  serviceTypeFr: string,
+  serviceTypeEn: string,
+  bookingRef: string,
+  bookingId: string
+) {
+  return createAdminNotifications({
+    type: 'BOOKING_REQUEST',
+    titleFr: 'Nouvelle demande de réservation',
+    titleEn: 'New booking request',
+    messageFr: `${clientName} a soumis une demande de ${serviceTypeFr} pour ${petNames} — réf. ${bookingRef}`,
+    messageEn: `${clientName} submitted a ${serviceTypeEn} request for ${petNames} — ref. ${bookingRef}`,
+    metadata: { bookingId, bookingRef },
+  });
+}
+
+export async function notifyAdminsNewLoyaltyClaim(
+  clientName: string,
+  benefitLabelFr: string,
+  benefitLabelEn: string,
+  claimId: string
+) {
+  return createAdminNotifications({
+    type: 'LOYALTY_CLAIM_PENDING',
+    titleFr: 'Nouvelle réclamation d\'avantage fidélité',
+    titleEn: 'New loyalty benefit claim',
+    messageFr: `${clientName} demande : « ${benefitLabelFr} »`,
+    messageEn: `${clientName} requests: "${benefitLabelEn}"`,
+    metadata: { claimId },
+  });
 }
 
 export async function getUnreadCount(userId: string): Promise<number> {
