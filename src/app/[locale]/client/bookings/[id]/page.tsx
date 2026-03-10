@@ -5,13 +5,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import {
   ArrowLeft, Calendar, PawPrint, Package, Car,
-  FileText, Camera, MessageSquare, CheckCircle2,
-  XCircle, AlertCircle, Clock,
+  FileText, Camera, MessageSquare,
+  XCircle, Clock,
   Check, MapPin,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import CancelBookingButton from '../../history/CancelBookingButton';
+import AutoRefresh from '@/components/shared/AutoRefresh';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -221,6 +222,7 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
   };
   const t = l[locale as keyof typeof l] || l.fr;
 
+  const isActive = ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(booking.status);
   const isBoarding = booking.serviceType === 'BOARDING';
   const nights = booking.endDate
     ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))
@@ -234,6 +236,9 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
 
   return (
     <div className="max-w-2xl mx-auto">
+      {/* Auto-refresh pour les réservations actives (toutes les 30s) */}
+      {isActive && <AutoRefresh intervalMs={30000} />}
+
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Link href={`/${locale}/client/history`} className="text-gray-400 hover:text-charcoal transition-colors">
