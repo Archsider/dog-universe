@@ -196,7 +196,64 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ---
 
+## SYSTÈME DE RÉSERVATIONS — WORKFLOWS ET STATUTS
+
+### Statuts DB (`Booking.status`)
+`PENDING` → `CONFIRMED` → `IN_PROGRESS` → `COMPLETED` (flux normal)
+`CANCELLED` / `REJECTED` (sortie possible à tout moment par l'admin)
+
+**Important** : `IN_PROGRESS` doit être présent dans `VALID_STATUSES` de `PATCH /api/admin/bookings/[id]`. Ne jamais l'omettre.
+
+### Pipelines affichés (labels UI ≠ statuts DB)
+| Statut DB   | Pension (BOARDING)      | Pet Taxi (PET_TAXI)       |
+|-------------|-------------------------|---------------------------|
+| PENDING     | Demande reçue           | Transport planifié        |
+| CONFIRMED   | Séjour confirmé         | Chauffeur en route        |
+| IN_PROGRESS | Dans nos murs           | Animal à bord             |
+| COMPLETED   | Séjour terminé          | Arrivé à destination      |
+
+### Board Kanban admin (`ReservationsKanban.tsx`)
+- Centralisé dans `NEXT_STATUS` (transitions) et `ACTION_LABELS` (boutons) — ne jamais coder les statuts en dur ailleurs
+- Chaque carte a un bouton d'action contextuel → `PATCH /api/admin/bookings/{id}`
+- Mise à jour **optimiste** : `useState` local sur les bookings, la carte se déplace immédiatement sans rechargement
+- Le clic bouton `stopPropagation()` pour ne pas naviguer vers la fiche
+
+### Fiche admin (`ReservationActions.tsx`)
+- Bouton principal = prochaine étape du pipeline
+- Section "Forcer un statut" masquée par défaut (dépliable) avec select complet
+- Reçoit `serviceType` en prop (obligatoire pour déterminer le pipeline)
+
+### Fiche client (`client/bookings/[id]/page.tsx`)
+- Server Component — ne se re-render pas automatiquement
+- `AutoRefresh` (`src/components/shared/AutoRefresh.tsx`) ajouté pour les réservations actives : appelle `router.refresh()` toutes les 30s
+- Stepper visuel lecture seule : étapes passées ✓ / active surlignée / futures grisées
+- Le client ne peut **jamais** modifier le statut
+
+### Contraintes Pet Taxi (front + back)
+- **Dimanche interdit** : `isValidTaxiDate()` dans le formulaire client
+- **Horaires 10h-17h uniquement** : `isValidTaxiTime()` dans le formulaire client
+- Validation dupliquée côté backend dans `POST /api/bookings` :
+  - `SUNDAY_NOT_ALLOWED` → 400
+  - `INVALID_TIME_SLOT` → 400
+- S'applique au taxi standalone ET aux addons taxi d'une pension
+
+---
+
 ## HISTORIQUE ET DÉCISIONS CLÉS
+
+### 2026-03-10 — Session Board + Stepper
+
+**Corrections et fonctionnalités :**
+
+1. **`IN_PROGRESS` absent de `VALID_STATUSES`** : bug bloquant — les transitions "Chauffeur en route", "Dans nos murs", "Animal à bord" retournaient 400. Corrigé dans `PATCH /api/admin/bookings/[id]`.
+
+2. **Board actionnable** : `ReservationsKanban.tsx` refactorisé avec boutons de transition contextuels par pipeline, mise à jour optimiste, logique centralisée.
+
+3. **Stepper client** : fiche réservation client transformée avec progression visuelle verticale adaptée au type de service. Lecture seule côté client.
+
+4. **Auto-refresh fiche client** : `AutoRefresh` component pour les réservations actives (30s) — contournement du Server Component statique.
+
+5. **Validation taxi complétée** : le taxi standalone n'avait aucune validation dimanche/horaires côté JS (seulement les attributs HTML `min/max`). Validation JS + backend ajoutée.
 
 ### 2026-03-08 — Session principale
 
