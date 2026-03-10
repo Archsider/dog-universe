@@ -1,6 +1,32 @@
-# CLAUDE.md — Dog Universe · Mémoire permanente de projet
+# CLAUDE.md
 
-> Ce fichier est lu à chaque nouvelle session. Ne jamais en supprimer une ligne sans accord explicite.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+> Mémoire permanente de projet — ne jamais supprimer une ligne sans accord explicite.
+
+---
+
+## COMMANDES ESSENTIELLES
+
+```bash
+# Développement
+npm run dev              # Lance Next.js en mode dev (port 3000)
+npm run lint             # ESLint via next lint
+npx tsc --noEmit         # Vérification TypeScript — TOUJOURS avant commit
+
+# Base de données
+npm run db:generate      # prisma generate (sans connexion DB — régénère le client TS)
+npm run db:migrate       # prisma migrate dev (nécessite DB locale)
+npm run db:push          # prisma db push (sync schema sans migration)
+npm run db:studio        # Prisma Studio (UI de la DB)
+
+# Build
+npm run build            # next build (échoue sur Google Fonts sans réseau — normal en sandbox)
+```
+
+**Important DB** : la DB locale (`localhost:5432`) est inaccessible en environnement sandbox.
+`npx prisma generate` (= `npm run db:generate`) fonctionne sans connexion et suffit pour régénérer le client TypeScript après modification du schema.
+Les migrations sont créées manuellement dans `prisma/migrations/YYYYMMDD_nom/migration.sql`.
 
 ---
 
