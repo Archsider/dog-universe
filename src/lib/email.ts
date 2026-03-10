@@ -63,7 +63,7 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -149,6 +149,58 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         <p>Please feel free to contact us or submit a new request for other dates.</p>
         <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
       `,
+    },
+    booking_completed: {
+      subjectFr: data.serviceType === 'PET_TAXI'
+        ? `🏁 Trajet terminé — Dog Universe`
+        : data.hasGrooming === 'true'
+          ? `✅ Séjour & toilettage terminés — Dog Universe`
+          : `✅ Séjour terminé — Dog Universe`,
+      subjectEn: data.serviceType === 'PET_TAXI'
+        ? `🏁 Trip completed — Dog Universe`
+        : data.hasGrooming === 'true'
+          ? `✅ Stay & grooming completed — Dog Universe`
+          : `✅ Stay completed — Dog Universe`,
+      bodyFr: data.serviceType === 'PET_TAXI'
+        ? `
+          <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+          <p>Votre trajet Pet Taxi (réf. <strong>${data.bookingRef}</strong>) est terminé.</p>
+          <p><strong>${data.petName}</strong> est arrivé(e) à destination en toute sécurité.</p>
+          <p>Merci de votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
+        `
+        : data.hasGrooming === 'true'
+          ? `
+            <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+            <p>Le séjour et le toilettage de <strong>${data.petName}</strong> (réf. <strong>${data.bookingRef}</strong>) sont maintenant terminés.</p>
+            <p>Votre compagnon est prêt à être récupéré. N'hésitez pas à nous contacter pour convenir de l'heure de passage.</p>
+            <p>Merci de votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
+          `
+          : `
+            <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+            <p>Le séjour de <strong>${data.petName}</strong> (réf. <strong>${data.bookingRef}</strong>) est maintenant terminé.</p>
+            <p>Votre compagnon est prêt à être récupéré. N'hésitez pas à nous contacter pour convenir de l'heure de passage.</p>
+            <p>Merci de votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
+          `,
+      bodyEn: data.serviceType === 'PET_TAXI'
+        ? `
+          <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+          <p>Your Pet Taxi trip (ref. <strong>${data.bookingRef}</strong>) is now complete.</p>
+          <p><strong>${data.petName}</strong> has arrived safely at the destination.</p>
+          <p>Thank you for your trust,<br><strong>The Dog Universe Team</strong></p>
+        `
+        : data.hasGrooming === 'true'
+          ? `
+            <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+            <p><strong>${data.petName}</strong>'s stay and grooming (ref. <strong>${data.bookingRef}</strong>) are now complete.</p>
+            <p>Your companion is ready to be picked up. Feel free to contact us to arrange a pick-up time.</p>
+            <p>Thank you for your trust,<br><strong>The Dog Universe Team</strong></p>
+          `
+          : `
+            <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+            <p><strong>${data.petName}</strong>'s stay (ref. <strong>${data.bookingRef}</strong>) is now complete.</p>
+            <p>Your companion is ready to be picked up. Feel free to contact us to arrange a pick-up time.</p>
+            <p>Thank you for your trust,<br><strong>The Dog Universe Team</strong></p>
+          `,
     },
     invoice_available: {
       subjectFr: `📄 Votre facture ${data.invoiceNumber} est disponible — Dog Universe`,

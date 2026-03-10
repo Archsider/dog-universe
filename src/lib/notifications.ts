@@ -5,6 +5,8 @@ export type NotificationType =
   | 'BOOKING_CONFIRMATION'
   | 'BOOKING_VALIDATION'
   | 'BOOKING_REFUSAL'
+  | 'BOOKING_IN_PROGRESS'
+  | 'BOOKING_COMPLETED'
   | 'STAY_REMINDER'
   | 'INVOICE_AVAILABLE'
   | 'ADMIN_MESSAGE'
@@ -83,6 +85,93 @@ export async function createBookingRefusalNotification(
     messageFr: `Votre réservation (réf. ${bookingRef}) ne peut pas être honorée.${reason ? ` Motif : ${reason}` : ''}`,
     messageEn: `Your booking (ref. ${bookingRef}) cannot be accommodated.${reason ? ` Reason: ${reason}` : ''}`,
   });
+}
+
+export async function createBookingInProgressNotification(
+  userId: string,
+  bookingRef: string,
+  petName: string,
+  serviceType: 'BOARDING' | 'PET_TAXI'
+) {
+  const isTaxi = serviceType === 'PET_TAXI';
+  return createNotification({
+    userId,
+    type: 'BOOKING_IN_PROGRESS',
+    titleFr: isTaxi ? 'Animal à bord' : 'Séjour en cours',
+    titleEn: isTaxi ? 'Pet on board' : 'Stay in progress',
+    messageFr: isTaxi
+      ? `${petName} est à bord et en route avec notre équipe (réf. ${bookingRef}).`
+      : `${petName} est bien arrivé(e) dans nos locaux — le séjour a commencé (réf. ${bookingRef}).`,
+    messageEn: isTaxi
+      ? `${petName} is on board and on the way with our team (ref. ${bookingRef}).`
+      : `${petName} has arrived safely at our facility — the stay has begun (ref. ${bookingRef}).`,
+  });
+}
+
+export async function createBookingCompletedNotification(
+  userId: string,
+  bookingRef: string,
+  petName: string,
+  serviceType: 'BOARDING' | 'PET_TAXI',
+  hasGrooming: boolean = false
+) {
+  const isTaxi = serviceType === 'PET_TAXI';
+
+  let titleFr: string;
+  let titleEn: string;
+  let messageFr: string;
+  let messageEn: string;
+
+  if (isTaxi) {
+    titleFr = 'Trajet terminé';
+    titleEn = 'Trip completed';
+    messageFr = `${petName} est arrivé(e) à destination (réf. ${bookingRef}).`;
+    messageEn = `${petName} has arrived at the destination (ref. ${bookingRef}).`;
+  } else if (hasGrooming) {
+    titleFr = 'Séjour & toilettage terminés';
+    titleEn = 'Stay & grooming completed';
+    messageFr = `Le séjour et le toilettage de ${petName} sont terminés — votre compagnon est prêt à être récupéré (réf. ${bookingRef}).`;
+    messageEn = `${petName}'s stay and grooming are complete — your companion is ready to be picked up (ref. ${bookingRef}).`;
+  } else {
+    titleFr = 'Séjour terminé';
+    titleEn = 'Stay completed';
+    messageFr = `Le séjour de ${petName} est terminé — votre compagnon est prêt à être récupéré (réf. ${bookingRef}).`;
+    messageEn = `${petName}'s stay is complete — your companion is ready to be picked up (ref. ${bookingRef}).`;
+  }
+
+  const notification = await createNotification({
+    userId,
+    type: 'BOOKING_COMPLETED',
+    titleFr,
+    titleEn,
+    messageFr,
+    messageEn,
+  });
+
+  // Send email (non-blocking)
+  try {
+    const client = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true, language: true },
+    });
+    if (client) {
+      const locale = client.language ?? 'fr';
+      const { subject, html } = getEmailTemplate(
+        'booking_completed',
+        {
+          clientName: client.name ?? client.email,
+          bookingRef,
+          petName,
+          serviceType,
+          hasGrooming: hasGrooming ? 'true' : 'false',
+        },
+        locale
+      );
+      await sendEmail({ to: client.email, subject, html });
+    }
+  } catch { /* non-blocking */ }
+
+  return notification;
 }
 
 export async function createInvoiceNotification(

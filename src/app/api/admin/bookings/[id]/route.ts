@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { createBookingValidationNotification, createBookingRefusalNotification } from '@/lib/notifications';
+import { createBookingValidationNotification, createBookingRefusalNotification, createBookingInProgressNotification, createBookingCompletedNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -45,6 +45,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     include: {
       client: true,
       bookingPets: { include: { pet: true } },
+      boardingDetail: true,
     },
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -99,6 +100,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         details: { from: booking.status, to: status },
       });
     } else if (status === 'COMPLETED') {
+      const hasGrooming = booking.boardingDetail?.includeGrooming ?? false;
+      await createBookingCompletedNotification(
+        booking.clientId,
+        bookingRef,
+        petNames,
+        booking.serviceType as 'BOARDING' | 'PET_TAXI',
+        hasGrooming
+      );
+
       await logAction({
         userId: session.user.id,
         action: LOG_ACTIONS.BOOKING_COMPLETED,
@@ -126,6 +136,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         }
       } catch { /* non-blocking */ }
     } else if (status === 'IN_PROGRESS') {
+      await createBookingInProgressNotification(
+        booking.clientId,
+        bookingRef,
+        petNames,
+        booking.serviceType as 'BOARDING' | 'PET_TAXI'
+      );
+
       await logAction({
         userId: session.user.id,
         action: 'BOOKING_IN_PROGRESS',
