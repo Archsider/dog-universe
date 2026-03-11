@@ -165,7 +165,7 @@ export function ContractModal({ clientName, onSigned }: ContractModalProps) {
           </div>
           <div>
             <h2 className="text-base font-bold text-gray-900">Contrat de pension — DOG UNIVERSE</h2>
-            <p className="text-xs text-gray-500">Veuillez lire et signer avant d'accéder à votre espace</p>
+            <p className="text-xs text-gray-500">Veuillez lire et signer avant d&apos;accéder à votre espace</p>
           </div>
         </div>
 
@@ -205,7 +205,7 @@ export function ContractModal({ clientName, onSigned }: ContractModalProps) {
               className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
             />
             <span className="text-xs text-gray-600">
-              Je, <strong>{clientName}</strong>, confirme avoir lu et accepté l'intégralité des conditions générales ci-dessus.
+              Je, <strong>{clientName}</strong>, confirme avoir lu et accepté l&apos;intégralité des conditions générales ci-dessus.
               Cette signature électronique a valeur contractuelle.
             </span>
           </label>

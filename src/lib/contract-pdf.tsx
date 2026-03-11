@@ -247,7 +247,7 @@ function ContractPDFDocument({ data }: { data: ContractPDFData }) {
           {/* Client signature */}
           <View style={styles.signatureBox}>
             <Text style={{ fontSize: 8, color: '#374151', marginBottom: 6, fontStyle: 'italic' }}>
-              Lu et accepté — J'ai pris connaissance des conditions générales ci-dessus et je les accepte sans réserve.
+              {`Lu et accepté — J'ai pris connaissance des conditions générales ci-dessus et je les accepte sans réserve.`}
             </Text>
             <Text style={styles.signatureLabel}>Signature du client</Text>
             <Text style={{ fontSize: 8, color: '#374151', marginBottom: 4 }}>{data.clientName}</Text>
@@ -263,7 +263,7 @@ function ContractPDFDocument({ data }: { data: ContractPDFData }) {
 
           {/* Stamp / Cachet */}
           <View style={{ ...styles.signatureBox, alignItems: 'flex-end' }}>
-            <Text style={styles.signatureLabel}>Cachet de l'établissement</Text>
+            <Text style={styles.signatureLabel}>{`Cachet de l'établissement`}</Text>
             <Image
               src={STAMP_PATH}
               style={styles.stampImg}
