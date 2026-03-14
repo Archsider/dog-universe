@@ -57,7 +57,8 @@ export async function sendSms({ to, message }: SendSmsOptions): Promise<SmsResul
   if (!enabled || !gatewayUrl) {
     // Silently skip when not configured — log in dev
     if (process.env.NODE_ENV === 'development') {
-      console.log(`[SMS] (not configured) To: ${to} | ${message}`);
+      const maskedTo = to.length > 4 ? `${to.slice(0, 3)}****${to.slice(-2)}` : '****';
+      console.log(`[SMS] (not configured) To: ${maskedTo} | ${message.slice(0, 30)}...`);
     }
     return { ok: true };
   }

@@ -23,7 +23,8 @@ export async function GET(request: Request) {
     where.clientId = clientId;
   }
 
-  if (status) where.status = status;
+  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REJECTED'];
+  if (status && VALID_STATUSES.includes(status)) where.status = status;
 
   const bookings = await prisma.booking.findMany({
     where,

@@ -15,9 +15,12 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
   const skip = (page - 1) * limit;
 
+  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REJECTED'];
+  const VALID_SERVICE_TYPES = ['BOARDING', 'PET_TAXI'];
+
   const where: Record<string, unknown> = {};
-  if (status) where.status = status;
-  if (serviceType) where.serviceType = serviceType;
+  if (status && VALID_STATUSES.includes(status)) where.status = status;
+  if (serviceType && VALID_SERVICE_TYPES.includes(serviceType)) where.serviceType = serviceType;
 
   const [bookings, total] = await Promise.all([
     prisma.booking.findMany({

@@ -22,7 +22,8 @@ export async function GET(request: Request) {
     where.clientId = clientId;
   }
 
-  if (status) where.status = status;
+  const VALID_INVOICE_STATUSES = ['PENDING', 'PAID', 'CANCELLED'];
+  if (status && VALID_INVOICE_STATUSES.includes(status)) where.status = status;
 
   const invoices = await prisma.invoice.findMany({
     where,

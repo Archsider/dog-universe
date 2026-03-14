@@ -25,7 +25,8 @@ export async function GET(request: Request) {
     ];
   }
 
-  if (grade) {
+  const VALID_GRADES = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];
+  if (grade && VALID_GRADES.includes(grade)) {
     where.loyaltyGrade = { grade };
   }
 

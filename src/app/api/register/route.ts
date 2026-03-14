@@ -61,6 +61,15 @@ export async function POST(request: Request) {
       role: user.role,
     }, { status: 201 });
   } catch (error) {
+    // Handle Prisma unique constraint violation P2002 (race condition on email)
+    if (
+      error !== null &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code: string }).code === 'P2002'
+    ) {
+      return NextResponse.json({ error: 'EMAIL_TAKEN', message: 'Email already in use' }, { status: 409 });
+    }
     console.error('Register error:', error);
     return NextResponse.json({ error: 'INTERNAL_ERROR', message: 'An error occurred' }, { status: 500 });
   }

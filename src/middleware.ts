@@ -24,6 +24,18 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(5, '60 m'),
       prefix: 'rl:pwd-reset',
     }),
+    // Booking creation: 20 per hour per IP
+    bookings: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(20, '60 m'),
+      prefix: 'rl:bookings',
+    }),
+    // File uploads: 30 per hour per IP
+    uploads: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(30, '60 m'),
+      prefix: 'rl:uploads',
+    }),
   };
 }
 
@@ -31,12 +43,14 @@ const limiter = getRatelimiter();
 
 const RATE_LIMITED_ROUTES: Record<
   string,
-  'auth' | 'passwordReset'
+  'auth' | 'passwordReset' | 'bookings' | 'uploads'
 > = {
   '/api/auth/signin': 'auth',
   '/api/auth/callback/credentials': 'auth',
   '/api/register': 'auth',
   '/api/reset-password': 'passwordReset',
+  '/api/bookings': 'bookings',
+  '/api/uploads': 'uploads',
 };
 
 export async function middleware(request: NextRequest) {
@@ -78,5 +92,7 @@ export const config = {
     '/api/auth/callback/credentials',
     '/api/register',
     '/api/reset-password',
+    '/api/bookings',
+    '/api/uploads',
   ],
 };
