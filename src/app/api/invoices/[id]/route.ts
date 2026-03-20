@@ -46,6 +46,11 @@ export async function PATCH(request: Request, { params }: Params) {
   const invoice = await prisma.invoice.findUnique({ where: { id } });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  const VALID_INVOICE_STATUSES = ['PENDING', 'PAID', 'CANCELLED'];
+  if (body.status && !VALID_INVOICE_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+  }
+
   const updateData: Record<string, unknown> = {};
   if (body.status) updateData.status = body.status;
   if (body.status === 'PAID') {

@@ -9,7 +9,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const unreadOnly = searchParams.get('unreadOnly') === 'true';
-  const limit = parseInt(searchParams.get('limit') ?? '50');
+  const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') ?? '50')), 100);
 
   const where: Record<string, unknown> = { userId: session.user.id };
   if (unreadOnly) where.read = false;

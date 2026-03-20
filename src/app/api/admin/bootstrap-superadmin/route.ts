@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual, createHash } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
 // One-time endpoint to promote a user to SUPERADMIN.
@@ -24,7 +25,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'email and secret are required' }, { status: 400 });
   }
 
-  if (providedSecret !== secret) {
+  // Constant-time comparison to prevent timing attacks
+  const secretHash = createHash('sha256').update(secret).digest();
+  const providedHash = createHash('sha256').update(providedSecret).digest();
+  if (!timingSafeEqual(secretHash, providedHash)) {
     return NextResponse.json({ error: 'Invalid secret' }, { status: 403 });
   }
 

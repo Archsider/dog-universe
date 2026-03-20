@@ -5,10 +5,12 @@ import { prisma } from '@/lib/prisma';
 function escapeCsv(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
   const str = String(value);
-  if (str.includes(';') || str.includes('"') || str.includes('\n')) {
-    return `"${str.replace(/"/g, '""')}"`;
+  // Neutralise les formules CSV (Excel/LibreOffice formula injection)
+  const sanitized = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  if (sanitized.includes(';') || sanitized.includes('"') || sanitized.includes('\n')) {
+    return `"${sanitized.replace(/"/g, '""')}"`;
   }
-  return str;
+  return sanitized;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -33,8 +35,9 @@ export async function GET(request: Request) {
   const status = searchParams.get('status');
   const year = searchParams.get('year');
 
+  const VALID_STATUSES = ['PENDING', 'PAID', 'CANCELLED'];
   const where: Record<string, unknown> = {};
-  if (status) where.status = status;
+  if (status && VALID_STATUSES.includes(status)) where.status = status;
   if (year) {
     const y = parseInt(year);
     where.issuedAt = {

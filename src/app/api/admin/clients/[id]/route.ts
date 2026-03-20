@@ -69,8 +69,14 @@ export async function PATCH(request: Request, { params }: Params) {
   const body = await request.json();
 
   const updateData: Record<string, unknown> = {};
-  if (body.name !== undefined) updateData.name = body.name;
-  if (body.phone !== undefined) updateData.phone = body.phone;
+  if (body.name !== undefined) {
+    const name = String(body.name).trim().slice(0, 255);
+    if (!name) return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 });
+    updateData.name = name;
+  }
+  if (body.phone !== undefined) {
+    updateData.phone = body.phone ? String(body.phone).trim().slice(0, 20) : null;
+  }
 
   await prisma.user.update({ where: { id }, data: updateData });
 

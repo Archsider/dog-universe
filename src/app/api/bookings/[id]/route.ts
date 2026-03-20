@@ -50,7 +50,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Client can only cancel their own pending bookings
+  // Client path — strictly isolated: only status=CANCELLED allowed, no other fields
   if (session.user.role === 'CLIENT') {
     if (booking.clientId !== session.user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -61,12 +61,30 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!['PENDING', 'CONFIRMED'].includes(booking.status)) {
       return NextResponse.json({ error: 'Cannot cancel this booking' }, { status: 400 });
     }
+    // Clients can ONLY set status to CANCELLED — no other field modification allowed
+    const updated = await prisma.booking.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        cancellationReason: typeof body.cancellationReason === 'string'
+          ? body.cancellationReason.trim().slice(0, 500)
+          : null,
+      },
+      include: { client: true, bookingPets: { include: { pet: true } } },
+    });
+    await logAction({
+      userId: session.user.id,
+      action: LOG_ACTIONS.BOOKING_CANCELLED,
+      entityType: 'Booking',
+      entityId: id,
+    });
+    return NextResponse.json(updated);
   }
 
-  // Admin can update any field
+  // Admin path — full update capability
   const updateData: Record<string, unknown> = {};
 
-  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'CANCELLED', 'REJECTED', 'COMPLETED'];
+  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'CANCELLED', 'REJECTED', 'COMPLETED'];
   if (body.status && !VALID_STATUSES.includes(body.status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
