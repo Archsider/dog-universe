@@ -267,6 +267,27 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### 2026-03-20 — Session sécurité (hardening complet)
+
+**Corrections appliquées (10 fichiers) :**
+
+1. **Whitelist enums Prisma** : les paramètres `status`, `serviceType`, `grade` passés en query string sont désormais validés contre une liste blanche avant d'être transmis à Prisma. Empêche toute injection d'opérateurs Prisma via l'URL.
+   - Fichiers : `api/admin/bookings`, `api/admin/clients`, `api/bookings`, `api/invoices`
+
+2. **XSS emails corrigé** : fonction `escapeHtml()` ajoutée dans `src/lib/email.ts`. Tous les champs `data.*` passent par cette fonction avant d'être injectés dans le HTML des templates. Les URLs (`resetUrl`, `loginUrl`) sont exemptées de l'échappement.
+
+3. **Magic bytes MIME** : `src/lib/upload.ts` valide désormais le type réel du fichier via les octets magiques (signature binaire) — JPEG, PNG, WebP, GIF, PDF. Un fichier `.exe` renommé en `.jpg` sera rejeté. Le MIME détecté côté serveur est utilisé pour le stockage (remplace le `file.type` client-contrôlable).
+
+4. **Rate limiting étendu** : middleware `src/middleware.ts` couvre maintenant aussi :
+   - `POST /api/bookings` → 20 requêtes/h par IP
+   - `POST /api/uploads` → 30 requêtes/h par IP
+
+5. **CSP + remotePatterns** : `next.config.mjs` mis à jour — `img-src` restreint à `*.supabase.co` (plus de `https:` large). `remotePatterns` configuré pour `next/image` (chemin `/storage/v1/object/public/**`).
+
+6. **Logs SMS dépiistés** : numéro de téléphone masqué dans les logs dev (`+212****67`). Message tronqué à 30 caractères.
+
+7. **Race condition register** : `POST /api/register` attrape le code Prisma `P2002` (unique constraint violation) et retourne proprement `EMAIL_TAKEN` au lieu d'une erreur 500.
+
 ### 2026-03-10 — Session Board + Stepper
 
 **Corrections et fonctionnalités :**
