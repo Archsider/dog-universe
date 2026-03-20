@@ -16,6 +16,11 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
 
     if (user) {
+      // Invalider les anciens tokens non utilisés avant d'en créer un nouveau
+      await prisma.passwordResetToken.deleteMany({
+        where: { userId: user.id, used: false },
+      });
+
       const token = randomUUID();
       await prisma.passwordResetToken.create({
         data: {

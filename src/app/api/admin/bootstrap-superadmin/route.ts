@@ -7,6 +7,11 @@ import { prisma } from '@/lib/prisma';
 // Usage: POST /api/admin/bootstrap-superadmin
 //        { "email": "your@email.com", "secret": "YOUR_SUPERADMIN_SECRET" }
 export async function POST(req: NextRequest) {
+  // Endpoint de bootstrap uniquement — désactivé en production après usage initial
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   const secret = process.env.SUPERADMIN_SECRET;
   if (!secret) {
     return NextResponse.json({ error: 'SUPERADMIN_SECRET not configured' }, { status: 500 });
