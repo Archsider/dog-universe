@@ -77,16 +77,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { name, email, phone, password, language } = await request.json();
+  const body = await request.json();
+  const { password, language } = body;
+
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 255) : '';
+  const email = typeof body.email === 'string' ? body.email.toLowerCase().trim().slice(0, 255) : '';
+  const phone = typeof body.phone === 'string' ? body.phone.trim().slice(0, 20) : null;
 
   if (!name || !email || !password) {
     return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
   }
-  if (password.length < 8) {
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
     return NextResponse.json({ error: 'WEAK_PASSWORD' }, { status: 400 });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     return NextResponse.json({ error: 'EMAIL_TAKEN' }, { status: 409 });
   }
@@ -95,9 +100,9 @@ export async function POST(request: Request) {
 
   const user = await prisma.user.create({
     data: {
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
-      phone: phone?.trim() || null,
+      name,
+      email,
+      phone: phone || null,
       passwordHash,
       role: 'CLIENT',
       language: language ?? 'fr',

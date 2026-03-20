@@ -56,6 +56,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
     }
 
+    // Validate each item: amounts must be positive numbers
+    for (const item of items as { description: string; quantity: number; unitPrice: number; total: number }[]) {
+      if (!item.description || typeof item.description !== 'string') {
+        return NextResponse.json({ error: 'INVALID_ITEM_DESCRIPTION' }, { status: 400 });
+      }
+      if (typeof item.unitPrice !== 'number' || item.unitPrice < 0) {
+        return NextResponse.json({ error: 'INVALID_ITEM_PRICE' }, { status: 400 });
+      }
+      if (typeof item.quantity !== 'number' || item.quantity <= 0) {
+        return NextResponse.json({ error: 'INVALID_ITEM_QUANTITY' }, { status: 400 });
+      }
+      if (typeof item.total !== 'number' || item.total < 0) {
+        return NextResponse.json({ error: 'INVALID_ITEM_TOTAL' }, { status: 400 });
+      }
+    }
+
     const client = await prisma.user.findUnique({ where: { id: clientId } });
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
@@ -64,10 +80,14 @@ export async function POST(request: Request) {
     const year = new Date().getFullYear();
     const invoiceNumber = `DU-${year}-${String(count + 1).padStart(4, '0')}`;
 
-    const amount = items.reduce(
+    const amount = (items as { total: number }[]).reduce(
       (sum: number, item: { total: number }) => sum + item.total,
       0
     );
+
+    if (amount <= 0) {
+      return NextResponse.json({ error: 'INVALID_AMOUNT' }, { status: 400 });
+    }
 
     const invoice = await prisma.invoice.create({
       data: {

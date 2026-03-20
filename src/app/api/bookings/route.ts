@@ -74,7 +74,11 @@ export async function POST(request: Request) {
       taxiType,
     } = body;
 
-    if (!serviceType || !petIds?.length || !startDate) {
+    const VALID_SERVICE_TYPES = ['BOARDING', 'PET_TAXI'];
+    if (!serviceType || !VALID_SERVICE_TYPES.includes(serviceType)) {
+      return NextResponse.json({ error: 'INVALID_SERVICE_TYPE' }, { status: 400 });
+    }
+    if (!petIds?.length || !startDate) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
     }
 

@@ -33,17 +33,33 @@ export async function POST(request: Request) {
       behaviorWithDogs, behaviorWithCats, behaviorWithHumans, notes,
     } = body;
 
+    const VALID_SPECIES = ['DOG', 'CAT'];
+    const VALID_GENDERS = ['MALE', 'FEMALE'];
+
     if (!name || !species || !dateOfBirth) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
+    }
+    if (!VALID_SPECIES.includes(species)) {
+      return NextResponse.json({ error: 'INVALID_SPECIES' }, { status: 400 });
+    }
+    if (gender && !VALID_GENDERS.includes(gender)) {
+      return NextResponse.json({ error: 'INVALID_GENDER' }, { status: 400 });
+    }
+    const parsedDob = new Date(dateOfBirth);
+    if (isNaN(parsedDob.getTime()) || parsedDob > new Date()) {
+      return NextResponse.json({ error: 'INVALID_DATE_OF_BIRTH' }, { status: 400 });
+    }
+    if (weight !== undefined && weight !== null && (isNaN(Number(weight)) || Number(weight) <= 0)) {
+      return NextResponse.json({ error: 'INVALID_WEIGHT' }, { status: 400 });
     }
 
     const pet = await prisma.pet.create({
       data: {
         ownerId: session.user.id,
-        name: name.trim(),
+        name: String(name).trim().slice(0, 100),
         species,
-        breed: breed?.trim() || null,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        breed: breed ? String(breed).trim().slice(0, 100) : null,
+        dateOfBirth: parsedDob,
         gender: gender || null,
         photoUrl: photoUrl || null,
         isNeutered: isNeutered ?? null,

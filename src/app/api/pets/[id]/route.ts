@@ -63,12 +63,31 @@ export async function PATCH(_req: Request, { params }: Params) {
       behaviorWithDogs, behaviorWithCats, behaviorWithHumans, notes,
     } = body;
 
+    const VALID_SPECIES = ['DOG', 'CAT'];
+    const VALID_GENDERS = ['MALE', 'FEMALE'];
+
+    if (species !== undefined && !VALID_SPECIES.includes(species)) {
+      return NextResponse.json({ error: 'INVALID_SPECIES' }, { status: 400 });
+    }
+    if (gender && !VALID_GENDERS.includes(gender)) {
+      return NextResponse.json({ error: 'INVALID_GENDER' }, { status: 400 });
+    }
+    if (dateOfBirth !== undefined) {
+      const parsedDob = new Date(dateOfBirth);
+      if (isNaN(parsedDob.getTime()) || parsedDob > new Date()) {
+        return NextResponse.json({ error: 'INVALID_DATE_OF_BIRTH' }, { status: 400 });
+      }
+    }
+    if (weight !== undefined && weight !== null && (isNaN(Number(weight)) || Number(weight) <= 0)) {
+      return NextResponse.json({ error: 'INVALID_WEIGHT' }, { status: 400 });
+    }
+
     const updated = await prisma.pet.update({
       where: { id },
       data: {
-        name: name?.trim(),
+        name: name ? String(name).trim().slice(0, 100) : undefined,
         species,
-        breed: breed?.trim() || null,
+        breed: breed ? String(breed).trim().slice(0, 100) : null,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         gender: gender || null,
         photoUrl: photoUrl || null,
