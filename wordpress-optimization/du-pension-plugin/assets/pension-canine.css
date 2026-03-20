@@ -1,0 +1,691 @@
+/*
+ * Dog Universe – Pension Canine v2.0
+ * pension-canine.css — extracted from inline <style>, browser-cacheable
+ *
+ * Changes from v1:
+ *  - Extracted from inline block (enables HTTP caching)
+ *  - Added :focus-visible for keyboard accessibility (WCAG 2.1 AA)
+ *  - Added .du-toast notification styles (replaces alert())
+ *  - Added .du-dog-card (from inline style attr)
+ *  - Removed scroll-behavior conflict (handled in JS)
+ *  - Removed !important overuse (reduced to 3 justified cases)
+ */
+
+/* ─── Design tokens ─────────────────────────────────────── */
+:root {
+  --ink:    #161513;
+  --text:   #2b2a28;
+  --muted:  #6f6a63;
+  --paper:  #fff;
+  --line:   #ece7db;
+  --gold:   #c6a961;
+  --accent: #1f1e1b;
+  --radius: 18px;
+  --shadow: 0 10px 24px rgba(0,0,0,.06);
+}
+
+/* ─── Scoped reset (Divi-safe) ───────────────────────────── */
+#du-pension-canine,
+#du-pension-canine * {
+  box-sizing: border-box;
+}
+
+#du-pension-canine {
+  background:
+    radial-gradient(1200px 800px at 20% -10%, #fff, transparent 70%),
+    linear-gradient(#fff, #fbf8f1 40%, #f8f5ef);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+#du-pension-canine img {
+  max-width: 100%;
+  height: auto;
+}
+
+#du-pension-canine pre,
+#du-pension-canine code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* ─── Layout ─────────────────────────────────────────────── */
+.du-container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: clamp(20px, 5vw, 40px) clamp(16px, 4vw, 24px);
+}
+
+h1, h2, h3 {
+  font-family: "Playfair Display", Georgia, serif;
+  color: var(--ink);
+  line-height: 1.2;
+  margin: 0;
+}
+
+p {
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* ─── Pre-hero ───────────────────────────────────────────── */
+.du-prehero {
+  padding: 12px 16px;
+  text-align: center;
+}
+
+.du-prehero p {
+  margin: 0 auto;
+  max-width: 80ch;
+  font-weight: 700;
+  color: #2f2e2b;
+}
+
+/* ─── Hero ───────────────────────────────────────────────── */
+.du-hero {
+  text-align: center;
+}
+
+.du-hero h1 {
+  font-size: clamp(26px, 5.6vw, 40px);
+}
+
+.du-title-underline {
+  display: block;
+  width: 110px;
+  height: 3px;
+  margin: 10px auto 0;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  border-radius: 3px;
+}
+
+.du-hero p {
+  font-size: clamp(15px, 4.2vw, 18px);
+  color: #3a3936;
+  max-width: 70ch;
+  margin: 12px auto 0;
+}
+
+.du-hero-figure {
+  max-width: 880px;
+  margin: 14px auto 0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+  position: relative;
+}
+
+.du-hero-figure img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  object-position: center 40%;
+}
+
+.du-hero-figure figcaption {
+  padding: 10px 14px;
+  background: #fff;
+  border-top: 1px solid var(--line);
+  font-size: .9rem;
+  color: #3a3936;
+  text-align: center;
+}
+
+/* ─── Buttons ────────────────────────────────────────────── */
+.du-cta {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.du-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  padding: 12px 18px;
+  border-radius: 999px;
+  font: 800 14px/1 Inter, system-ui;
+  border: 1.5px solid var(--gold);
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  box-shadow: 0 10px 26px rgba(31,30,27,.16);
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+  cursor: pointer;
+}
+
+.du-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 36px rgba(31,30,27,.22);
+}
+
+/* Keyboard focus — WCAG 2.1 AA */
+.du-btn:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.du-btn.du-btn--ghost {
+  background: #fff;
+  color: #111;
+}
+
+/* ─── Trust bar ──────────────────────────────────────────── */
+.du-trust {
+  max-width: 980px;
+  margin: 18px auto 0;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+}
+
+.du-trust strong { color: #111; }
+
+.du-trust .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.du-trust .stars { letter-spacing: 1px; }
+
+/* ─── Grid / Cards ───────────────────────────────────────── */
+.du-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.du-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+@media (min-width: 860px) {
+  .du-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ─── CTA band ───────────────────────────────────────────── */
+.du-cta-band {
+  background: linear-gradient(90deg, rgba(198,169,97,.10), rgba(198,169,97,.05));
+  border-block: 1px solid var(--line);
+}
+
+.du-cta-band .wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  text-align: center;
+}
+
+@media (min-width: 840px) {
+  .du-cta-band .wrap {
+    flex-direction: row;
+    justify-content: space-between;
+    text-align: left;
+  }
+}
+
+/* ─── Gallery ────────────────────────────────────────────── */
+.du-gallery-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+  .du-gallery-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+.du-gallery-item {
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  background: #fff;
+}
+
+.du-gallery-item picture {
+  display: block;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.du-gallery-item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.du-gallery-item figcaption {
+  padding: 10px 6px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ─── Pricing ────────────────────────────────────────────── */
+.du-pricing {
+  background: linear-gradient(180deg, transparent, rgba(198,169,97,.06));
+  border-top: 1px solid var(--line);
+}
+
+.du-rate {
+  display: grid;
+  gap: 12px;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.du-rate-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.du-rate-card ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.du-rate-card li { margin: 6px 0; }
+
+/* ─── Simulator ──────────────────────────────────────────── */
+.du-simpro {
+  max-width: 980px;
+  margin: 24px auto 0;
+  padding: 0;
+  border-radius: 26px;
+  overflow: hidden;
+  background:
+    radial-gradient(800px 480px at 20% -10%, rgba(198,169,97,.10), transparent 60%),
+    linear-gradient(180deg, #fff, #fbf7ee 40%, #f7f3eb);
+  border: 1px solid #efe6cc;
+  box-shadow: 0 20px 50px rgba(0,0,0,.08);
+}
+
+.sim2-head {
+  padding: 20px 22px 0;
+  text-align: center;
+}
+
+.sim2-head h3 {
+  font-size: clamp(18px, 4.6vw, 24px);
+  margin: 0 0 4px;
+}
+
+.sim2-wrap {
+  display: grid;
+  gap: 0;
+  grid-template-columns: 1.1fr .9fr;
+}
+
+@media (max-width: 860px) {
+  .sim2-wrap { grid-template-columns: 1fr; }
+}
+
+.sim2-left  { padding: 18px 22px 22px; }
+
+.sim2-right {
+  background: #fff;
+  border-left: 1px solid var(--line);
+  padding: 20px;
+}
+
+@media (max-width: 860px) {
+  .sim2-right {
+    border-left: none;
+    border-top: 1px solid var(--line);
+  }
+}
+
+.sim2-field { display: grid; gap: 10px; margin: 10px 0 14px; }
+.sim2-label { font-weight: 800; color: #3a372f; }
+
+.sim2-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sim2-input {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #fff;
+  border: 1.5px solid #eadfbe;
+  border-radius: 16px;
+  height: 54px;
+  font: 900 20px/1 Inter;
+}
+
+.sim2-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 1.5px solid #eadfbe;
+  background: #fff;
+  font: 900 22px/1 Inter;
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.sim2-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(0,0,0,.08);
+}
+
+.sim2-btn:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.sim2-range {
+  width: 100%;
+  appearance: none;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #d1b874, #e9d9a8);
+  outline: none;
+  border: 1px solid #eadfbe;
+}
+
+.sim2-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.sim2-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1.5px solid #eadfbe;
+  background: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+
+.sim2-pill.active {
+  border-color: #c6a961;
+  background: #fff9eb;
+}
+
+.sim2-pill:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.sim2-recap { display: grid; gap: 8px; }
+
+.sim2-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px dashed #eee;
+}
+
+.sim2-row:last-child { border-bottom: none; }
+
+.sim2-flag {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #fff9eb;
+  border: 1px solid #f1e3b6;
+  border-radius: 12px;
+}
+
+.sim2-total {
+  margin-top: 14px;
+  background: #101010;
+  color: #fff;
+  border-radius: 18px;
+  padding: 16px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+
+.sim2-total strong {
+  font-size: clamp(18px, 4.6vw, 26px);
+  letter-spacing: .2px;
+}
+
+.sim2-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.sim2-badge {
+  font: 800 11px/1 Inter;
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid #2c2c2c;
+  background: #181818;
+}
+
+.sim2-cta {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 16px 0 0;
+  flex-wrap: wrap;
+}
+
+.sim2-sub {
+  color: #6f6a63;
+  font-size: 12px;
+  margin-top: 8px;
+  text-align: center;
+}
+
+.sim2-dates { display: grid; gap: 10px; }
+
+@media (min-width: 860px) {
+  .sim2-dates { grid-template-columns: 1fr 1fr; }
+}
+
+.sim2-date input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid #eadfbe;
+  border-radius: 12px;
+  background: #fff;
+  font: 700 14px/1.2 Inter;
+  max-width: 100%;
+}
+
+.sim2-date input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(198,169,97,.18);
+}
+
+/* ─── Dog card (from inline style, now a class) ──────────── */
+.du-dog-card {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: none;
+  margin-top: 10px;
+}
+
+.du-dog-card h3 { margin: 0 0 10px; }
+
+/* ─── Fiche form ─────────────────────────────────────────── */
+#du-fiche-form { display: grid; gap: 12px; }
+#du-fiche-form h3 { margin: 12px 0 4px; }
+
+#du-fiche-form input,
+#du-fiche-form select,
+#du-fiche-form textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  font: 600 14px/1.3 Inter;
+  background: #fff;
+  max-width: 100%;
+}
+
+#du-fiche-form input:focus,
+#du-fiche-form select:focus,
+#du-fiche-form textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(198,169,97,.18);
+}
+
+#fiche-preview { border: 1.5px dashed #e8d7a4; }
+
+/* ─── Screen-reader only ─────────────────────────────────── */
+.du-sr {
+  /* justifiable !important — must override any theme positioning */
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ─── FAQ accordion ──────────────────────────────────────── */
+.du-acc-item {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.du-acc-btn {
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  border: none;
+  padding: 14px;
+  font: 700 15px Inter, system-ui;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.du-acc-btn:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: -3px;
+}
+
+.du-acc-btn svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  transition: transform .18s ease;
+}
+
+.du-acc-item .du-acc-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .28s ease, padding .28s ease;
+  display: grid;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.du-acc-item.active .du-acc-content {
+  max-height: 1000px;
+  padding: 10px 14px 14px;
+}
+
+.du-acc-item.active .du-acc-btn svg {
+  transform: rotate(180deg);
+}
+
+/* ─── Toast notification (replaces alert()) ──────────────── */
+.du-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  opacity: 0;
+  visibility: hidden;
+  background: #111;
+  color: #fff;
+  padding: 14px 22px;
+  border-radius: 12px;
+  font: 600 14px/1.4 Inter, system-ui;
+  max-width: min(480px, 90vw);
+  text-align: center;
+  z-index: 9999;
+  transition: opacity .22s ease, transform .22s ease, visibility .22s;
+  pointer-events: none;
+}
+
+.du-toast--visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.du-toast--error   { background: #c0392b; }
+.du-toast--success { background: #1c6e3d; }
+
+/* ─── Contract logo fix ──────────────────────────────────── */
+#du-contract-block img {
+  /* justifiable !important — overrides Divi's img rule in the same specificity level */
+  max-width: 160px !important;
+  width: auto !important;
+  height: auto !important;
+  display: block !important;
+  margin: 0 auto 14px !important;
+}
+
+/* ─── Content visibility (paint-skip on off-screen sections) */
+.du-gallery,
+.du-pricing,
+.du-faq,
+#contrat,
+#simulateur,
+#pourquoi,
+#fiche-chien {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 900px;
+}
+
+/* ─── Mobile tweaks ──────────────────────────────────────── */
+@media (max-width: 480px) {
+  .du-card,
+  .du-gallery-item,
+  .du-hero-figure {
+    box-shadow: 0 6px 16px rgba(0,0,0,.08);
+  }
+}
