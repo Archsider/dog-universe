@@ -48,6 +48,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id!;
         token.role = user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
         token.language = (user as { language?: string }).language ?? 'fr';
+      } else if (token.id) {
+        // Re-fetch role from DB on every token renewal — allows immediate revocation
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { role: true, language: true },
+        });
+        if (!dbUser) return null; // Account deleted → invalidate session
+        token.role = dbUser.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
+        token.language = dbUser.language ?? 'fr';
       }
       return token;
     },
