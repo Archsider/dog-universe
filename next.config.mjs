@@ -1,5 +1,4 @@
 import createNextIntlPlugin from 'next-intl/plugin';
-import { withSentryConfig } from '@sentry/nextjs';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
@@ -72,22 +71,4 @@ const nextConfig = {
   },
 };
 
-export default withSentryConfig(withNextIntl(nextConfig), {
-  // Org and project set via SENTRY_ORG / SENTRY_PROJECT env vars
-  silent: !process.env.CI,
-
-  // Route Sentry telemetry through /monitoring to avoid ad blockers
-  tunnelRoute: '/monitoring',
-
-  // Hide source maps from the public bundle
-  hideSourceMaps: true,
-
-  // Remove Sentry logger in production builds
-  disableLogger: true,
-
-  // Wider client file upload for better stack traces
-  widenClientFileUpload: true,
-
-  // Automatically detect Vercel cron monitors
-  automaticVercelMonitors: true,
-});
+export default withNextIntl(nextConfig);
