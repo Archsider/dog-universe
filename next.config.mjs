@@ -14,21 +14,10 @@ const securityHeaders = [
     key: 'Strict-Transport-Security',
     value: 'max-age=63072000; includeSubDomains; preload',
   },
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      // unsafe-eval needed in dev (HMR/hot reload), removed in production
-      isDev
-        ? "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
-        : "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' blob: data: https://*.supabase.co https://supabase.co",
-      "font-src 'self'",
-      "connect-src 'self' https:",
-      "frame-ancestors 'none'",
-    ].join('; '),
-  },
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+  { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
+  { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
+  // CSP is set dynamically in middleware (nonce-based) to remove 'unsafe-inline'
 ];
 
 /** @type {import('next').NextConfig} */

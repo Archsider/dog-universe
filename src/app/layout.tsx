@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Playfair_Display, Inter } from 'next/font/google';
+import { headers } from 'next/headers';
 import './globals.css';
 
 const playfair = Playfair_Display({
@@ -21,13 +22,15 @@ export const metadata: Metadata = {
   description: 'Pension haut de gamme et transport pour animaux à Marrakech',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
-    <html suppressHydrationWarning className={`${playfair.variable} ${inter.variable}`}>
+    <html suppressHydrationWarning nonce={nonce} className={`${playfair.variable} ${inter.variable}`}>
       <body>{children}</body>
     </html>
   );

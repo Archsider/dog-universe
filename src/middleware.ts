@@ -54,45 +54,67 @@ const RATE_LIMITED_ROUTES: Record<
 };
 
 export async function middleware(request: NextRequest) {
-  if (!limiter) return NextResponse.next();
-
   const path = request.nextUrl.pathname;
-  const limitKey = RATE_LIMITED_ROUTES[path];
 
-  if (!limitKey || request.method !== 'POST') return NextResponse.next();
+  // Rate limiting — only for specific POST routes
+  if (limiter) {
+    const limitKey = RATE_LIMITED_ROUTES[path];
+    if (limitKey && request.method === 'POST') {
+      const ip =
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+        request.headers.get('x-real-ip') ||
+        '127.0.0.1';
 
-  const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    '127.0.0.1';
+      const { success, limit, remaining, reset } = await limiter[limitKey].limit(ip);
 
-  const { success, limit, remaining, reset } = await limiter[limitKey].limit(ip);
-
-  if (!success) {
-    return NextResponse.json(
-      { error: 'Too many requests. Please try again later.' },
-      {
-        status: 429,
-        headers: {
-          'X-RateLimit-Limit': String(limit),
-          'X-RateLimit-Remaining': String(remaining),
-          'X-RateLimit-Reset': String(reset),
-          'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)),
-        },
+      if (!success) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please try again later.' },
+          {
+            status: 429,
+            headers: {
+              'X-RateLimit-Limit': String(limit),
+              'X-RateLimit-Remaining': String(remaining),
+              'X-RateLimit-Reset': String(reset),
+              'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)),
+            },
+          }
+        );
       }
-    );
+    }
   }
 
-  return NextResponse.next();
+  // Generate a per-request nonce for Content-Security-Policy
+  // btoa(randomUUID) produces a URL-safe base64 string without Node.js Buffer
+  const nonce = btoa(crypto.randomUUID());
+  const isDev = process.env.NODE_ENV === 'development';
+
+  const csp = [
+    "default-src 'self'",
+    // unsafe-eval only in dev (HMR); strict-dynamic in prod makes unsafe-inline inert
+    isDev
+      ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval'`
+      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' blob: data: https://*.supabase.co https://supabase.co",
+    "font-src 'self'",
+    "connect-src 'self' https:",
+    "frame-ancestors 'none'",
+  ].join('; ');
+
+  // Forward nonce to server components via request header
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set('Content-Security-Policy', csp);
+
+  return response;
 }
 
 export const config = {
   matcher: [
-    '/api/auth/signin',
-    '/api/auth/callback/credentials',
-    '/api/register',
-    '/api/reset-password',
-    '/api/bookings',
-    '/api/uploads',
+    // Run on all routes except Next.js internals and static assets
+    '/((?!_next/static|_next/image|favicon\\.ico).*)',
   ],
 };
