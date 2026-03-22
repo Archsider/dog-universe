@@ -31,7 +31,7 @@ export default function LandingPage({ locale }: LandingPageProps) {
             </Link>
             <Link
               href={`/${locale}/auth/register`}
-              className="bg-gold-500 hover:bg-gold-600 text-white text-sm font-medium px-3 py-2 rounded-md transition-colors"
+              className="bg-gold-500 hover:bg-gold-600 text-stone-900 text-sm font-medium px-3 py-2 rounded-md transition-colors"
             >
               {t('hero.cta')}
             </Link>
@@ -43,7 +43,7 @@ export default function LandingPage({ locale }: LandingPageProps) {
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-4 py-10 md:py-20">
         <div className="text-center max-w-2xl mx-auto">
-          <p className="text-gold-600 text-xs font-semibold tracking-widest uppercase mb-3">
+          <p className="text-gold-800 text-xs font-semibold tracking-widest uppercase mb-3">
             {t('hero.tagline')}
           </p>
           <h1 className="text-3xl md:text-5xl font-serif font-bold text-charcoal mb-4 leading-tight">
@@ -55,7 +55,7 @@ export default function LandingPage({ locale }: LandingPageProps) {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href={`/${locale}/auth/register`}
-              className="bg-gold-500 hover:bg-gold-600 text-white font-semibold px-6 py-3.5 rounded-lg transition-colors shadow-gold text-base"
+              className="bg-gold-500 hover:bg-gold-600 text-stone-900 font-semibold px-6 py-3.5 rounded-lg transition-colors shadow-gold text-base"
             >
               {t('hero.cta')}
             </Link>
