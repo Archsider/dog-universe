@@ -7,11 +7,11 @@ import LoyaltyClaimButton from './LoyaltyClaimButton';
 
 type Params = { locale: string };
 
-const GRADE_LABELS: Record<Grade, { fr: string; en: string; color: string; bg: string; border: string }> = {
-  BRONZE:   { fr: 'Bronze',   en: 'Bronze',   color: 'text-amber-700',  bg: 'bg-amber-50',   border: 'border-amber-200' },
-  SILVER:   { fr: 'Argent',   en: 'Silver',   color: 'text-slate-600',  bg: 'bg-slate-50',   border: 'border-slate-200' },
-  GOLD:     { fr: 'Or',       en: 'Gold',     color: 'text-yellow-700', bg: 'bg-yellow-50',  border: 'border-yellow-200' },
-  PLATINUM: { fr: 'Platine',  en: 'Platinum', color: 'text-purple-700', bg: 'bg-purple-50',  border: 'border-purple-200' },
+const GRADE_LABELS: Record<Grade, { fr: string; en: string; color: string; bg: string; border: string; barColor: string }> = {
+  BRONZE:   { fr: 'Bronze',   en: 'Bronze',   color: 'text-amber-700',  bg: 'bg-amber-50',   border: 'border-amber-200',  barColor: 'bg-amber-700' },
+  SILVER:   { fr: 'Argent',   en: 'Silver',   color: 'text-slate-600',  bg: 'bg-slate-50',   border: 'border-slate-200',  barColor: 'bg-slate-600' },
+  GOLD:     { fr: 'Or',       en: 'Gold',     color: 'text-yellow-700', bg: 'bg-yellow-50',  border: 'border-yellow-200', barColor: 'bg-yellow-700' },
+  PLATINUM: { fr: 'Platine',  en: 'Platinum', color: 'text-purple-700', bg: 'bg-purple-50',  border: 'border-purple-200', barColor: 'bg-purple-700' },
 };
 
 export default async function LoyaltyPage({ params }: { params: Promise<Params> }) {
@@ -125,7 +125,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
           </div>
           <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${gradeInfo.color.replace('text-', 'bg-')}`}
+              className={`h-full rounded-full transition-all ${gradeInfo.barColor}`}
               style={{ width: `${nextGrade.progressPercent}%` }}
             />
           </div>

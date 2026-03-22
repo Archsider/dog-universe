@@ -47,11 +47,11 @@ export async function GET(request: Request) {
     try {
       const locale = booking.client.language ?? 'fr';
       const petNames = booking.bookingPets.map(bp => bp.pet.name).join(', ');
-      const startDate = booking.startDate.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-      });
+      const dateFormatOpts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+      const startDateFr = booking.startDate.toLocaleDateString('fr-FR', dateFormatOpts);
+      const startDateEn = booking.startDate.toLocaleDateString('en-US', dateFormatOpts);
+      // For email, use the client's preferred locale
+      const startDate = locale === 'fr' ? startDateFr : startDateEn;
 
       const { subject, html } = getEmailTemplate(
         'booking_reminder',
@@ -73,8 +73,8 @@ export async function GET(request: Request) {
         type: 'STAY_REMINDER',
         titleFr: 'Rappel de séjour',
         titleEn: 'Stay reminder',
-        messageFr: `Le séjour de ${petNames} commence dans 2 jours (${startDate}).`,
-        messageEn: `${petNames}'s stay starts in 2 days (${startDate}).`,
+        messageFr: `Le séjour de ${petNames} commence dans 2 jours (${startDateFr}).`,
+        messageEn: `${petNames}'s stay starts in 2 days (${startDateEn}).`,
         metadata: { bookingId: booking.id },
       });
 

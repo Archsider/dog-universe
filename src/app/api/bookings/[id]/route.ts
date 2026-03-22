@@ -172,7 +172,7 @@ export async function PATCH(request: Request, { params }: Params) {
     ).catch(() => {});
   }
 
-  if (body.status === 'CANCELLED' && session.user.role === 'ADMIN') {
+  if (body.status === 'CANCELLED' && (session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN')) {
     await createBookingRefusalNotification(updated.clientId, id, body.reason);
     const { subject, html } = getEmailTemplate('booking_refused', {
       clientName: updated.client.name,

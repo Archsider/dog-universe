@@ -34,7 +34,7 @@ export default async function AdminSettingsPage({ params: { locale } }: PageProp
   return (
     <div className="space-y-8">
       <PricingForm initialValues={settings} />
-      <DangerZone locale={locale} />
+      {session.user.role === 'SUPERADMIN' && <DangerZone locale={locale} />}
     </div>
   );
 }
