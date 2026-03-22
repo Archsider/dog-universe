@@ -1,8 +1,8 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import { GRADE_BENEFITS, Grade } from '@/lib/loyalty';
-import { CheckCircle2, XCircle, Clock, Star, Gift, Zap } from 'lucide-react';
+import { GRADE_BENEFITS, Grade, getNextGradeInfo } from '@/lib/loyalty';
+import { CheckCircle2, XCircle, Clock, Star, Gift, Zap, TrendingUp } from 'lucide-react';
 import LoyaltyClaimButton from './LoyaltyClaimButton';
 
 type Params = { locale: string };
@@ -19,17 +19,21 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
   const session = await auth();
   if (!session?.user) redirect(`/${locale}/auth/login`);
 
-  const [loyaltyGrade, allClaims] = await Promise.all([
+  const [loyaltyGrade, allClaims, totalStays] = await Promise.all([
     prisma.loyaltyGrade.findUnique({ where: { clientId: session.user.id } }),
     prisma.loyaltyBenefitClaim.findMany({
       where: { clientId: session.user.id },
       orderBy: { claimedAt: 'desc' },
+    }),
+    prisma.booking.count({
+      where: { clientId: session.user.id, status: 'COMPLETED', serviceType: 'BOARDING' },
     }),
   ]);
 
   const grade = (loyaltyGrade?.grade ?? 'BRONZE') as Grade;
   const benefits = GRADE_BENEFITS[grade];
   const gradeInfo = GRADE_LABELS[grade];
+  const nextGrade = getNextGradeInfo(totalStays, grade);
 
   const isFr = locale === 'fr';
 
@@ -46,6 +50,9 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
       claimable: 'Avantages à activer',
       claimableDesc: 'Cliquez sur "Activer" pour soumettre une demande — notre équipe la traitera sous 48h.',
       noBenefits: 'Aucun avantage disponible pour le grade Bronze. Continuez vos séjours pour progresser !',
+      nextGradeLabel: 'Progression vers',
+      staysToNext: (n: number) => `encore ${n} séjour${n > 1 ? 's' : ''} pour atteindre`,
+      maxGrade: 'Vous avez atteint le grade maximum.',
       history: 'Historique des demandes',
       noHistory: 'Aucune demande effectuée.',
       statusLabels: { PENDING: 'En attente', APPROVED: 'Accordé', REJECTED: 'Refusé' },
@@ -61,6 +68,9 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
       claimable: 'Benefits to activate',
       claimableDesc: 'Click "Activate" to submit a request — our team will process it within 48 hours.',
       noBenefits: 'No benefits available for the Bronze grade. Keep booking to progress!',
+      nextGradeLabel: 'Progress toward',
+      staysToNext: (n: number) => `${n} more stay${n > 1 ? 's' : ''} to reach`,
+      maxGrade: 'You have reached the maximum grade.',
       history: 'Claim history',
       noHistory: 'No requests submitted yet.',
       statusLabels: { PENDING: 'Pending', APPROVED: 'Granted', REJECTED: 'Rejected' },
@@ -100,6 +110,35 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
           <p className={`text-xl font-serif font-bold ${gradeInfo.color}`}>{isFr ? gradeInfo.fr : gradeInfo.en}</p>
         </div>
       </div>
+
+      {/* Progress bar toward next grade */}
+      {nextGrade.nextGrade ? (
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="h-4 w-4 text-gold-500" />
+            <span className="text-sm font-medium text-charcoal">
+              {l.staysToNext(nextGrade.staysToNext)}{' '}
+              <span className={GRADE_LABELS[nextGrade.nextGrade].color + ' font-semibold'}>
+                {isFr ? GRADE_LABELS[nextGrade.nextGrade].fr : GRADE_LABELS[nextGrade.nextGrade].en}
+              </span>
+            </span>
+          </div>
+          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${gradeInfo.color.replace('text-', 'bg-')}`}
+              style={{ width: `${nextGrade.progressPercent}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-charcoal/40 mt-1.5">
+            <span>{nextGrade.currentStays} séjour{nextGrade.currentStays > 1 ? 's' : ''}</span>
+            <span>{nextGrade.currentStays + nextGrade.staysToNext}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 text-center">
+          <p className="text-sm text-charcoal/60">{l.maxGrade}</p>
+        </div>
+      )}
 
       {benefits.length === 0 ? (
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-8 text-center">

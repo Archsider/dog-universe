@@ -70,8 +70,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   pages: {
-    signIn: '/fr/auth/login',
-    error: '/fr/auth/login',
+    signIn: '/auth/login',
+    error: '/auth/login',
   },
   trustHost: true,
 });

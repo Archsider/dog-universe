@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { createNotification } from '@/lib/notifications';
 
 /**
  * POST /api/cron/reminders
@@ -65,6 +66,18 @@ export async function GET(request: Request) {
       );
 
       await sendEmail({ to: booking.client.email, subject, html });
+
+      // Also create an in-app notification for the reminder
+      await createNotification({
+        userId: booking.clientId,
+        type: 'STAY_REMINDER',
+        titleFr: 'Rappel de séjour',
+        titleEn: 'Stay reminder',
+        messageFr: `Le séjour de ${petNames} commence dans 2 jours (${startDate}).`,
+        messageEn: `${petNames}'s stay starts in 2 days (${startDate}).`,
+        metadata: { bookingId: booking.id },
+      });
+
       sent++;
     } catch (err) {
       errors.push(`${booking.id}: ${String(err)}`);

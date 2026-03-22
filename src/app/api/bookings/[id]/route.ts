@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { createBookingValidationNotification, createBookingRefusalNotification } from '@/lib/notifications';
+import { createBookingValidationNotification, createBookingRefusalNotification, createBookingCompletedNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { formatDateShort } from '@/lib/utils';
 
@@ -162,6 +162,14 @@ export async function PATCH(request: Request, { params }: Params) {
       entityType: 'Booking',
       entityId: id,
     });
+
+    // Notify client (non-blocking)
+    createBookingCompletedNotification(
+      updated.clientId,
+      id,
+      petNames,
+      updated.serviceType as 'BOARDING' | 'PET_TAXI',
+    ).catch(() => {});
   }
 
   if (body.status === 'CANCELLED' && session.user.role === 'ADMIN') {
