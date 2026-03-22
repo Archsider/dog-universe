@@ -81,7 +81,11 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json(updated);
   }
 
-  // Admin path — full update capability
+  // Admin path — explicit role check (defensive guard)
+  if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const updateData: Record<string, unknown> = {};
 
   const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'CANCELLED', 'REJECTED', 'COMPLETED'];
@@ -95,6 +99,13 @@ export async function PATCH(request: Request, { params }: Params) {
   if (body.startDate) updateData.startDate = new Date(body.startDate);
   if (body.endDate) updateData.endDate = new Date(body.endDate);
   if (body.arrivalTime !== undefined) updateData.arrivalTime = body.arrivalTime;
+
+  // Validate date ordering
+  const resolvedStart = (updateData.startDate as Date | undefined) ?? booking.startDate;
+  const resolvedEnd = (updateData.endDate as Date | undefined) ?? booking.endDate;
+  if (resolvedStart && resolvedEnd && resolvedEnd <= resolvedStart) {
+    return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 });
+  }
 
   const updated = await prisma.booking.update({
     where: { id },

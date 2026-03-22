@@ -13,12 +13,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const periodMonths = parseInt(searchParams.get('months') ?? '1');
 
-  // ── 2026 yearly chart (single query, grooming breakdown) ──────────────────
-  const start2026 = new Date('2026-01-01T00:00:00.000Z');
-  const end2026 = new Date('2026-12-31T23:59:59.999Z');
+  // ── Current year chart (dynamic — never hardcoded) ────────────────────────
+  const currentYear = now.getFullYear();
+  const startCurrentYear = new Date(`${currentYear}-01-01T00:00:00.000Z`);
+  const endCurrentYear = new Date(`${currentYear}-12-31T23:59:59.999Z`);
 
   const invoices2026 = await prisma.invoice.findMany({
-    where: { status: 'PAID', paidAt: { gte: start2026, lte: end2026 } },
+    where: { status: 'PAID', paidAt: { gte: startCurrentYear, lte: endCurrentYear } },
     select: {
       amount: true,
       paidAt: true,
@@ -47,9 +48,10 @@ export async function GET(request: Request) {
   }
 
   const frMonths = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  const yearSuffix = String(currentYear).slice(2);
   const yearlyData = Array.from({ length: 12 }, (_, i) => ({
-    month: `${frMonths[i]} 26`,
-    monthDate: new Date(2026, i, 1).toISOString(),
+    month: `${frMonths[i]} ${yearSuffix}`,
+    monthDate: new Date(currentYear, i, 1).toISOString(),
     boarding: monthly[i].boarding,
     grooming: monthly[i].grooming,
     taxi: monthly[i].taxi,

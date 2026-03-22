@@ -75,10 +75,18 @@ export async function POST(request: Request) {
     const client = await prisma.user.findUnique({ where: { id: clientId } });
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
-    // Generate invoice number
-    const count = await prisma.invoice.count();
+    // Generate invoice number — retry on collision (race condition guard)
     const year = new Date().getFullYear();
-    const invoiceNumber = `DU-${year}-${String(count + 1).padStart(4, '0')}`;
+    let invoiceNumber = '';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const count = await prisma.invoice.count();
+      const candidate = `DU-${year}-${String(count + 1 + attempt).padStart(4, '0')}`;
+      const exists = await prisma.invoice.findUnique({ where: { invoiceNumber: candidate } });
+      if (!exists) { invoiceNumber = candidate; break; }
+    }
+    if (!invoiceNumber) {
+      return NextResponse.json({ error: 'Could not generate invoice number' }, { status: 500 });
+    }
 
     const amount = (items as { total: number }[]).reduce(
       (sum: number, item: { total: number }) => sum + item.total,

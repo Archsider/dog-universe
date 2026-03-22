@@ -107,6 +107,30 @@ export async function POST(request: Request) {
       }
     }
 
+    // Validate boarding taxi addon dates/times (same rules as standalone Pet Taxi)
+    if (serviceType === 'BOARDING') {
+      const addonChecks = [
+        { enabled: taxiGoEnabled, date: taxiGoDate, time: taxiGoTime },
+        { enabled: taxiReturnEnabled, date: taxiReturnDate, time: taxiReturnTime },
+      ];
+      for (const addon of addonChecks) {
+        if (!addon.enabled) continue;
+        if (addon.date) {
+          const d = new Date(addon.date + 'T12:00:00');
+          if (d.getDay() === 0) {
+            return NextResponse.json({ error: 'SUNDAY_NOT_ALLOWED' }, { status: 400 });
+          }
+        }
+        if (addon.time && typeof addon.time === 'string') {
+          const [h, m] = addon.time.split(':').map(Number);
+          const total = (h ?? 0) * 60 + (m ?? 0);
+          if (total < 10 * 60 || total > 17 * 60) {
+            return NextResponse.json({ error: 'INVALID_TIME_SLOT' }, { status: 400 });
+          }
+        }
+      }
+    }
+
     // Verify pets belong to this client
     if (session.user.role === 'CLIENT') {
       const pets = await prisma.pet.findMany({

@@ -53,15 +53,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Already claimed' }, { status: 409 });
   }
 
-  const claim = await prisma.loyaltyBenefitClaim.create({
-    data: {
-      clientId: session.user.id,
-      grade,
-      benefitKey,
-      benefitLabelFr: benefit.labelFr,
-      benefitLabelEn: benefit.labelEn,
-    },
-  });
+  let claim;
+  try {
+    claim = await prisma.loyaltyBenefitClaim.create({
+      data: {
+        clientId: session.user.id,
+        grade,
+        benefitKey,
+        benefitLabelFr: benefit.labelFr,
+        benefitLabelEn: benefit.labelEn,
+      },
+    });
+  } catch (err) {
+    // P2002 = unique constraint violation — concurrent submission race condition
+    if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002') {
+      return NextResponse.json({ error: 'Already claimed' }, { status: 409 });
+    }
+    throw err;
+  }
 
   // Notify admins (non-blocking)
   prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, email: true } })
