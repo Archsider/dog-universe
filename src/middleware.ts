@@ -102,9 +102,12 @@ export async function middleware(request: NextRequest) {
     "frame-ancestors 'none'",
   ].join('; ');
 
-  // Forward nonce to server components via request header
+  // Forward nonce and locale to server components via request headers
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
+  // Detect locale from URL path for html[lang] attribute in root layout
+  const locale = path.startsWith('/en') ? 'en' : 'fr';
+  requestHeaders.set('x-locale', locale);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('Content-Security-Policy', csp);

@@ -25,7 +25,7 @@ export default function LandingPage({ locale }: LandingPageProps) {
             <LanguageSwitcher />
             <Link
               href={`/${locale}/auth/login`}
-              className="text-sm font-medium text-charcoal/70 hover:text-charcoal transition-colors px-2 py-1.5"
+              className="text-sm font-medium text-neutral-600 hover:text-charcoal transition-colors px-2 py-1.5"
             >
               {t('hero.login')}
             </Link>
@@ -39,6 +39,7 @@ export default function LandingPage({ locale }: LandingPageProps) {
         </div>
       </header>
 
+      <main>
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-4 py-10 md:py-20">
         <div className="text-center max-w-2xl mx-auto">
@@ -74,7 +75,7 @@ export default function LandingPage({ locale }: LandingPageProps) {
       <section className="max-w-6xl mx-auto px-4 py-10 md:py-16">
         <div className="text-center mb-8">
           <h2 className="text-2xl md:text-3xl font-serif font-bold text-charcoal mb-2">{t('services.title')}</h2>
-          <p className="text-charcoal/60">{t('services.subtitle')}</p>
+          <p className="text-neutral-600">{t('services.subtitle')}</p>
         </div>
         <div className="grid md:grid-cols-3 gap-4">
           {[
@@ -107,7 +108,7 @@ export default function LandingPage({ locale }: LandingPageProps) {
                   <Icon className={`h-6 w-6 ${service.color}`} />
                 </div>
                 <h3 className="text-lg font-serif font-semibold text-charcoal mb-2">{service.title}</h3>
-                <p className="text-charcoal/60 text-sm leading-relaxed">{service.description}</p>
+                <p className="text-neutral-600 text-sm leading-relaxed">{service.description}</p>
               </div>
             );
           })}
@@ -176,6 +177,7 @@ export default function LandingPage({ locale }: LandingPageProps) {
           </div>
         </div>
       </section>
+      </main>
     </div>
   );
 }

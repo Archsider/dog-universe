@@ -27,10 +27,12 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const nonce = (await headers()).get('x-nonce') ?? undefined;
+  const h = await headers();
+  const nonce = h.get('x-nonce') ?? undefined;
+  const lang = h.get('x-locale') ?? 'fr';
 
   return (
-    <html suppressHydrationWarning nonce={nonce} className={`${playfair.variable} ${inter.variable}`}>
+    <html lang={lang} suppressHydrationWarning nonce={nonce} className={`${playfair.variable} ${inter.variable}`}>
       <body>{children}</body>
     </html>
   );

@@ -80,7 +80,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF6F0] flex items-center justify-center p-4">
+    <main className="min-h-screen bg-[#FAF6F0] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
@@ -91,7 +91,7 @@ export default function RegisterPage() {
             </span>
           </Link>
           <h1 className="text-2xl font-serif font-semibold text-charcoal">{t('title')}</h1>
-          <p className="text-charcoal/60 mt-1 text-sm">{t('subtitle')}</p>
+          <p className="text-neutral-600 mt-1 text-sm">{t('subtitle')}</p>
         </div>
 
         {/* Card */}
@@ -154,7 +154,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-charcoal/40"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -193,7 +193,7 @@ export default function RegisterPage() {
           </form>
         </div>
 
-        <p className="text-center text-sm text-charcoal/60 mt-6">
+        <p className="text-center text-sm text-neutral-600 mt-6">
           {t('hasAccount')}{' '}
           <Link href={`/${locale}/auth/login`} className="text-gold-600 hover:text-gold-700 font-medium">
             {t('login')}
@@ -204,6 +204,6 @@ export default function RegisterPage() {
           <LanguageSwitcher />
         </div>
       </div>
-    </div>
+    </main>
   );
 }
