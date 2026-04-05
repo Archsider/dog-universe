@@ -55,3 +55,25 @@ export async function deleteFromStorage(key: string): Promise<void> {
     throw new Error(`Supabase delete failed: ${error.message}`);
   }
 }
+
+/**
+ * Generate a short-lived signed URL for private file access.
+ * Use this for sensitive documents (contracts, client documents) instead of
+ * the permanent public URL. Requires the bucket to be set to PRIVATE in
+ * the Supabase dashboard for full security.
+ * @param key          Storage path, e.g. "contracts/abc123.pdf"
+ * @param expiresIn    Expiry in seconds (default: 3600 = 1 hour)
+ */
+export async function createSignedUrl(
+  key: string,
+  expiresIn = 3600
+): Promise<string> {
+  const client = getSupabaseAdmin();
+  const { data, error } = await client.storage
+    .from(bucket)
+    .createSignedUrl(key, expiresIn);
+  if (error || !data?.signedUrl) {
+    throw new Error(`Supabase signed URL failed: ${error?.message ?? 'no URL returned'}`);
+  }
+  return data.signedUrl;
+}

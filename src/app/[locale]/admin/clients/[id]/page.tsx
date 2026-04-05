@@ -1,6 +1,7 @@
 import { auth } from '../../../../../../auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { createSignedUrl } from '@/lib/supabase';
 import Link from 'next/link';
 import { ArrowLeft, PawPrint, Calendar, MessageSquare, FileText, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +21,7 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
     where: { id },
     include: {
       loyaltyGrade: true,
-      contract: { select: { signedAt: true, pdfUrl: true, version: true } },
+      contract: { select: { signedAt: true, storageKey: true, version: true } },
       pets: { include: { _count: { select: { bookingPets: true } } } },
       bookings: {
         include: { bookingPets: { include: { pet: { select: { name: true } } } } },
@@ -55,6 +56,11 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
 
   const totalRevenue = client.invoices.filter(i => i.status === 'PAID').reduce((sum, i) => sum + i.amount, 0);
   const grade = client.loyaltyGrade?.grade || 'BRONZE';
+
+  // Generate a time-limited signed URL for the contract PDF (1 hour)
+  const contractDownloadUrl = client.contract?.storageKey
+    ? await createSignedUrl(client.contract.storageKey).catch(() => null)
+    : null;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -113,15 +119,17 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
                     { year: 'numeric', month: 'long', day: 'numeric' }
                   )}
                 </p>
-                <a
-                  href={client.contract.pdfUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900 underline font-medium"
-                >
-                  <Download className="h-3 w-3" />
-                  {locale === 'fr' ? 'Télécharger le PDF' : 'Download PDF'}
-                </a>
+                {contractDownloadUrl && (
+                  <a
+                    href={contractDownloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900 underline font-medium"
+                  >
+                    <Download className="h-3 w-3" />
+                    {locale === 'fr' ? 'Télécharger le PDF' : 'Download PDF'}
+                  </a>
+                )}
               </div>
             ) : (
               <p className="text-xs text-gray-400 italic">

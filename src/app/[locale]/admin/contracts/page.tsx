@@ -1,6 +1,7 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { createSignedUrl } from '@/lib/supabase';
 import { FileText, CheckCircle2, XCircle } from 'lucide-react';
 import ContractsManager from './ContractsManager';
 
@@ -13,13 +14,26 @@ export default async function AdminContractsPage({ params }: PageProps) {
     redirect(`/${locale}/auth/login`);
   }
 
-  const clients = await prisma.user.findMany({
+  const rawClients = await prisma.user.findMany({
     where: { role: 'CLIENT' },
     include: {
-      contract: { select: { id: true, signedAt: true, pdfUrl: true, version: true } },
+      contract: { select: { id: true, signedAt: true, storageKey: true, version: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
+
+  // Generate short-lived signed URLs for each contract (1 hour)
+  const clients = await Promise.all(
+    rawClients.map(async (c) => ({
+      ...c,
+      contract: c.contract
+        ? {
+            ...c.contract,
+            downloadUrl: await createSignedUrl(c.contract.storageKey).catch(() => null),
+          }
+        : null,
+    }))
+  );
 
   const signed = clients.filter(c => c.contract !== null);
   const unsigned = clients.filter(c => c.contract === null);
@@ -99,7 +113,7 @@ export default async function AdminContractsPage({ params }: PageProps) {
             name: c.name,
             email: c.email,
             contract: c.contract
-              ? { id: c.contract.id, signedAt: c.contract.signedAt, pdfUrl: c.contract.pdfUrl, version: c.contract.version }
+              ? { id: c.contract.id, signedAt: c.contract.signedAt, downloadUrl: c.contract.downloadUrl, version: c.contract.version }
               : null,
           }))}
           locale={locale}

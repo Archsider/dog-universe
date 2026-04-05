@@ -6,7 +6,7 @@ import { CheckCircle, FileText, AlertCircle } from 'lucide-react';
 
 interface ContractModalProps {
   clientName: string;
-  onSigned: (pdfUrl: string) => void;
+  onSigned: (downloadUrl: string) => void;
 }
 
 const CONTRACT_ARTICLES = [
@@ -134,7 +134,7 @@ export function ContractModal({ clientName, onSigned }: ContractModalProps) {
 
       setSuccess(true);
       setTimeout(() => {
-        onSigned(data.pdfUrl);
+        onSigned(data.downloadUrl);
       }, 1500);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');

@@ -18,7 +18,7 @@ interface UserProfile {
 
 interface ContractInfo {
   signedAt: string;
-  pdfUrl: string;
+  downloadUrl: string;
   version: string;
 }
 
@@ -209,7 +209,7 @@ export default function ProfilePage() {
               </p>
             </div>
             <a
-              href={contract.pdfUrl}
+              href={contract.downloadUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-sm font-medium text-green-700 hover:text-green-900 underline"

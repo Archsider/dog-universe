@@ -143,7 +143,15 @@ Sinon (dev local)
   → retourne /uploads/subfolder/filename
 ```
 
-`src/lib/supabase.ts` contient `uploadBuffer(buffer, key, mimeType)` — toujours utiliser cette fonction pour les nouveaux types d'upload.
+`src/lib/supabase.ts` contient :
+- `uploadBuffer(buffer, key, mimeType)` — pour les uploads (photos, etc.)
+- `createSignedUrl(key, expiresIn?)` — URL signée courte durée (1h par défaut) pour les fichiers sensibles
+- `deleteFromStorage(key)` — suppression
+
+**Règle de sécurité : ne jamais exposer l'URL publique permanente des contrats et documents sensibles.**
+- Photos (pets/, stays/) → `getPublicUrl()` acceptable
+- Contrats (contracts/) et documents (documents/) → utiliser `createSignedUrl()` — les endpoints API régénèrent une URL signée à chaque accès
+- **Action requise sur Supabase Dashboard** : passer le bucket `uploads` en mode **PRIVATE** (désactiver "Public bucket") pour que les URL publiques permanentes cessent de fonctionner. Sans cette action, les URLs publiques restent accessibles en parallèle des URLs signées.
 
 **Variables d'env Supabase nécessaires en production :**
 - `SUPABASE_URL`
@@ -266,6 +274,14 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 ---
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
+
+### 2026-04-05 — Session audit sécurité Supabase
+
+**2 vulnérabilités corrigées :**
+
+1. **Contrats PDF publics permanents** (HIGH) : les contrats signés (signature manuscrite, nom, email, IP) étaient stockés avec `getPublicUrl()` → URL permanente et publique accessible sans authentification. Corrigé : `createSignedUrl()` ajouté dans `src/lib/supabase.ts`. Les endpoints `GET/POST /api/contracts/sign` retournent maintenant une URL signée (1h). L'admin contracts page génère les URLs signées server-side. La page client profile et `ContractModal.tsx` utilisent `downloadUrl` au lieu de `pdfUrl`. **Action manuelle requise** : passer le bucket Supabase en PRIVATE dans le Dashboard.
+
+2. **Upload type non whitelisté** (MEDIUM) : `/api/uploads` acceptait n'importe quelle string comme `uploadType` sans validation. Corrigé : whitelist `VALID_UPLOAD_TYPES` avec fallback sur `'pet-photo'`.
 
 ### 2026-03-20 — Session audit sécurité complet (round 2)
 

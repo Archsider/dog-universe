@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { generateContractPDF } from '@/lib/contract-pdf';
-import { uploadBuffer } from '@/lib/supabase';
+import { uploadBuffer, createSignedUrl } from '@/lib/supabase';
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -92,7 +92,9 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
-  return NextResponse.json({ success: true, pdfUrl: contract.pdfUrl });
+  // Return a time-limited signed URL (1h) — never expose the permanent public URL
+  const downloadUrl = await createSignedUrl(storageKey);
+  return NextResponse.json({ success: true, downloadUrl });
 }
 
 export async function GET() {
@@ -105,8 +107,16 @@ export async function GET() {
 
   const contract = await prisma.clientContract.findUnique({
     where: { clientId },
-    select: { signedAt: true, pdfUrl: true, version: true },
+    select: { signedAt: true, storageKey: true, version: true },
   });
 
-  return NextResponse.json({ contract });
+  if (!contract) {
+    return NextResponse.json({ contract: null });
+  }
+
+  // Generate a fresh signed URL valid for 1 hour — do not return the stored public URL
+  const downloadUrl = await createSignedUrl(contract.storageKey);
+  return NextResponse.json({
+    contract: { signedAt: contract.signedAt, downloadUrl, version: contract.version },
+  });
 }

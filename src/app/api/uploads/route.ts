@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { uploadFile, type UploadType } from '@/lib/upload';
 
+const VALID_UPLOAD_TYPES: UploadType[] = ['pet-photo', 'document', 'stay-photo'];
+
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -9,7 +11,11 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const rawFile = formData.get('file');
-    const uploadType = (formData.get('type') as UploadType) ?? 'pet-photo';
+    const rawType = formData.get('type') as string | null;
+    const uploadType: UploadType =
+      rawType && (VALID_UPLOAD_TYPES as string[]).includes(rawType)
+        ? (rawType as UploadType)
+        : 'pet-photo';
 
     if (!rawFile || !(rawFile instanceof File)) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });

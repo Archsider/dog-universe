@@ -8,7 +8,7 @@ import { getInitials, formatDate } from '@/lib/utils';
 
 interface Contract {
   signedAt: Date;
-  pdfUrl: string;
+  downloadUrl: string | null;
   version: string;
   id: string;
 }
@@ -180,10 +180,10 @@ export default function ContractsManager({ clients, locale }: Props) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      {client.contract?.pdfUrl ? (
+                      {client.contract?.downloadUrl ? (
                         <>
                           <a
-                            href={client.contract.pdfUrl}
+                            href={client.contract.downloadUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             title={isFr ? 'Aperçu' : 'Preview'}
@@ -192,7 +192,7 @@ export default function ContractsManager({ clients, locale }: Props) {
                             <Eye className="h-4 w-4" />
                           </a>
                           <a
-                            href={client.contract.pdfUrl}
+                            href={client.contract.downloadUrl}
                             download
                             title={l.download}
                             className="p-1.5 text-gray-400 hover:text-gold-600 rounded transition-colors"
