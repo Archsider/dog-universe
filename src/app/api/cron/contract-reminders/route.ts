@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 
-const LOGIN_URL = process.env.NEXT_PUBLIC_APP_URL
-  ? `${process.env.NEXT_PUBLIC_APP_URL}/fr/auth/login`
-  : 'https://doguniverse.ma/fr/auth/login';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
 
 export async function GET(req: NextRequest) {
   const secret = req.headers.get('x-cron-secret')
@@ -23,9 +21,10 @@ export async function GET(req: NextRequest) {
   for (const client of unsigned) {
     try {
       const locale = client.language ?? 'fr';
+      const loginUrl = `${APP_URL}/${locale}/auth/login`;
       const { subject, html } = getEmailTemplate(
         'contract_reminder',
-        { clientName: client.name ?? client.email, loginUrl: LOGIN_URL },
+        { clientName: client.name ?? client.email, loginUrl },
         locale
       );
       await sendEmail({ to: client.email, subject, html });

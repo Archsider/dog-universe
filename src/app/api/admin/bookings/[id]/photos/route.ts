@@ -59,13 +59,14 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   await createStayPhotoNotification(booking.client.id, petName, bookingRef, booking.id);
 
+  // Non-blocking — photo is already saved; email failure must not cause a false 500
   const locale = booking.client.language ?? 'fr';
   const { subject, html } = getEmailTemplate(
     'stay_photo',
-    { clientName: booking.client.name, petName, bookingRef },
+    { clientName: booking.client.name ?? booking.client.email, petName, bookingRef },
     locale
   );
-  await sendEmail({ to: booking.client.email, subject, html });
+  sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
 
   return NextResponse.json(photo, { status: 201 });
 }
