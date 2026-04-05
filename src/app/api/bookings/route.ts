@@ -82,6 +82,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
     }
 
+    // Clients cannot book in the past (admins can for data entry)
+    if (session.user.role === 'CLIENT') {
+      const start = new Date(startDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (start < today) {
+        return NextResponse.json({ error: 'DATE_IN_PAST' }, { status: 400 });
+      }
+    }
+
     // Validation horaires Pet Taxi : pas le dimanche, uniquement 10h-17h
     if (serviceType === 'PET_TAXI') {
       const taxiDate = new Date(startDate);

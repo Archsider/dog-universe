@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { sendEmail, getEmailTemplate } from '@/lib/email';
 
 export async function POST(request: Request) {
   try {
@@ -53,6 +54,17 @@ export async function POST(request: Request) {
       entityId: user.id,
       details: { email: user.email },
     });
+
+    // Welcome email — non-blocking
+    const locale = user.language ?? 'fr';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
+    const loginUrl = `${appUrl}/${locale}/auth/login`;
+    const { subject, html } = getEmailTemplate(
+      'welcome',
+      { clientName: user.name ?? user.email, loginUrl },
+      locale
+    );
+    sendEmail({ to: user.email, subject, html }).catch(() => {});
 
     return NextResponse.json({
       id: user.id,

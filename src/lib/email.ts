@@ -72,7 +72,7 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder' | 'welcome', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   // Escape all user-supplied fields to prevent XSS in email HTML
   const d: Record<string, string> = {};
   for (const [key, val] of Object.entries(data)) {
@@ -373,6 +373,44 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         </div>
         <p style="color: #999; font-size: 13px;">If you have any questions, feel free to contact us by email or phone.</p>
         <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    welcome: {
+      subjectFr: '🐾 Bienvenue chez Dog Universe !',
+      subjectEn: '🐾 Welcome to Dog Universe!',
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Bienvenue chez <strong>Dog Universe</strong> — la pension animale de référence à Marrakech.</p>
+        <p>Votre compte a été créé avec succès. Vous pouvez dès maintenant :</p>
+        <ul style="color: #4B5563; line-height: 1.8;">
+          <li>Réserver un séjour ou un Pet Taxi pour votre animal</li>
+          <li>Suivre vos réservations en temps réel</li>
+          <li>Accéder à vos factures et les télécharger en PDF</li>
+          <li>Profiter de notre programme de fidélité</li>
+        </ul>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${d.loginUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Accéder à mon espace
+          </a>
+        </p>
+        <p>À très bientôt,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Welcome to <strong>Dog Universe</strong> — Marrakech's premier pet boarding facility.</p>
+        <p>Your account has been created successfully. You can now:</p>
+        <ul style="color: #4B5563; line-height: 1.8;">
+          <li>Book a boarding stay or Pet Taxi for your pet</li>
+          <li>Track your bookings in real time</li>
+          <li>Access and download your invoices as PDF</li>
+          <li>Enjoy our loyalty rewards program</li>
+        </ul>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${d.loginUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Access my account
+          </a>
+        </p>
+        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
     reset_password: {
