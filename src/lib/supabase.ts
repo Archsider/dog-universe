@@ -12,13 +12,21 @@ function getSupabaseAdmin(): SupabaseClient {
   return _client;
 }
 
+/** Public bucket — for photos (pets/, stays/). Files served via getPublicUrl(). */
 const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'uploads';
 
 /**
- * Upload a buffer to Supabase Storage and return the public URL.
- * @param buffer   File content
- * @param key      Storage path, e.g. "contracts/abc123.pdf"
- * @param mimeType MIME type of the file
+ * Private bucket — for sensitive files (contracts/, documents/).
+ * Must be set to PRIVATE in Supabase Dashboard (or via SQL migration).
+ * Files are served via createSignedUrl() only — never via getPublicUrl().
+ */
+const privateBucket = process.env.SUPABASE_PRIVATE_STORAGE_BUCKET ?? 'uploads-private';
+
+// ─── Public bucket (photos) ────────────────────────────────────────────────
+
+/**
+ * Upload a buffer to the PUBLIC Supabase Storage bucket and return its public URL.
+ * Use only for non-sensitive files: pet photos, stay photos.
  */
 export async function uploadBuffer(
   buffer: Buffer,
@@ -28,10 +36,7 @@ export async function uploadBuffer(
   const client = getSupabaseAdmin();
   const { error } = await client.storage
     .from(bucket)
-    .upload(key, buffer, {
-      contentType: mimeType,
-      upsert: true,
-    });
+    .upload(key, buffer, { contentType: mimeType, upsert: true });
 
   if (error) {
     throw new Error(`Supabase upload failed: ${error.message}`);
@@ -45,8 +50,7 @@ export async function uploadBuffer(
 }
 
 /**
- * Delete a file from Supabase Storage.
- * @param key Storage path, e.g. "contracts/abc123.pdf"
+ * Delete a file from the public Supabase Storage bucket.
  */
 export async function deleteFromStorage(key: string): Promise<void> {
   const client = getSupabaseAdmin();
@@ -56,11 +60,43 @@ export async function deleteFromStorage(key: string): Promise<void> {
   }
 }
 
+// ─── Private bucket (contracts / documents) ────────────────────────────────
+
 /**
- * Generate a short-lived signed URL for private file access.
- * Use this for sensitive documents (contracts, client documents) instead of
- * the permanent public URL. Requires the bucket to be set to PRIVATE in
- * the Supabase dashboard for full security.
+ * Upload a buffer to the PRIVATE Supabase Storage bucket.
+ * Returns the storage key (not a URL). Call createSignedUrl() to serve.
+ * Use for contracts, client documents, and any file containing PII.
+ */
+export async function uploadBufferPrivate(
+  buffer: Buffer,
+  key: string,
+  mimeType: string
+): Promise<string> {
+  const client = getSupabaseAdmin();
+  const { error } = await client.storage
+    .from(privateBucket)
+    .upload(key, buffer, { contentType: mimeType, upsert: true });
+
+  if (error) {
+    throw new Error(`Supabase private upload failed: ${error.message}`);
+  }
+
+  return key; // Return the key — caller must use createSignedUrl() to serve the file
+}
+
+/**
+ * Delete a file from the private Supabase Storage bucket.
+ */
+export async function deleteFromPrivateStorage(key: string): Promise<void> {
+  const client = getSupabaseAdmin();
+  const { error } = await client.storage.from(privateBucket).remove([key]);
+  if (error) {
+    throw new Error(`Supabase private delete failed: ${error.message}`);
+  }
+}
+
+/**
+ * Generate a short-lived signed URL for a file in the PRIVATE bucket.
  * @param key          Storage path, e.g. "contracts/abc123.pdf"
  * @param expiresIn    Expiry in seconds (default: 3600 = 1 hour)
  */
@@ -70,7 +106,7 @@ export async function createSignedUrl(
 ): Promise<string> {
   const client = getSupabaseAdmin();
   const { data, error } = await client.storage
-    .from(bucket)
+    .from(privateBucket)
     .createSignedUrl(key, expiresIn);
   if (error || !data?.signedUrl) {
     throw new Error(`Supabase signed URL failed: ${error?.message ?? 'no URL returned'}`);

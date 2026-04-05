@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { uploadBuffer } from './supabase';
+import { uploadBuffer, uploadBufferPrivate, createSignedUrl } from './supabase';
 
 // Local filesystem fallback (dev without Supabase env vars)
 import { writeFile, mkdir } from 'fs/promises';
@@ -83,8 +83,14 @@ export async function uploadFile(
     : 'documents';
 
   if (hasSupabase) {
-    // Production: Supabase Storage — persists across deployments
     const key = `${subfolder}/${filename}`;
+    if (uploadType === 'document') {
+      // Documents go to the private bucket — return a 1-hour signed URL
+      await uploadBufferPrivate(buffer, key, detectedMime);
+      const url = await createSignedUrl(key);
+      return { url, filename, mimeType: detectedMime, size: file.size };
+    }
+    // Pet photos and stay photos go to the public bucket
     const url = await uploadBuffer(buffer, key, detectedMime);
     return { url, filename, mimeType: detectedMime, size: file.size };
   } else {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { generateContractPDF } from '@/lib/contract-pdf';
-import { uploadBuffer, createSignedUrl } from '@/lib/supabase';
+import { uploadBufferPrivate, createSignedUrl } from '@/lib/supabase';
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   });
   if (existing) {
     return NextResponse.json(
-      { error: 'Contract already signed', pdfUrl: existing.pdfUrl },
+      { error: 'Contract already signed' },
       { status: 409 }
     );
   }
@@ -64,18 +64,16 @@ export async function POST(req: NextRequest) {
     version: '1.0',
   });
 
-  // Upload to Supabase Storage
+  // Upload to the PRIVATE Supabase Storage bucket
   const storageKey = `contracts/${clientId}.pdf`;
-  const pdfUrl = await uploadBuffer(pdfBuffer, storageKey, 'application/pdf');
+  await uploadBufferPrivate(pdfBuffer, storageKey, 'application/pdf');
 
   // Save contract record in DB — catch P2002 for concurrent signing race condition
-  let contract;
   try {
-    contract = await prisma.clientContract.create({
+    await prisma.clientContract.create({
       data: {
         clientId,
         signedAt,
-        pdfUrl,
         storageKey,
         ipAddress,
         version: '1.0',
@@ -83,16 +81,12 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002') {
-      const existing = await prisma.clientContract.findUnique({ where: { clientId } });
-      return NextResponse.json(
-        { error: 'Contract already signed', pdfUrl: existing?.pdfUrl },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: 'Contract already signed' }, { status: 409 });
     }
     throw err;
   }
 
-  // Return a time-limited signed URL (1h) — never expose the permanent public URL
+  // Return a time-limited signed URL (1h) — never expose a permanent public URL
   const downloadUrl = await createSignedUrl(storageKey);
   return NextResponse.json({ success: true, downloadUrl });
 }

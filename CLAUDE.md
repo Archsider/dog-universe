@@ -144,19 +144,30 @@ Sinon (dev local)
 ```
 
 `src/lib/supabase.ts` contient :
-- `uploadBuffer(buffer, key, mimeType)` — pour les uploads (photos, etc.)
-- `createSignedUrl(key, expiresIn?)` — URL signée courte durée (1h par défaut) pour les fichiers sensibles
-- `deleteFromStorage(key)` — suppression
+- `uploadBuffer(buffer, key, mimeType)` — bucket public, pour les photos (pets/, stays/)
+- `uploadBufferPrivate(buffer, key, mimeType)` — bucket privé, retourne la clé (pas d'URL)
+- `createSignedUrl(key, expiresIn?)` — URL signée courte durée (1h par défaut) pour les fichiers privés
+- `deleteFromStorage(key)` — suppression du bucket public
+- `deleteFromPrivateStorage(key)` — suppression du bucket privé
 
-**Règle de sécurité : ne jamais exposer l'URL publique permanente des contrats et documents sensibles.**
-- Photos (pets/, stays/) → `getPublicUrl()` acceptable
-- Contrats (contracts/) et documents (documents/) → utiliser `createSignedUrl()` — les endpoints API régénèrent une URL signée à chaque accès
-- **Action requise sur Supabase Dashboard** : passer le bucket `uploads` en mode **PRIVATE** (désactiver "Public bucket") pour que les URL publiques permanentes cessent de fonctionner. Sans cette action, les URLs publiques restent accessibles en parallèle des URLs signées.
+**Architecture deux buckets :**
+| Fichier | Bucket | Accès |
+|---|---|---|
+| `pets/` (photos animaux) | `uploads` (public) | `getPublicUrl()` |
+| `stays/` (photos séjour) | `uploads` (public) | `getPublicUrl()` |
+| `documents/` (documents clients) | `uploads-private` (privé) | `createSignedUrl()` |
+| `contracts/` (contrats signés) | `uploads-private` (privé) | `createSignedUrl()` |
+
+**Migration requise** : `prisma/migrations/20260405_private_storage/migration.sql` — à exécuter sur Supabase :
+- Crée le bucket `uploads-private` (public=false)
+- Rend `ClientContract.pdfUrl` nullable (champ déprécié — remplacé par `storageKey`)
+- Ajoute une policy RLS bloquant tout accès anon/authenticated au bucket privé
 
 **Variables d'env Supabase nécessaires en production :**
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_STORAGE_BUCKET` (défaut : `"uploads"`)
+- `SUPABASE_PRIVATE_STORAGE_BUCKET` (défaut : `"uploads-private"`)
 
 ---
 
@@ -279,7 +290,7 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 **2 vulnérabilités corrigées :**
 
-1. **Contrats PDF publics permanents** (HIGH) : les contrats signés (signature manuscrite, nom, email, IP) étaient stockés avec `getPublicUrl()` → URL permanente et publique accessible sans authentification. Corrigé : `createSignedUrl()` ajouté dans `src/lib/supabase.ts`. Les endpoints `GET/POST /api/contracts/sign` retournent maintenant une URL signée (1h). L'admin contracts page génère les URLs signées server-side. La page client profile et `ContractModal.tsx` utilisent `downloadUrl` au lieu de `pdfUrl`. **Action manuelle requise** : passer le bucket Supabase en PRIVATE dans le Dashboard.
+1. **Contrats PDF publics permanents** (HIGH) : les contrats signés (signature manuscrite, nom, email, IP) étaient stockés avec `getPublicUrl()` → URL permanente et publique accessible sans authentification. Corrigé : architecture deux buckets — `uploads` (public, photos) + `uploads-private` (privé, contrats/documents). `uploadBufferPrivate()` + `createSignedUrl()` ajoutés dans `supabase.ts`. Les endpoints `GET/POST /api/contracts/sign` retournent une URL signée (1h). `ClientContract.pdfUrl` rendu nullable (déprécié). Migration SQL `20260405_private_storage` à exécuter sur Supabase.
 
 2. **Upload type non whitelisté** (MEDIUM) : `/api/uploads` acceptait n'importe quelle string comme `uploadType` sans validation. Corrigé : whitelist `VALID_UPLOAD_TYPES` avec fallback sur `'pet-photo'`.
 

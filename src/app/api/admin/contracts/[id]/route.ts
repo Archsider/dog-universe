@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
-import { deleteFromStorage } from '@/lib/supabase';
+import { deleteFromPrivateStorage } from '@/lib/supabase';
 
 // DELETE /api/admin/contracts/[id] — delete a contract (forces client to re-sign)
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
@@ -19,10 +19,10 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // Delete from Supabase Storage (non-blocking if it fails)
+  // Delete from private Supabase Storage (non-blocking if it fails)
   if (contract.storageKey) {
     try {
-      await deleteFromStorage(contract.storageKey);
+      await deleteFromPrivateStorage(contract.storageKey);
     } catch (e) {
       console.warn('Could not delete contract file from storage:', e);
     }

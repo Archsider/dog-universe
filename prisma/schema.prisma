@@ -314,7 +314,7 @@ model ClientContract {
   id          String   @id @default(cuid())
   clientId    String   @unique
   signedAt    DateTime @default(now())
-  pdfUrl      String   // Supabase Storage URL
+  pdfUrl      String?  // Deprecated: legacy public URL. Use storageKey + createSignedUrl() instead.
   storageKey  String   // e.g. contracts/{clientId}.pdf
   ipAddress   String?
   version     String   @default("1.0")
