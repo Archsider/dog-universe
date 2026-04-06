@@ -178,6 +178,23 @@ export default function LandingPage({ locale }: LandingPageProps) {
         </div>
       </section>
       </main>
+
+      <footer className="border-t border-[#F0D98A]/30 mt-4">
+        <div className="max-w-6xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-neutral-500">
+          <span>© {new Date().getFullYear()} Dog Universe — Marrakech</span>
+          <div className="flex items-center gap-4">
+            <Link href={`/${locale}/privacy`} className="hover:text-charcoal transition-colors">
+              {locale === 'fr' ? 'Confidentialité' : 'Privacy'}
+            </Link>
+            <Link href={`/${locale}/terms`} className="hover:text-charcoal transition-colors">
+              {locale === 'fr' ? 'CGU' : 'Terms'}
+            </Link>
+            <a href="mailto:contact@doguniverse.ma" className="hover:text-charcoal transition-colors">
+              contact@doguniverse.ma
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
