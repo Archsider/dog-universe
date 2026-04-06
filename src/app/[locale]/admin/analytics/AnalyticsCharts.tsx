@@ -1,7 +1,16 @@
 'use client';
 
-import RevenueChart from '@/components/admin/RevenueChart';
-import ServiceBreakdown from '@/components/admin/ServiceBreakdown';
+import dynamic from 'next/dynamic';
+
+const RevenueChart = dynamic(() => import('@/components/admin/RevenueChart'), {
+  ssr: false,
+  loading: () => <div className="h-[280px] flex items-center justify-center text-sm text-gray-400">Chargement...</div>,
+});
+
+const ServiceBreakdown = dynamic(() => import('@/components/admin/ServiceBreakdown'), {
+  ssr: false,
+  loading: () => <div className="h-[180px] flex items-center justify-center text-sm text-gray-400">Chargement...</div>,
+});
 
 interface Props {
   revenueData: { month: string; boarding: number; taxi: number; grooming?: number }[];

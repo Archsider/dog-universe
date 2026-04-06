@@ -5,7 +5,7 @@ import { useLocale } from 'next-intl';
 import {
   CheckCheck, Loader2, BellOff, Camera, MessageSquare,
   CheckCircle2, XCircle, Bell, Star, Receipt, CalendarClock,
-  ArrowRight,
+  ArrowRight, Cake, Truck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
@@ -27,11 +27,14 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   BOOKING_CONFIRMATION: { icon: CalendarClock,  color: 'text-amber-600',  bg: 'bg-amber-50' },
   BOOKING_VALIDATION:   { icon: CheckCircle2,   color: 'text-green-600',  bg: 'bg-green-50' },
   BOOKING_REFUSAL:      { icon: XCircle,        color: 'text-red-500',    bg: 'bg-red-50' },
+  BOOKING_IN_PROGRESS:  { icon: Truck,          color: 'text-blue-600',   bg: 'bg-blue-50' },
+  BOOKING_COMPLETED:    { icon: CheckCheck,     color: 'text-green-700',  bg: 'bg-green-50' },
   STAY_REMINDER:        { icon: Bell,           color: 'text-blue-500',   bg: 'bg-blue-50' },
   INVOICE_AVAILABLE:    { icon: Receipt,        color: 'text-purple-500', bg: 'bg-purple-50' },
   ADMIN_MESSAGE:        { icon: MessageSquare,  color: 'text-gold-600',   bg: 'bg-gold-50' },
   STAY_PHOTO:           { icon: Camera,         color: 'text-gold-600',   bg: 'bg-gold-50' },
   LOYALTY_UPDATE:       { icon: Star,           color: 'text-gold-500',   bg: 'bg-gold-50' },
+  PET_BIRTHDAY:         { icon: Cake,           color: 'text-pink-500',   bg: 'bg-pink-50' },
 };
 
 function parseMetadata(raw: string | null): Record<string, string> {

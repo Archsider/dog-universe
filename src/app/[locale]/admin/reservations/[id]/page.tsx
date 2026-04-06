@@ -15,7 +15,7 @@ interface PageProps { params: { locale: string; id: string } }
 
 export default async function AdminReservationDetailPage({ params: { locale, id } }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const booking = await prisma.booking.findUnique({
     where: { id },
@@ -146,19 +146,6 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
                 <CreateInvoiceFromBookingButton
                   bookingId={booking.id}
                   clientId={booking.client.id}
-                  serviceType={booking.serviceType}
-                  nights={nights}
-                  petNames={booking.bookingPets.map(bp => bp.pet.name).join(', ')}
-                  boardingDetail={booking.boardingDetail ? {
-                    pricePerNight: booking.boardingDetail.pricePerNight,
-                    includeGrooming: booking.boardingDetail.includeGrooming,
-                    groomingPrice: booking.boardingDetail.groomingPrice,
-                    taxiAddonPrice: booking.boardingDetail.taxiAddonPrice,
-                  } : null}
-                  taxiDetail={booking.taxiDetail ? {
-                    taxiType: booking.taxiDetail.taxiType,
-                    price: booking.taxiDetail.price,
-                  } : null}
                   locale={locale}
                 />
               </div>
@@ -225,7 +212,7 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
             </div>
           </div>
 
-          <ReservationActions booking={{ id: booking.id, status: booking.status }} locale={locale} />
+          <ReservationActions booking={{ id: booking.id, status: booking.status, serviceType: booking.serviceType }} locale={locale} />
           <AdminMessageSection bookingId={booking.id} locale={locale} />
         </div>
       </div>

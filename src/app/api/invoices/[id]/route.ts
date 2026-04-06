@@ -36,7 +36,7 @@ export async function GET(_req: Request, { params }: Params) {
 
 export async function PATCH(request: Request, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -45,6 +45,11 @@ export async function PATCH(request: Request, { params }: Params) {
 
   const invoice = await prisma.invoice.findUnique({ where: { id } });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  const VALID_INVOICE_STATUSES = ['PENDING', 'PAID', 'CANCELLED'];
+  if (body.status && !VALID_INVOICE_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+  }
 
   const updateData: Record<string, unknown> = {};
   if (body.status) updateData.status = body.status;
@@ -88,6 +93,8 @@ export async function PATCH(request: Request, { params }: Params) {
           where: { clientId: invoice.clientId },
           data: { grade: suggestedGrade },
         });
+        const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
+        await createLoyaltyUpdateNotification(invoice.clientId, suggestedGrade, client.language || 'fr');
       }
     }
   }

@@ -9,7 +9,7 @@ interface PageProps { params: { locale: string } }
 
 export default async function AdminAnalyticsPage({ params: { locale } }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const now = new Date();
   const thisMonthStart = startOfMonth(now);

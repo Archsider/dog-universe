@@ -9,7 +9,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const unreadOnly = searchParams.get('unreadOnly') === 'true';
-  const limit = parseInt(searchParams.get('limit') ?? '50');
+  const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') ?? '50')), 100);
 
   const where: Record<string, unknown> = { userId: session.user.id };
   if (unreadOnly) where.read = false;
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

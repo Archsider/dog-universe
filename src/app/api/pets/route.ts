@@ -26,21 +26,54 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, species, breed, dateOfBirth, gender, photoUrl } = body;
+    const {
+      name, species, breed, dateOfBirth, gender, photoUrl,
+      isNeutered, microchipNumber, tattooNumber, weight,
+      vetName, vetPhone, allergies, currentMedication,
+      behaviorWithDogs, behaviorWithCats, behaviorWithHumans, notes,
+    } = body;
 
-    if (!name || !species) {
+    const VALID_SPECIES = ['DOG', 'CAT'];
+    const VALID_GENDERS = ['MALE', 'FEMALE'];
+
+    if (!name || !species || !dateOfBirth) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
+    }
+    if (!VALID_SPECIES.includes(species)) {
+      return NextResponse.json({ error: 'INVALID_SPECIES' }, { status: 400 });
+    }
+    if (gender && !VALID_GENDERS.includes(gender)) {
+      return NextResponse.json({ error: 'INVALID_GENDER' }, { status: 400 });
+    }
+    const parsedDob = new Date(dateOfBirth);
+    if (isNaN(parsedDob.getTime()) || parsedDob > new Date()) {
+      return NextResponse.json({ error: 'INVALID_DATE_OF_BIRTH' }, { status: 400 });
+    }
+    if (weight !== undefined && weight !== null && (isNaN(Number(weight)) || Number(weight) <= 0)) {
+      return NextResponse.json({ error: 'INVALID_WEIGHT' }, { status: 400 });
     }
 
     const pet = await prisma.pet.create({
       data: {
         ownerId: session.user.id,
-        name: name.trim(),
+        name: String(name).trim().slice(0, 100),
         species,
-        breed: breed?.trim() || null,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        breed: breed ? String(breed).trim().slice(0, 100) : null,
+        dateOfBirth: parsedDob,
         gender: gender || null,
         photoUrl: photoUrl || null,
+        isNeutered: isNeutered ?? null,
+        microchipNumber: microchipNumber?.trim() || null,
+        tattooNumber: tattooNumber?.trim() || null,
+        weight: weight ? Number(weight) : null,
+        vetName: vetName?.trim() || null,
+        vetPhone: vetPhone?.trim() || null,
+        allergies: allergies?.trim() || null,
+        currentMedication: currentMedication?.trim() || null,
+        behaviorWithDogs: behaviorWithDogs || null,
+        behaviorWithCats: behaviorWithCats || null,
+        behaviorWithHumans: behaviorWithHumans || null,
+        notes: notes?.trim() || null,
       },
     });
 

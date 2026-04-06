@@ -7,7 +7,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -51,9 +51,9 @@ export async function GET(_req: Request, { params }: Params) {
     orderBy: { createdAt: 'desc' },
   });
 
+  const { passwordHash: _pw, ...safeClient } = client;
   return NextResponse.json({
-    ...client,
-    passwordHash: undefined,
+    ...safeClient,
     totalRevenue,
     adminNotes,
   });
@@ -61,7 +61,7 @@ export async function GET(_req: Request, { params }: Params) {
 
 export async function PATCH(request: Request, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -69,8 +69,14 @@ export async function PATCH(request: Request, { params }: Params) {
   const body = await request.json();
 
   const updateData: Record<string, unknown> = {};
-  if (body.name !== undefined) updateData.name = body.name;
-  if (body.phone !== undefined) updateData.phone = body.phone;
+  if (body.name !== undefined) {
+    const name = String(body.name).trim().slice(0, 255);
+    if (!name) return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 });
+    updateData.name = name;
+  }
+  if (body.phone !== undefined) {
+    updateData.phone = body.phone ? String(body.phone).trim().slice(0, 20) : null;
+  }
 
   await prisma.user.update({ where: { id }, data: updateData });
 
@@ -79,7 +85,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
 export async function DELETE(_req: Request, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

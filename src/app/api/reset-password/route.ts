@@ -8,13 +8,19 @@ export async function POST(request: Request) {
   try {
     const { email, locale = 'fr' } = await request.json();
 
-    if (!email) {
-      return NextResponse.json({ message: 'ok' }); // Always return ok
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return NextResponse.json({ message: 'ok' }); // Always return ok to prevent enumeration
     }
 
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
 
     if (user) {
+      // Invalider les anciens tokens non utilisés avant d'en créer un nouveau
+      await prisma.passwordResetToken.deleteMany({
+        where: { userId: user.id, used: false },
+      });
+
       const token = randomUUID();
       await prisma.passwordResetToken.create({
         data: {

@@ -22,7 +22,8 @@ export async function GET(request: Request) {
     where.clientId = clientId;
   }
 
-  if (status) where.status = status;
+  const VALID_INVOICE_STATUSES = ['PENDING', 'PAID', 'CANCELLED'];
+  if (status && VALID_INVOICE_STATUSES.includes(status)) where.status = status;
 
   const invoices = await prisma.invoice.findMany({
     where,
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -55,18 +56,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
     }
 
+    // Validate each item: amounts must be positive numbers
+    for (const item of items as { description: string; quantity: number; unitPrice: number; total: number }[]) {
+      if (!item.description || typeof item.description !== 'string') {
+        return NextResponse.json({ error: 'INVALID_ITEM_DESCRIPTION' }, { status: 400 });
+      }
+      if (typeof item.unitPrice !== 'number' || item.unitPrice < 0) {
+        return NextResponse.json({ error: 'INVALID_ITEM_PRICE' }, { status: 400 });
+      }
+      if (typeof item.quantity !== 'number' || item.quantity <= 0) {
+        return NextResponse.json({ error: 'INVALID_ITEM_QUANTITY' }, { status: 400 });
+      }
+      if (typeof item.total !== 'number' || item.total < 0) {
+        return NextResponse.json({ error: 'INVALID_ITEM_TOTAL' }, { status: 400 });
+      }
+    }
+
     const client = await prisma.user.findUnique({ where: { id: clientId } });
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
-    // Generate invoice number
-    const count = await prisma.invoice.count();
+    // Generate invoice number — retry on collision (race condition guard)
     const year = new Date().getFullYear();
-    const invoiceNumber = `DU-${year}-${String(count + 1).padStart(4, '0')}`;
+    let invoiceNumber = '';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const count = await prisma.invoice.count();
+      const candidate = `DU-${year}-${String(count + 1 + attempt).padStart(4, '0')}`;
+      const exists = await prisma.invoice.findUnique({ where: { invoiceNumber: candidate } });
+      if (!exists) { invoiceNumber = candidate; break; }
+    }
+    if (!invoiceNumber) {
+      return NextResponse.json({ error: 'Could not generate invoice number' }, { status: 500 });
+    }
 
-    const amount = items.reduce(
+    const amount = (items as { total: number }[]).reduce(
       (sum: number, item: { total: number }) => sum + item.total,
       0
     );
+
+    if (amount <= 0) {
+      return NextResponse.json({ error: 'INVALID_AMOUNT' }, { status: 400 });
+    }
 
     const invoice = await prisma.invoice.create({
       data: {

@@ -194,10 +194,10 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
             </View>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>Marrakech, Maroc</Text>
-            <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>+212 669 183 981</Text>
+            <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>RC : 87023 — IF : 25081867 — ICE : 002035800000002</Text>
+            <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>Tél : 00212669183981</Text>
             <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>contact@doguniverse.ma</Text>
-            <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>RC : 87023 — ICE : 002035800000002</Text>
+            <Text style={{ fontSize: 9, color: '#6B7280', lineHeight: 1.7 }}>Marrakech, Maroc</Text>
           </View>
         </View>
 
@@ -283,11 +283,16 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
               </View>
             ))}
 
-            {/* TVA mention */}
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 6, paddingHorizontal: 8 }}>
-              <Text style={{ fontSize: 8, color: '#9CA3AF', fontStyle: 'italic' }}>
-                TVA non applicable — Art. 91-I-3° du CGI marocain
-              </Text>
+            {/* TVA breakdown */}
+            <View style={{ paddingTop: 6, paddingHorizontal: 8, gap: 3 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 32 }}>
+                <Text style={{ fontSize: 9, color: '#6B7280' }}>Montant HT</Text>
+                <Text style={{ fontSize: 9, color: '#6B7280', minWidth: 60, textAlign: 'right' }}>{formatMAD(Math.round(invoice.amount / 1.2))}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 32 }}>
+                <Text style={{ fontSize: 9, color: '#6B7280' }}>TVA 20%</Text>
+                <Text style={{ fontSize: 9, color: '#6B7280', minWidth: 60, textAlign: 'right' }}>{formatMAD(invoice.amount - Math.round(invoice.amount / 1.2))}</Text>
+              </View>
             </View>
 
             {/* Total */}
@@ -308,8 +313,8 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
 
         {/* Footer */}
         <Text style={styles.footer}>
-          DOG UNIVERSE SARLAU — Marrakech, Maroc — RC : 87023 — ICE : 002035800000002
-          {'\n'}contact@doguniverse.ma — +212 669 183 981 — Merci pour votre confiance.
+          DOG UNIVERSE SARLAU — RC : 87023 — IF : 25081867 — ICE : 002035800000002
+          {'\n'}Tél : 00212669183981 — contact@doguniverse.ma — Marrakech, Maroc — Merci pour votre confiance.
         </Text>
       </Page>
     </Document>

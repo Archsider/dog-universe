@@ -14,7 +14,7 @@ model User {
   name         String
   phone        String?
   passwordHash String
-  role         String   @default("CLIENT") // "ADMIN" | "CLIENT"
+  role         String   @default("CLIENT") // "ADMIN" | "CLIENT" | "SUPERADMIN"
   language     String   @default("fr")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -27,6 +27,9 @@ model User {
   actionLogs    ActionLog[]
   adminNotes    AdminNote[]    @relation("NoteAuthor")
   passwordResets PasswordResetToken[]
+  contract      ClientContract?
+  benefitClaims    LoyaltyBenefitClaim[]
+  reviewedClaims   LoyaltyBenefitClaim[] @relation("ClaimReviewer")
 }
 
 model Pet {
@@ -38,6 +41,23 @@ model Pet {
   dateOfBirth DateTime?
   gender      String?  // "MALE" | "FEMALE"
   photoUrl    String?
+  // Identification
+  isNeutered      Boolean?
+  microchipNumber String?
+  tattooNumber    String?
+  weight          Float?   // kg
+  // Vet info
+  vetName         String?
+  vetPhone        String?
+  // Health
+  allergies         String?
+  currentMedication String?
+  // Behavior: "SOCIABLE" | "TOLERANT" | "MONITOR" | "REACTIVE"
+  behaviorWithDogs   String?
+  behaviorWithCats   String?
+  behaviorWithHumans String?
+  // Notes
+  notes             String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -210,6 +230,26 @@ model LoyaltyGrade {
   client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
 }
 
+model LoyaltyBenefitClaim {
+  id          String   @id @default(cuid())
+  clientId    String
+  grade       String   // grade at time of claim
+  benefitKey  String   // e.g. "grooming_discount_10", "free_grooming", "pet_taxi_ride"
+  benefitLabelFr String
+  benefitLabelEn String
+  status      String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  rejectionReason String?
+  reviewedBy  String?  // admin user id
+  reviewedAt  DateTime?
+  claimedAt   DateTime @default(now())
+
+  client   User          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reviewer User?         @relation("ClaimReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([clientId])
+  @@index([status])
+}
+
 model AdminNote {
   id         String   @id @default(cuid())
   entityType String   // "CLIENT" | "PET"
@@ -269,3 +309,17 @@ model PasswordResetToken {
 
   @@index([token])
 }
+
+model ClientContract {
+  id          String   @id @default(cuid())
+  clientId    String   @unique
+  signedAt    DateTime @default(now())
+  pdfUrl      String?  // Deprecated: legacy public URL. Use storageKey + createSignedUrl() instead.
+  storageKey  String   // e.g. contracts/{clientId}.pdf
+  ipAddress   String?
+  version     String   @default("1.0")
+  createdAt   DateTime @default(now())
+
+  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+

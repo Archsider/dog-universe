@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { createNotification } from '@/lib/notifications';
 
 /**
  * POST /api/cron/reminders
@@ -10,8 +11,11 @@ import { sendEmail, getEmailTemplate } from '@/lib/email';
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    console.error('CRON_SECRET is not configured — cron endpoint is unprotected');
+    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+  }
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -27,7 +31,7 @@ export async function GET(request: Request) {
   const bookings = await prisma.booking.findMany({
     where: {
       serviceType: 'BOARDING',
-      status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+      status: 'CONFIRMED',
       startDate: { gte: rangeStart, lte: rangeEnd },
     },
     include: {
@@ -43,17 +47,17 @@ export async function GET(request: Request) {
     try {
       const locale = booking.client.language ?? 'fr';
       const petNames = booking.bookingPets.map(bp => bp.pet.name).join(', ');
-      const startDate = booking.startDate.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-      });
+      const dateFormatOpts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+      const startDateFr = booking.startDate.toLocaleDateString('fr-FR', dateFormatOpts);
+      const startDateEn = booking.startDate.toLocaleDateString('en-US', dateFormatOpts);
+      // For email, use the client's preferred locale
+      const startDate = locale === 'fr' ? startDateFr : startDateEn;
 
       const { subject, html } = getEmailTemplate(
         'booking_reminder',
         {
-          clientName: booking.client.name,
-          bookingRef: booking.id.slice(-8).toUpperCase(),
+          clientName: booking.client.name ?? booking.client.email,
+          bookingRef: booking.id.slice(0, 8).toUpperCase(),
           petName: petNames,
           startDate,
           service: locale === 'fr' ? 'Pension' : 'Boarding',
@@ -62,6 +66,18 @@ export async function GET(request: Request) {
       );
 
       await sendEmail({ to: booking.client.email, subject, html });
+
+      // Also create an in-app notification for the reminder
+      await createNotification({
+        userId: booking.clientId,
+        type: 'STAY_REMINDER',
+        titleFr: 'Rappel de séjour',
+        titleEn: 'Stay reminder',
+        messageFr: `Le séjour de ${petNames} commence dans 2 jours (${startDateFr}).`,
+        messageEn: `${petNames}'s stay starts in 2 days (${startDateEn}).`,
+        metadata: { bookingId: booking.id },
+      });
+
       sent++;
     } catch (err) {
       errors.push(`${booking.id}: ${String(err)}`);

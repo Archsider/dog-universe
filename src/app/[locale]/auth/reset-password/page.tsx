@@ -33,7 +33,7 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF6F0] flex items-center justify-center p-4">
+    <main className="min-h-screen bg-[#FAF6F0] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href={`/${locale}`} className="inline-flex items-center gap-2 mb-6">
@@ -43,7 +43,7 @@ export default function ResetPasswordPage() {
             </span>
           </Link>
           <h1 className="text-2xl font-serif font-semibold text-charcoal">{t('title')}</h1>
-          <p className="text-charcoal/60 mt-1 text-sm">{t('subtitle')}</p>
+          <p className="text-neutral-600 mt-1 text-sm">{t('subtitle')}</p>
         </div>
 
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-gold p-8">
@@ -73,12 +73,12 @@ export default function ResetPasswordPage() {
           )}
         </div>
 
-        <p className="text-center text-sm text-charcoal/60 mt-6">
+        <p className="text-center text-sm text-neutral-600 mt-6">
           <Link href={`/${locale}/auth/login`} className="text-gold-600 hover:text-gold-700 font-medium">
             ← {t('backToLogin')}
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }

@@ -31,8 +31,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return {
           id: user.id,
           email: user.email,
-          name: user.name,
-          role: user.role as 'ADMIN' | 'CLIENT',
+          name: user.name ?? user.email.split('@')[0],
+          role: user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN',
           language: user.language,
         };
       },
@@ -40,14 +40,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 24 * 60 * 60, // 1 day (réduit pour limiter la fenêtre d'exposition en cas de vol de session)
   },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id!;
-        token.role = user.role as 'ADMIN' | 'CLIENT';
+        token.role = user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
         token.language = (user as { language?: string }).language ?? 'fr';
+      } else if (token.id) {
+        // Re-fetch role from DB on every token renewal — allows immediate revocation
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { role: true, language: true },
+        });
+        if (!dbUser) return null; // Account deleted → invalidate session
+        token.role = dbUser.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
+        token.language = dbUser.language ?? 'fr';
       }
       return token;
     },
@@ -61,8 +70,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   pages: {
-    signIn: '/fr/auth/login',
-    error: '/fr/auth/login',
+    signIn: '/auth/login',
+    error: '/auth/login',
   },
   trustHost: true,
 });

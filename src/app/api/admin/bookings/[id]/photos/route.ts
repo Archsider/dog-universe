@@ -9,7 +9,7 @@ interface Params { params: { id: string } }
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function POST(request: NextRequest, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -59,20 +59,21 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   await createStayPhotoNotification(booking.client.id, petName, bookingRef, booking.id);
 
+  // Non-blocking — photo is already saved; email failure must not cause a false 500
   const locale = booking.client.language ?? 'fr';
   const { subject, html } = getEmailTemplate(
     'stay_photo',
-    { clientName: booking.client.name, petName, bookingRef },
+    { clientName: booking.client.name ?? booking.client.email, petName, bookingRef },
     locale
   );
-  await sendEmail({ to: booking.client.email, subject, html });
+  sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
 
   return NextResponse.json(photo, { status: 201 });
 }
 
 export async function DELETE(request: NextRequest, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

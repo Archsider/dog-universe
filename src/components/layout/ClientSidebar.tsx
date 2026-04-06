@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   X,
+  Gift,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,7 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
     { href: `/${locale}/client/pets`, label: t('pets'), icon: PawPrint },
     { href: `/${locale}/client/history`, label: t('bookings'), icon: Calendar },
     { href: `/${locale}/client/invoices`, label: t('invoices'), icon: FileText },
+    { href: `/${locale}/client/loyalty`, label: t('loyalty'), icon: Gift },
     { href: `/${locale}/client/notifications`, label: t('notifications'), icon: Bell },
     { href: `/${locale}/client/profile`, label: t('profile'), icon: User },
   ];
@@ -56,7 +58,7 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
 
       {/* User info */}
       <div className="px-6 py-4 border-b border-[#F0D98A]/20">
-        <p className="text-xs text-muted-foreground">Connecté en tant que</p>
+        <p className="text-xs text-muted-foreground">{t('connectedAs')}</p>
         <p className="text-sm font-semibold text-charcoal truncate mt-0.5">{userName}</p>
       </div>
 

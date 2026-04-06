@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { createBookingValidationNotification, createBookingRefusalNotification } from '@/lib/notifications';
+import { createBookingValidationNotification, createBookingRefusalNotification, createBookingInProgressNotification, createBookingCompletedNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -28,18 +28,24 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const body = await request.json();
   const { status, notes } = body;
 
+  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'CANCELLED', 'REJECTED', 'COMPLETED'];
+  if (status && !VALID_STATUSES.includes(status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+  }
+
   const booking = await prisma.booking.findUnique({
     where: { id: params.id },
     include: {
       client: true,
       bookingPets: { include: { pet: true } },
+      boardingDetail: true,
     },
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -61,11 +67,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (status === 'CONFIRMED') {
       const dates = booking.startDate.toLocaleDateString('fr-MA');
       await createBookingValidationNotification(booking.clientId, bookingRef, petNames, dates);
-      const { subject, html } = getEmailTemplate('booking_confirmation', {
-        clientName: booking.client.name,
+      const { subject, html } = getEmailTemplate('booking_validated', {
+        clientName: booking.client.name ?? booking.client.email,
         bookingRef,
         service: booking.serviceType === 'BOARDING' ? (userLang === 'fr' ? 'Pension' : 'Boarding') : 'Pet Taxi',
         petName: petNames,
+        dates,
       }, userLang);
       await sendEmail({ to: booking.client.email, subject, html });
 
@@ -77,9 +84,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         details: { from: booking.status, to: status },
       });
     } else if (status === 'REJECTED' || status === 'CANCELLED') {
-      await createBookingRefusalNotification(booking.clientId, bookingRef, petNames);
+      await createBookingRefusalNotification(booking.clientId, bookingRef);
       const { subject, html } = getEmailTemplate('booking_refused', {
-        clientName: booking.client.name,
+        clientName: booking.client.name ?? booking.client.email,
         bookingRef,
         petName: petNames,
       }, userLang);
@@ -92,10 +99,53 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         entityId: params.id,
         details: { from: booking.status, to: status },
       });
-    } else {
+    } else if (status === 'COMPLETED') {
+      const hasGrooming = booking.boardingDetail?.includeGrooming ?? false;
+      await createBookingCompletedNotification(
+        booking.clientId,
+        bookingRef,
+        petNames,
+        booking.serviceType as 'BOARDING' | 'PET_TAXI',
+        hasGrooming
+      );
+
       await logAction({
         userId: session.user.id,
         action: LOG_ACTIONS.BOOKING_COMPLETED,
+        entityType: 'Booking',
+        entityId: params.id,
+        details: { from: booking.status, to: status },
+      });
+
+      // Recalculate loyalty grade on booking completion
+      try {
+        const { calculateSuggestedGrade } = await import('@/lib/loyalty');
+        const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
+        const [totalStays, totalPaid, currentGrade] = await Promise.all([
+          prisma.booking.count({ where: { clientId: booking.clientId, status: 'COMPLETED' } }),
+          prisma.invoice.aggregate({ where: { clientId: booking.clientId, status: 'PAID' }, _sum: { amount: true } }),
+          prisma.loyaltyGrade.findUnique({ where: { clientId: booking.clientId } }),
+        ]);
+        const suggestedGrade = calculateSuggestedGrade(totalStays, totalPaid._sum.amount ?? 0);
+        if (currentGrade && !currentGrade.isOverride && currentGrade.grade !== suggestedGrade) {
+          await prisma.loyaltyGrade.update({
+            where: { clientId: booking.clientId },
+            data: { grade: suggestedGrade },
+          });
+          await createLoyaltyUpdateNotification(booking.clientId, suggestedGrade, booking.client.language || 'fr');
+        }
+      } catch { /* non-blocking */ }
+    } else if (status === 'IN_PROGRESS') {
+      await createBookingInProgressNotification(
+        booking.clientId,
+        bookingRef,
+        petNames,
+        booking.serviceType as 'BOARDING' | 'PET_TAXI'
+      );
+
+      await logAction({
+        userId: session.user.id,
+        action: 'BOOKING_IN_PROGRESS',
         entityType: 'Booking',
         entityId: params.id,
         details: { from: booking.status, to: status },
@@ -108,7 +158,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

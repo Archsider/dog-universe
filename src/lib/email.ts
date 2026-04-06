@@ -63,7 +63,22 @@ export async function sendEmail({
   }
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder' | 'welcome', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+  // Escape all user-supplied fields to prevent XSS in email HTML
+  const d: Record<string, string> = {};
+  for (const [key, val] of Object.entries(data)) {
+    // URL fields must not be escaped (they go in href attributes as-is)
+    d[key] = (key === 'resetUrl' || key === 'loginUrl') ? val : escapeHtml(val ?? '');
+  }
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -100,17 +115,17 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
       subjectFr: '✅ Votre demande de réservation a bien été reçue — Dog Universe',
       subjectEn: '✅ Your booking request has been received — Dog Universe',
       bodyFr: `
-        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
-        <p>Nous avons bien reçu votre demande de réservation <strong>${data.bookingRef}</strong>.</p>
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Nous avons bien reçu votre demande de réservation <strong>${d.bookingRef}</strong>.</p>
         <p>Notre équipe la traitera sous <strong>24 heures</strong>. Vous recevrez une notification de confirmation dès validation.</p>
-        <p style="color: #6B7280; font-size: 14px;">Service : ${data.service} | Animal : ${data.petName}</p>
+        <p style="color: #6B7280; font-size: 14px;">Service : ${d.service} | Animal : ${d.petName}</p>
         <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
       `,
       bodyEn: `
-        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
-        <p>We have received your booking request <strong>${data.bookingRef}</strong>.</p>
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>We have received your booking request <strong>${d.bookingRef}</strong>.</p>
         <p>Our team will process it within <strong>24 hours</strong>. You will receive a confirmation notification once validated.</p>
-        <p style="color: #6B7280; font-size: 14px;">Service: ${data.service} | Pet: ${data.petName}</p>
+        <p style="color: #6B7280; font-size: 14px;">Service: ${d.service} | Pet: ${d.petName}</p>
         <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
@@ -118,17 +133,17 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
       subjectFr: '✅ Réservation confirmée — Dog Universe',
       subjectEn: '✅ Booking confirmed — Dog Universe',
       bodyFr: `
-        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
-        <p>Excellente nouvelle ! Votre réservation <strong>${data.bookingRef}</strong> a été <strong style="color: #16a34a;">confirmée</strong>.</p>
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Excellente nouvelle ! Votre réservation <strong>${d.bookingRef}</strong> a été <strong style="color: #16a34a;">confirmée</strong>.</p>
         <p>Nous attendons votre compagnon avec impatience.</p>
-        <p style="color: #6B7280; font-size: 14px;">Service : ${data.service} | Animal : ${data.petName} | Dates : ${data.dates}</p>
+        <p style="color: #6B7280; font-size: 14px;">Service : ${d.service} | Animal : ${d.petName} | Dates : ${d.dates}</p>
         <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
       `,
       bodyEn: `
-        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
-        <p>Great news! Your booking <strong>${data.bookingRef}</strong> has been <strong style="color: #16a34a;">confirmed</strong>.</p>
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Great news! Your booking <strong>${d.bookingRef}</strong> has been <strong style="color: #16a34a;">confirmed</strong>.</p>
         <p>We look forward to welcoming your companion.</p>
-        <p style="color: #6B7280; font-size: 14px;">Service: ${data.service} | Pet: ${data.petName} | Dates: ${data.dates}</p>
+        <p style="color: #6B7280; font-size: 14px;">Service: ${d.service} | Pet: ${d.petName} | Dates: ${d.dates}</p>
         <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
@@ -136,32 +151,84 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
       subjectFr: 'ℹ️ Réservation non disponible — Dog Universe',
       subjectEn: 'ℹ️ Booking unavailable — Dog Universe',
       bodyFr: `
-        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
-        <p>Nous sommes désolés de vous informer que votre demande de réservation <strong>${data.bookingRef}</strong> ne peut pas être honorée.</p>
-        ${data.reason ? `<p>Motif : ${data.reason}</p>` : ''}
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Nous sommes désolés de vous informer que votre demande de réservation <strong>${d.bookingRef}</strong> ne peut pas être honorée.</p>
+        ${d.reason ? `<p>Motif : ${d.reason}</p>` : ''}
         <p>N'hésitez pas à nous contacter ou à soumettre une nouvelle demande pour d'autres dates.</p>
         <p>Cordialement,<br><strong>L'équipe Dog Universe</strong></p>
       `,
       bodyEn: `
-        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
-        <p>We regret to inform you that your booking request <strong>${data.bookingRef}</strong> cannot be accommodated.</p>
-        ${data.reason ? `<p>Reason: ${data.reason}</p>` : ''}
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>We regret to inform you that your booking request <strong>${d.bookingRef}</strong> cannot be accommodated.</p>
+        ${d.reason ? `<p>Reason: ${d.reason}</p>` : ''}
         <p>Please feel free to contact us or submit a new request for other dates.</p>
         <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
+    booking_completed: {
+      subjectFr: d.serviceType === 'PET_TAXI'
+        ? `🏁 Trajet terminé — Dog Universe`
+        : d.hasGrooming === 'true'
+          ? `✅ Séjour & toilettage terminés — Dog Universe`
+          : `✅ Séjour terminé — Dog Universe`,
+      subjectEn: d.serviceType === 'PET_TAXI'
+        ? `🏁 Trip completed — Dog Universe`
+        : d.hasGrooming === 'true'
+          ? `✅ Stay & grooming completed — Dog Universe`
+          : `✅ Stay completed — Dog Universe`,
+      bodyFr: d.serviceType === 'PET_TAXI'
+        ? `
+          <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+          <p>Votre trajet Pet Taxi (réf. <strong>${d.bookingRef}</strong>) est terminé.</p>
+          <p><strong>${d.petName}</strong> est arrivé(e) à destination en toute sécurité.</p>
+          <p>Merci de votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
+        `
+        : d.hasGrooming === 'true'
+          ? `
+            <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+            <p>Le séjour et le toilettage de <strong>${d.petName}</strong> (réf. <strong>${d.bookingRef}</strong>) sont maintenant terminés.</p>
+            <p>Votre compagnon est prêt à être récupéré. N'hésitez pas à nous contacter pour convenir de l'heure de passage.</p>
+            <p>Merci de votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
+          `
+          : `
+            <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+            <p>Le séjour de <strong>${d.petName}</strong> (réf. <strong>${d.bookingRef}</strong>) est maintenant terminé.</p>
+            <p>Votre compagnon est prêt à être récupéré. N'hésitez pas à nous contacter pour convenir de l'heure de passage.</p>
+            <p>Merci de votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
+          `,
+      bodyEn: d.serviceType === 'PET_TAXI'
+        ? `
+          <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+          <p>Your Pet Taxi trip (ref. <strong>${d.bookingRef}</strong>) is now complete.</p>
+          <p><strong>${d.petName}</strong> has arrived safely at the destination.</p>
+          <p>Thank you for your trust,<br><strong>The Dog Universe Team</strong></p>
+        `
+        : d.hasGrooming === 'true'
+          ? `
+            <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+            <p><strong>${d.petName}</strong>'s stay and grooming (ref. <strong>${d.bookingRef}</strong>) are now complete.</p>
+            <p>Your companion is ready to be picked up. Feel free to contact us to arrange a pick-up time.</p>
+            <p>Thank you for your trust,<br><strong>The Dog Universe Team</strong></p>
+          `
+          : `
+            <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+            <p><strong>${d.petName}</strong>'s stay (ref. <strong>${d.bookingRef}</strong>) is now complete.</p>
+            <p>Your companion is ready to be picked up. Feel free to contact us to arrange a pick-up time.</p>
+            <p>Thank you for your trust,<br><strong>The Dog Universe Team</strong></p>
+          `,
+    },
     invoice_available: {
-      subjectFr: `📄 Votre facture ${data.invoiceNumber} est disponible — Dog Universe`,
-      subjectEn: `📄 Your invoice ${data.invoiceNumber} is available — Dog Universe`,
+      subjectFr: `📄 Votre facture ${d.invoiceNumber} est disponible — Dog Universe`,
+      subjectEn: `📄 Your invoice ${d.invoiceNumber} is available — Dog Universe`,
       bodyFr: `
-        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
-        <p>Votre facture <strong>${data.invoiceNumber}</strong> d'un montant de <strong>${data.amount}</strong> est maintenant disponible dans votre espace client.</p>
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Votre facture <strong>${d.invoiceNumber}</strong> d'un montant de <strong>${d.amount}</strong> est maintenant disponible dans votre espace client.</p>
         <p>Connectez-vous pour la consulter et la télécharger en PDF.</p>
         <p>Cordialement,<br><strong>L'équipe Dog Universe</strong></p>
       `,
       bodyEn: `
-        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
-        <p>Your invoice <strong>${data.invoiceNumber}</strong> for <strong>${data.amount}</strong> is now available in your client portal.</p>
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Your invoice <strong>${d.invoiceNumber}</strong> for <strong>${d.amount}</strong> is now available in your client portal.</p>
         <p>Log in to view and download it as PDF.</p>
         <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
       `,
@@ -170,32 +237,32 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
       subjectFr: `🐾 Rappel : votre séjour commence dans 2 jours — Dog Universe`,
       subjectEn: `🐾 Reminder: your stay starts in 2 days — Dog Universe`,
       bodyFr: `
-        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
-        <p>Petit rappel : votre réservation <strong>${data.bookingRef}</strong> pour <strong>${data.petName}</strong> commence <strong>dans 2 jours</strong>, le <strong>${data.startDate}</strong>.</p>
-        <p style="color: #6B7280; font-size: 14px;">Service : ${data.service}</p>
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Petit rappel : votre réservation <strong>${d.bookingRef}</strong> pour <strong>${d.petName}</strong> commence <strong>dans 2 jours</strong>, le <strong>${d.startDate}</strong>.</p>
+        <p style="color: #6B7280; font-size: 14px;">Service : ${d.service}</p>
         <p>Si vous avez des questions ou souhaitez modifier votre réservation, n'hésitez pas à nous contacter.</p>
         <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
       `,
       bodyEn: `
-        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
-        <p>Just a reminder: your booking <strong>${data.bookingRef}</strong> for <strong>${data.petName}</strong> starts <strong>in 2 days</strong>, on <strong>${data.startDate}</strong>.</p>
-        <p style="color: #6B7280; font-size: 14px;">Service: ${data.service}</p>
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Just a reminder: your booking <strong>${d.bookingRef}</strong> for <strong>${d.petName}</strong> starts <strong>in 2 days</strong>, on <strong>${d.startDate}</strong>.</p>
+        <p style="color: #6B7280; font-size: 14px;">Service: ${d.service}</p>
         <p>If you have any questions or would like to modify your booking, please feel free to contact us.</p>
         <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
     stay_photo: {
-      subjectFr: `📸 Nouvelles photos de ${data.petName} disponibles — Dog Universe`,
-      subjectEn: `📸 New photos of ${data.petName} available — Dog Universe`,
+      subjectFr: `📸 Nouvelles photos de ${d.petName} disponibles — Dog Universe`,
+      subjectEn: `📸 New photos of ${d.petName} available — Dog Universe`,
       bodyFr: `
-        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
-        <p>De nouvelles photos de <strong>${data.petName}</strong> ont été publiées pour votre réservation <strong>${data.bookingRef}</strong>.</p>
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>De nouvelles photos de <strong>${d.petName}</strong> ont été publiées pour votre réservation <strong>${d.bookingRef}</strong>.</p>
         <p>Connectez-vous à votre espace client pour les consulter !</p>
         <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
       `,
       bodyEn: `
-        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
-        <p>New photos of <strong>${data.petName}</strong> have been posted for your booking <strong>${data.bookingRef}</strong>.</p>
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>New photos of <strong>${d.petName}</strong> have been posted for your booking <strong>${d.bookingRef}</strong>.</p>
         <p>Log in to your client portal to see them!</p>
         <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
       `,
@@ -204,20 +271,146 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
       subjectFr: `💬 Message de Dog Universe`,
       subjectEn: `💬 Message from Dog Universe`,
       bodyFr: `
-        <h2 style="color: #2C2C2C;">Bonjour ${data.clientName},</h2>
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
         <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
-          <p style="margin: 0; color: #2C2C2C;">${data.message}</p>
+          <p style="margin: 0; color: #2C2C2C;">${d.message}</p>
         </div>
-        ${data.bookingRef ? `<p style="color: #6B7280; font-size: 13px;">Réservation : ${data.bookingRef}</p>` : ''}
+        ${d.bookingRef ? `<p style="color: #6B7280; font-size: 13px;">Réservation : ${d.bookingRef}</p>` : ''}
         <p>Cordialement,<br><strong>L'équipe Dog Universe</strong></p>
       `,
       bodyEn: `
-        <h2 style="color: #2C2C2C;">Hello ${data.clientName},</h2>
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
         <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
-          <p style="margin: 0; color: #2C2C2C;">${data.message}</p>
+          <p style="margin: 0; color: #2C2C2C;">${d.message}</p>
         </div>
-        ${data.bookingRef ? `<p style="color: #6B7280; font-size: 13px;">Booking: ${data.bookingRef}</p>` : ''}
+        ${d.bookingRef ? `<p style="color: #6B7280; font-size: 13px;">Booking: ${d.bookingRef}</p>` : ''}
         <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    loyalty_update: {
+      subjectFr: `⭐ Votre grade de fidélité a évolué — Dog Universe`,
+      subjectEn: `⭐ Your loyalty grade has been updated — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Félicitations ! Votre fidélité a été récompensée.</p>
+        <p>Votre grade est maintenant : <strong style="color: #C9A84C; font-size: 18px;">${d.grade}</strong></p>
+        ${d.totalStays ? `<p style="color: #6B7280; font-size: 14px;">Séjours complétés : ${d.totalStays}</p>` : ''}
+        <p>Connectez-vous à votre espace client pour découvrir vos nouveaux avantages.</p>
+        <p>Merci pour votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Congratulations! Your loyalty has been rewarded.</p>
+        <p>Your grade is now: <strong style="color: #C9A84C; font-size: 18px;">${d.grade}</strong></p>
+        ${d.totalStays ? `<p style="color: #6B7280; font-size: 14px;">Completed stays: ${d.totalStays}</p>` : ''}
+        <p>Log in to your client portal to discover your new benefits.</p>
+        <p>Thank you for your loyalty,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    loyalty_claim_approved: {
+      subjectFr: `✅ Votre avantage fidélité a été accordé — Dog Universe`,
+      subjectEn: `✅ Your loyalty benefit has been granted — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Excellente nouvelle ! Votre demande d'avantage a été <strong style="color: #16a34a;">accordée</strong>.</p>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0; font-weight: bold; color: #2C2C2C;">${d.benefitFr}</p>
+        </div>
+        <p>Notre équipe prendra contact avec vous pour la mise en place de cet avantage.</p>
+        <p>Merci pour votre fidélité,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Great news! Your benefit request has been <strong style="color: #16a34a;">approved</strong>.</p>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0; font-weight: bold; color: #2C2C2C;">${d.benefitEn}</p>
+        </div>
+        <p>Our team will contact you shortly to arrange this benefit.</p>
+        <p>Thank you for your loyalty,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    loyalty_claim_rejected: {
+      subjectFr: `ℹ️ Votre réclamation d'avantage fidélité — Dog Universe`,
+      subjectEn: `ℹ️ Your loyalty benefit claim — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Votre demande pour l'avantage <strong>${d.benefitFr}</strong> n'a malheureusement pas pu être accordée.</p>
+        ${d.reason ? `<div style="background: #FEF2F2; border-left: 4px solid #EF4444; padding: 16px; border-radius: 4px; margin: 16px 0;"><p style="margin: 0; color: #991B1B;">Motif : ${d.reason}</p></div>` : ''}
+        <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
+        <p>Cordialement,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Unfortunately, your request for the benefit <strong>${d.benefitEn}</strong> could not be approved.</p>
+        ${d.reason ? `<div style="background: #FEF2F2; border-left: 4px solid #EF4444; padding: 16px; border-radius: 4px; margin: 16px 0;"><p style="margin: 0; color: #991B1B;">Reason: ${d.reason}</p></div>` : ''}
+        <p>If you have any questions, please feel free to contact us.</p>
+        <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    contract_reminder: {
+      subjectFr: '⚠️ Action requise : signature de votre contrat — Dog Universe',
+      subjectEn: '⚠️ Action required: sign your contract — Dog Universe',
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Votre <strong>contrat d'hébergement</strong> est obligatoire pour accéder à votre espace client Dog Universe.</p>
+        <p>Pour le signer, connectez-vous à votre espace — le contrat vous sera présenté automatiquement :</p>
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${d.loginUrl}" style="display: inline-block; background: #C9A84C; color: white; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-size: 15px;">
+            Accéder à mon espace
+          </a>
+        </div>
+        <p style="color: #999; font-size: 13px;">Si vous avez des questions, n'hésitez pas à nous contacter par email ou téléphone.</p>
+        <p>Cordialement,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Your <strong>boarding contract</strong> is required to access your Dog Universe client area.</p>
+        <p>To sign it, log in to your account — the contract will be presented to you automatically:</p>
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${d.loginUrl}" style="display: inline-block; background: #C9A84C; color: white; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-size: 15px;">
+            Access my account
+          </a>
+        </div>
+        <p style="color: #999; font-size: 13px;">If you have any questions, feel free to contact us by email or phone.</p>
+        <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    welcome: {
+      subjectFr: '🐾 Bienvenue chez Dog Universe !',
+      subjectEn: '🐾 Welcome to Dog Universe!',
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Bienvenue chez <strong>Dog Universe</strong> — la pension animale de référence à Marrakech.</p>
+        <p>Votre compte a été créé avec succès. Vous pouvez dès maintenant :</p>
+        <ul style="color: #4B5563; line-height: 1.8;">
+          <li>Réserver un séjour ou un Pet Taxi pour votre animal</li>
+          <li>Suivre vos réservations en temps réel</li>
+          <li>Accéder à vos factures et les télécharger en PDF</li>
+          <li>Profiter de notre programme de fidélité</li>
+        </ul>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${d.loginUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Accéder à mon espace
+          </a>
+        </p>
+        <p>À très bientôt,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Welcome to <strong>Dog Universe</strong> — Marrakech's premier pet boarding facility.</p>
+        <p>Your account has been created successfully. You can now:</p>
+        <ul style="color: #4B5563; line-height: 1.8;">
+          <li>Book a boarding stay or Pet Taxi for your pet</li>
+          <li>Track your bookings in real time</li>
+          <li>Access and download your invoices as PDF</li>
+          <li>Enjoy our loyalty rewards program</li>
+        </ul>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${d.loginUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Access my account
+          </a>
+        </p>
+        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
     reset_password: {
@@ -228,7 +421,7 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         <p>Vous avez demandé la réinitialisation de votre mot de passe Dog Universe.</p>
         <p>Cliquez sur le bouton ci-dessous pour définir un nouveau mot de passe :</p>
         <p style="text-align: center; margin: 24px 0;">
-          <a href="${data.resetUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+          <a href="${d.resetUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
             Réinitialiser mon mot de passe
           </a>
         </p>
@@ -240,7 +433,7 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         <p>You have requested a password reset for your Dog Universe account.</p>
         <p>Click the button below to set a new password:</p>
         <p style="text-align: center; margin: 24px 0;">
-          <a href="${data.resetUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+          <a href="${d.resetUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
             Reset my password
           </a>
         </p>

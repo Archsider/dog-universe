@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { createBookingConfirmationNotification } from '@/lib/notifications';
+import { createBookingConfirmationNotification, notifyAdminsNewBooking } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { formatDate } from '@/lib/utils';
+import { getPricingSettings } from '@/lib/pricing';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -22,7 +23,8 @@ export async function GET(request: Request) {
     where.clientId = clientId;
   }
 
-  if (status) where.status = status;
+  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REJECTED'];
+  if (status && VALID_STATUSES.includes(status)) where.status = status;
 
   const bookings = await prisma.booking.findMany({
     where,
@@ -72,8 +74,71 @@ export async function POST(request: Request) {
       taxiType,
     } = body;
 
-    if (!serviceType || !petIds?.length || !startDate) {
+    const VALID_SERVICE_TYPES = ['BOARDING', 'PET_TAXI'];
+    if (!serviceType || !VALID_SERVICE_TYPES.includes(serviceType)) {
+      return NextResponse.json({ error: 'INVALID_SERVICE_TYPE' }, { status: 400 });
+    }
+    if (!petIds?.length || !startDate) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
+    }
+
+    // Clients cannot book in the past (admins can for data entry)
+    if (session.user.role === 'CLIENT') {
+      const start = new Date(startDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (start < today) {
+        return NextResponse.json({ error: 'DATE_IN_PAST' }, { status: 400 });
+      }
+    }
+
+    // Validation horaires Pet Taxi : pas le dimanche, uniquement 10h-17h
+    if (serviceType === 'PET_TAXI') {
+      const taxiDate = new Date(startDate);
+      if (taxiDate.getDay() === 0) {
+        return NextResponse.json({ error: 'SUNDAY_NOT_ALLOWED' }, { status: 400 });
+      }
+      // Vérifier l'heure (depuis startDate ou arrivalTime)
+      let taxiHour: number | null = null;
+      let taxiMinute = 0;
+      if (body.arrivalTime && typeof body.arrivalTime === 'string') {
+        const parts = body.arrivalTime.split(':').map(Number);
+        taxiHour = parts[0] ?? null;
+        taxiMinute = parts[1] ?? 0;
+      } else {
+        taxiHour = taxiDate.getHours();
+        taxiMinute = taxiDate.getMinutes();
+      }
+      if (taxiHour !== null) {
+        const totalMinutes = taxiHour * 60 + taxiMinute;
+        if (totalMinutes < 10 * 60 || totalMinutes > 17 * 60) {
+          return NextResponse.json({ error: 'INVALID_TIME_SLOT' }, { status: 400 });
+        }
+      }
+    }
+
+    // Validate boarding taxi addon dates/times (same rules as standalone Pet Taxi)
+    if (serviceType === 'BOARDING') {
+      const addonChecks = [
+        { enabled: taxiGoEnabled, date: taxiGoDate, time: taxiGoTime },
+        { enabled: taxiReturnEnabled, date: taxiReturnDate, time: taxiReturnTime },
+      ];
+      for (const addon of addonChecks) {
+        if (!addon.enabled) continue;
+        if (addon.date) {
+          const d = new Date(addon.date + 'T12:00:00');
+          if (d.getDay() === 0) {
+            return NextResponse.json({ error: 'SUNDAY_NOT_ALLOWED' }, { status: 400 });
+          }
+        }
+        if (addon.time && typeof addon.time === 'string') {
+          const [h, m] = addon.time.split(':').map(Number);
+          const total = (h ?? 0) * 60 + (m ?? 0);
+          if (total < 10 * 60 || total > 17 * 60) {
+            return NextResponse.json({ error: 'INVALID_TIME_SLOT' }, { status: 400 });
+          }
+        }
+      }
     }
 
     // Verify pets belong to this client
@@ -86,18 +151,21 @@ export async function POST(request: Request) {
       }
     }
 
-    // Generate booking reference
-    const count = await prisma.booking.count();
-    const year = new Date().getFullYear();
-    const bookingRef = `DU-${year}-${String(count + 1).padStart(4, '0')}`;
+    // Booking reference: first 8 chars of UUID, uppercase — consistent across all systems
+    // (computed after booking.create below — placeholder until then)
+    let bookingRef = '';
 
-    const clientId = session.user.role === 'CLIENT' ? session.user.id : body.clientId;
+    const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN';
+    const clientId = isAdmin ? body.clientId : session.user.id;
+    if (!clientId) {
+      return NextResponse.json({ error: 'MISSING_CLIENT_ID' }, { status: 400 });
+    }
 
     const booking = await prisma.booking.create({
       data: {
         clientId,
         serviceType,
-        status: session.user.role === 'ADMIN' ? 'CONFIRMED' : 'PENDING',
+        status: isAdmin ? 'CONFIRMED' : 'PENDING',
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         arrivalTime: arrivalTime || null,
@@ -113,15 +181,39 @@ export async function POST(request: Request) {
       },
     });
 
+    // Set booking reference using the actual ID (consistent across all systems)
+    bookingRef = booking.id.slice(0, 8).toUpperCase();
+
     // Create service-specific details
     if (serviceType === 'BOARDING') {
+      // Auto-calculate pricePerNight from settings if not explicitly provided
+      let resolvedPricePerNight = pricePerNight ?? 0;
+      if (!resolvedPricePerNight) {
+        try {
+          const pricing = await getPricingSettings();
+          const pets = await prisma.pet.findMany({ where: { id: { in: petIds } }, select: { species: true } });
+          const nights = endDate
+            ? Math.max(0, Math.floor((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)))
+            : 0;
+          const dogs = pets.filter(p => p.species === 'DOG');
+          const cats = pets.filter(p => p.species === 'CAT');
+          if (dogs.length === 1 && cats.length === 0) {
+            resolvedPricePerNight = nights > pricing.long_stay_threshold ? pricing.boarding_dog_long_stay : pricing.boarding_dog_per_night;
+          } else if (dogs.length > 1) {
+            resolvedPricePerNight = pricing.boarding_dog_multi;
+          } else if (cats.length > 0 && dogs.length === 0) {
+            resolvedPricePerNight = pricing.boarding_cat_per_night;
+          }
+        } catch { /* fallback to 0 */ }
+      }
+
       await prisma.boardingDetail.create({
         data: {
           bookingId: booking.id,
           includeGrooming: includeGrooming ?? false,
           groomingSize: groomingSize || null,
           groomingPrice: groomingPrice ?? 0,
-          pricePerNight: pricePerNight ?? 0,
+          pricePerNight: resolvedPricePerNight,
           taxiGoEnabled: taxiGoEnabled ?? false,
           taxiGoDate: taxiGoDate || null,
           taxiGoTime: taxiGoTime || null,
@@ -152,6 +244,18 @@ export async function POST(request: Request) {
       bookingRef,
       petNames
     );
+
+    // Notify admins when a client (not admin) creates a booking
+    if (!isAdmin) {
+      notifyAdminsNewBooking(
+        booking.client.name ?? booking.client.email,
+        petNames,
+        serviceType === 'BOARDING' ? 'pension' : 'taxi animalier',
+        serviceType === 'BOARDING' ? 'boarding' : 'pet taxi',
+        bookingRef,
+        booking.id
+      ).catch(() => {});
+    }
 
     const serviceName = serviceType === 'BOARDING'
       ? (locale === 'fr' ? 'Pension' : 'Boarding')

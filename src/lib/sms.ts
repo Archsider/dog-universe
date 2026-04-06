@@ -55,9 +55,10 @@ export async function sendSms({ to, message }: SendSmsOptions): Promise<SmsResul
   const pass = process.env.SMS_GATEWAY_PASS;
 
   if (!enabled || !gatewayUrl) {
-    // Silently skip when not configured — log in dev
+    // Always mask phone number in logs regardless of environment
+    const maskedTo = to.length > 4 ? `${to.slice(0, 3)}****${to.slice(-2)}` : '****';
     if (process.env.NODE_ENV === 'development') {
-      console.log(`[SMS] (not configured) To: ${to} | ${message}`);
+      console.log(`[SMS] (not configured) To: ${maskedTo} | ${message.slice(0, 30)}...`);
     }
     return { ok: true };
   }

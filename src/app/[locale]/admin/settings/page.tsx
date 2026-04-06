@@ -23,7 +23,7 @@ const DEFAULT_SETTINGS: Record<string, string> = {
 
 export default async function AdminSettingsPage({ params: { locale } }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const rows = await prisma.setting?.findMany() ?? [];
   const settings = { ...DEFAULT_SETTINGS };
@@ -34,7 +34,7 @@ export default async function AdminSettingsPage({ params: { locale } }: PageProp
   return (
     <div className="space-y-8">
       <PricingForm initialValues={settings} />
-      <DangerZone locale={locale} />
+      {session.user.role === 'SUPERADMIN' && <DangerZone locale={locale} />}
     </div>
   );
 }

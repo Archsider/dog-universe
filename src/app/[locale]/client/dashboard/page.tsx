@@ -3,9 +3,10 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
-import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
-import { PawPrint, Calendar, FileText, History, Clock, CheckCircle, AlertCircle } from 'lucide-react';
-import { formatDate, formatDateShort, formatMAD, calculateNights } from '@/lib/utils';
+import { MemberCard } from '@/components/shared/MemberCard';
+import { Grade } from '@/lib/loyalty';
+import { PawPrint, Calendar, FileText, History, CheckCircle, AlertCircle } from 'lucide-react';
+import { formatDateShort, formatMAD } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
 type Params = { locale: string };
@@ -17,10 +18,10 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
   const t = await getTranslations('dashboard');
 
-  // Fetch all data in parallel
-  const [pets, upcomingBookings, recentInvoices, loyaltyGrade] = await Promise.all([
+  const [pets, upcomingBookings, recentInvoices, loyaltyGrade, myClaims] = await Promise.all([
     prisma.pet.findMany({
       where: { ownerId: session.user.id },
+      select: { id: true, name: true, species: true, breed: true, photoUrl: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.booking.findMany({
@@ -44,31 +45,27 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       take: 3,
     }),
     prisma.loyaltyGrade.findUnique({ where: { clientId: session.user.id } }),
+    prisma.loyaltyBenefitClaim.findMany({
+      where: { clientId: session.user.id },
+      select: { benefitKey: true, status: true },
+      orderBy: { claimedAt: 'desc' },
+    }),
   ]);
 
-  const totalStays = await prisma.booking.count({
-    where: { clientId: session.user.id, status: 'COMPLETED' },
-  });
+  const [totalStays, totalSpent] = await Promise.all([
+    prisma.booking.count({ where: { clientId: session.user.id, status: 'COMPLETED' } }),
+    prisma.invoice.aggregate({ where: { clientId: session.user.id, status: 'PAID' }, _sum: { amount: true } }),
+  ]);
 
-  const totalSpent = await prisma.invoice.aggregate({
-    where: { clientId: session.user.id, status: 'PAID' },
-    _sum: { amount: true },
-  });
-
-  const grade = loyaltyGrade?.grade ?? 'BRONZE';
+  const grade = (loyaltyGrade?.grade ?? 'BRONZE') as Grade;
 
   const statusColors: Record<string, string> = {
-    PENDING: 'pending',
-    CONFIRMED: 'confirmed',
-    COMPLETED: 'completed',
-    CANCELLED: 'cancelled',
+    PENDING: 'pending', CONFIRMED: 'confirmed', COMPLETED: 'completed', CANCELLED: 'cancelled',
   };
-
   const statusLabels: Record<string, Record<string, string>> = {
     fr: { PENDING: 'En attente', CONFIRMED: 'Confirmée', COMPLETED: 'Terminée', CANCELLED: 'Annulée' },
     en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', COMPLETED: 'Completed', CANCELLED: 'Cancelled' },
   };
-
   const serviceLabels: Record<string, Record<string, string>> = {
     fr: { BOARDING: 'Pension', PET_TAXI: 'Taxi animalier' },
     en: { BOARDING: 'Boarding', PET_TAXI: 'Pet Taxi' },
@@ -79,13 +76,25 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-serif font-bold text-charcoal">
-          {t('greeting', { name: session.user.name.split(' ')[0] })}
+          {t('greeting', { name: session.user.name?.split(' ')[0] ?? '' })}
         </h1>
         <p className="text-charcoal/60 mt-1">{t('subtitle')}</p>
       </div>
 
+      {/* Member Card */}
+      <MemberCard
+        clientId={session.user.id}
+        clientName={session.user.name ?? ''}
+        pets={pets.map((p) => ({ name: p.name, species: p.species }))}
+        grade={grade}
+        totalStays={totalStays}
+        totalSpentMAD={totalSpent._sum.amount ?? 0}
+        locale={locale}
+        claims={myClaims as { benefitKey: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' }[]}
+      />
+
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
           <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{t('stats.pets')}</p>
           <p className="text-3xl font-serif font-bold text-charcoal mt-1">{pets.length}</p>
@@ -99,12 +108,6 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           <p className="text-2xl font-serif font-bold text-gold-600 mt-1">
             {formatMAD(totalSpent._sum.amount ?? 0)}
           </p>
-        </div>
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-          <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{t('stats.loyalty')}</p>
-          <div className="mt-2">
-            <LoyaltyBadge grade={grade} locale={locale} size="md" />
-          </div>
         </div>
       </div>
 

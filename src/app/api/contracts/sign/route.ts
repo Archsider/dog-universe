@@ -1,0 +1,116 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '../../../../../auth';
+import { prisma } from '@/lib/prisma';
+import { generateContractPDF } from '@/lib/contract-pdf';
+import { uploadBufferPrivate, createSignedUrl } from '@/lib/supabase';
+
+export async function POST(req: NextRequest) {
+  const session = await auth();
+
+  if (!session?.user || session.user.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const clientId = session.user.id;
+
+  // Check if already signed
+  const existing = await prisma.clientContract.findUnique({
+    where: { clientId },
+  });
+  if (existing) {
+    return NextResponse.json(
+      { error: 'Contract already signed' },
+      { status: 409 }
+    );
+  }
+
+  let signatureDataUrl: string;
+  try {
+    const body = await req.json();
+    signatureDataUrl = body.signatureDataUrl;
+    if (!signatureDataUrl || !signatureDataUrl.startsWith('data:image/png;base64,')) {
+      return NextResponse.json({ error: 'Invalid signature data' }, { status: 400 });
+    }
+    // Guard against oversized payloads (max 2 MB base64 ≈ 1.5 MB image)
+    if (signatureDataUrl.length > 2 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Signature image too large' }, { status: 400 });
+    }
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+
+  const client = await prisma.user.findUnique({
+    where: { id: clientId },
+    select: { name: true, email: true },
+  });
+  if (!client) {
+    return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+  }
+
+  const ipAddress =
+    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+    req.headers.get('x-real-ip') ??
+    undefined;
+
+  const signedAt = new Date();
+
+  // Generate PDF server-side (stamp is embedded here — stamp file never sent to browser)
+  const pdfBuffer = await generateContractPDF({
+    clientName: client.name,
+    clientEmail: client.email,
+    signedAt,
+    signatureDataUrl,
+    ipAddress,
+    version: '1.0',
+  });
+
+  // Upload to the PRIVATE Supabase Storage bucket
+  const storageKey = `contracts/${clientId}.pdf`;
+  await uploadBufferPrivate(pdfBuffer, storageKey, 'application/pdf');
+
+  // Save contract record in DB — catch P2002 for concurrent signing race condition
+  try {
+    await prisma.clientContract.create({
+      data: {
+        clientId,
+        signedAt,
+        storageKey,
+        ipAddress,
+        version: '1.0',
+      },
+    });
+  } catch (err) {
+    if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002') {
+      return NextResponse.json({ error: 'Contract already signed' }, { status: 409 });
+    }
+    throw err;
+  }
+
+  // Return a time-limited signed URL (1h) — never expose a permanent public URL
+  const downloadUrl = await createSignedUrl(storageKey);
+  return NextResponse.json({ success: true, downloadUrl });
+}
+
+export async function GET() {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const clientId = session.user.id;
+
+  const contract = await prisma.clientContract.findUnique({
+    where: { clientId },
+    select: { signedAt: true, storageKey: true, version: true },
+  });
+
+  if (!contract) {
+    return NextResponse.json({ contract: null });
+  }
+
+  // Generate a fresh signed URL valid for 1 hour — do not return the stored public URL
+  const downloadUrl = await createSignedUrl(contract.storageKey);
+  return NextResponse.json({
+    contract: { signedAt: contract.signedAt, downloadUrl, version: contract.version },
+  });
+}

@@ -4,13 +4,13 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
-  const page = parseInt(searchParams.get('page') ?? '1');
-  const limit = parseInt(searchParams.get('limit') ?? '50');
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
+  const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') ?? '50')), 100);
   const entityType = searchParams.get('entityType') ?? '';
 
   const where: Record<string, unknown> = {};
