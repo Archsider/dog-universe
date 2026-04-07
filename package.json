@@ -15,6 +15,7 @@
     "setup": "npm install && npx prisma generate && npx prisma db push && npm run db:seed"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.85.0",
     "@auth/prisma-adapter": "^2.7.2",
     "@hookform/resolvers": "^3.9.1",
     "@prisma/client": "^5.22.0",

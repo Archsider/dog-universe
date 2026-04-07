@@ -71,16 +71,21 @@ model Pet {
 }
 
 model Vaccination {
-  id          String   @id @default(cuid())
-  petId       String
-  date        DateTime
-  vaccineType String
-  comment     String?
-  createdAt   DateTime @default(now())
+  id               String    @id @default(cuid())
+  petId            String
+  date             DateTime?
+  vaccineType      String    @default("")
+  nextDueDate      DateTime?
+  comment          String?
+  status           String    @default("CONFIRMED") // "CONFIRMED" | "DRAFT"
+  isAutoDetected   Boolean   @default(false)
+  sourceDocumentId String?   // PetDocument.id reference (informational, no FK)
+  createdAt        DateTime  @default(now())
 
   pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
 
   @@index([petId])
+  @@index([status])
 }
 
 model PetDocument {

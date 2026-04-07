@@ -116,7 +116,7 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
               {pet.vaccinations[0] && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <p className="text-xs text-charcoal/40">
-                    {locale === 'fr' ? 'Dernier vaccin:' : 'Last vaccine:'} {pet.vaccinations[0].vaccineType} · {formatDateShort(pet.vaccinations[0].date, locale)}
+                    {locale === 'fr' ? 'Dernier vaccin:' : 'Last vaccine:'} {pet.vaccinations[0].vaccineType}{pet.vaccinations[0].date ? ` · ${formatDateShort(pet.vaccinations[0].date, locale)}` : ''}
                   </p>
                 </div>
               )}
