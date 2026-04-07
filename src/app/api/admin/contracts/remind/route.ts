@@ -5,7 +5,7 @@ import { sendEmail, getEmailTemplate } from '@/lib/email';
 
 const LOGIN_URL = process.env.NEXT_PUBLIC_APP_URL
   ? `${process.env.NEXT_PUBLIC_APP_URL}/fr/auth/login`
-  : 'https://doguniverse.ma/fr/auth/login';
+  : 'https://app.doguniverse.ma/fr/auth/login';
 
 // POST /api/admin/contracts/remind
 // Body: { clientId?: string } — if omitted, sends to ALL unsigned clients

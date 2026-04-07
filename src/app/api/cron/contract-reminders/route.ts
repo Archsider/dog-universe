@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
 
 export async function GET(req: NextRequest) {
   const secret = req.headers.get('x-cron-secret')

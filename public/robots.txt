@@ -6,4 +6,4 @@ Disallow: /*/admin/
 Disallow: /*/client/
 Disallow: /*/auth/
 
-Sitemap: https://doguniverse.ma/sitemap.xml
+Sitemap: https://app.doguniverse.ma/sitemap.xml

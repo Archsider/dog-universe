@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
     // Welcome email — non-blocking
     const locale = user.language ?? 'fr';
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
     const loginUrl = `${appUrl}/${locale}/auth/login`;
     const { subject, html } = getEmailTemplate(
       'welcome',

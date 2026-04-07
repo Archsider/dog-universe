@@ -5,7 +5,7 @@ type Params = { locale: string };
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { locale } = await params;
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
   const isFr = locale === 'fr';
   return {
     title: isFr ? 'Politique de confidentialité — Dog Universe' : 'Privacy Policy — Dog Universe',

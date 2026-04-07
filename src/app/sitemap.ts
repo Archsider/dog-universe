@@ -1,6 +1,6 @@
 import { MetadataRoute } from 'next';
 
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const locales = ['fr', 'en'] as const;
