@@ -12,6 +12,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'MISSING_FIELDS', message: 'Required fields missing' }, { status: 400 });
     }
 
+    if (name.trim().split(/\s+/).length < 2) {
+      return NextResponse.json({ error: 'FULL_NAME_REQUIRED', message: 'Please enter your first and last name' }, { status: 400 });
+    }
+
     if (password.length < 8) {
       return NextResponse.json({ error: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters' }, { status: 400 });
     }

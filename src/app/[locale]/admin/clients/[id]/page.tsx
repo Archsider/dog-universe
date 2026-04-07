@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatMAD, formatDate, getInitials, getBookingStatusColor } from '@/lib/utils';
 import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
 import ClientDetailActions from './ClientDetailActions';
+import EditClientInfoForm from './EditClientInfoForm';
 import DeleteClientButton from './DeleteClientButton';
 import CreateAnimalModal from '../../animals/CreateAnimalModal';
 
@@ -85,12 +86,23 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
               <div><div className="text-sm font-bold text-charcoal">{formatMAD(totalRevenue)}</div><div className="text-xs text-gray-500">{l.totalRevenue}</div></div>
             </div>
           </div>
-          {client.phone && (
-            <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
-              <h3 className="font-semibold text-charcoal text-sm mb-2">{l.contact}</h3>
-              <p className="text-sm text-gray-600">{client.phone}</p>
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
+            <h3 className="font-semibold text-charcoal text-sm mb-3">
+              {locale === 'fr' ? 'Infos client' : 'Client info'}
+            </h3>
+            <div className="space-y-1 mb-3 text-sm text-gray-600">
+              <p className="font-medium text-charcoal">{client.name}</p>
+              <p className="text-xs">{client.email}</p>
+              {client.phone && <p className="text-xs">{client.phone}</p>}
             </div>
-          )}
+            <EditClientInfoForm
+              clientId={id}
+              initialName={client.name ?? ''}
+              initialEmail={client.email}
+              initialPhone={client.phone}
+              locale={locale}
+            />
+          </div>
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
             <h3 className="font-semibold text-charcoal text-sm mb-3">{l.loyalty}</h3>
             <div className="mb-3"><LoyaltyBadge grade={grade} locale={locale} /></div>

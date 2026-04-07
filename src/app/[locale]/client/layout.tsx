@@ -38,24 +38,24 @@ export default async function ClientLayout({
   const hasContract = !!contract;
 
   return (
-    <div className="flex min-h-screen bg-[#FAF6F0]">
-      <ClientSidebar userName={session.user.name} unreadCount={unreadCount} />
+    <ContractGate hasContract={hasContract} clientName={session.user.name ?? ''}>
+      <div className="flex min-h-screen bg-[#FAF6F0]">
+        <ClientSidebar userName={session.user.name} unreadCount={unreadCount} />
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top bar */}
-        <header className="bg-white border-b border-[#F0D98A]/30 h-14 flex items-center justify-end px-4 sm:px-6 gap-3 flex-shrink-0 lg:sticky lg:top-0 lg:z-30">
-          <NotificationBell />
-          <LanguageSwitcher />
-        </header>
+        {/* Main content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Top bar */}
+          <header className="bg-white border-b border-[#F0D98A]/30 h-14 flex items-center justify-end px-4 sm:px-6 gap-3 flex-shrink-0 lg:sticky lg:top-0 lg:z-30">
+            <NotificationBell />
+            <LanguageSwitcher />
+          </header>
 
-        {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in">
-          <ContractGate hasContract={hasContract} clientName={session.user.name ?? ''}>
+          {/* Page content */}
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in">
             {children}
-          </ContractGate>
-        </main>
+          </main>
+        </div>
       </div>
-    </div>
+    </ContractGate>
   );
 }

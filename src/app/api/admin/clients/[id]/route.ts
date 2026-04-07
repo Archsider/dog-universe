@@ -77,6 +77,15 @@ export async function PATCH(request: Request, { params }: Params) {
   if (body.phone !== undefined) {
     updateData.phone = body.phone ? String(body.phone).trim().slice(0, 20) : null;
   }
+  if (body.email !== undefined) {
+    const email = String(body.email).trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
+    }
+    const existing = await prisma.user.findFirst({ where: { email, NOT: { id } } });
+    if (existing) return NextResponse.json({ error: 'EMAIL_TAKEN' }, { status: 409 });
+    updateData.email = email;
+  }
 
   await prisma.user.update({ where: { id }, data: updateData });
 

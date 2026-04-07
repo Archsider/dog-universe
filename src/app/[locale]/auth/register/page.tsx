@@ -29,6 +29,10 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
+    if (form.name.trim().split(/\s+/).length < 2) {
+      setError(locale === 'fr' ? 'Veuillez entrer votre prénom et nom de famille.' : 'Please enter your first and last name.');
+      return;
+    }
     if (form.password !== form.confirmPassword) {
       setError(t('errors.passwordMismatch'));
       return;
@@ -105,7 +109,7 @@ export default function RegisterPage() {
                 type="text"
                 value={form.name}
                 onChange={handleChange}
-                placeholder={locale === 'fr' ? 'Marie Dupont' : 'Jane Smith'}
+                placeholder={locale === 'fr' ? 'Prénom Nom (ex: Marie Dupont)' : 'First Last (e.g. Jane Smith)'}
                 required
                 className="mt-1"
               />

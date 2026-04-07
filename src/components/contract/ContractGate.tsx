@@ -14,14 +14,10 @@ export function ContractGate({ hasContract, clientName, children }: ContractGate
 
   if (!signed) {
     return (
-      <>
-        {/* Render children behind (blurred) but block interaction */}
-        <div className="pointer-events-none select-none filter blur-sm opacity-30 fixed inset-0" aria-hidden="true" />
-        <ContractModal
-          clientName={clientName}
-          onSigned={() => setSigned(true)}
-        />
-      </>
+      <ContractModal
+        clientName={clientName}
+        onSigned={() => setSigned(true)}
+      />
     );
   }
 

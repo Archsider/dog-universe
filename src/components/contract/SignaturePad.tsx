@@ -13,9 +13,15 @@ export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
   const padRef = useRef<SignaturePadLib | null>(null);
 
   // Resize canvas to match CSS size (for HiDPI / retina screens)
+  // Preserves existing signature data across resize events (e.g. mobile keyboard open/close)
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
+    const pad = padRef.current;
     if (!canvas) return;
+
+    // Save current signature data before resizing (resize clears the canvas)
+    const data = pad && !pad.isEmpty() ? pad.toData() : null;
+
     const ratio = Math.max(window.devicePixelRatio || 1, 1);
     const width = canvas.offsetWidth;
     const height = canvas.offsetHeight;
@@ -23,7 +29,11 @@ export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
     canvas.height = height * ratio;
     const ctx = canvas.getContext('2d');
     if (ctx) ctx.scale(ratio, ratio);
-    padRef.current?.clear();
+
+    // Restore signature data if there was one
+    if (pad && data) {
+      pad.fromData(data);
+    }
   }, []);
 
   useEffect(() => {
