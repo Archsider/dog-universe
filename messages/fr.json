@@ -69,7 +69,8 @@
       "contracts": "Contrats",
       "users": "Utilisateurs",
       "loyalty": "Réclamations fidélité",
-      "logout": "Déconnexion"
+      "logout": "Déconnexion",
+      "revenue_summary": "Données historiques"
     }
   },
   "auth": {

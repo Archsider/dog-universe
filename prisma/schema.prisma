@@ -30,6 +30,7 @@ model User {
   contract      ClientContract?
   benefitClaims    LoyaltyBenefitClaim[]
   reviewedClaims   LoyaltyBenefitClaim[] @relation("ClaimReviewer")
+  revenueSummaries MonthlyRevenueSummary[]
 }
 
 model Pet {
@@ -321,5 +322,26 @@ model ClientContract {
   createdAt   DateTime @default(now())
 
   client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+// Historical revenue summaries — for pre-production data entry (Jan/Feb/Mar/etc.)
+// Independent from Booking/Invoice — never affects normal workflows.
+model MonthlyRevenueSummary {
+  id              String   @id @default(cuid())
+  year            Int
+  month           Int      // 1–12
+  boardingRevenue Float    @default(0)
+  groomingRevenue Float    @default(0)
+  taxiRevenue     Float    @default(0)
+  otherRevenue    Float    @default(0)
+  notes           String?
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  author User @relation(fields: [createdBy], references: [id])
+
+  @@unique([year, month])
+  @@index([year])
 }
 

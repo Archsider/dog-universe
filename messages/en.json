@@ -69,7 +69,8 @@
       "contracts": "Contracts",
       "users": "Users",
       "loyalty": "Loyalty Claims",
-      "logout": "Sign Out"
+      "logout": "Sign Out",
+      "revenue_summary": "Historical Revenue"
     }
   },
   "auth": {

@@ -85,8 +85,9 @@ export async function PATCH(request: Request, { params }: Params) {
 
 export async function DELETE(_req: Request, { params }: Params) {
   const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  // Destructive: SUPERADMIN only
+  if (!session?.user || session.user.role !== 'SUPERADMIN') {
+    return NextResponse.json({ error: 'Forbidden — SUPERADMIN only' }, { status: 403 });
   }
 
   const { id } = await params;

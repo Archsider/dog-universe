@@ -24,6 +24,7 @@ import {
   FileText,
   UserCog,
   Gift,
+  TrendingUp,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -55,7 +56,10 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, userRol
     { href: `/${locale}/admin/settings`, labelKey: 'settings', icon: Settings },
     { href: `/${locale}/admin/profile`, labelKey: 'profile', icon: UserCircle },
     ...(userRole === 'SUPERADMIN'
-      ? [{ href: `/${locale}/admin/users`, labelKey: 'users', icon: UserCog }]
+      ? [
+          { href: `/${locale}/admin/users`, labelKey: 'users', icon: UserCog },
+          { href: `/${locale}/admin/revenue-summary`, labelKey: 'revenue_summary', icon: TrendingUp },
+        ]
       : []),
   ];
 

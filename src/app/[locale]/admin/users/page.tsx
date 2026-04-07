@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { ShieldCheck, Shield, User, AlertTriangle } from 'lucide-react';
 import { getInitials, formatDate } from '@/lib/utils';
 import ChangeRoleButton from './ChangeRoleButton';
+import ProductionResetPanel from './ProductionResetPanel';
 
 interface PageProps { params: { locale: string } }
 
@@ -163,6 +164,14 @@ export default async function AdminUsersPage({ params: { locale } }: PageProps) 
       <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card p-4">
         <p className="text-sm font-semibold text-charcoal mb-1">{l.bootstrapTitle}</p>
         <p className="text-sm text-gray-500">{l.bootstrapDesc}</p>
+      </div>
+
+      {/* Production reset — danger zone */}
+      <div>
+        <h2 className="text-lg font-serif font-semibold text-charcoal mb-3">
+          {locale === 'fr' ? 'Zone de danger' : 'Danger zone'}
+        </h2>
+        <ProductionResetPanel locale={locale} />
       </div>
     </div>
   );
