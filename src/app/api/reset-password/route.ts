@@ -30,7 +30,8 @@ export async function POST(request: Request) {
         },
       });
 
-      const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/${locale}/auth/reset-password/${token}`;
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
+      const resetUrl = `${appUrl}/${locale}/auth/reset-password/${token}`;
       const { subject, html } = getEmailTemplate('reset_password', { resetUrl }, locale);
 
       await sendEmail({ to: user.email, subject, html });

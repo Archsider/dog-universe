@@ -54,19 +54,30 @@ export async function POST(req: NextRequest) {
 
   const signedAt = new Date();
 
-  // Generate PDF server-side (stamp is embedded here — stamp file never sent to browser)
-  const pdfBuffer = await generateContractPDF({
-    clientName: client.name,
-    clientEmail: client.email,
-    signedAt,
-    signatureDataUrl,
-    ipAddress,
-    version: '1.0',
-  });
+  // Generate PDF server-side
+  let pdfBuffer: Buffer;
+  try {
+    pdfBuffer = await generateContractPDF({
+      clientName: client.name,
+      clientEmail: client.email,
+      signedAt,
+      signatureDataUrl,
+      ipAddress,
+      version: '1.0',
+    });
+  } catch (err) {
+    console.error('Contract PDF generation failed:', err);
+    return NextResponse.json({ error: 'PDF_GENERATION_FAILED' }, { status: 500 });
+  }
 
   // Upload to the PRIVATE Supabase Storage bucket
   const storageKey = `contracts/${clientId}.pdf`;
-  await uploadBufferPrivate(pdfBuffer, storageKey, 'application/pdf');
+  try {
+    await uploadBufferPrivate(pdfBuffer, storageKey, 'application/pdf');
+  } catch (err) {
+    console.error('Contract storage upload failed:', err);
+    return NextResponse.json({ error: 'STORAGE_UPLOAD_FAILED' }, { status: 500 });
+  }
 
   // Save contract record in DB — catch P2002 for concurrent signing race condition
   try {
@@ -87,7 +98,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Return a time-limited signed URL (1h) — never expose a permanent public URL
-  const downloadUrl = await createSignedUrl(storageKey);
+  let downloadUrl: string | null = null;
+  try {
+    downloadUrl = await createSignedUrl(storageKey);
+  } catch (err) {
+    // Contract is saved — signed URL failure is non-critical, client can retrieve it later
+    console.error('Signed URL generation failed after contract save:', err);
+  }
+
   return NextResponse.json({ success: true, downloadUrl });
 }
 
@@ -108,8 +126,15 @@ export async function GET() {
     return NextResponse.json({ contract: null });
   }
 
-  // Generate a fresh signed URL valid for 1 hour — do not return the stored public URL
-  const downloadUrl = await createSignedUrl(contract.storageKey);
+  // Generate a fresh signed URL valid for 1 hour
+  let downloadUrl: string | null = null;
+  try {
+    downloadUrl = await createSignedUrl(contract.storageKey);
+  } catch (err) {
+    console.error('Signed URL generation failed:', err);
+    // Return contract metadata without download URL rather than 500
+  }
+
   return NextResponse.json({
     contract: { signedAt: contract.signedAt, downloadUrl, version: contract.version },
   });

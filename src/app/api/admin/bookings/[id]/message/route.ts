@@ -42,7 +42,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     { clientName: booking.client.name, message, bookingRef },
     locale
   );
-  await sendEmail({ to: booking.client.email, subject, html });
+  sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
 
   return NextResponse.json({ success: true });
 }

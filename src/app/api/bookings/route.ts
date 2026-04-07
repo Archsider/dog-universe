@@ -268,7 +268,7 @@ export async function POST(request: Request) {
       petName: petNames,
     }, locale);
 
-    await sendEmail({ to: booking.client.email, subject, html });
+    sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
 
     await logAction({
       userId: session.user.id,

@@ -136,7 +136,7 @@ export async function PATCH(request: Request, { params }: Params) {
       dates,
     }, locale);
 
-    await sendEmail({ to: updated.client.email, subject, html });
+    sendEmail({ to: updated.client.email, subject, html }).catch(() => {});
 
     await logAction({
       userId: session.user.id,
@@ -179,7 +179,7 @@ export async function PATCH(request: Request, { params }: Params) {
       bookingRef: id,
       reason: body.reason ?? '',
     }, locale);
-    await sendEmail({ to: updated.client.email, subject, html });
+    sendEmail({ to: updated.client.email, subject, html }).catch(() => {});
     await logAction({
       userId: session.user.id,
       action: LOG_ACTIONS.BOOKING_REJECTED,
