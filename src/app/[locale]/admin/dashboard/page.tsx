@@ -47,6 +47,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     bookingsWithoutInvoice,
     todayCheckIns,
     todayCheckOuts,
+    historicalSummaries,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'CLIENT' } }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
@@ -129,6 +130,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
         bookingPets: { include: { pet: { select: { name: true, species: true } } } },
       },
     }),
+    // Historical revenue summaries (pre-production data Jan/Feb/Mar etc.)
+    prisma.monthlyRevenueSummary.findMany({
+      select: { year: true, month: true, boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
+    }).catch(() => [] as { year: number; month: number; boardingRevenue: number; groomingRevenue: number; taxiRevenue: number; otherRevenue: number }[]),
   ]);
 
   const capacitySettings = await prisma.setting.findMany({
@@ -149,23 +154,32 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     totalRevenue: r._sum.amount ?? 0,
   }));
 
-  // CA variation vs previous month
+  // CA variation vs previous month — use historical summary if no real invoices for last month
   const thisMonthAmt = monthlyRevenue._sum.amount ?? 0;
-  const lastMonthAmt = lastMonthRevenue._sum.amount ?? 0;
+  const lastMonthInvoiceAmt = lastMonthRevenue._sum.amount ?? 0;
+  const lastMonthNum = subMonths(now, 1).getMonth() + 1; // 1-indexed
+  const lastMonthYear = subMonths(now, 1).getFullYear();
+  const lastMonthSummary = historicalSummaries.find(s => s.year === lastMonthYear && s.month === lastMonthNum);
+  const lastMonthSummaryAmt = lastMonthSummary
+    ? lastMonthSummary.boardingRevenue + lastMonthSummary.groomingRevenue + lastMonthSummary.taxiRevenue + lastMonthSummary.otherRevenue
+    : 0;
+  const lastMonthAmt = lastMonthInvoiceAmt > 0 ? lastMonthInvoiceAmt : lastMonthSummaryAmt;
   const monthVariation = lastMonthAmt > 0
     ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
     : 0;
 
-  // Build monthly chart data
+  // Build monthly chart data — last 12 months
+  const chartLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
   const monthlyData: Record<string, { boarding: number; taxi: number; grooming: number }> = {};
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = d.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: '2-digit' });
+    const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
     monthlyData[key] = { boarding: 0, taxi: 0, grooming: 0 };
   }
+  // Real invoices
   revenueData.forEach(inv => {
     const d = new Date(inv.issuedAt);
-    const key = d.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: '2-digit' });
+    const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
     if (monthlyData[key]) {
       if (inv.booking?.serviceType === 'PET_TAXI') {
         monthlyData[key].taxi += inv.amount;
@@ -174,6 +188,16 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
         monthlyData[key].grooming += groomingPrice;
         monthlyData[key].boarding += inv.amount - groomingPrice;
       }
+    }
+  });
+  // Historical summaries — fill in months that have no real invoices
+  historicalSummaries.forEach(s => {
+    const d = new Date(s.year, s.month - 1, 1);
+    const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
+    if (monthlyData[key]) {
+      monthlyData[key].boarding += s.boardingRevenue + s.otherRevenue;
+      monthlyData[key].grooming += s.groomingRevenue;
+      monthlyData[key].taxi += s.taxiRevenue;
     }
   });
   const chartData = Object.entries(monthlyData).map(([month, v]) => ({ month, ...v }));
