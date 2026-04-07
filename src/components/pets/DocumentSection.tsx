@@ -26,10 +26,11 @@ export default function DocumentSection({ petId, documents: initialDocuments, lo
 
   const t = {
     fr: {
-      title: 'Documents',
+      title: 'Documents & preuves',
+      subtitle: 'Vignettes vaccins · Carnet de santé · Passeport · Certificats · Ordonnances',
       upload: 'Ajouter',
       empty: 'Aucun document enregistré',
-      emptyHint: 'Carnet de santé, certificat de vaccination, passeport...',
+      emptyHint: 'Déposez vos justificatifs ici : vignettes de vaccination, carnet de santé, passeport animal, certificats vétérinaires.',
       drag: 'Glissez un fichier ici ou',
       browse: 'parcourir',
       maxSize: '10 Mo max — PDF, JPG, PNG',
@@ -40,10 +41,11 @@ export default function DocumentSection({ petId, documents: initialDocuments, lo
       confirmDelete: 'Supprimer ce document ?',
     },
     en: {
-      title: 'Documents',
+      title: 'Documents & proof',
+      subtitle: 'Vaccine stickers · Health booklet · Pet passport · Certificates · Prescriptions',
       upload: 'Add',
       empty: 'No documents recorded',
-      emptyHint: 'Health booklet, vaccination certificate, passport...',
+      emptyHint: 'Upload your documents here: vaccination stickers, health booklet, pet passport, vet certificates.',
       drag: 'Drop a file here or',
       browse: 'browse',
       maxSize: '10 MB max — PDF, JPG, PNG',
@@ -91,13 +93,16 @@ export default function DocumentSection({ petId, documents: initialDocuments, lo
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <FileText className="h-5 w-5 text-gold-500" />
-          <h3 className="font-semibold text-charcoal">{labels.title}</h3>
-          <span className="text-sm text-gray-500">({documents.length})</span>
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-gold-500" />
+            <h3 className="font-semibold text-charcoal">{labels.title}</h3>
+            <span className="text-sm text-gray-500">({documents.length})</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-0.5 ml-7">{labels.subtitle}</p>
         </div>
-        <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+        <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="flex-shrink-0">
           <Upload className="h-4 w-4 mr-1" />{uploading ? labels.uploading : labels.upload}
         </Button>
       </div>

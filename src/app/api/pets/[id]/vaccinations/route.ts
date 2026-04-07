@@ -44,7 +44,9 @@ export async function DELETE(request: Request, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  const { vaccinationId } = await request.json();
+  const url = new URL(request.url);
+  const vaccinationId = url.searchParams.get('vaccinationId');
+  if (!vaccinationId) return NextResponse.json({ error: 'Missing vaccinationId' }, { status: 400 });
 
   const pet = await prisma.pet.findUnique({ where: { id } });
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });

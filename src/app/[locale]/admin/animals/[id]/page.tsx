@@ -2,10 +2,12 @@ import { auth } from '../../../../../../auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { ArrowLeft, PawPrint, Shield, Calendar } from 'lucide-react';
+import { ArrowLeft, PawPrint, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { calculateAge, formatDate, formatDateShort, getBookingStatusColor } from '@/lib/utils';
+import { calculateAge, formatDate, getBookingStatusColor } from '@/lib/utils';
 import DeleteAnimalButton from './DeleteAnimalButton';
+import VaccinationSection from '@/components/pets/VaccinationSection';
+import DocumentSection from '@/components/pets/DocumentSection';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -35,8 +37,8 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
   };
 
   const labels = {
-    fr: { back: 'Animaux', owner: 'Propriétaire', species: 'Espèce', breed: 'Race', gender: 'Sexe', age: 'Âge', male: 'Mâle', female: 'Femelle', dog: 'Chien', cat: 'Chat', vaccinations: 'Vaccinations', history: 'Historique', noVac: 'Aucune vaccination', noHistory: 'Aucun séjour' },
-    en: { back: 'Animals', owner: 'Owner', species: 'Species', breed: 'Breed', gender: 'Gender', age: 'Age', male: 'Male', female: 'Female', dog: 'Dog', cat: 'Cat', vaccinations: 'Vaccinations', history: 'History', noVac: 'No vaccinations', noHistory: 'No stays' },
+    fr: { back: 'Animaux', owner: 'Propriétaire', species: 'Espèce', breed: 'Race', gender: 'Sexe', age: 'Âge', male: 'Mâle', female: 'Femelle', dog: 'Chien', cat: 'Chat', history: 'Historique', noHistory: 'Aucun séjour' },
+    en: { back: 'Animals', owner: 'Owner', species: 'Species', breed: 'Breed', gender: 'Gender', age: 'Age', male: 'Male', female: 'Female', dog: 'Dog', cat: 'Cat', history: 'History', noHistory: 'No stays' },
   };
 
   const l = labels[locale as keyof typeof labels] || labels.fr;
@@ -59,6 +61,7 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Left column: info + history */}
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
             <h3 className="font-semibold text-charcoal text-sm mb-3">{locale === 'fr' ? 'Informations' : 'Information'}</h3>
@@ -74,25 +77,6 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
-            <div className="flex items-center gap-2 mb-3"><Shield className="h-4 w-4 text-gold-500" /><h3 className="font-semibold text-charcoal text-sm">{l.vaccinations}</h3></div>
-            {pet.vaccinations.length === 0 ? <p className="text-sm text-gray-400">{l.noVac}</p> : (
-              <div className="space-y-2">
-                {pet.vaccinations.map(v => (
-                  <div key={v.id} className="text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                      <span className="font-medium text-charcoal">{v.vaccineType}</span>
-                    </div>
-                    <p className="text-xs text-gray-400 ml-3.5">{formatDateShort(v.date, locale)}{v.comment ? ` · ${v.comment}` : ''}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="lg:col-span-2">
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
             <div className="flex items-center gap-2 mb-3"><Calendar className="h-4 w-4 text-gold-500" /><h3 className="font-semibold text-charcoal text-sm">{l.history}</h3></div>
             {pet.bookingPets.length === 0 ? <p className="text-sm text-gray-400">{l.noHistory}</p> : (
@@ -110,6 +94,16 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
                 ))}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Right column: vaccinations (interactive) + documents */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
+            <VaccinationSection petId={id} vaccinations={pet.vaccinations} locale={locale} />
+          </div>
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
+            <DocumentSection petId={id} documents={pet.documents} locale={locale} />
           </div>
         </div>
       </div>

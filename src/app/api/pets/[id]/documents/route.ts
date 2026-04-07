@@ -47,7 +47,9 @@ export async function DELETE(request: Request, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  const { documentId } = await request.json();
+  const url = new URL(request.url);
+  const documentId = url.searchParams.get('documentId');
+  if (!documentId) return NextResponse.json({ error: 'Missing documentId' }, { status: 400 });
 
   const pet = await prisma.pet.findUnique({ where: { id } });
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
