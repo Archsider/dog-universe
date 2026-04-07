@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Shield, Plus, Trash2, Calendar, Upload, Paperclip, CheckCircle2 } from 'lucide-react';
+import { Shield, Plus, Trash2, Calendar, Upload, ExternalLink, FileText, File } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,71 +15,95 @@ interface Vaccination {
   comment: string | null;
 }
 
+interface PetDocument {
+  id: string;
+  name: string;
+  fileUrl: string;
+  fileType: string;
+  uploadedAt: Date | string;
+}
+
 interface VaccinationSectionProps {
   petId: string;
   vaccinations: Vaccination[];
+  documents?: PetDocument[];
   locale: string;
 }
 
-export default function VaccinationSection({ petId, vaccinations: initialVaccinations, locale }: VaccinationSectionProps) {
+const PROOF_PREFIX = 'Preuve vaccination - ';
+
+export default function VaccinationSection({
+  petId,
+  vaccinations: initialVaccinations,
+  documents: initialDocuments = [],
+  locale,
+}: VaccinationSectionProps) {
   const [vaccinations, setVaccinations] = useState(initialVaccinations);
+  const [proofDocs, setProofDocs] = useState(initialDocuments);
   const [showDialog, setShowDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ vaccineType: '', date: '', comment: '' });
   const [proofUploading, setProofUploading] = useState(false);
-  const [proofJustUploaded, setProofJustUploaded] = useState(false);
   const proofInputRef = useRef<HTMLInputElement>(null);
 
   const t = {
     fr: {
       title: 'Vaccinations',
-      add: 'Ajouter',
+      add: 'Ajouter une vaccination',
       addTitle: 'Ajouter une vaccination',
       vaccineType: 'Vaccin',
       date: 'Date',
       comment: 'Commentaire / Vétérinaire',
       save: 'Enregistrer',
       cancel: 'Annuler',
-      empty: 'Aucune vaccination enregistrée',
+      emptyVax: 'Aucune vaccination enregistrée',
       typePlaceholder: 'Ex: Rage, CPHPL...',
       commentPlaceholder: 'Dr. Benali, Clinique Vétérinaire...',
       saving: 'Enregistrement...',
-      proofTitle: 'Preuves de vaccination',
-      proofSubtitle: 'Ajoutez ici vos justificatifs : vignette, carnet de vaccination, passeport animal, certificat.',
-      proofUpload: 'Déposer un justificatif',
+      proofTitle: 'Justificatifs de vaccination',
+      proofSubtitle: 'Vignette · Carnet de vaccination · Passeport animal · Certificat',
+      proofUpload: 'Ajouter un justificatif',
       proofUploading: 'Envoi...',
-      proofUploaded: 'Fichier ajouté !',
       proofHint: 'PDF, JPG ou PNG · 10 Mo max',
+      proofEmpty: 'Aucun justificatif déposé',
+      proofView: 'Ouvrir',
+      proofDelete: 'Supprimer',
+      proofConfirmDelete: 'Supprimer ce justificatif ?',
     },
     en: {
       title: 'Vaccinations',
-      add: 'Add',
+      add: 'Add vaccination',
       addTitle: 'Add a vaccination',
       vaccineType: 'Vaccine',
       date: 'Date',
       comment: 'Comment / Veterinarian',
       save: 'Save',
       cancel: 'Cancel',
-      empty: 'No vaccinations recorded',
+      emptyVax: 'No vaccinations recorded',
       typePlaceholder: 'E.g: Rabies, DHPP...',
       commentPlaceholder: 'Dr. Smith, Vet Clinic...',
       saving: 'Saving...',
       proofTitle: 'Vaccination proof',
-      proofSubtitle: 'Upload your documents here: vaccination sticker, health booklet, pet passport, certificate.',
-      proofUpload: 'Upload proof',
+      proofSubtitle: 'Sticker · Health booklet · Pet passport · Certificate',
+      proofUpload: 'Add proof',
       proofUploading: 'Uploading...',
-      proofUploaded: 'File added!',
       proofHint: 'PDF, JPG or PNG · 10 MB max',
+      proofEmpty: 'No proof uploaded',
+      proofView: 'Open',
+      proofDelete: 'Delete',
+      proofConfirmDelete: 'Delete this file?',
     },
   };
 
   const labels = t[locale as keyof typeof t] || t.fr;
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString(locale === 'fr' ? 'fr-MA' : 'en-US', {
+  const fmtDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString(locale === 'fr' ? 'fr-MA' : 'en-US', {
       day: '2-digit', month: 'short', year: 'numeric',
     });
-  };
+
+  const displayName = (doc: PetDocument) =>
+    doc.name.startsWith(PROOF_PREFIX) ? doc.name.slice(PROOF_PREFIX.length) : doc.name;
 
   const handleSubmit = async () => {
     if (!form.vaccineType || !form.date) return;
@@ -100,23 +124,7 @@ export default function VaccinationSection({ petId, vaccinations: initialVaccina
     }
   };
 
-  const handleProofUpload = async (file: File) => {
-    if (file.size > 10 * 1024 * 1024) return;
-    setProofUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('name', `Preuve vaccination - ${file.name}`);
-      const res = await fetch(`/api/pets/${petId}/documents`, { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('Failed');
-      setProofJustUploaded(true);
-      setTimeout(() => setProofJustUploaded(false), 3000);
-    } catch { /* silent */ } finally {
-      setProofUploading(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
+  const handleDeleteVax = async (id: string) => {
     if (!confirm(locale === 'fr' ? 'Supprimer cette vaccination ?' : 'Delete this vaccination?')) return;
     try {
       await fetch(`/api/pets/${petId}/vaccinations?vaccinationId=${id}`, { method: 'DELETE' });
@@ -124,91 +132,159 @@ export default function VaccinationSection({ petId, vaccinations: initialVaccina
     } catch { /* silent */ }
   };
 
+  const handleProofUpload = async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) return;
+    setProofUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('name', `${PROOF_PREFIX}${file.name}`);
+      const res = await fetch(`/api/pets/${petId}/documents`, { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('Failed');
+      const data: PetDocument = await res.json();
+      setProofDocs(prev => [data, ...prev]);
+    } catch { /* silent */ } finally {
+      setProofUploading(false);
+    }
+  };
+
+  const handleDeleteProof = async (docId: string) => {
+    if (!confirm(labels.proofConfirmDelete)) return;
+    try {
+      await fetch(`/api/pets/${petId}/documents?documentId=${docId}`, { method: 'DELETE' });
+      setProofDocs(prev => prev.filter(d => d.id !== docId));
+    } catch { /* silent */ }
+  };
+
+  const ProofIcon = ({ fileType }: { fileType: string }) => {
+    if (fileType === 'application/pdf') return <FileText className="h-5 w-5 text-red-400 flex-shrink-0" />;
+    return <File className="h-5 w-5 text-blue-400 flex-shrink-0" />;
+  };
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-gold-500" />
-          <h3 className="font-semibold text-charcoal">{labels.title}</h3>
-          <span className="text-sm text-gray-500">({vaccinations.length})</span>
+    <div className="space-y-6">
+      {/* ── Vaccination entries ── */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-gold-500" />
+            <h3 className="font-semibold text-charcoal">{labels.title}</h3>
+            <span className="text-sm text-gray-500">({vaccinations.length})</span>
+          </div>
+          <Button size="sm" onClick={() => setShowDialog(true)}>
+            <Plus className="h-4 w-4 mr-1" />{labels.add}
+          </Button>
         </div>
-        <Button size="sm" onClick={() => setShowDialog(true)}>
-          <Plus className="h-4 w-4 mr-1" />{labels.add}
-        </Button>
-      </div>
 
-      {vaccinations.length === 0 ? (
-        <div className="text-center py-8 text-gray-400">
-          <Shield className="h-10 w-10 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">{labels.empty}</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {vaccinations.map(v => (
-            <div key={v.id} className="flex items-center justify-between p-3 bg-ivory-50 rounded-lg border border-ivory-200">
-              <div className="flex items-start gap-3 flex-1 min-w-0">
-                <div className="w-2 h-2 rounded-full mt-2 bg-green-400 flex-shrink-0" />
-                <div>
-                  <p className="font-medium text-charcoal text-sm">{v.vaccineType}</p>
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
-                    <Calendar className="h-3 w-3" />
-                    {formatDate(String(v.date))}
-                    {v.comment && <span>· {v.comment}</span>}
+        {vaccinations.length === 0 ? (
+          <div className="text-center py-6 text-gray-400">
+            <Shield className="h-10 w-10 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">{labels.emptyVax}</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {vaccinations
+              .slice()
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+              .map(v => (
+                <div key={v.id} className="flex items-center justify-between p-3 bg-ivory-50 rounded-lg border border-ivory-200">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="w-2 h-2 rounded-full mt-2 bg-green-400 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-charcoal text-sm">{v.vaccineType}</p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                        <Calendar className="h-3 w-3" />
+                        {fmtDate(String(v.date))}
+                        {v.comment && <span>· {v.comment}</span>}
+                      </div>
+                    </div>
                   </div>
+                  <button onClick={() => handleDeleteVax(v.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded flex-shrink-0">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
-              </div>
-              <button onClick={() => handleDelete(v.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded">
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Vaccination proof upload */}
-      <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Paperclip className="h-4 w-4 text-amber-600" />
+              ))}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-amber-900 text-sm">{labels.proofTitle}</p>
-            <p className="text-xs text-amber-700 mt-0.5 mb-3">{labels.proofSubtitle}</p>
-            <div className="flex items-center gap-3">
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-amber-300 bg-white text-amber-800 hover:bg-amber-100 text-xs gap-1.5"
-                disabled={proofUploading}
-                onClick={() => proofInputRef.current?.click()}
-              >
-                {proofUploading ? (
-                  <><Upload className="h-3.5 w-3.5 animate-pulse" />{labels.proofUploading}</>
-                ) : (
-                  <><Upload className="h-3.5 w-3.5" />{labels.proofUpload}</>
-                )}
-              </Button>
-              {proofJustUploaded && (
-                <span className="flex items-center gap-1 text-xs text-green-700 font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  {labels.proofUploaded}
-                </span>
-              )}
-              {!proofJustUploaded && (
-                <span className="text-xs text-amber-600">{labels.proofHint}</span>
-              )}
-            </div>
-            <input
-              ref={proofInputRef}
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleProofUpload(f); e.target.value = ''; }}
-            />
-          </div>
-        </div>
+        )}
       </div>
 
+      {/* ── Vaccination proof files ── */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-1">
+          <div>
+            <p className="font-semibold text-amber-900 text-sm">{labels.proofTitle}</p>
+            <p className="text-xs text-amber-700 mt-0.5">{labels.proofSubtitle}</p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-amber-300 bg-white text-amber-800 hover:bg-amber-100 text-xs gap-1.5 flex-shrink-0"
+            disabled={proofUploading}
+            onClick={() => proofInputRef.current?.click()}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {proofUploading ? labels.proofUploading : labels.proofUpload}
+          </Button>
+          <input
+            ref={proofInputRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleProofUpload(f); e.target.value = ''; }}
+          />
+        </div>
+
+        {/* Format hint */}
+        <p className="text-xs text-amber-600 mb-3">{labels.proofHint}</p>
+
+        {/* Proof file list */}
+        {proofDocs.length === 0 ? (
+          <p className="text-xs text-amber-700/60 italic">{labels.proofEmpty}</p>
+        ) : (
+          <div className="space-y-2 mt-2">
+            {proofDocs.map(doc => (
+              <div key={doc.id} className="flex items-center gap-2 bg-white rounded-lg border border-amber-100 px-3 py-2">
+                {/* Thumbnail for images, icon for others */}
+                {doc.fileType.startsWith('image/') ? (
+                  <img
+                    src={doc.fileUrl}
+                    alt={displayName(doc)}
+                    className="h-8 w-8 object-cover rounded flex-shrink-0"
+                  />
+                ) : (
+                  <ProofIcon fileType={doc.fileType} />
+                )}
+                <span className="flex-1 min-w-0 text-xs font-medium text-charcoal truncate">
+                  {displayName(doc)}
+                </span>
+                <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:block">
+                  {fmtDate(String(doc.uploadedAt))}
+                </span>
+                <a
+                  href={doc.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs text-amber-700 hover:text-amber-900 font-medium flex-shrink-0 px-1.5 py-1 rounded hover:bg-amber-100"
+                  title={labels.proofView}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{labels.proofView}</span>
+                </a>
+                <button
+                  onClick={() => handleDeleteProof(doc.id)}
+                  className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0"
+                  title={labels.proofDelete}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Add vaccination dialog ── */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle>{labels.addTitle}</DialogTitle></DialogHeader>

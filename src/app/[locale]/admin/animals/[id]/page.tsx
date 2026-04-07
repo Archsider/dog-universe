@@ -100,10 +100,19 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
         {/* Right column: vaccinations (interactive) + documents */}
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
-            <VaccinationSection petId={id} vaccinations={pet.vaccinations} locale={locale} />
+            <VaccinationSection
+              petId={id}
+              vaccinations={pet.vaccinations}
+              documents={pet.documents.filter(d => d.name.startsWith('Preuve vaccination - '))}
+              locale={locale}
+            />
           </div>
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
-            <DocumentSection petId={id} documents={pet.documents} locale={locale} />
+            <DocumentSection
+              petId={id}
+              documents={pet.documents.filter(d => !d.name.startsWith('Preuve vaccination - '))}
+              locale={locale}
+            />
           </div>
         </div>
       </div>

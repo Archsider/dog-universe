@@ -225,12 +225,21 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
 
         {/* ── Vaccinations ── */}
         <TabsContent value="vaccinations">
-          <VaccinationSection petId={id} vaccinations={pet.vaccinations} locale={locale} />
+          <VaccinationSection
+            petId={id}
+            vaccinations={pet.vaccinations}
+            documents={pet.documents.filter(d => d.name.startsWith('Preuve vaccination - '))}
+            locale={locale}
+          />
         </TabsContent>
 
         {/* ── Documents ── */}
         <TabsContent value="documents">
-          <DocumentSection petId={id} documents={pet.documents} locale={locale} />
+          <DocumentSection
+            petId={id}
+            documents={pet.documents.filter(d => !d.name.startsWith('Preuve vaccination - '))}
+            locale={locale}
+          />
         </TabsContent>
 
         {/* ── History ── */}
