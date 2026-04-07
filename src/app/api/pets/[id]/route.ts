@@ -61,6 +61,7 @@ export async function PATCH(_req: Request, { params }: Params) {
       isNeutered, microchipNumber, tattooNumber, weight,
       vetName, vetPhone, allergies, currentMedication,
       behaviorWithDogs, behaviorWithCats, behaviorWithHumans, notes,
+      lastAntiparasiticDate, antiparasiticProduct, antiparasiticNotes,
     } = body;
 
     const VALID_SPECIES = ['DOG', 'CAT'];
@@ -103,6 +104,15 @@ export async function PATCH(_req: Request, { params }: Params) {
         behaviorWithCats: behaviorWithCats || null,
         behaviorWithHumans: behaviorWithHumans || null,
         notes: notes?.trim() || null,
+        lastAntiparasiticDate: lastAntiparasiticDate !== undefined
+          ? (lastAntiparasiticDate ? new Date(lastAntiparasiticDate) : null)
+          : undefined,
+        antiparasiticProduct: antiparasiticProduct !== undefined
+          ? (antiparasiticProduct?.trim() || null)
+          : undefined,
+        antiparasiticNotes: antiparasiticNotes !== undefined
+          ? (antiparasiticNotes?.trim() || null)
+          : undefined,
       },
     });
 

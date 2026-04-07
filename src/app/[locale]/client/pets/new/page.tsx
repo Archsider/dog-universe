@@ -26,6 +26,7 @@ type FormState = {
   allergies: string; currentMedication: string;
   behaviorWithDogs: string; behaviorWithCats: string; behaviorWithHumans: string;
   notes: string;
+  lastAntiparasiticDate: string; antiparasiticProduct: string; antiparasiticNotes: string;
 };
 
 export default function NewPetPage() {
@@ -41,6 +42,7 @@ export default function NewPetPage() {
     allergies: '', currentMedication: '',
     behaviorWithDogs: '', behaviorWithCats: '', behaviorWithHumans: '',
     notes: '',
+    lastAntiparasiticDate: '', antiparasiticProduct: '', antiparasiticNotes: '',
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -82,6 +84,7 @@ export default function NewPetPage() {
         photoUrl,
         isNeutered: form.isNeutered === '' ? null : form.isNeutered === 'true',
         weight: form.weight ? parseFloat(form.weight) : null,
+        lastAntiparasiticDate: form.lastAntiparasiticDate || null,
       };
 
       const res = await fetch('/api/pets', {
@@ -272,7 +275,28 @@ export default function NewPetPage() {
             ))}
           </section>
 
-          {/* Section 5 : Notes */}
+          {/* Section 5 : Antiparasitaire */}
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
+              {fr ? 'Antiparasitaire' : 'Anti-parasitic treatment'}
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="antiDate">{fr ? 'Dernière application' : 'Last treatment date'}</Label>
+                <Input id="antiDate" type="date" value={form.lastAntiparasiticDate} onChange={set('lastAntiparasiticDate')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
+              </div>
+              <div>
+                <Label htmlFor="antiProduct">{fr ? 'Produit utilisé' : 'Product used'}</Label>
+                <Input id="antiProduct" value={form.antiparasiticProduct} onChange={set('antiparasiticProduct')} className="mt-1" placeholder={fr ? 'Ex: Frontline, Bravecto...' : 'Ex: Frontline, Bravecto...'} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="antiNotes">{fr ? 'Notes (optionnel)' : 'Notes (optional)'}</Label>
+              <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" placeholder={fr ? 'Ex: traitement mensuel, réaction passée...' : 'Ex: monthly treatment, past reaction...'} rows={2} />
+            </div>
+          </section>
+
+          {/* Section 6 : Notes */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
               {fr ? 'Notes spéciales' : 'Special notes'}

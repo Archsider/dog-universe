@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { notifyAdminsNewClient } from '@/lib/notifications';
 
 export async function POST(request: Request) {
   try {
@@ -58,6 +59,9 @@ export async function POST(request: Request) {
       entityId: user.id,
       details: { email: user.email },
     });
+
+    // Admin notification + email — non-blocking
+    notifyAdminsNewClient(user.name, user.email, user.phone ?? null, user.id).catch(() => {});
 
     // Welcome email — non-blocking
     const locale = user.language ?? 'fr';

@@ -26,6 +26,7 @@ type FormState = {
   allergies: string; currentMedication: string;
   behaviorWithDogs: string; behaviorWithCats: string; behaviorWithHumans: string;
   notes: string;
+  lastAntiparasiticDate: string; antiparasiticProduct: string; antiparasiticNotes: string;
 };
 
 const EMPTY_FORM: FormState = {
@@ -35,6 +36,7 @@ const EMPTY_FORM: FormState = {
   allergies: '', currentMedication: '',
   behaviorWithDogs: '', behaviorWithCats: '', behaviorWithHumans: '',
   notes: '',
+  lastAntiparasiticDate: '', antiparasiticProduct: '', antiparasiticNotes: '',
 };
 
 export default function EditPetPage() {
@@ -79,6 +81,9 @@ export default function EditPetPage() {
           behaviorWithCats: data.behaviorWithCats || '',
           behaviorWithHumans: data.behaviorWithHumans || '',
           notes: data.notes || '',
+          lastAntiparasiticDate: data.lastAntiparasiticDate ? data.lastAntiparasiticDate.split('T')[0] : '',
+          antiparasiticProduct: data.antiparasiticProduct || '',
+          antiparasiticNotes: data.antiparasiticNotes || '',
         });
         setFetching(false);
       })
@@ -117,6 +122,7 @@ export default function EditPetPage() {
         photoUrl,
         isNeutered: form.isNeutered === '' ? null : form.isNeutered === 'true',
         weight: form.weight ? parseFloat(form.weight) : null,
+        lastAntiparasiticDate: form.lastAntiparasiticDate || null,
       };
 
       const res = await fetch(`/api/pets/${petId}`, {
@@ -315,6 +321,27 @@ export default function EditPetPage() {
                 </Select>
               </div>
             ))}
+          </section>
+
+          {/* Antiparasitaire */}
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
+              {fr ? 'Antiparasitaire' : 'Anti-parasitic treatment'}
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="antiDate">{fr ? 'Dernière application' : 'Last treatment date'}</Label>
+                <Input id="antiDate" type="date" value={form.lastAntiparasiticDate} onChange={set('lastAntiparasiticDate')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
+              </div>
+              <div>
+                <Label htmlFor="antiProduct">{fr ? 'Produit utilisé' : 'Product used'}</Label>
+                <Input id="antiProduct" value={form.antiparasiticProduct} onChange={set('antiparasiticProduct')} className="mt-1" placeholder={fr ? 'Ex: Frontline, Bravecto...' : 'Ex: Frontline, Bravecto...'} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="antiNotes">{fr ? 'Notes (optionnel)' : 'Notes (optional)'}</Label>
+              <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" placeholder={fr ? 'Ex: traitement mensuel, réaction passée...' : 'Ex: monthly treatment, past reaction...'} rows={2} />
+            </div>
           </section>
 
           {/* Notes */}

@@ -31,6 +31,7 @@ export async function POST(request: Request) {
       isNeutered, microchipNumber, tattooNumber, weight,
       vetName, vetPhone, allergies, currentMedication,
       behaviorWithDogs, behaviorWithCats, behaviorWithHumans, notes,
+      lastAntiparasiticDate, antiparasiticProduct, antiparasiticNotes,
     } = body;
 
     const VALID_SPECIES = ['DOG', 'CAT'];
@@ -74,6 +75,9 @@ export async function POST(request: Request) {
         behaviorWithCats: behaviorWithCats || null,
         behaviorWithHumans: behaviorWithHumans || null,
         notes: notes?.trim() || null,
+        lastAntiparasiticDate: lastAntiparasiticDate ? new Date(lastAntiparasiticDate) : null,
+        antiparasiticProduct: antiparasiticProduct?.trim() || null,
+        antiparasiticNotes: antiparasiticNotes?.trim() || null,
       },
     });
 

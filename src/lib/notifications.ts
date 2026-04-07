@@ -13,8 +13,9 @@ export type NotificationType =
   | 'STAY_PHOTO'
   | 'LOYALTY_UPDATE'
   | 'PET_BIRTHDAY'
-  | 'BOOKING_REQUEST'        // admin receives when a client creates a booking
-  | 'LOYALTY_CLAIM_PENDING'; // admin receives when a client submits a claim
+  | 'BOOKING_REQUEST'           // admin receives when a client creates a booking
+  | 'LOYALTY_CLAIM_PENDING'     // admin receives when a client submits a claim
+  | 'NEW_CLIENT_REGISTRATION';  // admin receives when a new client registers
 
 interface CreateNotificationData {
   userId: string;
@@ -329,6 +330,43 @@ export async function notifyAdminsNewBooking(
     messageEn: `${clientName} submitted a ${serviceTypeEn} request for ${petNames} — ref. ${bookingRef}`,
     metadata: { bookingId, bookingRef },
   });
+}
+
+export async function notifyAdminsNewClient(
+  clientName: string,
+  clientEmail: string,
+  clientPhone: string | null,
+  clientId: string
+) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
+  const phonePart = clientPhone ? ` · ${clientPhone}` : '';
+  await createAdminNotifications({
+    type: 'NEW_CLIENT_REGISTRATION',
+    titleFr: 'Nouveau client inscrit',
+    titleEn: 'New client registered',
+    messageFr: `${clientName} (${clientEmail}${phonePart}) vient de créer un compte.`,
+    messageEn: `${clientName} (${clientEmail}${phonePart}) just created an account.`,
+    metadata: { clientId, clientUrl: `${appUrl}/fr/admin/clients/${clientId}` },
+  });
+
+  // Send email to all admin emails (non-blocking)
+  try {
+    const admins = await prisma.user.findMany({
+      where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+      select: { email: true, language: true },
+    });
+    const { getEmailTemplate } = await import('./email');
+    await Promise.all(admins.map(async (admin) => {
+      const locale = admin.language ?? 'fr';
+      const clientUrl = `${appUrl}/${locale}/admin/clients/${clientId}`;
+      const { subject, html } = getEmailTemplate(
+        'admin_new_client',
+        { clientName, clientEmail, clientPhone: clientPhone ?? '', clientUrl, registeredAt: new Date().toISOString() },
+        locale
+      );
+      await sendEmail({ to: admin.email, subject, html });
+    }));
+  } catch { /* non-blocking */ }
 }
 
 export async function notifyAdminsNewLoyaltyClaim(

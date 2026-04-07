@@ -59,6 +59,10 @@ model Pet {
   behaviorWithHumans String?
   // Notes
   notes             String?
+  // Anti-parasitic treatment
+  lastAntiparasiticDate DateTime?
+  antiparasiticProduct  String?
+  antiparasiticNotes    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

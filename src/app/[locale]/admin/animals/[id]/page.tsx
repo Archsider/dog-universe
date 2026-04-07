@@ -2,7 +2,7 @@ import { auth } from '../../../../../../auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { ArrowLeft, PawPrint, Calendar } from 'lucide-react';
+import { ArrowLeft, PawPrint, Calendar, ShieldCheck, ShieldAlert, ShieldOff, ShieldQuestion } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDate, getBookingStatusColor } from '@/lib/utils';
 import DeleteAnimalButton from './DeleteAnimalButton';
@@ -36,9 +36,17 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
     en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', CANCELLED: 'Cancelled', REJECTED: 'Rejected', COMPLETED: 'Completed', IN_PROGRESS: 'In progress' },
   };
 
+  function getAntiStatus(d: Date | null): 'up_to_date' | 'expiring_soon' | 'expired' | 'unknown' {
+    if (!d) return 'unknown';
+    const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+    if (days <= 25) return 'up_to_date';
+    if (days <= 30) return 'expiring_soon';
+    return 'expired';
+  }
+
   const labels = {
-    fr: { back: 'Animaux', owner: 'Propriétaire', species: 'Espèce', breed: 'Race', gender: 'Sexe', age: 'Âge', male: 'Mâle', female: 'Femelle', dog: 'Chien', cat: 'Chat', history: 'Historique', noHistory: 'Aucun séjour' },
-    en: { back: 'Animals', owner: 'Owner', species: 'Species', breed: 'Breed', gender: 'Gender', age: 'Age', male: 'Male', female: 'Female', dog: 'Dog', cat: 'Cat', history: 'History', noHistory: 'No stays' },
+    fr: { back: 'Animaux', owner: 'Propriétaire', species: 'Espèce', breed: 'Race', gender: 'Sexe', age: 'Âge', male: 'Mâle', female: 'Femelle', dog: 'Chien', cat: 'Chat', history: 'Historique', noHistory: 'Aucun séjour', weight: 'Poids', antiDate: 'Antiparasitaire', antiProduct: 'Produit', antiNotes: 'Notes antiparas.' },
+    en: { back: 'Animals', owner: 'Owner', species: 'Species', breed: 'Breed', gender: 'Gender', age: 'Age', male: 'Male', female: 'Female', dog: 'Dog', cat: 'Cat', history: 'History', noHistory: 'No stays', weight: 'Weight', antiDate: 'Anti-parasitic', antiProduct: 'Product', antiNotes: 'Anti-par. notes' },
   };
 
   const l = labels[locale as keyof typeof labels] || labels.fr;
@@ -70,12 +78,59 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
               {pet.breed && <div className="flex justify-between"><span className="text-gray-400">{l.breed}</span><span className="text-charcoal">{pet.breed}</span></div>}
               {pet.gender && <div className="flex justify-between"><span className="text-gray-400">{l.gender}</span><span className="text-charcoal">{pet.gender === 'MALE' ? l.male : l.female}</span></div>}
               {pet.dateOfBirth && <div className="flex justify-between"><span className="text-gray-400">{l.age}</span><span className="text-charcoal">{calculateAge(new Date(pet.dateOfBirth), locale)}</span></div>}
+              {pet.weight !== null && pet.weight !== undefined && (
+                <div className="flex justify-between"><span className="text-gray-400">{l.weight}</span><span className="text-charcoal font-medium">{pet.weight} kg</span></div>
+              )}
               <div className="border-t border-ivory-100 pt-2">
                 <span className="text-gray-400">{l.owner}</span>
                 <Link href={`/${locale}/admin/clients/${pet.owner.id}`} className="block text-gold-600 hover:underline font-medium mt-0.5">{pet.owner.name}</Link>
               </div>
             </div>
           </div>
+
+          {/* Anti-parasitic card */}
+          {(() => {
+            const antiStatus = getAntiStatus(pet.lastAntiparasiticDate);
+            const iconMap = {
+              up_to_date:    { Icon: ShieldCheck,    cls: 'text-green-600',  bg: 'bg-green-50',  label: locale === 'fr' ? 'À jour' : 'Up to date' },
+              expiring_soon: { Icon: ShieldAlert,    cls: 'text-amber-600',  bg: 'bg-amber-50',  label: locale === 'fr' ? 'Expire bientôt' : 'Expiring soon' },
+              expired:       { Icon: ShieldOff,      cls: 'text-red-600',    bg: 'bg-red-50',    label: locale === 'fr' ? 'Expiré' : 'Expired' },
+              unknown:       { Icon: ShieldQuestion, cls: 'text-gray-400',   bg: 'bg-gray-50',   label: locale === 'fr' ? 'Non renseigné' : 'Not recorded' },
+            };
+            const { Icon, cls, bg, label } = iconMap[antiStatus];
+            return (
+              <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${bg}`}>
+                      <Icon className={`h-4 w-4 ${cls}`} />
+                    </div>
+                    <h3 className="font-semibold text-charcoal text-sm">{locale === 'fr' ? 'Antiparasitaire' : 'Anti-parasitic'}</h3>
+                  </div>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bg} ${cls}`}>{label}</span>
+                </div>
+                <div className="space-y-1.5 text-sm">
+                  {pet.lastAntiparasiticDate ? (
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">{l.antiDate}</span>
+                      <span className="text-charcoal">{formatDate(pet.lastAntiparasiticDate, locale)}</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">{locale === 'fr' ? 'Aucune date enregistrée' : 'No date recorded'}</p>
+                  )}
+                  {pet.antiparasiticProduct && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">{l.antiProduct}</span>
+                      <span className="text-charcoal">{pet.antiparasiticProduct}</span>
+                    </div>
+                  )}
+                  {pet.antiparasiticNotes && (
+                    <p className="text-xs text-gray-500 pt-1 border-t border-ivory-100">{pet.antiparasiticNotes}</p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
             <div className="flex items-center gap-2 mb-3"><Calendar className="h-4 w-4 text-gold-500" /><h3 className="font-semibold text-charcoal text-sm">{l.history}</h3></div>

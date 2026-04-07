@@ -12,6 +12,14 @@ import DocumentSection from '@/components/pets/DocumentSection';
 
 type Params = { locale: string; id: string };
 
+function getAntiparasiticStatus(lastDate: Date | null): 'up_to_date' | 'expiring_soon' | 'expired' | 'unknown' {
+  if (!lastDate) return 'unknown';
+  const days = Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000);
+  if (days <= 25) return 'up_to_date';
+  if (days <= 30) return 'expiring_soon';
+  return 'expired';
+}
+
 const BEHAVIOR_LABELS: Record<string, Record<string, string>> = {
   SOCIABLE: { fr: 'Sociable', en: 'Sociable' },
   TOLERANT: { fr: 'Tolérant', en: 'Tolerant' },
@@ -181,6 +189,50 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
                 </div>
               </div>
             )}
+
+            {/* Antiparasitaire */}
+            {(() => {
+              const status = getAntiparasiticStatus(pet.lastAntiparasiticDate);
+              const statusConfig = {
+                up_to_date:    { label: fr ? 'À jour' : 'Up to date',         cls: 'bg-green-50 text-green-700 border-green-200' },
+                expiring_soon: { label: fr ? 'Expire bientôt' : 'Expiring soon', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+                expired:       { label: fr ? 'Expiré' : 'Expired',            cls: 'bg-red-50 text-red-700 border-red-200' },
+                unknown:       { label: fr ? 'Non renseigné' : 'Not recorded', cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+              };
+              const cfg = statusConfig[status];
+              return (
+                <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide">
+                      {fr ? 'Antiparasitaire' : 'Anti-parasitic treatment'}
+                    </h3>
+                    <span className={`text-xs font-semibold border rounded-full px-3 py-1 ${cfg.cls}`}>{cfg.label}</span>
+                  </div>
+                  <div className="space-y-3">
+                    {pet.lastAntiparasiticDate ? (
+                      <div className="border-b border-gray-50 pb-3">
+                        <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{fr ? 'Dernière application' : 'Last treatment'}</p>
+                        <p className="font-medium text-charcoal">{formatDateShort(pet.lastAntiparasiticDate, locale)}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-charcoal/40 italic">{fr ? 'Aucune date enregistrée — pensez à mettre à jour le profil.' : 'No date recorded — remember to update the profile.'}</p>
+                    )}
+                    {pet.antiparasiticProduct && (
+                      <div className="border-b border-gray-50 pb-3">
+                        <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{fr ? 'Produit' : 'Product'}</p>
+                        <p className="font-medium text-charcoal">{pet.antiparasiticProduct}</p>
+                      </div>
+                    )}
+                    {pet.antiparasiticNotes && (
+                      <div>
+                        <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{fr ? 'Notes' : 'Notes'}</p>
+                        <p className="text-charcoal">{pet.antiparasiticNotes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Comportement */}
             {(pet.behaviorWithDogs || pet.behaviorWithCats || pet.behaviorWithHumans) && (

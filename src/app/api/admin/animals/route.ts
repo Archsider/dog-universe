@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { ownerId, name, species, breed, gender, dateOfBirth } = await request.json();
+  const { ownerId, name, species, breed, gender, dateOfBirth, weight } = await request.json();
 
   if (!ownerId || !name || !species || !dateOfBirth) {
     return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
@@ -62,6 +62,7 @@ export async function POST(request: Request) {
       breed: breed?.trim() || null,
       gender: gender || null,
       dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+      weight: weight ? Number(weight) : null,
     },
   });
 

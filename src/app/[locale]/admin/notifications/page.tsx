@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useLocale } from 'next-intl';
 import {
   Bell, BellOff, CheckCheck, Loader2,
-  CalendarClock, Star, ArrowRight,
+  CalendarClock, Star, ArrowRight, UserPlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
@@ -23,8 +23,9 @@ interface Notification {
 }
 
 const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
-  BOOKING_REQUEST:        { icon: CalendarClock, color: 'text-amber-600',  bg: 'bg-amber-50' },
-  LOYALTY_CLAIM_PENDING:  { icon: Star,          color: 'text-gold-600',   bg: 'bg-gold-50' },
+  BOOKING_REQUEST:          { icon: CalendarClock, color: 'text-amber-600',  bg: 'bg-amber-50' },
+  LOYALTY_CLAIM_PENDING:    { icon: Star,          color: 'text-gold-600',   bg: 'bg-gold-50' },
+  NEW_CLIENT_REGISTRATION:  { icon: UserPlus,      color: 'text-blue-600',   bg: 'bg-blue-50' },
   // fallback handles everything else
 };
 
@@ -46,6 +47,7 @@ export default function AdminNotificationsPage() {
     markAllRead: isFr ? 'Tout marquer comme lu' : 'Mark all as read',
     viewBooking: isFr ? 'Voir la réservation' : 'View booking',
     viewClaim: isFr ? 'Voir les réclamations' : 'View claims',
+    viewClient: isFr ? 'Voir la fiche client' : 'View client profile',
   };
 
   useEffect(() => {
@@ -144,6 +146,15 @@ export default function AdminNotificationsPage() {
                           className={`flex items-center gap-1 text-xs font-medium ${cfg.color} hover:underline`}
                         >
                           {l.viewClaim} <ArrowRight className="h-3 w-3" />
+                        </Link>
+                      )}
+                      {n.type === 'NEW_CLIENT_REGISTRATION' && meta.clientId && (
+                        <Link
+                          href={`/${locale}/admin/clients/${meta.clientId}`}
+                          onClick={e => e.stopPropagation()}
+                          className={`flex items-center gap-1 text-xs font-medium ${cfg.color} hover:underline`}
+                        >
+                          {l.viewClient} <ArrowRight className="h-3 w-3" />
                         </Link>
                       )}
                     </div>

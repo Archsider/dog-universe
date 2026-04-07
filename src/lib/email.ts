@@ -72,7 +72,7 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder' | 'welcome', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder' | 'welcome' | 'admin_new_client', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   // Escape all user-supplied fields to prevent XSS in email HTML
   const d: Record<string, string> = {};
   for (const [key, val] of Object.entries(data)) {
@@ -411,6 +411,38 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
           </a>
         </p>
         <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    admin_new_client: {
+      subjectFr: `🐾 Nouveau client inscrit — ${d.clientName}`,
+      subjectEn: `🐾 New client registered — ${d.clientName}`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Nouveau client inscrit</h2>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0 0 6px; font-size: 16px; font-weight: bold; color: #2C2C2C;">${d.clientName}</p>
+          <p style="margin: 0 0 4px; color: #4B5563;">${d.clientEmail}</p>
+          ${d.clientPhone ? `<p style="margin: 0; color: #4B5563;">${d.clientPhone}</p>` : ''}
+        </div>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${d.clientUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Voir la fiche client
+          </a>
+        </p>
+        <p style="color: #6B7280; font-size: 12px; text-align: center;">Inscrit le ${new Date(d.registeredAt).toLocaleString('fr-FR')}</p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">New client registered</h2>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0 0 6px; font-size: 16px; font-weight: bold; color: #2C2C2C;">${d.clientName}</p>
+          <p style="margin: 0 0 4px; color: #4B5563;">${d.clientEmail}</p>
+          ${d.clientPhone ? `<p style="margin: 0; color: #4B5563;">${d.clientPhone}</p>` : ''}
+        </div>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${d.clientUrl}" style="background: #C9A84C; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            View client profile
+          </a>
+        </p>
+        <p style="color: #6B7280; font-size: 12px; text-align: center;">Registered on ${new Date(d.registeredAt).toLocaleString('en-GB')}</p>
       `,
     },
     reset_password: {
