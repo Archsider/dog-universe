@@ -12,6 +12,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const now = new Date();
+  const currentYear = now.getFullYear();
   const thisMonthStart = startOfMonth(now);
   const thisMonthEnd = endOfMonth(now);
   const lastMonthStart = startOfMonth(subMonths(now, 1));
@@ -19,8 +20,8 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const threeMonthsAgo = subMonths(now, 3);
   const sixMonthsAgo = subMonths(now, 6);
 
-  const start2026 = new Date('2026-01-01T00:00:00.000Z');
-  const end2026 = new Date('2026-12-31T23:59:59.999Z');
+  const startCurrentYear = new Date(`${currentYear}-01-01T00:00:00.000Z`);
+  const endCurrentYear = new Date(`${currentYear}-12-31T23:59:59.999Z`);
 
   const boardingNow = {
     serviceType: 'BOARDING' as const,
@@ -29,7 +30,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   };
 
   const [
-    invoices2026,
+    invoicesCurrentYear,
     thisMonthRevenue,
     lastMonthRevenue,
     pendingCount,
@@ -44,9 +45,10 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     activeClients,
     semiActiveIds,
     lastMonthInvoices,
+    historicalSummaries,
   ] = await Promise.all([
     prisma.invoice.findMany({
-      where: { status: 'PAID', paidAt: { gte: start2026, lte: end2026 } },
+      where: { status: 'PAID', paidAt: { gte: startCurrentYear, lte: endCurrentYear } },
       select: {
         amount: true, paidAt: true,
         booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } },
@@ -81,12 +83,19 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       where: { status: 'PAID', paidAt: { gte: lastMonthStart, lte: lastMonthEnd } },
       select: { clientId: true },
     }),
+    // Historical revenue summaries for current year (pre-production data)
+    prisma.monthlyRevenueSummary.findMany({
+      where: { year: currentYear },
+      select: { month: true, boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
+    }).catch(() => [] as { month: number; boardingRevenue: number; groomingRevenue: number; taxiRevenue: number; otherRevenue: number }[]),
   ]);
 
-  // Build 2026 monthly chart
+  // Build yearly chart — merge real invoices + historical summaries
   const monthly: Record<number, { boarding: number; grooming: number; taxi: number }> = {};
   for (let m = 0; m < 12; m++) monthly[m] = { boarding: 0, grooming: 0, taxi: 0 };
-  for (const inv of invoices2026) {
+
+  // Real invoices
+  for (const inv of invoicesCurrentYear) {
     if (!inv.paidAt) continue;
     const m = new Date(inv.paidAt).getMonth();
     if (inv.booking?.serviceType === 'PET_TAXI') {
@@ -97,19 +106,42 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       monthly[m].boarding += inv.amount - g;
     }
   }
+
+  // Historical summaries (month is 1-indexed)
+  for (const s of historicalSummaries) {
+    const m = s.month - 1;
+    monthly[m].boarding += s.boardingRevenue;
+    monthly[m].grooming += s.groomingRevenue;
+    monthly[m].taxi += s.taxiRevenue;
+    // otherRevenue added to boarding bucket for chart display
+    monthly[m].boarding += s.otherRevenue;
+  }
+
   const frMonths = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  const yearSuffix = String(currentYear).slice(2);
   const yearlyData = Array.from({ length: 12 }, (_, i) => ({
-    month: `${frMonths[i]} 26`,
+    month: `${frMonths[i]} ${yearSuffix}`,
     boarding: monthly[i].boarding,
     grooming: monthly[i].grooming,
     taxi: monthly[i].taxi,
   }));
 
+  // Current month KPI (real invoices only — historical is pre-production)
   const thisMonthAmt = thisMonthRevenue._sum.amount ?? 0;
-  const lastMonthAmt = lastMonthRevenue._sum.amount ?? 0;
+
+  // Last month: real invoices first, fall back to historical summary
+  const lastMonthInvoiceAmt = lastMonthRevenue._sum.amount ?? 0;
+  const lastMonthNum = subMonths(now, 1).getMonth() + 1; // 1-indexed
+  const lastMonthSummary = historicalSummaries.find(s => s.month === lastMonthNum);
+  const lastMonthSummaryAmt = lastMonthSummary
+    ? lastMonthSummary.boardingRevenue + lastMonthSummary.groomingRevenue + lastMonthSummary.taxiRevenue + lastMonthSummary.otherRevenue
+    : 0;
+  const lastMonthAmt = lastMonthInvoiceAmt > 0 ? lastMonthInvoiceAmt : lastMonthSummaryAmt;
+
   const monthVariation = lastMonthAmt > 0
     ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
     : 0;
+
   const capacitySettings = await prisma.setting.findMany({
     where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
   });
@@ -129,16 +161,21 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const totalSegments = activeClients + semiActiveCount + inactiveCount || 1;
 
   const uniqueLastMonth = new Set(lastMonthInvoices.map(i => i.clientId)).size;
-  const avgBasket = uniqueLastMonth > 0 ? Math.round(lastMonthAmt / uniqueLastMonth) : 0;
+  const avgBasket = uniqueLastMonth > 0 ? Math.round(lastMonthInvoiceAmt / uniqueLastMonth) : 0;
 
-  const boardingRevenue = boardingTotal._sum.total ?? 0;
-  const taxiRevenue = taxiTotal._sum.total ?? 0;
-  const groomingRevenue = groomingTotal._sum.total ?? 0;
+  // Service breakdown: real invoice items + historical summaries
+  const summaryBoarding = historicalSummaries.reduce((s, r) => s + r.boardingRevenue + r.otherRevenue, 0);
+  const summaryGrooming = historicalSummaries.reduce((s, r) => s + r.groomingRevenue, 0);
+  const summaryTaxi = historicalSummaries.reduce((s, r) => s + r.taxiRevenue, 0);
+
+  const boardingRevenue = (boardingTotal._sum.total ?? 0) + summaryBoarding;
+  const taxiRevenue = (taxiTotal._sum.total ?? 0) + summaryTaxi;
+  const groomingRevenue = (groomingTotal._sum.total ?? 0) + summaryGrooming;
 
   const l = {
     title: locale === 'en' ? 'Analytics' : 'Analytiques',
     overview: locale === 'en' ? 'Overview' : 'Vue d\'ensemble',
-    revenueChart: locale === 'en' ? 'Revenue trend — 2026' : 'Évolution du chiffre d\'affaires — 2026',
+    revenueChart: locale === 'en' ? `Revenue trend — ${currentYear}` : `Évolution du chiffre d\'affaires — ${currentYear}`,
     breakdown: locale === 'en' ? 'Service breakdown' : 'Répartition des services',
     clientSegments: locale === 'en' ? 'Client segmentation' : 'Segmentation clients',
     monthlyRevenue: locale === 'en' ? 'Revenue' : 'Chiffre d\'affaires',
