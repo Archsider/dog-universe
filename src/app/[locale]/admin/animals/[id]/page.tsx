@@ -49,17 +49,26 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
   if (!rawPet) notFound();
 
   // Pad with null for columns not yet in production DB — remove after applying migrations
+  // Dates are serialized to ISO strings to avoid Next.js RSC serialization errors
+  // when passing Date objects from Server Components to Client Components.
   const pet = {
     ...rawPet,
     lastAntiparasiticDate: null as Date | null,
     antiparasiticProduct: null as string | null,
     antiparasiticNotes: null as string | null,
     vaccinations: rawPet.vaccinations.map(v => ({
-      ...v,
-      nextDueDate: null as Date | null,
+      id: v.id,
+      vaccineType: v.vaccineType,
+      date: v.date ? v.date.toISOString() : null,
+      comment: v.comment,
+      nextDueDate: null as string | null,
       status: 'CONFIRMED' as string,
       isAutoDetected: false,
       sourceDocumentId: null as string | null,
+    })),
+    documents: rawPet.documents.map(d => ({
+      ...d,
+      uploadedAt: d.uploadedAt.toISOString(),
     })),
   };
 
