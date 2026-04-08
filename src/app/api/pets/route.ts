@@ -9,8 +9,17 @@ export async function GET() {
 
   const pets = await prisma.pet.findMany({
     where: { ownerId: session.user.id },
-    include: {
-      vaccinations: { orderBy: { date: 'desc' } },
+    select: {
+      id: true, ownerId: true, name: true, species: true, breed: true,
+      dateOfBirth: true, gender: true, photoUrl: true,
+      isNeutered: true, microchipNumber: true, tattooNumber: true, weight: true,
+      vetName: true, vetPhone: true, allergies: true, currentMedication: true,
+      behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
+      createdAt: true, updatedAt: true,
+      vaccinations: {
+        select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true },
+        orderBy: { date: 'desc' },
+      },
       documents: { orderBy: { uploadedAt: 'desc' } },
       _count: { select: { bookingPets: true } },
     },

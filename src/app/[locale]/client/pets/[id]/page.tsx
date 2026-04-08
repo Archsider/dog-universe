@@ -36,23 +36,33 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
   const t = await getTranslations('pets');
   const fr = locale === 'fr';
 
-  const pet = await prisma.pet.findUnique({
+  // Explicit select to avoid columns that may not exist in production DB yet
+  // (migrations: 20260407_antiparasitic, 20260407_vaccination_draft)
+  const rawPet = await prisma.pet.findUnique({
     where: { id },
-    include: {
+    select: {
+      id: true, ownerId: true, name: true, species: true, breed: true,
+      dateOfBirth: true, gender: true, photoUrl: true,
+      isNeutered: true, microchipNumber: true, tattooNumber: true, weight: true,
+      vetName: true, vetPhone: true, allergies: true, currentMedication: true,
+      behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
+      createdAt: true, updatedAt: true,
       owner: { select: { name: true, email: true } },
-      vaccinations: { orderBy: { date: 'desc' } },
-      documents: { orderBy: { uploadedAt: 'desc' } },
+      vaccinations: {
+        select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true },
+        orderBy: { date: 'desc' },
+      },
+      documents: {
+        select: { id: true, name: true, fileUrl: true, fileType: true, uploadedAt: true },
+        orderBy: { uploadedAt: 'desc' },
+      },
       bookingPets: {
         select: {
           id: true,
           booking: {
             select: {
-              id: true,
-              status: true,
-              serviceType: true,
-              startDate: true,
-              endDate: true,
-              totalPrice: true,
+              id: true, status: true, serviceType: true,
+              startDate: true, endDate: true, totalPrice: true,
               boardingDetail: { select: { includeGrooming: true } },
               taxiDetail: { select: { id: true } },
               invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
@@ -64,7 +74,22 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
     },
   });
 
-  if (!pet) notFound();
+  if (!rawPet) notFound();
+
+  // Pad with null for columns not yet in production DB — remove after applying migrations
+  const pet = {
+    ...rawPet,
+    lastAntiparasiticDate: null as Date | null,
+    antiparasiticProduct: null as string | null,
+    antiparasiticNotes: null as string | null,
+    vaccinations: rawPet.vaccinations.map(v => ({
+      ...v,
+      nextDueDate: null as Date | null,
+      status: 'CONFIRMED' as string,
+      isAutoDetected: false,
+      sourceDocumentId: null as string | null,
+    })),
+  };
   if (session.user.role !== 'ADMIN' && pet.ownerId !== session.user.id) {
     redirect(`/${locale}/client/pets`);
   }

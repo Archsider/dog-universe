@@ -17,9 +17,12 @@ export async function GET(_req: Request, { params }: Params) {
     where: { id, role: 'CLIENT' },
     include: {
       pets: {
-        include: {
-          vaccinations: { orderBy: { date: 'desc' } },
-          documents: { orderBy: { uploadedAt: 'desc' } },
+        select: {
+          id: true, ownerId: true, name: true, species: true, breed: true,
+          dateOfBirth: true, gender: true, photoUrl: true, weight: true,
+          createdAt: true, updatedAt: true,
+          vaccinations: { select: { id: true, vaccineType: true, date: true }, orderBy: { date: 'desc' } },
+          documents: { select: { id: true, name: true, fileUrl: true, fileType: true, uploadedAt: true }, orderBy: { uploadedAt: 'desc' } },
         },
       },
       loyaltyGrade: true,

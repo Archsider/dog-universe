@@ -13,16 +13,28 @@ export async function GET(_req: Request, { params }: Params) {
 
   const pet = await prisma.pet.findUnique({
     where: { id },
-    include: {
-      vaccinations: { orderBy: { date: 'desc' } },
+    select: {
+      id: true, ownerId: true, name: true, species: true, breed: true,
+      dateOfBirth: true, gender: true, photoUrl: true,
+      isNeutered: true, microchipNumber: true, tattooNumber: true, weight: true,
+      vetName: true, vetPhone: true, allergies: true, currentMedication: true,
+      behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
+      createdAt: true, updatedAt: true,
+      vaccinations: {
+        select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true },
+        orderBy: { date: 'desc' },
+      },
       documents: { orderBy: { uploadedAt: 'desc' } },
       bookingPets: {
-        include: {
+        select: {
+          id: true,
           booking: {
-            include: {
-              boardingDetail: true,
-              taxiDetail: true,
-              invoice: true,
+            select: {
+              id: true, status: true, serviceType: true,
+              startDate: true, endDate: true, totalPrice: true,
+              boardingDetail: { select: { includeGrooming: true, pricePerNight: true, groomingPrice: true } },
+              taxiDetail: { select: { id: true, taxiType: true, price: true } },
+              invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
             },
           },
         },
@@ -47,7 +59,7 @@ export async function PATCH(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const pet = await prisma.pet.findUnique({ where: { id } });
+  const pet = await prisma.pet.findUnique({ where: { id }, select: { id: true, ownerId: true } });
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && pet.ownerId !== session.user.id) {

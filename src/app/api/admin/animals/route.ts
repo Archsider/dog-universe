@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     where,
     include: {
       owner: { select: { id: true, name: true, email: true } },
-      vaccinations: { orderBy: { date: 'desc' }, take: 5 },
+      vaccinations: { select: { id: true, vaccineType: true, date: true }, orderBy: { date: 'desc' }, take: 5 },
       documents: { orderBy: { uploadedAt: 'desc' }, take: 3 },
       _count: { select: { bookingPets: true } },
     },
