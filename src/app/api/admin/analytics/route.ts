@@ -32,8 +32,8 @@ export async function GET(request: Request) {
     },
   });
 
-  const monthly: Record<number, { boarding: number; grooming: number; taxi: number }> = {};
-  for (let m = 0; m < 12; m++) monthly[m] = { boarding: 0, grooming: 0, taxi: 0 };
+  const monthly: Record<number, { boarding: number; grooming: number; taxi: number; croquettes: number }> = {};
+  for (let m = 0; m < 12; m++) monthly[m] = { boarding: 0, grooming: 0, taxi: 0, croquettes: 0 };
 
   for (const inv of invoices2026) {
     if (!inv.paidAt) continue;
@@ -55,7 +55,8 @@ export async function GET(request: Request) {
     boarding: monthly[i].boarding,
     grooming: monthly[i].grooming,
     taxi: monthly[i].taxi,
-    total: monthly[i].boarding + monthly[i].grooming + monthly[i].taxi,
+    croquettes: monthly[i].croquettes,
+    total: monthly[i].boarding + monthly[i].grooming + monthly[i].taxi + monthly[i].croquettes,
   }));
 
   // ── Current month stats ───────────────────────────────────────────────────

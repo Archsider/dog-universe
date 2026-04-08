@@ -91,8 +91,8 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   ]);
 
   // Build yearly chart — merge real invoices + historical summaries
-  const monthly: Record<number, { boarding: number; grooming: number; taxi: number }> = {};
-  for (let m = 0; m < 12; m++) monthly[m] = { boarding: 0, grooming: 0, taxi: 0 };
+  const monthly: Record<number, { boarding: number; grooming: number; taxi: number; croquettes: number }> = {};
+  for (let m = 0; m < 12; m++) monthly[m] = { boarding: 0, grooming: 0, taxi: 0, croquettes: 0 };
 
   // Real invoices
   for (const inv of invoicesCurrentYear) {
@@ -113,8 +113,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     monthly[m].boarding += s.boardingRevenue;
     monthly[m].grooming += s.groomingRevenue;
     monthly[m].taxi += s.taxiRevenue;
-    // otherRevenue added to boarding bucket for chart display
-    monthly[m].boarding += s.otherRevenue;
+    monthly[m].croquettes += s.otherRevenue;
   }
 
   const frMonths = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
@@ -124,6 +123,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     boarding: monthly[i].boarding,
     grooming: monthly[i].grooming,
     taxi: monthly[i].taxi,
+    croquettes: monthly[i].croquettes,
   }));
 
   // Current month KPI (real invoices only — historical is pre-production)
@@ -164,13 +164,15 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const avgBasket = uniqueLastMonth > 0 ? Math.round(lastMonthInvoiceAmt / uniqueLastMonth) : 0;
 
   // Service breakdown: real invoice items + historical summaries
-  const summaryBoarding = historicalSummaries.reduce((s, r) => s + r.boardingRevenue + r.otherRevenue, 0);
+  const summaryBoarding = historicalSummaries.reduce((s, r) => s + r.boardingRevenue, 0);
   const summaryGrooming = historicalSummaries.reduce((s, r) => s + r.groomingRevenue, 0);
   const summaryTaxi = historicalSummaries.reduce((s, r) => s + r.taxiRevenue, 0);
+  const summaryCroquettes = historicalSummaries.reduce((s, r) => s + r.otherRevenue, 0);
 
   const boardingRevenue = (boardingTotal._sum.total ?? 0) + summaryBoarding;
   const taxiRevenue = (taxiTotal._sum.total ?? 0) + summaryTaxi;
   const groomingRevenue = (groomingTotal._sum.total ?? 0) + summaryGrooming;
+  const croquettesRevenue = summaryCroquettes;
 
   const l = {
     title: locale === 'en' ? 'Analytics' : 'Analytiques',
@@ -284,6 +286,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         boardingRevenue={boardingRevenue}
         taxiRevenue={taxiRevenue}
         groomingRevenue={groomingRevenue}
+        croquettesRevenue={croquettesRevenue}
         locale={locale}
         labels={l}
       />

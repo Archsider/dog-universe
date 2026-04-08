@@ -32,6 +32,12 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
 
   if (!booking) notFound();
 
+  const bookingMessages = await prisma.notification.findMany({
+    where: { userId: booking.client.id, type: 'ADMIN_MESSAGE', metadata: { contains: id } },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, messageFr: true, messageEn: true, createdAt: true },
+  });
+
   const CANCELLATION_REASONS: Record<string, { fr: string; en: string }> = {
     plans_changed:  { fr: 'Changement de plans',            en: 'Plans changed' },
     emergency:      { fr: 'Urgence personnelle',             en: 'Personal emergency' },
@@ -258,7 +264,7 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
               locale={locale}
             />
           )}
-          <AdminMessageSection bookingId={booking.id} locale={locale} />
+          <AdminMessageSection bookingId={booking.id} locale={locale} initialMessages={bookingMessages} />
         </div>
       </div>
 

@@ -13,15 +13,16 @@ const ServiceBreakdown = dynamic(() => import('@/components/admin/ServiceBreakdo
 });
 
 interface Props {
-  revenueData: { month: string; boarding: number; taxi: number; grooming?: number }[];
+  revenueData: { month: string; boarding: number; taxi: number; grooming?: number; croquettes?: number }[];
   boardingRevenue: number;
   taxiRevenue: number;
   groomingRevenue: number;
+  croquettesRevenue: number;
   locale: string;
   labels: { revenueChart: string; breakdown: string };
 }
 
-export default function AnalyticsCharts({ revenueData, boardingRevenue, taxiRevenue, groomingRevenue, locale, labels }: Props) {
+export default function AnalyticsCharts({ revenueData, boardingRevenue, taxiRevenue, groomingRevenue, croquettesRevenue, locale, labels }: Props) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
@@ -35,6 +36,7 @@ export default function AnalyticsCharts({ revenueData, boardingRevenue, taxiReve
             boardingRevenue={boardingRevenue}
             taxiRevenue={taxiRevenue}
             groomingRevenue={groomingRevenue}
+            croquettesRevenue={croquettesRevenue}
             locale={locale}
           />
         </div>

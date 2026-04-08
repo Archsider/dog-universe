@@ -7,19 +7,20 @@ interface ServiceBreakdownProps {
   boardingRevenue: number;
   taxiRevenue: number;
   groomingRevenue: number;
+  croquettesRevenue: number;
   locale: string;
 }
 
-const COLORS = ['#C9A84C', '#2C2C2C', '#7C9D8E'];
+const COLORS = ['#C9A84C', '#2C2C2C', '#7C9D8E', '#E8A838'];
 
-export default function ServiceBreakdown({ boardingRevenue, taxiRevenue, groomingRevenue, locale }: ServiceBreakdownProps) {
+export default function ServiceBreakdown({ boardingRevenue, taxiRevenue, groomingRevenue, croquettesRevenue, locale }: ServiceBreakdownProps) {
   const labels = {
-    fr: { boarding: 'Pension', taxi: 'Taxi animalier', grooming: 'Toilettage', noData: 'Pas de données' },
-    en: { boarding: 'Boarding', taxi: 'Pet Taxi', grooming: 'Grooming', noData: 'No data' },
+    fr: { boarding: 'Pension', taxi: 'Taxi animalier', grooming: 'Toilettage', croquettes: 'Croquettes', noData: 'Pas de données' },
+    en: { boarding: 'Boarding', taxi: 'Pet Taxi', grooming: 'Grooming', croquettes: 'Croquettes', noData: 'No data' },
   };
   const l = labels[locale as keyof typeof labels] || labels.fr;
 
-  const total = boardingRevenue + taxiRevenue + groomingRevenue;
+  const total = boardingRevenue + taxiRevenue + groomingRevenue + croquettesRevenue;
   if (total === 0) {
     return (
       <div className="flex items-center justify-center h-48 text-gray-400 text-sm">{l.noData}</div>
@@ -30,12 +31,14 @@ export default function ServiceBreakdown({ boardingRevenue, taxiRevenue, groomin
     { name: l.boarding, value: boardingRevenue },
     { name: l.taxi, value: taxiRevenue },
     { name: l.grooming, value: groomingRevenue },
+    { name: l.croquettes, value: croquettesRevenue },
   ].filter(d => d.value > 0);
 
   const rows = [
     { name: l.boarding, value: boardingRevenue, color: COLORS[0] },
     { name: l.taxi, value: taxiRevenue, color: COLORS[1] },
     { name: l.grooming, value: groomingRevenue, color: COLORS[2] },
+    { name: l.croquettes, value: croquettesRevenue, color: COLORS[3] },
   ];
 
   return (

@@ -170,11 +170,11 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
 
   // Build monthly chart data — last 12 months
   const chartLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
-  const monthlyData: Record<string, { boarding: number; taxi: number; grooming: number }> = {};
+  const monthlyData: Record<string, { boarding: number; taxi: number; grooming: number; croquettes: number }> = {};
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
-    monthlyData[key] = { boarding: 0, taxi: 0, grooming: 0 };
+    monthlyData[key] = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
   }
   // Real invoices
   revenueData.forEach(inv => {
@@ -195,9 +195,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     const d = new Date(s.year, s.month - 1, 1);
     const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
     if (monthlyData[key]) {
-      monthlyData[key].boarding += s.boardingRevenue + s.otherRevenue;
+      monthlyData[key].boarding += s.boardingRevenue;
       monthlyData[key].grooming += s.groomingRevenue;
       monthlyData[key].taxi += s.taxiRevenue;
+      monthlyData[key].croquettes += s.otherRevenue;
     }
   });
   const chartData = Object.entries(monthlyData).map(([month, v]) => ({ month, ...v }));

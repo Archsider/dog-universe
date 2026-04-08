@@ -8,7 +8,7 @@ const RevenueChart = dynamic(() => import('@/components/admin/RevenueChart'), {
 });
 
 interface Props {
-  data: { month: string; boarding: number; taxi: number }[];
+  data: { month: string; boarding: number; taxi: number; grooming?: number; croquettes?: number }[];
   locale: string;
 }
 
