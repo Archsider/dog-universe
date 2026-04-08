@@ -6,6 +6,7 @@ import { FileText, Download, FileDown, Eye } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getInvoiceStatusColor } from '@/lib/utils';
 import CreateInvoiceButton from './CreateInvoiceButton';
+import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 
 interface PageProps {
   params: { locale: string };
@@ -25,7 +26,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
 
   const where: Record<string, unknown> = { ...(status && { status }) };
 
-  const [invoices, total, totalRevenue] = await Promise.all([
+  const [invoices, total, totalRevenue, allClients] = await Promise.all([
     prisma.invoice.findMany({
       where,
       include: {
@@ -38,6 +39,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
     }),
     prisma.invoice.count({ where }),
     prisma.invoice.aggregate({ where: { status: 'PAID' }, _sum: { amount: true } }),
+    prisma.user.findMany({ where: { role: 'CLIENT' }, select: { id: true, name: true, email: true }, orderBy: { name: 'asc' } }),
   ]);
 
   const labels = {
@@ -94,8 +96,8 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
             <div className="text-xs text-gray-400">{l.totalRevenue}</div>
             <div className="font-bold text-gold-600">{formatMAD(totalRevenue._sum.amount || 0)}</div>
           </div>
@@ -107,6 +109,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
             <FileDown className="h-3.5 w-3.5" />
             {locale === 'fr' ? 'Export CSV' : 'Export CSV'}
           </a>
+          <CreateStandaloneInvoiceModal clients={allClients} locale={locale} />
         </div>
       </div>
 
@@ -148,9 +151,15 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
                     <tr key={inv.id} className="border-b border-ivory-100 last:border-0 hover:bg-ivory-50 transition-colors">
                       <td className="px-4 py-3">
                         <span className="font-mono text-sm font-semibold text-charcoal">{inv.invoiceNumber}</span>
-                        {inv.booking && (
+                        {(inv.booking || inv.serviceType) && (
                           <p className="text-xs text-gray-400">
-                            {inv.booking.serviceType === 'BOARDING' ? (locale === 'fr' ? 'Pension' : 'Boarding') : 'Taxi'}
+                            {inv.serviceType === 'PRODUCT_SALE'
+                              ? (locale === 'fr' ? 'Croquettes / Produits' : 'Croquettes / Products')
+                              : inv.booking?.serviceType === 'BOARDING'
+                                ? (locale === 'fr' ? 'Pension' : 'Boarding')
+                                : inv.booking?.serviceType === 'PET_TAXI'
+                                  ? (locale === 'fr' ? 'Taxi animalier' : 'Pet Taxi')
+                                  : inv.booking?.serviceType ?? ''}
                           </p>
                         )}
                       </td>

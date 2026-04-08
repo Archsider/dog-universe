@@ -6,17 +6,18 @@ import Link from 'next/link';
 import { ArrowLeft, PawPrint, Edit } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { calculateAge, formatDateShort, formatMAD } from '@/lib/utils';
+import { calculateAge, formatDateShort, formatMAD, getAntiparasiticDurationDays } from '@/lib/utils';
 import VaccinationSection, { PROOF_PREFIX } from '@/components/pets/VaccinationSection';
 import DocumentSection from '@/components/pets/DocumentSection';
 
 type Params = { locale: string; id: string };
 
-function getAntiparasiticStatus(lastDate: Date | null): 'up_to_date' | 'expiring_soon' | 'expired' | 'unknown' {
+function getAntiparasiticStatus(lastDate: Date | null, product?: string | null): 'up_to_date' | 'expiring_soon' | 'expired' | 'unknown' {
   if (!lastDate) return 'unknown';
+  const duration = getAntiparasiticDurationDays(product);
   const days = Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000);
-  if (days <= 25) return 'up_to_date';
-  if (days <= 30) return 'expiring_soon';
+  if (days <= duration - 5) return 'up_to_date';
+  if (days <= duration) return 'expiring_soon';
   return 'expired';
 }
 
@@ -42,11 +43,18 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
       vaccinations: { orderBy: { date: 'desc' } },
       documents: { orderBy: { uploadedAt: 'desc' } },
       bookingPets: {
-        include: {
+        select: {
+          id: true,
           booking: {
-            include: {
-              boardingDetail: true,
-              taxiDetail: true,
+            select: {
+              id: true,
+              status: true,
+              serviceType: true,
+              startDate: true,
+              endDate: true,
+              totalPrice: true,
+              boardingDetail: { select: { includeGrooming: true } },
+              taxiDetail: { select: { id: true } },
               invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
             },
           },
@@ -192,7 +200,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
 
             {/* Antiparasitaire */}
             {(() => {
-              const status = getAntiparasiticStatus(pet.lastAntiparasiticDate);
+              const status = getAntiparasiticStatus(pet.lastAntiparasiticDate, pet.antiparasiticProduct);
               const statusConfig = {
                 up_to_date:    { label: fr ? 'À jour' : 'Up to date',         cls: 'bg-green-50 text-green-700 border-green-200' },
                 expiring_soon: { label: fr ? 'Expire bientôt' : 'Expiring soon', cls: 'bg-amber-50 text-amber-700 border-amber-200' },

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { ArrowLeft, PawPrint, Calendar, ShieldCheck, ShieldAlert, ShieldOff, ShieldQuestion, Edit } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { calculateAge, formatDate, getBookingStatusColor } from '@/lib/utils';
+import { calculateAge, formatDate, getBookingStatusColor, getAntiparasiticDurationDays } from '@/lib/utils';
 import DeleteAnimalButton from './DeleteAnimalButton';
 import VaccinationSection, { PROOF_PREFIX } from '@/components/pets/VaccinationSection';
 import DocumentSection from '@/components/pets/DocumentSection';
@@ -22,7 +22,17 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
       vaccinations: { orderBy: { date: 'desc' } },
       documents: { orderBy: { uploadedAt: 'desc' } },
       bookingPets: {
-        include: { booking: true },
+        select: {
+          id: true,
+          booking: {
+            select: {
+              id: true,
+              status: true,
+              serviceType: true,
+              startDate: true,
+            },
+          },
+        },
         orderBy: { booking: { startDate: 'desc' } },
         take: 10,
       },
@@ -36,11 +46,12 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
     en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', CANCELLED: 'Cancelled', REJECTED: 'Rejected', COMPLETED: 'Completed', IN_PROGRESS: 'In progress' },
   };
 
-  function getAntiStatus(d: Date | null): 'up_to_date' | 'expiring_soon' | 'expired' | 'unknown' {
+  function getAntiStatus(d: Date | null, product?: string | null): 'up_to_date' | 'expiring_soon' | 'expired' | 'unknown' {
     if (!d) return 'unknown';
+    const duration = getAntiparasiticDurationDays(product);
     const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
-    if (days <= 25) return 'up_to_date';
-    if (days <= 30) return 'expiring_soon';
+    if (days <= duration - 5) return 'up_to_date';
+    if (days <= duration) return 'expiring_soon';
     return 'expired';
   }
 
@@ -94,7 +105,7 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
 
           {/* Anti-parasitic card */}
           {(() => {
-            const antiStatus = getAntiStatus(pet.lastAntiparasiticDate);
+            const antiStatus = getAntiStatus(pet.lastAntiparasiticDate, pet.antiparasiticProduct);
             const iconMap = {
               up_to_date:    { Icon: ShieldCheck,    cls: 'text-green-600',  bg: 'bg-green-50',  label: locale === 'fr' ? 'À jour' : 'Up to date' },
               expiring_soon: { Icon: ShieldAlert,    cls: 'text-amber-600',  bg: 'bg-amber-50',  label: locale === 'fr' ? 'Expire bientôt' : 'Expiring soon' },

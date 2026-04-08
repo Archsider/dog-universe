@@ -50,10 +50,32 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { clientId, bookingId, items, notes } = body;
+    const { clientId, bookingId, items, notes, serviceType, issuedAt, markPaid, paymentMethod, paidAt } = body;
 
     if (!clientId || !items?.length) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
+    }
+
+    // Validate serviceType if provided
+    const VALID_SERVICE_TYPES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT_SALE'];
+    if (serviceType && !VALID_SERVICE_TYPES.includes(serviceType)) {
+      return NextResponse.json({ error: 'INVALID_SERVICE_TYPE' }, { status: 400 });
+    }
+
+    // Validate issuedAt if provided
+    let resolvedIssuedAt: Date | undefined;
+    if (issuedAt) {
+      const d = new Date(issuedAt);
+      if (isNaN(d.getTime())) {
+        return NextResponse.json({ error: 'INVALID_ISSUED_AT' }, { status: 400 });
+      }
+      resolvedIssuedAt = d;
+    }
+
+    // Validate payment info if markPaid
+    const VALID_PAYMENT_METHODS = ['CASH', 'CARD', 'CHECK', 'TRANSFER'];
+    if (markPaid && paymentMethod && !VALID_PAYMENT_METHODS.includes(paymentMethod)) {
+      return NextResponse.json({ error: 'INVALID_PAYMENT_METHOD' }, { status: 400 });
     }
 
     // Validate each item: amounts must be positive numbers
@@ -76,7 +98,7 @@ export async function POST(request: Request) {
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
     // Generate invoice number — retry on collision (race condition guard)
-    const year = new Date().getFullYear();
+    const year = resolvedIssuedAt ? resolvedIssuedAt.getFullYear() : new Date().getFullYear();
     let invoiceNumber = '';
     for (let attempt = 0; attempt < 5; attempt++) {
       const count = await prisma.invoice.count();
@@ -97,14 +119,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'INVALID_AMOUNT' }, { status: 400 });
     }
 
+    const isPaid = markPaid === true;
+    const resolvedPaidAt = isPaid && paidAt ? new Date(paidAt) : isPaid ? new Date() : null;
+
     const invoice = await prisma.invoice.create({
       data: {
         invoiceNumber,
         clientId,
         bookingId: bookingId || null,
         amount,
-        status: 'PENDING',
+        serviceType: serviceType || null,
+        status: isPaid ? 'PAID' : 'PENDING',
+        paidAmount: isPaid ? amount : 0,
+        paymentMethod: isPaid && paymentMethod ? paymentMethod : null,
+        paidAt: resolvedPaidAt,
         notes: notes?.trim() || null,
+        ...(resolvedIssuedAt && { issuedAt: resolvedIssuedAt }),
         items: {
           create: items.map((item: { description: string; quantity: number; unitPrice: number; total: number }) => ({
             description: item.description,

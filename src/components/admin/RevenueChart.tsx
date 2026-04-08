@@ -22,8 +22,6 @@ export default function RevenueChart({ data, locale }: RevenueChartProps) {
   };
   const l = labels[locale as keyof typeof labels] || labels.fr;
 
-  const hasCroquettes = data.some(d => (d.croquettes ?? 0) > 0);
-
   const formatValue = (value: number) => `${value.toLocaleString()} MAD`;
 
   return (
@@ -56,7 +54,7 @@ export default function RevenueChart({ data, locale }: RevenueChartProps) {
         <Bar dataKey="boarding" fill="#C9A84C" radius={[4, 4, 0, 0]} />
         <Bar dataKey="taxi" fill="#2C2C2C" radius={[4, 4, 0, 0]} />
         <Bar dataKey="grooming" fill="#7C9D8E" radius={[4, 4, 0, 0]} />
-        {hasCroquettes && <Bar dataKey="croquettes" fill="#E8A838" radius={[4, 4, 0, 0]} />}
+        <Bar dataKey="croquettes" fill="#E8A838" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

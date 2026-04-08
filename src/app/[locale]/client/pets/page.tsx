@@ -17,8 +17,19 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
 
   const pets = await prisma.pet.findMany({
     where: { ownerId: session.user.id },
-    include: {
-      vaccinations: { orderBy: { date: 'desc' }, take: 1 },
+    select: {
+      id: true,
+      name: true,
+      species: true,
+      breed: true,
+      dateOfBirth: true,
+      gender: true,
+      photoUrl: true,
+      vaccinations: {
+        select: { id: true, vaccineType: true, date: true },
+        orderBy: { date: 'desc' },
+        take: 1,
+      },
       _count: { select: { bookingPets: true } },
     },
     orderBy: { createdAt: 'asc' },

@@ -41,6 +41,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     boardingTotal,
     taxiTotal,
     groomingTotal,
+    productSaleTotal,
     completedBoardings,
     activeClients,
     semiActiveIds,
@@ -50,7 +51,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     prisma.invoice.findMany({
       where: { status: 'PAID', paidAt: { gte: startCurrentYear, lte: endCurrentYear } },
       select: {
-        amount: true, paidAt: true,
+        amount: true, paidAt: true, serviceType: true,
         booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } },
       },
     }),
@@ -70,6 +71,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     prisma.invoiceItem.aggregate({ where: { description: { contains: 'Pension' } }, _sum: { total: true } }),
     prisma.invoiceItem.aggregate({ where: { description: { contains: 'Taxi' } }, _sum: { total: true } }),
     prisma.invoiceItem.aggregate({ where: { description: { contains: 'Toilettage' } }, _sum: { total: true } }),
+    prisma.invoice.aggregate({ where: { status: 'PAID', serviceType: 'PRODUCT_SALE' }, _sum: { amount: true } }),
     prisma.booking.findMany({
       where: { serviceType: 'BOARDING', status: 'COMPLETED', endDate: { not: null } },
       select: { startDate: true, endDate: true }, take: 100,
@@ -98,7 +100,9 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   for (const inv of invoicesCurrentYear) {
     if (!inv.paidAt) continue;
     const m = new Date(inv.paidAt).getMonth();
-    if (inv.booking?.serviceType === 'PET_TAXI') {
+    if (inv.serviceType === 'PRODUCT_SALE') {
+      monthly[m].croquettes += inv.amount;
+    } else if (inv.booking?.serviceType === 'PET_TAXI') {
       monthly[m].taxi += inv.amount;
     } else if (inv.booking?.serviceType === 'BOARDING') {
       const g = inv.booking.boardingDetail?.groomingPrice ?? 0;
@@ -172,7 +176,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const boardingRevenue = (boardingTotal._sum.total ?? 0) + summaryBoarding;
   const taxiRevenue = (taxiTotal._sum.total ?? 0) + summaryTaxi;
   const groomingRevenue = (groomingTotal._sum.total ?? 0) + summaryGrooming;
-  const croquettesRevenue = summaryCroquettes;
+  const croquettesRevenue = (productSaleTotal._sum.amount ?? 0) + summaryCroquettes;
 
   const l = {
     title: locale === 'en' ? 'Analytics' : 'Analytiques',

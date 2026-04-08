@@ -101,6 +101,14 @@ export function getBookingStatusColor(status: string): string {
   }
 }
 
+export function getAntiparasiticDurationDays(product: string | null | undefined): number {
+  if (!product) return 30;
+  const p = product.toLowerCase();
+  if (p.includes('bravecto')) return 84; // 12 weeks
+  if (p.includes('nexgard') || p.includes('simparica')) return 30;
+  return 30;
+}
+
 export function getInvoiceStatusColor(status: string): string {
   switch (status) {
     case 'PAID':           return 'text-green-700 bg-green-50 border-green-200';

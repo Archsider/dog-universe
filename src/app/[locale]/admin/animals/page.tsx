@@ -20,10 +20,16 @@ export default async function AdminAnimalsPage({ params: { locale }, searchParam
 
   const pets = await prisma.pet.findMany({
     where: {
-      ...(q && { OR: [{ name: { contains: q } }, { breed: { contains: q } }, { owner: { name: { contains: q } } }] }),
+      ...(q && { OR: [{ name: { contains: q, mode: 'insensitive' } }, { breed: { contains: q, mode: 'insensitive' } }, { owner: { name: { contains: q, mode: 'insensitive' } } }] }),
       ...(species && { species }),
     },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      species: true,
+      breed: true,
+      dateOfBirth: true,
+      photoUrl: true,
       owner: { select: { id: true, name: true, email: true } },
       vaccinations: { select: { id: true } },
       _count: { select: { bookingPets: true } },

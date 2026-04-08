@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, LogIn, LogOut } from 'lucide-react';
+import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, LogIn, LogOut, Package } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import RevenueChartWrapper from './RevenueChartWrapper';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -40,6 +40,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     revenueData,
     monthlyBoardingInvoices,
     monthlyTaxiAgg,
+    monthlyCroquettesAgg,
     loyalClientsGroups,
     newClientsThisMonth,
     top5Revenue,
@@ -71,7 +72,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     }),
     prisma.invoice.findMany({
       where: { status: 'PAID', issuedAt: { gte: startOfLast12Months } },
-      select: { amount: true, issuedAt: true, booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } } },
+      select: { amount: true, issuedAt: true, serviceType: true, booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } } },
     }),
     prisma.invoice.findMany({
       where: { status: 'PAID', issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, booking: { serviceType: 'BOARDING' } },
@@ -79,6 +80,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     }),
     prisma.invoice.aggregate({
       where: { status: 'PAID', issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, booking: { serviceType: 'PET_TAXI' } },
+      _sum: { amount: true },
+    }),
+    prisma.invoice.aggregate({
+      where: { status: 'PAID', issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, serviceType: 'PRODUCT_SALE' },
       _sum: { amount: true },
     }),
     prisma.booking.groupBy({
@@ -181,9 +186,11 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     const d = new Date(inv.issuedAt);
     const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
     if (monthlyData[key]) {
-      if (inv.booking?.serviceType === 'PET_TAXI') {
+      if (inv.serviceType === 'PRODUCT_SALE') {
+        monthlyData[key].croquettes += inv.amount;
+      } else if (inv.booking?.serviceType === 'PET_TAXI') {
         monthlyData[key].taxi += inv.amount;
-      } else {
+      } else if (inv.booking?.serviceType === 'BOARDING') {
         const groomingPrice = inv.booking?.boardingDetail?.groomingPrice ?? 0;
         monthlyData[key].grooming += groomingPrice;
         monthlyData[key].boarding += inv.amount - groomingPrice;
@@ -207,6 +214,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   const monthlyGroomingRevenue = monthlyBoardingInvoices.reduce((sum, inv) => sum + (inv.booking?.boardingDetail?.groomingPrice ?? 0), 0);
   const monthlyBoardingRevenue = monthlyBoardingInvoices.reduce((sum, inv) => sum + inv.amount, 0) - monthlyGroomingRevenue;
   const monthlyTaxiRevenue = monthlyTaxiAgg._sum.amount ?? 0;
+  const monthlyCroquettesRevenue = monthlyCroquettesAgg._sum.amount ?? 0;
   const loyalClients = loyalClientsGroups.length;
   const pendingInvoicesAmount = pendingInvoicesAgg._sum.amount ?? 0;
   const pendingInvoicesCount = pendingInvoicesAgg._count.id ?? 0;
@@ -221,6 +229,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       pension: 'Pension',
       taxi: 'Taxi animalier',
       grooming: 'Toilettage',
+      croquettes: 'Croquettes',
       loyalClients: 'Clients fidèles',
       newClients: 'Nouveaux clients',
       recentBookings: 'Réservations récentes',
@@ -247,6 +256,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       pension: 'Boarding',
       taxi: 'Pet taxi',
       grooming: 'Grooming',
+      croquettes: 'Croquettes',
       loyalClients: 'Loyal clients',
       newClients: 'New clients',
       recentBookings: 'Recent bookings',
@@ -369,7 +379,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       </div>
 
       {/* Row 2 — Service revenues this month */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-gradient-to-br from-[#FBF5E0] to-[#FDF8EC] rounded-xl border border-[#E2C048]/30 p-4 shadow-card">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gold-700 uppercase tracking-wide">{l.pension}</span>
@@ -395,6 +405,15 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
           </div>
           <div className="text-2xl font-bold text-purple-800">{formatMAD(monthlyGroomingRevenue)}</div>
           <div className="text-xs text-purple-600 mt-1">{l.thisMth}</div>
+        </div>
+
+        <div className="bg-gradient-to-br from-[#FEF3E2] to-[#FFF8EE] rounded-xl border border-orange-200/50 p-4 shadow-card">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-orange-700 uppercase tracking-wide">{l.croquettes}</span>
+            <Package className="h-4 w-4 text-orange-500" />
+          </div>
+          <div className="text-2xl font-bold text-orange-800">{formatMAD(monthlyCroquettesRevenue)}</div>
+          <div className="text-xs text-orange-600 mt-1">{l.thisMth}</div>
         </div>
       </div>
 

@@ -185,6 +185,7 @@ model Invoice {
   amount        Float
   paidAmount    Float    @default(0)
   status        String   @default("PENDING") // "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED"
+  serviceType   String?  // "BOARDING" | "PET_TAXI" | "GROOMING" | "PRODUCT_SALE" | null (legacy)
   pdfUrl        String?
   notes         String?
   paymentMethod String?  // "CASH" | "CARD" | "CHECK" | "TRANSFER"
