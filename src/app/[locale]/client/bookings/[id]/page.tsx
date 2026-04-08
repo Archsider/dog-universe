@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import CancelBookingButton from '../../history/CancelBookingButton';
 import AutoRefresh from '@/components/shared/AutoRefresh';
+import RequestExtensionButton from './RequestExtensionButton';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -300,6 +301,16 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
                   <div className="flex justify-between">
                     <span className="text-gray-500">{t.grooming}</span>
                     <span className="font-medium text-charcoal">{booking.boardingDetail.includeGrooming ? t.yes : t.no}</span>
+                  </div>
+                )}
+                {['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && booking.endDate && (
+                  <div className="mt-3 pt-3 border-t border-ivory-100">
+                    <RequestExtensionButton
+                      bookingId={booking.id}
+                      currentEndDate={booking.endDate}
+                      hasExtensionRequest={booking.hasExtensionRequest}
+                      locale={locale}
+                    />
                   </div>
                 )}
               </>

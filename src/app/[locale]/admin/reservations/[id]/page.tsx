@@ -10,6 +10,7 @@ import DeleteBookingButton from './DeleteBookingButton';
 import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import StayPhotosSection from './StayPhotosSection';
 import AdminMessageSection from './AdminMessageSection';
+import ExtendBookingSection from './ExtendBookingSection';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -213,6 +214,20 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
           </div>
 
           <ReservationActions booking={{ id: booking.id, status: booking.status, serviceType: booking.serviceType }} locale={locale} />
+          {isBoarding && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
+            <ExtendBookingSection
+              booking={{
+                id: booking.id,
+                startDate: booking.startDate,
+                endDate: booking.endDate ?? null,
+                totalPrice: booking.totalPrice,
+                hasExtensionRequest: booking.hasExtensionRequest,
+                extensionRequestedEndDate: booking.extensionRequestedEndDate ?? null,
+                extensionRequestNote: booking.extensionRequestNote ?? null,
+              }}
+              locale={locale}
+            />
+          )}
           <AdminMessageSection bookingId={booking.id} locale={locale} />
         </div>
       </div>

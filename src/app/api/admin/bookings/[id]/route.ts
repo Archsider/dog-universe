@@ -46,9 +46,106 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       client: true,
       bookingPets: { include: { pet: true } },
       boardingDetail: true,
+      invoice: true,
     },
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // ── Extension: direct admin extend OR approve client request ─────────────────
+  const newEndDateStr: string | undefined = body.extendEndDate ?? (body.approveExtension ? booking.extensionRequestedEndDate?.toISOString().slice(0, 10) : undefined);
+
+  if (newEndDateStr || body.rejectExtension) {
+    if (booking.serviceType !== 'BOARDING') {
+      return NextResponse.json({ error: 'Extensions only apply to boarding stays' }, { status: 400 });
+    }
+
+    // ── Reject extension request ─────────────────────────────────────────────
+    if (body.rejectExtension) {
+      if (!booking.hasExtensionRequest) {
+        return NextResponse.json({ error: 'No pending extension request' }, { status: 400 });
+      }
+      await prisma.booking.update({
+        where: { id: params.id },
+        data: {
+          hasExtensionRequest: false,
+          extensionRequestedEndDate: null,
+          extensionRequestNote: null,
+        },
+      });
+      const bookingRef = booking.id.slice(0, 8).toUpperCase();
+      const { createExtensionRejectedNotification } = await import('@/lib/notifications');
+      await createExtensionRejectedNotification(booking.clientId, bookingRef).catch(() => {});
+      await logAction({
+        userId: session.user.id,
+        action: 'EXTENSION_REJECTED',
+        entityType: 'Booking',
+        entityId: params.id,
+        details: { bookingRef },
+      });
+      return NextResponse.json({ message: 'extension_rejected' });
+    }
+
+    // ── Apply extension (direct or approved) ─────────────────────────────────
+    const newEndDate = new Date(newEndDateStr + 'T12:00:00');
+    if (isNaN(newEndDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid end date' }, { status: 400 });
+    }
+    if (newEndDate <= booking.startDate) {
+      return NextResponse.json({ error: 'New end date must be after start date' }, { status: 400 });
+    }
+    if (booking.endDate && newEndDate <= booking.endDate) {
+      return NextResponse.json({ error: 'New end date must be after current end date' }, { status: 400 });
+    }
+
+    const newNights = Math.floor((newEndDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const pets = booking.bookingPets.map(bp => bp.pet);
+    const groomingPrice = booking.boardingDetail?.groomingPrice ?? 0;
+    const taxiAddonPrice = booking.boardingDetail?.taxiAddonPrice ?? 0;
+
+    const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
+    const pricingSettings = await getPricingSettings();
+    const newTotal = calculateBoardingTotalForExtension(pets, newNights, groomingPrice, taxiAddonPrice, pricingSettings);
+
+    // Invoice impact
+    let invoiceWarning = false;
+    if (booking.invoice) {
+      if (booking.invoice.status === 'PENDING') {
+        await prisma.invoice.update({ where: { id: booking.invoice.id }, data: { amount: newTotal } });
+      } else if (booking.invoice.status === 'PARTIALLY_PAID') {
+        // Update amount — paidAmount stays; status stays PARTIALLY_PAID (paidAmount < newTotal)
+        await prisma.invoice.update({ where: { id: booking.invoice.id }, data: { amount: newTotal } });
+      } else if (booking.invoice.status === 'PAID') {
+        invoiceWarning = true; // Admin must handle billing manually
+      }
+    }
+
+    await prisma.booking.update({
+      where: { id: params.id },
+      data: {
+        endDate: newEndDate,
+        totalPrice: newTotal,
+        hasExtensionRequest: false,
+        extensionRequestedEndDate: null,
+        extensionRequestNote: null,
+      },
+    });
+
+    const bookingRef = booking.id.slice(0, 8).toUpperCase();
+    const newEndDateDisplay = newEndDate.toLocaleDateString(booking.client.language === 'en' ? 'en-GB' : 'fr-MA');
+    const { createBookingExtendedNotification } = await import('@/lib/notifications');
+    await createBookingExtendedNotification(booking.clientId, bookingRef, newEndDateDisplay, booking.client.language ?? 'fr').catch(() => {});
+
+    await logAction({
+      userId: session.user.id,
+      action: body.approveExtension ? 'EXTENSION_APPROVED' : 'EXTENSION_DIRECT',
+      entityType: 'Booking',
+      entityId: params.id,
+      details: { newEndDate: newEndDateStr, newTotal, invoiceWarning },
+    });
+
+    return NextResponse.json({ message: 'extended', newEndDate: newEndDateStr, newTotal, invoiceWarning });
+  }
+  // ── End extension handling ────────────────────────────────────────────────────
 
   const updated = await prisma.booking.update({
     where: { id: params.id },

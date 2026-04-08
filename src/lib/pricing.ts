@@ -221,3 +221,30 @@ export function getGroomingPriceForPet(groomingSize: GroomingSize, pricing?: Pri
   const p = pricing ?? PRICING_DEFAULTS;
   return groomingSize === 'SMALL' ? p.grooming_small_dog : p.grooming_large_dog;
 }
+
+/**
+ * Recalculate total boarding price for a stay extension.
+ * Grooming and taxi add-on are fixed (already paid/set at booking time) —
+ * only the night rate portion changes with the new duration.
+ */
+export function calculateBoardingTotalForExtension(
+  pets: { species: string }[],
+  newNights: number,
+  groomingPrice: number,
+  taxiAddonPrice: number,
+  pricing?: PricingSettings,
+): number {
+  const p = pricing ?? PRICING_DEFAULTS;
+  const dogCount = pets.filter(pet => pet.species === 'DOG').length;
+  const catCount = pets.filter(pet => pet.species === 'CAT').length;
+
+  let nightsTotal = 0;
+  if (dogCount === 1) {
+    nightsTotal += (newNights > p.long_stay_threshold ? p.boarding_dog_long_stay : p.boarding_dog_per_night) * newNights;
+  } else if (dogCount > 1) {
+    nightsTotal += p.boarding_dog_multi * dogCount * newNights;
+  }
+  nightsTotal += p.boarding_cat_per_night * catCount * newNights;
+
+  return nightsTotal + groomingPrice + taxiAddonPrice;
+}

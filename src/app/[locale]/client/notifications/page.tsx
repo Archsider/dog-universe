@@ -35,6 +35,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   STAY_PHOTO:           { icon: Camera,         color: 'text-gold-600',   bg: 'bg-gold-50' },
   LOYALTY_UPDATE:       { icon: Star,           color: 'text-gold-500',   bg: 'bg-gold-50' },
   PET_BIRTHDAY:         { icon: Cake,           color: 'text-pink-500',   bg: 'bg-pink-50' },
+  BOOKING_EXTENDED:     { icon: CalendarClock,  color: 'text-blue-600',   bg: 'bg-blue-50' },
 };
 
 function parseMetadata(raw: string | null): Record<string, string> {

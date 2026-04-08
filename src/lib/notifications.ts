@@ -15,7 +15,9 @@ export type NotificationType =
   | 'PET_BIRTHDAY'
   | 'BOOKING_REQUEST'           // admin receives when a client creates a booking
   | 'LOYALTY_CLAIM_PENDING'     // admin receives when a client submits a claim
-  | 'NEW_CLIENT_REGISTRATION';  // admin receives when a new client registers
+  | 'NEW_CLIENT_REGISTRATION'   // admin receives when a new client registers
+  | 'EXTENSION_REQUEST'         // admin receives when a client requests a stay extension
+  | 'BOOKING_EXTENDED';         // client receives when stay is extended (admin direct or approved)
 
 interface CreateNotificationData {
   userId: string;
@@ -388,5 +390,56 @@ export async function notifyAdminsNewLoyaltyClaim(
 export async function getUnreadCount(userId: string): Promise<number> {
   return prisma.notification.count({
     where: { userId, read: false },
+  });
+}
+
+// ─── Extension request notifications ─────────────────────────────────────────
+
+export async function notifyAdminsExtensionRequest(
+  bookingRef: string,
+  clientName: string,
+  petNames: string,
+  requestedEndDate: string,
+  bookingId: string
+) {
+  return createAdminNotifications({
+    type: 'EXTENSION_REQUEST',
+    titleFr: 'Demande de prolongation de séjour',
+    titleEn: 'Stay extension request',
+    messageFr: `${clientName} demande une prolongation pour ${petNames} (réf. ${bookingRef}) — nouvelle date de sortie souhaitée : ${requestedEndDate}`,
+    messageEn: `${clientName} requests a stay extension for ${petNames} (ref. ${bookingRef}) — requested new checkout: ${requestedEndDate}`,
+    metadata: { bookingId, bookingRef },
+  });
+}
+
+export async function createBookingExtendedNotification(
+  clientId: string,
+  bookingRef: string,
+  newEndDate: string,
+  lang: string
+) {
+  return createNotification({
+    userId: clientId,
+    type: 'BOOKING_EXTENDED',
+    titleFr: 'Séjour prolongé',
+    titleEn: 'Stay extended',
+    messageFr: `Votre séjour (réf. ${bookingRef}) a été prolongé. Nouvelle date de sortie : ${newEndDate}.`,
+    messageEn: `Your stay (ref. ${bookingRef}) has been extended. New checkout date: ${newEndDate}.`,
+    metadata: { bookingId: bookingRef, lang },
+  });
+}
+
+export async function createExtensionRejectedNotification(
+  clientId: string,
+  bookingRef: string,
+) {
+  return createNotification({
+    userId: clientId,
+    type: 'BOOKING_REFUSAL',
+    titleFr: 'Demande de prolongation refusée',
+    titleEn: 'Extension request declined',
+    messageFr: `Votre demande de prolongation pour la réservation ${bookingRef} n'a pas pu être acceptée. Contactez-nous pour plus d'informations.`,
+    messageEn: `Your extension request for booking ${bookingRef} could not be approved. Please contact us for more details.`,
+    metadata: { bookingRef },
   });
 }
