@@ -16,7 +16,9 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
-  const status = searchParams.status || '';
+  const VALID_STATUS_FILTERS = ['', 'PAID', 'PARTIALLY_PAID', 'PENDING', 'CANCELLED'];
+  const rawStatus = searchParams.status || '';
+  const status = VALID_STATUS_FILTERS.includes(rawStatus) ? rawStatus : '';
   const page = parseInt(searchParams.page || '1');
   const limit = 20;
   const skip = (page - 1) * limit;
@@ -43,12 +45,15 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
       title: 'Facturation',
       all: 'Toutes',
       paid: 'Payées',
+      partial: 'Partiellement',
       pending: 'En attente',
       totalRevenue: 'Revenu total encaissé',
       ref: 'Référence',
       client: 'Client',
       date: 'Date',
       total: 'Total',
+      paid_col: 'Payé',
+      remaining: 'Restant',
       status: 'Statut',
       noInvoices: 'Aucune facture',
     },
@@ -56,20 +61,23 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
       title: 'Billing',
       all: 'All',
       paid: 'Paid',
+      partial: 'Partial',
       pending: 'Pending',
       totalRevenue: 'Total revenue collected',
       ref: 'Reference',
       client: 'Client',
       date: 'Date',
       total: 'Total',
+      paid_col: 'Paid',
+      remaining: 'Remaining',
       status: 'Status',
       noInvoices: 'No invoices',
     },
   };
 
   const isl: Record<string, Record<string, string>> = {
-    fr: { PENDING: 'En attente', PAID: 'Payée', CANCELLED: 'Annulée' },
-    en: { PENDING: 'Pending', PAID: 'Paid', CANCELLED: 'Cancelled' },
+    fr: { PENDING: 'En attente', PARTIALLY_PAID: 'Partiel', PAID: 'Payée', CANCELLED: 'Annulée' },
+    en: { PENDING: 'Pending', PARTIALLY_PAID: 'Partial', PAID: 'Paid', CANCELLED: 'Cancelled' },
   };
 
   const l = labels[locale as keyof typeof labels] || labels.fr;
@@ -78,6 +86,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
   const statusFilters = [
     { value: '', label: l.all },
     { value: 'PAID', label: l.paid },
+    { value: 'PARTIALLY_PAID', label: l.partial },
     { value: 'PENDING', label: l.pending },
   ];
 
@@ -126,44 +135,69 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
                   <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden md:table-cell">{l.client}</th>
                   <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden sm:table-cell">{l.date}</th>
                   <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3">{l.total}</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3 hidden lg:table-cell">{l.paid_col}</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3 hidden lg:table-cell">{l.remaining}</th>
                   <th className="text-center text-xs font-semibold text-gray-500 px-4 py-3">{l.status}</th>
                   <th className="px-4 py-3 w-16" />
                 </tr>
               </thead>
               <tbody>
-                {invoices.map(inv => (
-                  <tr key={inv.id} className="border-b border-ivory-100 last:border-0 hover:bg-ivory-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-sm font-semibold text-charcoal">{inv.invoiceNumber}</span>
-                      {inv.booking && (
-                        <p className="text-xs text-gray-400">
-                          {inv.booking.serviceType === 'BOARDING' ? (locale === 'fr' ? 'Pension' : 'Boarding') : 'Taxi'}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <Link href={`/${locale}/admin/clients/${inv.client.id}`} className="text-sm text-charcoal hover:text-gold-600">
-                        {inv.client.name || inv.client.email}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{formatDate(inv.issuedAt, locale)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-charcoal">{formatMAD(inv.amount)}</td>
-                    <td className="px-4 py-3 text-center">
-                      <Badge className={`text-xs ${getInvoiceStatusColor(inv.status)}`}>{statusLbls[inv.status] || inv.status}</Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <a href={`/api/invoices/${inv.id}/pdf?view=1`} target="_blank" rel="noopener noreferrer" title={locale === 'fr' ? 'Aperçu' : 'Preview'} className="p-1.5 text-gray-400 hover:text-gold-600 rounded">
-                          <Eye className="h-4 w-4" />
-                        </a>
-                        <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener noreferrer" title={locale === 'fr' ? 'Télécharger' : 'Download'} className="p-1.5 text-gray-400 hover:text-gold-600 rounded">
-                          <Download className="h-4 w-4" />
-                        </a>
-                        <CreateInvoiceButton invoiceId={inv.id} currentStatus={inv.status} locale={locale} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {invoices.map(inv => {
+                  const remaining = Math.max(0, inv.amount - inv.paidAmount);
+                  return (
+                    <tr key={inv.id} className="border-b border-ivory-100 last:border-0 hover:bg-ivory-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-sm font-semibold text-charcoal">{inv.invoiceNumber}</span>
+                        {inv.booking && (
+                          <p className="text-xs text-gray-400">
+                            {inv.booking.serviceType === 'BOARDING' ? (locale === 'fr' ? 'Pension' : 'Boarding') : 'Taxi'}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        <Link href={`/${locale}/admin/clients/${inv.client.id}`} className="text-sm text-charcoal hover:text-gold-600">
+                          {inv.client.name || inv.client.email}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{formatDate(inv.issuedAt, locale)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-charcoal">{formatMAD(inv.amount)}</td>
+                      <td className="px-4 py-3 text-right text-sm hidden lg:table-cell">
+                        {inv.paidAmount > 0 ? (
+                          <span className="text-green-700 font-medium">{formatMAD(inv.paidAmount)}</span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm hidden lg:table-cell">
+                        {remaining > 0 ? (
+                          <span className="text-orange-600 font-medium">{formatMAD(remaining)}</span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge className={`text-xs ${getInvoiceStatusColor(inv.status)}`}>{statusLbls[inv.status] || inv.status}</Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <a href={`/api/invoices/${inv.id}/pdf?view=1`} target="_blank" rel="noopener noreferrer" title={locale === 'fr' ? 'Aperçu' : 'Preview'} className="p-1.5 text-gray-400 hover:text-gold-600 rounded">
+                            <Eye className="h-4 w-4" />
+                          </a>
+                          <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener noreferrer" title={locale === 'fr' ? 'Télécharger' : 'Download'} className="p-1.5 text-gray-400 hover:text-gold-600 rounded">
+                            <Download className="h-4 w-4" />
+                          </a>
+                          <CreateInvoiceButton
+                            invoiceId={inv.id}
+                            currentStatus={inv.status}
+                            locale={locale}
+                            invoiceAmount={inv.amount}
+                            paidAmount={inv.paidAmount}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

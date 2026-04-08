@@ -103,8 +103,9 @@ export function getBookingStatusColor(status: string): string {
 
 export function getInvoiceStatusColor(status: string): string {
   switch (status) {
-    case 'PAID': return 'text-green-700 bg-green-50 border-green-200';
-    case 'PENDING': return 'text-amber-700 bg-amber-50 border-amber-200';
-    default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    case 'PAID':           return 'text-green-700 bg-green-50 border-green-200';
+    case 'PARTIALLY_PAID': return 'text-orange-700 bg-orange-50 border-orange-200';
+    case 'PENDING':        return 'text-amber-700 bg-amber-50 border-amber-200';
+    default:               return 'text-gray-600 bg-gray-50 border-gray-200';
   }
 }

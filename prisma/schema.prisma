@@ -179,10 +179,12 @@ model Invoice {
   clientId      String
   invoiceNumber String   @unique
   amount        Float
-  status        String   @default("PENDING") // "PAID" | "PENDING"
+  paidAmount    Float    @default(0)
+  status        String   @default("PENDING") // "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED"
   pdfUrl        String?
   notes         String?
   paymentMethod String?  // "CASH" | "CARD" | "CHECK" | "TRANSFER"
+  paymentDate   DateTime?
   issuedAt      DateTime @default(now())
   paidAt        DateTime?
   createdAt     DateTime @default(now())

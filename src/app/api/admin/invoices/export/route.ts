@@ -35,7 +35,7 @@ export async function GET(request: Request) {
   const status = searchParams.get('status');
   const year = searchParams.get('year');
 
-  const VALID_STATUSES = ['PENDING', 'PAID', 'CANCELLED'];
+  const VALID_STATUSES = ['PENDING', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
   const where: Record<string, unknown> = {};
   if (status && VALID_STATUSES.includes(status)) where.status = status;
   if (year) {
@@ -63,23 +63,33 @@ export async function GET(request: Request) {
     'Date émission',
     'Date paiement',
     'Mode de paiement',
-    'Montant (MAD)',
+    'Montant total (MAD)',
+    'Montant réglé (MAD)',
+    'Restant (MAD)',
     'Statut',
     'Service',
   ];
 
-  const rows = invoices.map(inv => [
-    escapeCsv(inv.invoiceNumber),
-    escapeCsv(inv.client.name),
-    escapeCsv(inv.client.email),
-    escapeCsv(inv.client.phone),
-    escapeCsv(inv.issuedAt.toISOString().slice(0, 10)),
-    escapeCsv(inv.paidAt ? inv.paidAt.toISOString().slice(0, 10) : ''),
-    escapeCsv(inv.paymentMethod ? PAYMENT_LABELS[inv.paymentMethod] ?? inv.paymentMethod : ''),
-    escapeCsv(inv.amount.toFixed(2)),
-    escapeCsv(inv.status === 'PAID' ? 'Payée' : inv.status === 'CANCELLED' ? 'Annulée' : 'En attente'),
-    escapeCsv(inv.booking ? SERVICE_LABELS[inv.booking.serviceType] ?? inv.booking.serviceType : ''),
-  ]);
+  const rows = invoices.map(inv => {
+    const remaining = Math.max(0, inv.amount - inv.paidAmount);
+    const paymentDateStr = inv.paymentDate
+      ? inv.paymentDate.toISOString().slice(0, 10)
+      : (inv.paidAt ? inv.paidAt.toISOString().slice(0, 10) : '');
+    return [
+      escapeCsv(inv.invoiceNumber),
+      escapeCsv(inv.client.name),
+      escapeCsv(inv.client.email),
+      escapeCsv(inv.client.phone),
+      escapeCsv(inv.issuedAt.toISOString().slice(0, 10)),
+      escapeCsv(paymentDateStr),
+      escapeCsv(inv.paymentMethod ? PAYMENT_LABELS[inv.paymentMethod] ?? inv.paymentMethod : ''),
+      escapeCsv(inv.amount.toFixed(2)),
+      escapeCsv(inv.paidAmount.toFixed(2)),
+      escapeCsv(remaining.toFixed(2)),
+      escapeCsv(inv.status === 'PAID' ? 'Payée' : inv.status === 'CANCELLED' ? 'Annulée' : inv.status === 'PARTIALLY_PAID' ? 'Partiel' : 'En attente'),
+      escapeCsv(inv.booking ? SERVICE_LABELS[inv.booking.serviceType] ?? inv.booking.serviceType : ''),
+    ];
+  });
 
   const csv =
     '\uFEFF' + // BOM for Excel

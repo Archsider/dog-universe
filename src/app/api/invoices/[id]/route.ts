@@ -46,22 +46,54 @@ export async function PATCH(request: Request, { params }: Params) {
   const invoice = await prisma.invoice.findUnique({ where: { id } });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const VALID_INVOICE_STATUSES = ['PENDING', 'PAID', 'CANCELLED'];
-  if (body.status && !VALID_INVOICE_STATUSES.includes(body.status)) {
-    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
-  }
+  const VALID_INVOICE_STATUSES = ['PENDING', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
 
   const updateData: Record<string, unknown> = {};
-  if (body.status) updateData.status = body.status;
-  if (body.status === 'PAID') {
-    updateData.paidAt = new Date();
+  let willBePaid = false;
+
+  // --- Payment amount tracking (preferred path) ---
+  if (body.paidAmount !== undefined) {
+    const paidAmount = Number(body.paidAmount);
+    if (isNaN(paidAmount) || paidAmount < 0) {
+      return NextResponse.json({ error: 'Invalid paidAmount' }, { status: 400 });
+    }
+    updateData.paidAmount = paidAmount;
+
     if (body.paymentMethod) updateData.paymentMethod = body.paymentMethod;
+    if (body.paymentDate) updateData.paymentDate = new Date(body.paymentDate);
+
+    // Auto-derive status from paid amount
+    if (paidAmount <= 0) {
+      updateData.status = 'PENDING';
+    } else if (paidAmount < invoice.amount) {
+      updateData.status = 'PARTIALLY_PAID';
+    } else {
+      updateData.status = 'PAID';
+      updateData.paidAt = invoice.paidAt ?? (body.paymentDate ? new Date(body.paymentDate) : new Date());
+      willBePaid = true;
+    }
   }
+
+  // --- Direct status override (legacy: CANCELLED, or explicit PAID without paidAmount) ---
+  if (body.status && body.paidAmount === undefined) {
+    if (!VALID_INVOICE_STATUSES.includes(body.status)) {
+      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+    }
+    updateData.status = body.status;
+    if (body.status === 'PAID') {
+      updateData.paidAmount = invoice.amount;
+      updateData.paidAt = new Date();
+      if (body.paymentMethod) updateData.paymentMethod = body.paymentMethod;
+      willBePaid = true;
+    }
+  }
+
   if (body.notes !== undefined) updateData.notes = body.notes;
 
   const updated = await prisma.invoice.update({ where: { id }, data: updateData });
 
-  if (body.status === 'PAID') {
+  // Run loyalty update only when transitioning to PAID for the first time
+  if (willBePaid && invoice.status !== 'PAID') {
     await logAction({
       userId: session.user.id,
       action: LOG_ACTIONS.INVOICE_PAID,
@@ -70,7 +102,6 @@ export async function PATCH(request: Request, { params }: Params) {
       details: { invoiceNumber: invoice.invoiceNumber },
     });
 
-    // Update loyalty grade if needed
     const client = await prisma.user.findUnique({ where: { id: invoice.clientId } });
     if (client) {
       const totalPaid = await prisma.invoice.aggregate({
