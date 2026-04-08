@@ -25,7 +25,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
 
   const boardingNow = {
     serviceType: 'BOARDING' as const,
-    status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+    status: 'IN_PROGRESS' as const,
     startDate: { lte: now }, endDate: { gte: now },
   };
 

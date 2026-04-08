@@ -11,6 +11,7 @@ import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import StayPhotosSection from './StayPhotosSection';
 import AdminMessageSection from './AdminMessageSection';
 import ExtendBookingSection from './ExtendBookingSection';
+import RecordPaymentButton from '@/app/[locale]/admin/billing/CreateInvoiceButton';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -134,12 +135,41 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
             <h3 className="font-semibold text-charcoal mb-3 text-sm">{l.invoice}</h3>
             {booking.invoice ? (
-              <div>
-                <p className="font-mono text-sm font-semibold text-charcoal">{booking.invoice.invoiceNumber}</p>
-                <p className="text-lg font-bold text-gold-600">{formatMAD(booking.invoice.amount)}</p>
-                <a href={`/api/invoices/${booking.invoice.id}/pdf`} className="text-xs text-gold-600 hover:underline" target="_blank" rel="noopener noreferrer">
-                  PDF
-                </a>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-mono text-sm font-semibold text-charcoal">{booking.invoice.invoiceNumber}</p>
+                  <a href={`/api/invoices/${booking.invoice.id}/pdf`} className="text-xs text-gold-600 hover:underline" target="_blank" rel="noopener noreferrer">PDF</a>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">{locale === 'fr' ? 'Total' : 'Total'}</span>
+                    <span className="font-bold text-charcoal">{formatMAD(booking.invoice.amount)}</span>
+                  </div>
+                  {booking.invoice.paidAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">{locale === 'fr' ? 'Payé' : 'Paid'}</span>
+                      <span className="font-medium text-green-700">{formatMAD(booking.invoice.paidAmount)}</span>
+                    </div>
+                  )}
+                  {booking.invoice.status !== 'PAID' && (
+                    <div className="flex justify-between border-t border-ivory-100 pt-1">
+                      <span className="text-gray-600 font-medium">{locale === 'fr' ? 'Restant' : 'Remaining'}</span>
+                      <span className="font-bold text-orange-600">{formatMAD(Math.max(0, booking.invoice.amount - booking.invoice.paidAmount))}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <RecordPaymentButton
+                    invoiceId={booking.invoice.id}
+                    currentStatus={booking.invoice.status}
+                    locale={locale}
+                    invoiceAmount={booking.invoice.amount}
+                    paidAmount={booking.invoice.paidAmount}
+                  />
+                  <Link href={`/${locale}/admin/billing?status=`} className="text-xs text-gray-400 hover:text-gold-600">
+                    {locale === 'fr' ? 'Voir facturation' : 'View billing'}
+                  </Link>
+                </div>
               </div>
             ) : (
               <div className="space-y-3">

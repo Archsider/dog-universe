@@ -46,7 +46,7 @@ interface VaccinationSectionProps {
   locale: string;
 }
 
-const PROOF_PREFIX = 'Preuve vaccination - ';
+export const PROOF_PREFIX = 'Preuve vaccination - ';
 
 const T = {
   fr: {
@@ -600,7 +600,12 @@ export default function VaccinationSection({
               return (
                 <div key={doc.id} className="flex items-center gap-2 bg-white rounded-lg border border-amber-100 px-3 py-2">
                   {doc.fileType.startsWith('image/') ? (
-                    <img src={doc.fileUrl} alt={displayName(doc)} className="h-8 w-8 object-cover rounded flex-shrink-0" />
+                    <img
+                      src={doc.fileUrl}
+                      alt={displayName(doc)}
+                      className="h-8 w-8 object-cover rounded flex-shrink-0"
+                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                    />
                   ) : (
                     <ProofIcon fileType={doc.fileType} />
                   )}

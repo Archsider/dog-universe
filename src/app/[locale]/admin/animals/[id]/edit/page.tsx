@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
-import { ArrowLeft, Loader2, Upload, PawPrint } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,13 +11,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-
-const BEHAVIOR_OPTIONS = [
-  { value: 'SOCIABLE', fr: 'Sociable', en: 'Sociable' },
-  { value: 'TOLERANT', fr: 'Tolérant', en: 'Tolerant' },
-  { value: 'MONITOR', fr: 'À surveiller', en: 'Needs monitoring' },
-  { value: 'REACTIVE', fr: 'Réactif', en: 'Reactive' },
-];
 
 type FormState = {
   name: string; species: string; breed: string; dateOfBirth: string; gender: string;
@@ -39,7 +32,14 @@ const EMPTY_FORM: FormState = {
   lastAntiparasiticDate: '', antiparasiticProduct: '', antiparasiticNotes: '',
 };
 
-export default function EditPetPage() {
+const BEHAVIOR_OPTIONS = [
+  { value: 'SOCIABLE', fr: 'Sociable', en: 'Sociable' },
+  { value: 'TOLERANT', fr: 'Tolérant', en: 'Tolerant' },
+  { value: 'MONITOR', fr: 'À surveiller', en: 'Needs monitoring' },
+  { value: 'REACTIVE', fr: 'Réactif', en: 'Reactive' },
+];
+
+export default function AdminEditPetPage() {
   const locale = useLocale();
   const router = useRouter();
   const params = useParams();
@@ -47,9 +47,6 @@ export default function EditPetPage() {
   const fr = locale === 'fr';
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>(null);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
 
@@ -61,8 +58,6 @@ export default function EditPetPage() {
     fetch(`/api/pets/${petId}`)
       .then(r => r.json())
       .then(data => {
-        setCurrentPhotoUrl(data.photoUrl || null);
-        setPhotoPreview(data.photoUrl || null);
         setForm({
           name: data.name || '',
           species: data.species || '',
@@ -90,40 +85,16 @@ export default function EditPetPage() {
       .catch(() => setFetching(false));
   }, [petId]);
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setPhotoFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => setPhotoPreview(reader.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.species || !form.dateOfBirth) {
       toast({ title: fr ? 'Nom, espèce et date de naissance sont obligatoires' : 'Name, species and date of birth are required', variant: 'destructive' });
       return;
     }
-    if (!form.lastAntiparasiticDate) {
-      toast({ title: fr ? 'La date du dernier traitement antiparasitaire est obligatoire' : 'Last anti-parasitic treatment date is required', variant: 'destructive' });
-      return;
-    }
     setLoading(true);
     try {
-      let photoUrl = currentPhotoUrl;
-      if (photoFile) {
-        const formData = new FormData();
-        formData.append('file', photoFile);
-        formData.append('type', 'pet-photo');
-        const uploadRes = await fetch('/api/uploads', { method: 'POST', body: formData });
-        if (uploadRes.ok) photoUrl = (await uploadRes.json()).url;
-      }
-
       const payload = {
         ...form,
-        photoUrl,
         isNeutered: form.isNeutered === '' ? null : form.isNeutered === 'true',
         weight: form.weight ? parseFloat(form.weight) : null,
         lastAntiparasiticDate: form.lastAntiparasiticDate || null,
@@ -137,7 +108,7 @@ export default function EditPetPage() {
 
       if (res.ok) {
         toast({ title: fr ? 'Animal modifié !' : 'Pet updated!', variant: 'success' });
-        router.push(`/${locale}/client/pets/${petId}`);
+        router.push(`/${locale}/admin/animals/${petId}`);
       } else {
         throw new Error('Failed');
       }
@@ -159,7 +130,7 @@ export default function EditPetPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <Link href={`/${locale}/client/pets/${petId}`} className="text-charcoal/50 hover:text-charcoal">
+        <Link href={`/${locale}/admin/animals/${petId}`} className="text-charcoal/50 hover:text-charcoal">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <h1 className="text-2xl font-serif font-bold text-charcoal">
@@ -169,25 +140,6 @@ export default function EditPetPage() {
 
       <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-8 shadow-card">
         <form onSubmit={handleSubmit} className="space-y-8">
-
-          {/* Photo */}
-          <div>
-            <Label>{fr ? 'Photo' : 'Photo'}</Label>
-            <div className="mt-2 flex items-center gap-4">
-              <div className="h-20 w-20 rounded-full bg-gold-50 border-2 border-gold-200 flex items-center justify-center overflow-hidden flex-shrink-0">
-                {photoPreview ? (
-                  <img src={photoPreview} alt="Preview" className="h-20 w-20 rounded-full object-cover" />
-                ) : (
-                  <PawPrint className="h-8 w-8 text-gold-300" />
-                )}
-              </div>
-              <label className="cursor-pointer flex items-center gap-2 text-sm text-gold-600 hover:text-gold-700 border border-gold-300 rounded-md px-3 py-2 transition-colors">
-                <Upload className="h-4 w-4" />
-                {fr ? 'Changer la photo' : 'Change photo'}
-                <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
-              </label>
-            </div>
-          </div>
 
           {/* Identité */}
           <section className="space-y-4">
@@ -230,7 +182,7 @@ export default function EditPetPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="breed">{fr ? 'Race' : 'Breed'}</Label>
-                <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder={fr ? 'Golden Retriever...' : 'Golden Retriever...'} />
+                <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder="Golden Retriever..." />
               </div>
               <div>
                 <Label htmlFor="dob">{fr ? 'Date de naissance' : 'Date of birth'} *</Label>
@@ -277,7 +229,7 @@ export default function EditPetPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="vetName">{fr ? 'Nom du vétérinaire' : 'Vet name'}</Label>
-                <Input id="vetName" value={form.vetName} onChange={set('vetName')} className="mt-1" placeholder="Dr. Martin" />
+                <Input id="vetName" value={form.vetName} onChange={set('vetName')} className="mt-1" placeholder="Dr. Benali" />
               </div>
               <div>
                 <Label htmlFor="vetPhone">{fr ? 'Téléphone vétérinaire' : 'Vet phone'}</Label>
@@ -293,11 +245,11 @@ export default function EditPetPage() {
             </h3>
             <div>
               <Label htmlFor="allergies">{fr ? 'Allergies / Conditions médicales' : 'Allergies / Medical conditions'}</Label>
-              <Textarea id="allergies" value={form.allergies} onChange={set('allergies')} className="mt-1" placeholder={fr ? 'Ex: allergie au poulet, dermatite...' : 'Ex: chicken allergy, dermatitis...'} rows={2} />
+              <Textarea id="allergies" value={form.allergies} onChange={set('allergies')} className="mt-1" rows={2} />
             </div>
             <div>
               <Label htmlFor="medication">{fr ? 'Médication en cours' : 'Current medication'}</Label>
-              <Textarea id="medication" value={form.currentMedication} onChange={set('currentMedication')} className="mt-1" placeholder={fr ? 'Ex: Apoquel 5mg, 1 cp/jour...' : 'Ex: Apoquel 5mg, 1 tab/day...'} rows={2} />
+              <Textarea id="medication" value={form.currentMedication} onChange={set('currentMedication')} className="mt-1" rows={2} />
             </div>
           </section>
 
@@ -334,38 +286,37 @@ export default function EditPetPage() {
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="antiDate">{fr ? 'Dernière application' : 'Last treatment date'} *</Label>
+                <Label htmlFor="antiDate">{fr ? 'Dernière application' : 'Last treatment date'}</Label>
                 <Input id="antiDate" type="date" value={form.lastAntiparasiticDate} onChange={set('lastAntiparasiticDate')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
               </div>
               <div>
                 <Label htmlFor="antiProduct">{fr ? 'Produit utilisé' : 'Product used'}</Label>
-                <Input id="antiProduct" value={form.antiparasiticProduct} onChange={set('antiparasiticProduct')} className="mt-1" placeholder={fr ? 'Ex: Frontline, Bravecto...' : 'Ex: Frontline, Bravecto...'} />
+                <Input id="antiProduct" value={form.antiparasiticProduct} onChange={set('antiparasiticProduct')} className="mt-1" placeholder="Frontline, Bravecto..." />
               </div>
             </div>
             <div>
               <Label htmlFor="antiNotes">{fr ? 'Notes (optionnel)' : 'Notes (optional)'}</Label>
-              <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" placeholder={fr ? 'Ex: traitement mensuel, réaction passée...' : 'Ex: monthly treatment, past reaction...'} rows={2} />
+              <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" rows={2} />
             </div>
           </section>
 
-          {/* Notes */}
+          {/* Notes spéciales */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
               {fr ? 'Notes spéciales' : 'Special notes'}
             </h3>
             <div>
-              <Label htmlFor="notes">{fr ? 'Instructions particulières' : 'Special instructions'}</Label>
-              <Textarea id="notes" value={form.notes} onChange={set('notes')} className="mt-1" placeholder={fr ? 'Régime alimentaire, habitudes, instructions spécifiques...' : 'Diet, habits, specific instructions...'} rows={3} />
+              <Textarea id="notes" value={form.notes} onChange={set('notes')} className="mt-1" rows={3} />
             </div>
           </section>
 
           <div className="flex gap-3 pt-2">
-            <Link href={`/${locale}/client/pets/${petId}`} className="flex-1">
-              <Button type="button" variant="outline" className="w-full">{fr ? 'Annuler' : 'Cancel'}</Button>
-            </Link>
-            <Button type="submit" className="flex-1" disabled={loading}>
-              {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {loading ? (fr ? 'Enregistrement...' : 'Saving...') : (fr ? 'Enregistrer' : 'Save')}
+            <Button type="button" variant="outline" asChild className="flex-1">
+              <Link href={`/${locale}/admin/animals/${petId}`}>{fr ? 'Annuler' : 'Cancel'}</Link>
+            </Button>
+            <Button type="submit" disabled={loading} className="flex-1">
+              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {fr ? 'Enregistrer' : 'Save'}
             </Button>
           </div>
         </form>

@@ -7,7 +7,7 @@ import { ArrowLeft, PawPrint, Edit } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDateShort, formatMAD } from '@/lib/utils';
-import VaccinationSection from '@/components/pets/VaccinationSection';
+import VaccinationSection, { PROOF_PREFIX } from '@/components/pets/VaccinationSection';
 import DocumentSection from '@/components/pets/DocumentSection';
 
 type Params = { locale: string; id: string };
@@ -280,7 +280,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
           <VaccinationSection
             petId={id}
             vaccinations={pet.vaccinations}
-            documents={pet.documents.filter(d => d.name.startsWith('Preuve vaccination - '))}
+            documents={pet.documents.filter(d => d.name.startsWith(PROOF_PREFIX))}
             locale={locale}
           />
         </TabsContent>
@@ -289,7 +289,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
         <TabsContent value="documents">
           <DocumentSection
             petId={id}
-            documents={pet.documents.filter(d => !d.name.startsWith('Preuve vaccination - '))}
+            documents={pet.documents.filter(d => !d.name.startsWith(PROOF_PREFIX))}
             locale={locale}
           />
         </TabsContent>

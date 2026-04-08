@@ -2,11 +2,11 @@ import { auth } from '../../../../../../auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { ArrowLeft, PawPrint, Calendar, ShieldCheck, ShieldAlert, ShieldOff, ShieldQuestion } from 'lucide-react';
+import { ArrowLeft, PawPrint, Calendar, ShieldCheck, ShieldAlert, ShieldOff, ShieldQuestion, Edit } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDate, getBookingStatusColor } from '@/lib/utils';
 import DeleteAnimalButton from './DeleteAnimalButton';
-import VaccinationSection from '@/components/pets/VaccinationSection';
+import VaccinationSection, { PROOF_PREFIX } from '@/components/pets/VaccinationSection';
 import DocumentSection from '@/components/pets/DocumentSection';
 
 interface PageProps { params: { locale: string; id: string } }
@@ -65,6 +65,10 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
             <p className="text-sm text-gray-500">{pet.breed || (pet.species === 'DOG' ? l.dog : l.cat)}</p>
           </div>
         </div>
+        <Link href={`/${locale}/admin/animals/${id}/edit`} className="flex items-center gap-1.5 text-sm text-charcoal/60 hover:text-charcoal border border-gray-200 rounded-md px-3 py-2 transition-colors mr-2">
+          <Edit className="h-3.5 w-3.5" />
+          {locale === 'fr' ? 'Modifier' : 'Edit'}
+        </Link>
         <DeleteAnimalButton petId={id} petName={pet.name} locale={locale} />
       </div>
 
@@ -158,14 +162,14 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
             <VaccinationSection
               petId={id}
               vaccinations={pet.vaccinations}
-              documents={pet.documents.filter(d => d.name.startsWith('Preuve vaccination - '))}
+              documents={pet.documents.filter(d => d.name.startsWith(PROOF_PREFIX))}
               locale={locale}
             />
           </div>
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
             <DocumentSection
               petId={id}
-              documents={pet.documents.filter(d => !d.name.startsWith('Preuve vaccination - '))}
+              documents={pet.documents.filter(d => !d.name.startsWith(PROOF_PREFIX))}
               locale={locale}
             />
           </div>
