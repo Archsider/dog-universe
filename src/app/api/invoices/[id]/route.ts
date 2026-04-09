@@ -47,6 +47,7 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const VALID_INVOICE_STATUSES = ['PENDING', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
+  const VALID_PAYMENT_METHODS = ['CASH', 'CARD', 'CHECK', 'TRANSFER'];
 
   const updateData: Record<string, unknown> = {};
   let willBePaid = false;
@@ -59,7 +60,12 @@ export async function PATCH(request: Request, { params }: Params) {
     }
     updateData.paidAmount = paidAmount;
 
-    if (body.paymentMethod) updateData.paymentMethod = body.paymentMethod;
+    if (body.paymentMethod) {
+      if (!VALID_PAYMENT_METHODS.includes(body.paymentMethod)) {
+        return NextResponse.json({ error: 'Invalid paymentMethod' }, { status: 400 });
+      }
+      updateData.paymentMethod = body.paymentMethod;
+    }
     if (body.paymentDate) updateData.paymentDate = new Date(body.paymentDate);
 
     // Auto-derive status from paid amount
@@ -83,7 +89,12 @@ export async function PATCH(request: Request, { params }: Params) {
     if (body.status === 'PAID') {
       updateData.paidAmount = invoice.amount;
       updateData.paidAt = new Date();
-      if (body.paymentMethod) updateData.paymentMethod = body.paymentMethod;
+      if (body.paymentMethod) {
+        if (!VALID_PAYMENT_METHODS.includes(body.paymentMethod)) {
+          return NextResponse.json({ error: 'Invalid paymentMethod' }, { status: 400 });
+        }
+        updateData.paymentMethod = body.paymentMethod;
+      }
       willBePaid = true;
     }
   }
