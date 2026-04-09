@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { formatMAD } from '@/lib/utils';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -145,6 +146,10 @@ export async function PATCH(request: Request, { params }: Params) {
         const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
         await createLoyaltyUpdateNotification(invoice.clientId, suggestedGrade, client.language || 'fr');
       }
+
+      // Notify client that invoice is paid (notification + email)
+      const { createInvoicePaidNotification } = await import('@/lib/notifications');
+      await createInvoicePaidNotification(invoice.clientId, invoice.invoiceNumber, formatMAD(invoice.amount));
     }
   }
 

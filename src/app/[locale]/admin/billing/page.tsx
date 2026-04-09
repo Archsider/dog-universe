@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getInvoiceStatusColor } from '@/lib/utils';
 import CreateInvoiceButton from './CreateInvoiceButton';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
+import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
 
 interface PageProps {
   params: { locale: string };
@@ -263,6 +264,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
                           <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener noreferrer" title={locale === 'fr' ? 'Télécharger' : 'Download'} className="p-1.5 text-gray-400 hover:text-gold-600 rounded">
                             <Download className="h-4 w-4" />
                           </a>
+                          <ResendInvoiceButton invoiceId={inv.id} locale={locale} />
                           <CreateInvoiceButton
                             invoiceId={inv.id}
                             currentStatus={inv.status}

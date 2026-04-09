@@ -8,7 +8,9 @@ export type NotificationType =
   | 'BOOKING_IN_PROGRESS'
   | 'BOOKING_COMPLETED'
   | 'STAY_REMINDER'
+  | 'STAY_END_REMINDER'         // client receives J-1 before boarding end
   | 'INVOICE_AVAILABLE'
+  | 'INVOICE_PAID'              // client receives when invoice is marked paid
   | 'ADMIN_MESSAGE'
   | 'STAY_PHOTO'
   | 'LOYALTY_UPDATE'
@@ -190,6 +192,39 @@ export async function createInvoiceNotification(
     messageFr: `Votre facture ${invoiceNumber} d'un montant de ${amount} est disponible.`,
     messageEn: `Your invoice ${invoiceNumber} for ${amount} is now available.`,
   });
+}
+
+export async function createInvoicePaidNotification(
+  userId: string,
+  invoiceNumber: string,
+  amount: string
+) {
+  const notification = await createNotification({
+    userId,
+    type: 'INVOICE_PAID',
+    titleFr: 'Paiement confirmé',
+    titleEn: 'Payment confirmed',
+    messageFr: `Votre facture ${invoiceNumber} d'un montant de ${amount} a bien été réglée. Merci !`,
+    messageEn: `Your invoice ${invoiceNumber} for ${amount} has been paid. Thank you!`,
+  });
+
+  try {
+    const client = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true, language: true },
+    });
+    if (client) {
+      const locale = client.language ?? 'fr';
+      const { subject, html } = getEmailTemplate('invoice_paid', {
+        clientName: client.name ?? client.email,
+        invoiceNumber,
+        amount,
+      }, locale);
+      await sendEmail({ to: client.email, subject, html });
+    }
+  } catch { /* non-blocking */ }
+
+  return notification;
 }
 
 export async function createLoyaltyUpdateNotification(

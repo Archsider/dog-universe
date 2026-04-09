@@ -72,7 +72,7 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'reset_password' | 'booking_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder' | 'welcome' | 'admin_new_client', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'invoice_paid' | 'reset_password' | 'booking_reminder' | 'stay_end_reminder' | 'admin_stay_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder' | 'welcome' | 'admin_new_client', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
   // Escape all user-supplied fields to prevent XSS in email HTML
   const d: Record<string, string> = {};
   for (const [key, val] of Object.entries(data)) {
@@ -234,21 +234,83 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
       `,
     },
     booking_reminder: {
-      subjectFr: `🐾 Rappel : votre séjour commence dans 2 jours — Dog Universe`,
-      subjectEn: `🐾 Reminder: your stay starts in 2 days — Dog Universe`,
+      subjectFr: `🐾 Rappel : votre séjour commence demain — Dog Universe`,
+      subjectEn: `🐾 Reminder: your stay starts tomorrow — Dog Universe`,
       bodyFr: `
         <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
-        <p>Petit rappel : votre réservation <strong>${d.bookingRef}</strong> pour <strong>${d.petName}</strong> commence <strong>dans 2 jours</strong>, le <strong>${d.startDate}</strong>.</p>
+        <p>Petit rappel : votre réservation <strong>${d.bookingRef}</strong> pour <strong>${d.petName}</strong> commence <strong>demain</strong>, le <strong>${d.startDate}</strong>.</p>
         <p style="color: #6B7280; font-size: 14px;">Service : ${d.service}</p>
         <p>Si vous avez des questions ou souhaitez modifier votre réservation, n'hésitez pas à nous contacter.</p>
         <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
       `,
       bodyEn: `
         <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
-        <p>Just a reminder: your booking <strong>${d.bookingRef}</strong> for <strong>${d.petName}</strong> starts <strong>in 2 days</strong>, on <strong>${d.startDate}</strong>.</p>
+        <p>Just a reminder: your booking <strong>${d.bookingRef}</strong> for <strong>${d.petName}</strong> starts <strong>tomorrow</strong>, on <strong>${d.startDate}</strong>.</p>
         <p style="color: #6B7280; font-size: 14px;">Service: ${d.service}</p>
         <p>If you have any questions or would like to modify your booking, please feel free to contact us.</p>
         <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    stay_end_reminder: {
+      subjectFr: `🏠 Fin de séjour demain — ${d.petName} — Dog Universe`,
+      subjectEn: `🏠 Stay ending tomorrow — ${d.petName} — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Le séjour de <strong>${d.petName}</strong> (réf. <strong>${d.bookingRef}</strong>) se termine <strong>demain</strong>, le <strong>${d.endDate}</strong>.</p>
+        <p>Pensez à prévoir votre venue pour récupérer votre compagnon. N'hésitez pas à nous contacter pour convenir de l'heure.</p>
+        <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p><strong>${d.petName}</strong>'s stay (ref. <strong>${d.bookingRef}</strong>) ends <strong>tomorrow</strong>, on <strong>${d.endDate}</strong>.</p>
+        <p>Please plan your visit to pick up your companion. Feel free to contact us to arrange a pick-up time.</p>
+        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    },
+    admin_stay_reminder: {
+      subjectFr: `📋 Rappel séjour demain — ${d.petName} (${d.clientName}) — Dog Universe`,
+      subjectEn: `📋 Stay reminder tomorrow — ${d.petName} (${d.clientName}) — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Rappel séjour</h2>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0 0 6px;"><strong>Client :</strong> ${d.clientName}</p>
+          <p style="margin: 0 0 6px;"><strong>Animal(aux) :</strong> ${d.petName}</p>
+          <p style="margin: 0 0 6px;"><strong>Réf. :</strong> ${d.bookingRef}</p>
+          <p style="margin: 0;"><strong>${d.reminderType === 'start' ? 'Arrivée' : 'Départ'} :</strong> demain le ${d.date}</p>
+        </div>
+        <p style="color: #6B7280; font-size: 13px;">Ce rappel automatique est envoyé la veille de l'arrivée ou du départ.</p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Stay reminder</h2>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0 0 6px;"><strong>Client:</strong> ${d.clientName}</p>
+          <p style="margin: 0 0 6px;"><strong>Pet(s):</strong> ${d.petName}</p>
+          <p style="margin: 0 0 6px;"><strong>Ref:</strong> ${d.bookingRef}</p>
+          <p style="margin: 0;"><strong>${d.reminderType === 'start' ? 'Check-in' : 'Check-out'}:</strong> tomorrow ${d.date}</p>
+        </div>
+        <p style="color: #6B7280; font-size: 13px;">This automatic reminder is sent the day before check-in or check-out.</p>
+      `,
+    },
+    invoice_paid: {
+      subjectFr: `✅ Paiement confirmé — Facture ${d.invoiceNumber} — Dog Universe`,
+      subjectEn: `✅ Payment confirmed — Invoice ${d.invoiceNumber} — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Nous confirmons la bonne réception de votre paiement pour la facture <strong>${d.invoiceNumber}</strong>.</p>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0; font-size: 18px; font-weight: bold; color: #2C2C2C;">Montant réglé : ${d.amount}</p>
+        </div>
+        <p>Connectez-vous à votre espace client pour télécharger votre facture en PDF.</p>
+        <p>Merci pour votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>We confirm receipt of your payment for invoice <strong>${d.invoiceNumber}</strong>.</p>
+        <div style="background: #F5EDD8; border-left: 4px solid #C9A84C; padding: 16px; border-radius: 4px; margin: 16px 0;">
+          <p style="margin: 0; font-size: 18px; font-weight: bold; color: #2C2C2C;">Amount paid: ${d.amount}</p>
+        </div>
+        <p>Log in to your client portal to download your invoice as PDF.</p>
+        <p>Thank you for your trust,<br><strong>The Dog Universe Team</strong></p>
       `,
     },
     stay_photo: {

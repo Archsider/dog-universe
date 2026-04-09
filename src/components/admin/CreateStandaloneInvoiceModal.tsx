@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,6 +36,73 @@ const SERVICE_TYPES = [
   { value: 'PRODUCT_SALE', fr: 'Vente produit / Croquettes', en: 'Product Sale / Croquettes' },
 ];
 
+interface QuickAddPreset {
+  labelFr: string;
+  labelEn: string;
+  descriptionFr: string;
+  descriptionEn: string;
+  serviceType: string;
+  defaultPrice: number;
+  color: string;
+}
+
+const QUICK_ADD_PRESETS: QuickAddPreset[] = [
+  {
+    labelFr: 'Pension',
+    labelEn: 'Boarding',
+    descriptionFr: 'Pension (nuit)',
+    descriptionEn: 'Boarding (night)',
+    serviceType: 'BOARDING',
+    defaultPrice: 0,
+    color: 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
+  },
+  {
+    labelFr: 'Pet Taxi',
+    labelEn: 'Pet Taxi',
+    descriptionFr: 'Transport animalier',
+    descriptionEn: 'Pet taxi transport',
+    serviceType: 'PET_TAXI',
+    defaultPrice: 0,
+    color: 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100',
+  },
+  {
+    labelFr: 'Toilettage',
+    labelEn: 'Grooming',
+    descriptionFr: 'Toilettage',
+    descriptionEn: 'Grooming',
+    serviceType: 'GROOMING',
+    defaultPrice: 0,
+    color: 'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
+  },
+  {
+    labelFr: 'Croquettes',
+    labelEn: 'Kibbles',
+    descriptionFr: 'Croquettes',
+    descriptionEn: 'Kibbles',
+    serviceType: 'PRODUCT_SALE',
+    defaultPrice: 0,
+    color: 'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
+  },
+  {
+    labelFr: 'Médicaments',
+    labelEn: 'Medication',
+    descriptionFr: 'Médicaments / soins',
+    descriptionEn: 'Medication / care',
+    serviceType: '',
+    defaultPrice: 0,
+    color: 'bg-red-50 border-red-200 text-red-800 hover:bg-red-100',
+  },
+  {
+    labelFr: 'Autre',
+    labelEn: 'Other',
+    descriptionFr: 'Prestation diverse',
+    descriptionEn: 'Miscellaneous service',
+    serviceType: '',
+    defaultPrice: 0,
+    color: 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100',
+  },
+];
+
 const PAYMENT_METHODS = [
   { value: 'CASH', fr: 'Espèces', en: 'Cash' },
   { value: 'CARD', fr: 'Carte', en: 'Card' },
@@ -66,6 +133,23 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
   const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
   const updateItem = (i: number, field: keyof LineItem, value: string | number) => {
     setItems(prev => prev.map((it, idx) => idx === i ? { ...it, [field]: value } : it));
+  };
+
+  const addPreset = (preset: QuickAddPreset) => {
+    // If first item is blank, replace it; otherwise append
+    setItems(prev => {
+      const isEmpty = prev.length === 1 && !prev[0].description && prev[0].unitPrice === 0;
+      const newItem = {
+        description: fr ? preset.descriptionFr : preset.descriptionEn,
+        quantity: 1,
+        unitPrice: preset.defaultPrice,
+      };
+      return isEmpty ? [newItem] : [...prev, newItem];
+    });
+    // Auto-select service type if not already set to multiple
+    if (preset.serviceType && !serviceType) {
+      setServiceType(preset.serviceType);
+    }
   };
 
   const reset = () => {
@@ -195,12 +279,29 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
               />
             </div>
 
+            {/* Quick-add presets */}
+            <div>
+              <Label className="text-xs text-gray-500">{fr ? 'Ajout rapide' : 'Quick add'}</Label>
+              <div className="flex flex-wrap gap-2 mt-1.5">
+                {QUICK_ADD_PRESETS.map(preset => (
+                  <button
+                    key={preset.labelFr}
+                    type="button"
+                    onClick={() => addPreset(preset)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${preset.color}`}
+                  >
+                    + {fr ? preset.labelFr : preset.labelEn}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Line items */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <Label className="text-xs">{fr ? 'Articles *' : 'Items *'}</Label>
                 <Button size="sm" variant="outline" onClick={addItem} className="h-7 text-xs gap-1">
-                  <Plus className="h-3 w-3" />{fr ? 'Ajouter' : 'Add'}
+                  <Plus className="h-3 w-3" />{fr ? 'Ligne vide' : 'Empty line'}
                 </Button>
               </div>
 
