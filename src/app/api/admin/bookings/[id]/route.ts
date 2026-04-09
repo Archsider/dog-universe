@@ -108,6 +108,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     // Invoice impact
     let invoiceWarning = false;
+    let supplementaryInvoiceNumber: string | null = null;
     if (booking.invoice) {
       if (booking.invoice.status === 'PENDING') {
         await prisma.invoice.update({ where: { id: booking.invoice.id }, data: { amount: newTotal } });
@@ -115,7 +116,74 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         // Update amount — paidAmount stays; status stays PARTIALLY_PAID (paidAmount < newTotal)
         await prisma.invoice.update({ where: { id: booking.invoice.id }, data: { amount: newTotal } });
       } else if (booking.invoice.status === 'PAID') {
-        invoiceWarning = true; // Admin must handle billing manually
+        // Original invoice is paid — do NOT touch it.
+        // Create (or update/merge) a supplementary PENDING invoice for the extension delta.
+        const deltaAmount = Math.round((newTotal - booking.invoice.amount) * 100) / 100;
+        if (deltaAmount > 0) {
+          const bookingRefShort = params.id.slice(0, 8).toUpperCase();
+          const surchargeNote = `EXTENSION_SURCHARGE:${params.id}`;
+          const existing = await prisma.invoice.findFirst({
+            where: {
+              clientId: booking.clientId,
+              notes: surchargeNote,
+              status: { notIn: ['PAID', 'CANCELLED'] },
+            },
+          });
+          if (existing) {
+            // Merge delta into the existing unpaid supplementary invoice
+            await prisma.invoice.update({
+              where: { id: existing.id },
+              data: {
+                amount: deltaAmount,
+                items: {
+                  deleteMany: {},
+                  create: [{
+                    description: `Supplément prolongation séjour #${bookingRefShort}`,
+                    quantity: 1,
+                    unitPrice: deltaAmount,
+                    total: deltaAmount,
+                  }],
+                },
+              },
+            });
+            supplementaryInvoiceNumber = existing.invoiceNumber;
+          } else {
+            // Generate a new invoice number (same pattern as /api/invoices)
+            const year = new Date().getFullYear();
+            let suppNum = '';
+            for (let attempt = 0; attempt < 5; attempt++) {
+              const count = await prisma.invoice.count();
+              const candidate = `DU-${year}-${String(count + 1 + attempt).padStart(4, '0')}`;
+              const taken = await prisma.invoice.findUnique({ where: { invoiceNumber: candidate } });
+              if (!taken) { suppNum = candidate; break; }
+            }
+            if (suppNum) {
+              const created = await prisma.invoice.create({
+                data: {
+                  invoiceNumber: suppNum,
+                  clientId: booking.clientId,
+                  bookingId: null,
+                  amount: deltaAmount,
+                  paidAmount: 0,
+                  status: 'PENDING',
+                  serviceType: 'BOARDING',
+                  notes: surchargeNote,
+                  items: {
+                    create: [{
+                      description: `Supplément prolongation séjour #${bookingRefShort}`,
+                      quantity: 1,
+                      unitPrice: deltaAmount,
+                      total: deltaAmount,
+                    }],
+                  },
+                },
+              });
+              supplementaryInvoiceNumber = created.invoiceNumber;
+            } else {
+              invoiceWarning = true; // invoice number generation failed (collision — extremely rare)
+            }
+          }
+        }
       }
     }
 
@@ -140,10 +208,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       action: body.approveExtension ? 'EXTENSION_APPROVED' : 'EXTENSION_DIRECT',
       entityType: 'Booking',
       entityId: params.id,
-      details: { newEndDate: newEndDateStr, newTotal, invoiceWarning },
+      details: { newEndDate: newEndDateStr, newTotal, invoiceWarning, supplementaryInvoiceNumber },
     });
 
-    return NextResponse.json({ message: 'extended', newEndDate: newEndDateStr, newTotal, invoiceWarning });
+    return NextResponse.json({ message: 'extended', newEndDate: newEndDateStr, newTotal, invoiceWarning, supplementaryInvoiceNumber });
   }
   // ── End extension handling ────────────────────────────────────────────────────
 
