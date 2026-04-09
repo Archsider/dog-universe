@@ -147,6 +147,7 @@ model Booking {
 
   client         User           @relation(fields: [clientId], references: [id])
   bookingPets    BookingPet[]
+  bookingItems   BookingItem[]
   boardingDetail BoardingDetail?
   taxiDetail     TaxiDetail?
   invoice        Invoice?
@@ -166,6 +167,20 @@ model BookingPet {
   pet     Pet     @relation(fields: [petId], references: [id])
 
   @@unique([bookingId, petId])
+  @@index([bookingId])
+}
+
+// Extra billable lines added manually by admin at booking time (products, custom services)
+model BookingItem {
+  id          String @id @default(cuid())
+  bookingId   String
+  description String
+  quantity    Int    @default(1)
+  unitPrice   Float
+  total       Float
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
   @@index([bookingId])
 }
 

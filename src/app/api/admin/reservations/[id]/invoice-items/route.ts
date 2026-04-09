@@ -19,6 +19,7 @@ export async function GET(_req: Request, { params }: Params) {
       bookingPets: { include: { pet: { select: { id: true, name: true, species: true } } } },
       boardingDetail: true,
       taxiDetail: true,
+      bookingItems: true,
     },
   });
 
@@ -56,6 +57,11 @@ export async function GET(_req: Request, { params }: Params) {
       total: item.total,
     }));
 
+    // Append admin-defined extra lines
+    for (const bi of booking.bookingItems) {
+      items.push({ description: bi.description, quantity: bi.quantity, unitPrice: bi.unitPrice, total: bi.total });
+    }
+
     return NextResponse.json({ items });
   }
 
@@ -68,8 +74,21 @@ export async function GET(_req: Request, { params }: Params) {
       unitPrice: item.unitPrice,
       total: item.total,
     }));
+
+    // Append admin-defined extra lines
+    for (const bi of booking.bookingItems) {
+      items.push({ description: bi.description, quantity: bi.quantity, unitPrice: bi.unitPrice, total: bi.total });
+    }
+
     return NextResponse.json({ items });
   }
 
-  return NextResponse.json({ items: [] });
+  // Fallback: return only extra lines if no service detail found
+  const items = booking.bookingItems.map(bi => ({
+    description: bi.description,
+    quantity: bi.quantity,
+    unitPrice: bi.unitPrice,
+    total: bi.total,
+  }));
+  return NextResponse.json({ items });
 }

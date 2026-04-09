@@ -5,7 +5,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingConfirmationNotification, notifyAdminsNewBooking } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { formatDate } from '@/lib/utils';
-import { getPricingSettings } from '@/lib/pricing';
+import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice } from '@/lib/pricing';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -73,6 +73,8 @@ export async function POST(request: Request) {
       taxiAddonPrice,
       // Taxi specific
       taxiType,
+      // Extra billable lines (admin only)
+      bookingItems,
     } = body;
 
     const VALID_SERVICE_TYPES = ['BOARDING', 'PET_TAXI'];
@@ -167,6 +169,71 @@ export async function POST(request: Request) {
       ? source
       : isAdmin ? 'MANUAL' : 'ONLINE';
 
+    // ── Auto-compute totalPrice before inserting the booking ──────────────────
+    // Prevents the "0" / "0.06" bug: if the client sends 0 (or nothing),
+    // we calculate the correct total from service details + pricing settings.
+    let resolvedTotalPrice: number = typeof totalPrice === 'number' && totalPrice > 0 ? totalPrice : 0;
+    let resolvedPricePerNight = typeof pricePerNight === 'number' && pricePerNight > 0 ? pricePerNight : 0;
+
+    const nights = endDate
+      ? Math.max(0, Math.floor((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)))
+      : 0;
+
+    if (resolvedTotalPrice === 0) {
+      try {
+        const pricing = await getPricingSettings();
+        const petsForCalc = await prisma.pet.findMany({
+          where: { id: { in: petIds } },
+          select: { id: true, name: true, species: true },
+        });
+
+        if (serviceType === 'BOARDING') {
+          const groomingMap: Record<string, 'SMALL' | 'LARGE'> = {};
+          if (includeGrooming && groomingSize) {
+            petsForCalc.filter(p => p.species === 'DOG').forEach(dog => {
+              groomingMap[dog.id] = groomingSize as 'SMALL' | 'LARGE';
+            });
+          }
+          const breakdown = calculateBoardingBreakdown(
+            nights,
+            petsForCalc,
+            includeGrooming ? groomingMap : undefined,
+            taxiGoEnabled ?? false,
+            taxiReturnEnabled ?? false,
+            pricing,
+          );
+          resolvedTotalPrice = breakdown.total;
+
+          // Also resolve pricePerNight if not set (used by extension calc)
+          if (!resolvedPricePerNight) {
+            const dogs = petsForCalc.filter(p => p.species === 'DOG');
+            const cats = petsForCalc.filter(p => p.species === 'CAT');
+            if (dogs.length === 1 && cats.length === 0) {
+              resolvedPricePerNight = nights > pricing.long_stay_threshold
+                ? pricing.boarding_dog_long_stay
+                : pricing.boarding_dog_per_night;
+            } else if (dogs.length > 1) {
+              resolvedPricePerNight = pricing.boarding_dog_multi;
+            } else if (cats.length > 0 && dogs.length === 0) {
+              resolvedPricePerNight = pricing.boarding_cat_per_night;
+            }
+          }
+        } else if (serviceType === 'PET_TAXI') {
+          const breakdown = calculateTaxiPrice(taxiType ?? 'STANDARD', pricing);
+          resolvedTotalPrice = breakdown.total;
+        }
+
+        // Add custom booking items to the total
+        if (Array.isArray(bookingItems)) {
+          for (const item of bookingItems) {
+            const qty = typeof item.quantity === 'number' ? item.quantity : 0;
+            const up = typeof item.unitPrice === 'number' ? item.unitPrice : 0;
+            resolvedTotalPrice += qty * up;
+          }
+        }
+      } catch { /* fallback: keep 0 — better than crashing */ }
+    }
+
     const booking = await prisma.booking.create({
       data: {
         clientId,
@@ -176,7 +243,7 @@ export async function POST(request: Request) {
         endDate: endDate ? new Date(endDate) : null,
         arrivalTime: arrivalTime || null,
         notes: notes?.trim() || null,
-        totalPrice: totalPrice ?? 0,
+        totalPrice: resolvedTotalPrice,
         source: resolvedSource,
         bookingPets: {
           create: petIds.map((petId: string) => ({ petId })),
@@ -193,33 +260,12 @@ export async function POST(request: Request) {
 
     // Create service-specific details
     if (serviceType === 'BOARDING') {
-      // Auto-calculate pricePerNight from settings if not explicitly provided
-      let resolvedPricePerNight = pricePerNight ?? 0;
-      if (!resolvedPricePerNight) {
-        try {
-          const pricing = await getPricingSettings();
-          const pets = await prisma.pet.findMany({ where: { id: { in: petIds } }, select: { species: true } });
-          const nights = endDate
-            ? Math.max(0, Math.floor((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)))
-            : 0;
-          const dogs = pets.filter(p => p.species === 'DOG');
-          const cats = pets.filter(p => p.species === 'CAT');
-          if (dogs.length === 1 && cats.length === 0) {
-            resolvedPricePerNight = nights > pricing.long_stay_threshold ? pricing.boarding_dog_long_stay : pricing.boarding_dog_per_night;
-          } else if (dogs.length > 1) {
-            resolvedPricePerNight = pricing.boarding_dog_multi;
-          } else if (cats.length > 0 && dogs.length === 0) {
-            resolvedPricePerNight = pricing.boarding_cat_per_night;
-          }
-        } catch { /* fallback to 0 */ }
-      }
-
       await prisma.boardingDetail.create({
         data: {
           bookingId: booking.id,
           includeGrooming: includeGrooming ?? false,
           groomingSize: groomingSize || null,
-          groomingPrice: groomingPrice ?? 0,
+          groomingPrice: typeof groomingPrice === 'number' ? groomingPrice : 0,
           pricePerNight: resolvedPricePerNight,
           taxiGoEnabled: taxiGoEnabled ?? false,
           taxiGoDate: taxiGoDate || null,
@@ -229,7 +275,7 @@ export async function POST(request: Request) {
           taxiReturnDate: taxiReturnDate || null,
           taxiReturnTime: taxiReturnTime || null,
           taxiReturnAddress: taxiReturnAddress || null,
-          taxiAddonPrice: taxiAddonPrice ?? 0,
+          taxiAddonPrice: typeof taxiAddonPrice === 'number' ? taxiAddonPrice : 0,
         },
       });
     } else if (serviceType === 'PET_TAXI') {
@@ -237,9 +283,33 @@ export async function POST(request: Request) {
         data: {
           bookingId: booking.id,
           taxiType: taxiType ?? 'STANDARD',
-          price: totalPrice ?? 150,
+          price: resolvedTotalPrice > 0 ? resolvedTotalPrice : 150,
         },
       });
+    }
+
+    // Persist extra admin-defined billing lines
+    if (isAdmin && Array.isArray(bookingItems) && bookingItems.length > 0) {
+      const validItems = bookingItems.filter(
+        (item: { description?: unknown; quantity?: unknown; unitPrice?: unknown }) =>
+          typeof item.description === 'string' &&
+          item.description.trim().length > 0 &&
+          typeof item.quantity === 'number' &&
+          item.quantity > 0 &&
+          typeof item.unitPrice === 'number' &&
+          item.unitPrice >= 0,
+      );
+      if (validItems.length > 0) {
+        await prisma.bookingItem.createMany({
+          data: validItems.map((item: { description: string; quantity: number; unitPrice: number }) => ({
+            bookingId: booking.id,
+            description: item.description.trim(),
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.quantity * item.unitPrice,
+          })),
+        });
+      }
     }
 
     // Send notifications and emails
