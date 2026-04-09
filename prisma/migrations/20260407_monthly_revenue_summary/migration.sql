@@ -2,7 +2,7 @@
 -- Adds MonthlyRevenueSummary table for historical revenue data entry
 -- (Pre-production data for Jan/Feb/Mar 2026 and beyond)
 
-CREATE TABLE "MonthlyRevenueSummary" (
+CREATE TABLE IF NOT EXISTS "MonthlyRevenueSummary" (
     "id"              TEXT NOT NULL,
     "year"            INTEGER NOT NULL,
     "month"           INTEGER NOT NULL,
@@ -19,12 +19,21 @@ CREATE TABLE "MonthlyRevenueSummary" (
 );
 
 -- One record per year+month (no duplicate months)
-CREATE UNIQUE INDEX "MonthlyRevenueSummary_year_month_key" ON "MonthlyRevenueSummary"("year", "month");
+CREATE UNIQUE INDEX IF NOT EXISTS "MonthlyRevenueSummary_year_month_key" ON "MonthlyRevenueSummary"("year", "month");
 
 -- Index for year-based queries (fiscal year)
-CREATE INDEX "MonthlyRevenueSummary_year_idx" ON "MonthlyRevenueSummary"("year");
+CREATE INDEX IF NOT EXISTS "MonthlyRevenueSummary_year_idx" ON "MonthlyRevenueSummary"("year");
 
 -- FK to User (the admin who entered the data)
-ALTER TABLE "MonthlyRevenueSummary"
-    ADD CONSTRAINT "MonthlyRevenueSummary_createdBy_fkey"
-    FOREIGN KEY ("createdBy") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'MonthlyRevenueSummary_createdBy_fkey'
+  ) THEN
+    ALTER TABLE "MonthlyRevenueSummary"
+        ADD CONSTRAINT "MonthlyRevenueSummary_createdBy_fkey"
+        FOREIGN KEY ("createdBy") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END
+$$;

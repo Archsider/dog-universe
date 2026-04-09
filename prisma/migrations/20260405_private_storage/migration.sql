@@ -17,15 +17,26 @@ VALUES (
 )
 ON CONFLICT (id) DO UPDATE SET public = false;
 
--- 3. Storage policies for uploads-private
+-- 3. Storage policies for uploads-private (idempotent via DO block)
 --    The app uses SERVICE_ROLE_KEY which bypasses RLS.
 --    These policies ensure anon / authenticated users cannot access files directly.
 
 -- Deny all public SELECT access (belt-and-suspenders — bucket.public=false is the primary control)
-CREATE POLICY "deny_public_select_private"
-  ON storage.objects FOR SELECT
-  TO anon, authenticated
-  USING (bucket_id = 'uploads-private' AND false);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'storage'
+      AND tablename = 'objects'
+      AND policyname = 'deny_public_select_private'
+  ) THEN
+    CREATE POLICY "deny_public_select_private"
+      ON storage.objects FOR SELECT
+      TO anon, authenticated
+      USING (bucket_id = 'uploads-private' AND false);
+  END IF;
+END
+$$;
 
 -- Allow service role INSERT (bypasses RLS, but explicit policy for clarity)
 -- Note: SERVICE_ROLE_KEY already bypasses RLS — no policy needed for it.
