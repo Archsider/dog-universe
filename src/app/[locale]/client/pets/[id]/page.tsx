@@ -38,8 +38,6 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
   const t = await getTranslations('pets');
   const fr = locale === 'fr';
 
-  // Explicit select to avoid columns that may not exist in production DB yet
-  // (migrations: 20260407_antiparasitic, 20260407_vaccination_draft)
   const rawPet = await prisma.pet.findUnique({
     where: { id },
     select: {
@@ -48,10 +46,11 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
       isNeutered: true, microchipNumber: true, tattooNumber: true, weight: true,
       vetName: true, vetPhone: true, allergies: true, currentMedication: true,
       behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
+      lastAntiparasiticDate: true, antiparasiticProduct: true, antiparasiticNotes: true,
       createdAt: true, updatedAt: true,
       owner: { select: { name: true, email: true } },
       vaccinations: {
-        select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true },
+        select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true, nextDueDate: true, status: true, isAutoDetected: true, sourceDocumentId: true },
         orderBy: { date: 'desc' },
       },
       documents: {
@@ -78,23 +77,19 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
 
   if (!rawPet) notFound();
 
-  // Pad with null for columns not yet in production DB — remove after applying migrations
   // Dates are serialized to ISO strings to avoid Next.js RSC serialization errors
   // when passing Date objects from Server Components to Client Components.
   const pet = {
     ...rawPet,
-    lastAntiparasiticDate: null as Date | null,
-    antiparasiticProduct: null as string | null,
-    antiparasiticNotes: null as string | null,
     vaccinations: rawPet.vaccinations.map(v => ({
       id: v.id,
       vaccineType: v.vaccineType,
       date: v.date ? v.date.toISOString() : null,
       comment: v.comment,
-      nextDueDate: null as string | null,
-      status: 'CONFIRMED' as string,
-      isAutoDetected: false,
-      sourceDocumentId: null as string | null,
+      nextDueDate: v.nextDueDate ? v.nextDueDate.toISOString() : null,
+      status: v.status,
+      isAutoDetected: v.isAutoDetected,
+      sourceDocumentId: v.sourceDocumentId,
     })),
     documents: await Promise.all(rawPet.documents.map(async d => ({
       id: d.id,

@@ -41,7 +41,7 @@ export default function AntiparasiticUpdateButton({
   const today = new Date().toISOString().split('T')[0];
 
   function detectProductKey(product: string | null | undefined): string {
-    if (!product) return '';
+    if (!product) return '__none__';
     if (KNOWN_PRODUCTS.some(p => p.value === product)) return product;
     return 'OTHER';
   }
@@ -56,8 +56,9 @@ export default function AntiparasiticUpdateButton({
 
   const handleOpen = () => {
     setDate(currentDate ? currentDate.split('T')[0] : today);
-    setProductKey(detectProductKey(currentProduct));
-    setCustomProduct(detectProductKey(currentProduct) === 'OTHER' ? (currentProduct ?? '') : '');
+    const key = detectProductKey(currentProduct);
+    setProductKey(key);
+    setCustomProduct(key === 'OTHER' ? (currentProduct ?? '') : '');
     setNotes(currentNotes ?? '');
     setDurationDays(currentDurationDays ? String(currentDurationDays) : '');
     setOpen(true);
@@ -72,7 +73,7 @@ export default function AntiparasiticUpdateButton({
     try {
       const antiparasiticProduct = productKey === 'OTHER'
         ? (customProduct.trim() || null)
-        : (productKey || null);
+        : (productKey === '__none__' ? null : productKey || null);
 
       const payload = {
         lastAntiparasiticDate: date,
@@ -143,7 +144,7 @@ export default function AntiparasiticUpdateButton({
                     <SelectValue placeholder={fr ? '— Non renseigné' : '— Not specified'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{fr ? '— Non renseigné' : '— Not specified'}</SelectItem>
+                    <SelectItem value="__none__">{fr ? '— Non renseigné' : '— Not specified'}</SelectItem>
                     {KNOWN_PRODUCTS.map(p => (
                       <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
                     ))}

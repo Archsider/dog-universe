@@ -22,7 +22,7 @@ const BEHAVIOR_OPTIONS = [
 const KNOWN_PRODUCTS = ['NexGard', 'Simparica', 'Bravecto', 'Frontline'] as const;
 
 function detectProductKey(product: string): string {
-  if (!product) return '';
+  if (!product) return '__none__';
   if ((KNOWN_PRODUCTS as readonly string[]).includes(product)) return product;
   return 'OTHER';
 }
@@ -48,7 +48,7 @@ const EMPTY_FORM: FormState = {
   behaviorWithDogs: '', behaviorWithCats: '', behaviorWithHumans: '',
   notes: '',
   lastAntiparasiticDate: '',
-  antiparasiticProductKey: '',
+  antiparasiticProductKey: '__none__',
   antiparasiticCustomProduct: '',
   antiparasiticNotes: '',
 };
@@ -138,7 +138,7 @@ export default function EditPetPage() {
 
       const antiparasiticProduct = form.antiparasiticProductKey === 'OTHER'
         ? (form.antiparasiticCustomProduct.trim() || null)
-        : (form.antiparasiticProductKey || null);
+        : (form.antiparasiticProductKey === '__none__' ? null : form.antiparasiticProductKey || null);
 
       const { antiparasiticProductKey: _k, antiparasiticCustomProduct: _c, ...rest } = form;
       const payload = {
@@ -365,7 +365,7 @@ export default function EditPetPage() {
                     <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{fr ? '— Non renseigné' : '— Not specified'}</SelectItem>
+                    <SelectItem value="__none__">{fr ? '— Non renseigné' : '— Not specified'}</SelectItem>
                     <SelectItem value="NexGard">NexGard</SelectItem>
                     <SelectItem value="Simparica">Simparica</SelectItem>
                     <SelectItem value="Bravecto">Bravecto</SelectItem>
