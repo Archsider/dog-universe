@@ -27,10 +27,11 @@ interface CreateStandaloneInvoiceModalProps {
 }
 
 const SERVICE_TYPES = [
-  { value: 'PRODUCT_SALE', fr: 'Vente produit / Croquettes', en: 'Product Sale / Croquettes' },
+  { value: '', fr: '— Multiple / Divers', en: '— Multiple / Miscellaneous' },
   { value: 'BOARDING', fr: 'Pension', en: 'Boarding' },
   { value: 'PET_TAXI', fr: 'Taxi animalier', en: 'Pet Taxi' },
   { value: 'GROOMING', fr: 'Toilettage', en: 'Grooming' },
+  { value: 'PRODUCT_SALE', fr: 'Vente produit / Croquettes', en: 'Product Sale / Croquettes' },
 ];
 
 const PAYMENT_METHODS = [
@@ -49,7 +50,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
   const [error, setError] = useState('');
 
   const [clientId, setClientId] = useState('');
-  const [serviceType, setServiceType] = useState('PRODUCT_SALE');
+  const [serviceType, setServiceType] = useState('');
   const [issuedAt, setIssuedAt] = useState(today());
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<LineItem[]>([{ description: '', quantity: 1, unitPrice: 0 }]);
@@ -67,7 +68,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
 
   const reset = () => {
     setClientId('');
-    setServiceType('PRODUCT_SALE');
+    setServiceType('');
     setIssuedAt(today());
     setNotes('');
     setItems([{ description: '', quantity: 1, unitPrice: 0 }]);
@@ -161,7 +162,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
               </div>
 
               <div>
-                <Label className="text-xs">{fr ? 'Type de service' : 'Service type'}</Label>
+                <Label className="text-xs">{fr ? 'Catégorie (optionnel)' : 'Category (optional)'}</Label>
                 <select
                   value={serviceType}
                   onChange={e => setServiceType(e.target.value)}
@@ -171,6 +172,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
                     <option key={st.value} value={st.value}>{fr ? st.fr : st.en}</option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-400 mt-1">{fr ? 'Laissez "Multiple" pour combiner plusieurs services' : 'Leave "Multiple" to combine several services'}</p>
               </div>
             </div>
 

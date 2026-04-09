@@ -26,7 +26,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
 
   const where: Record<string, unknown> = { ...(status && { status }) };
 
-  const [invoices, total, totalRevenue, allClients] = await Promise.all([
+  const [invoices, total, totalRevenue, allClients, paymentMethodStats] = await Promise.all([
     prisma.invoice.findMany({
       where,
       include: {
@@ -41,6 +41,12 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
     prisma.invoice.count({ where }),
     prisma.invoice.aggregate({ where: { status: 'PAID' }, _sum: { amount: true } }),
     prisma.user.findMany({ where: { role: 'CLIENT' }, select: { id: true, name: true, email: true }, orderBy: { name: 'asc' } }),
+    prisma.invoice.groupBy({
+      by: ['paymentMethod'],
+      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] }, paymentMethod: { not: null } },
+      _sum: { paidAmount: true },
+      _count: { id: true },
+    }),
   ]);
 
   const labels = {
@@ -113,6 +119,53 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
           <CreateStandaloneInvoiceModal clients={allClients} locale={locale} />
         </div>
       </div>
+
+      {/* Payment method breakdown */}
+      {paymentMethodStats.length > 0 && (() => {
+        const METHOD_CONFIG: Record<string, { Icon: typeof Banknote; color: string; bg: string; bar: string; labelFr: string; labelEn: string }> = {
+          CASH:     { Icon: Banknote,   color: 'text-green-700',  bg: 'bg-green-50',   bar: 'bg-green-400',   labelFr: 'Espèces',     labelEn: 'Cash' },
+          CARD:     { Icon: CreditCard, color: 'text-blue-700',   bg: 'bg-blue-50',    bar: 'bg-blue-400',    labelFr: 'TPE / Carte', labelEn: 'Card / POS' },
+          CHECK:    { Icon: Receipt,    color: 'text-purple-700', bg: 'bg-purple-50',  bar: 'bg-purple-400',  labelFr: 'Chèque',      labelEn: 'Check' },
+          TRANSFER: { Icon: Building2,  color: 'text-indigo-700', bg: 'bg-indigo-50',  bar: 'bg-indigo-400',  labelFr: 'Virement',    labelEn: 'Transfer' },
+        };
+        const totalPaid = paymentMethodStats.reduce((s, r) => s + (r._sum.paidAmount ?? 0), 0) || 1;
+        return (
+          <div className="mb-5">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+              {locale === 'fr' ? 'Répartition des encaissements' : 'Payment breakdown'}
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {(['CASH', 'CARD', 'CHECK', 'TRANSFER'] as const).map(method => {
+                const stat = paymentMethodStats.find(s => s.paymentMethod === method);
+                const amount = stat?._sum.paidAmount ?? 0;
+                const count = stat?._count.id ?? 0;
+                const pct = Math.round((amount / totalPaid) * 100);
+                const cfg = METHOD_CONFIG[method];
+                return (
+                  <div key={method} className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${cfg.bg}`}>
+                        <cfg.Icon className={`h-4 w-4 ${cfg.color}`} />
+                      </div>
+                      <span className="text-sm font-semibold text-charcoal">
+                        {locale === 'fr' ? cfg.labelFr : cfg.labelEn}
+                      </span>
+                    </div>
+                    <p className="text-lg font-bold text-charcoal">{formatMAD(amount)}</p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-gray-400">{count} {locale === 'fr' ? 'paiement(s)' : 'payment(s)'}</p>
+                      <span className={`text-xs font-semibold ${cfg.color}`}>{pct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full mt-2">
+                      <div className={`h-1.5 rounded-full transition-all ${cfg.bar}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {statusFilters.map(f => (

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDate, getBookingStatusColor, getAntiparasiticDurationDays } from '@/lib/utils';
 import { createSignedUrl } from '@/lib/supabase';
 import DeleteAnimalButton from './DeleteAnimalButton';
+import AntiparasiticUpdateButton from '@/components/admin/AntiparasiticUpdateButton';
 import VaccinationSection from '@/components/pets/VaccinationSection';
 import DocumentSection from '@/components/pets/DocumentSection';
 import { PROOF_PREFIX } from '@/components/pets/constants';
@@ -160,7 +161,17 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
                     </div>
                     <h3 className="font-semibold text-charcoal text-sm">{locale === 'fr' ? 'Antiparasitaire' : 'Anti-parasitic'}</h3>
                   </div>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bg} ${cls}`}>{label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bg} ${cls}`}>{label}</span>
+                    <AntiparasiticUpdateButton
+                      petId={id}
+                      locale={locale}
+                      currentDate={pet.lastAntiparasiticDate ? pet.lastAntiparasiticDate.toISOString() : null}
+                      currentProduct={pet.antiparasiticProduct}
+                      currentNotes={pet.antiparasiticNotes}
+                      currentDurationDays={pet.antiparasiticDurationDays}
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1.5 text-sm">
                   {pet.lastAntiparasiticDate ? (
