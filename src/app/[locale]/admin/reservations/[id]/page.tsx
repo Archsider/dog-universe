@@ -32,6 +32,10 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
 
   if (!booking) notFound();
 
+  const supplementaryInvoice = await prisma.invoice.findFirst({
+    where: { clientId: booking.client.id, notes: `EXTENSION_SURCHARGE:${id}` },
+  });
+
   const bookingMessages = await prisma.notification.findMany({
     where: { userId: booking.client.id, type: 'ADMIN_MESSAGE', metadata: { contains: id } },
     orderBy: { createdAt: 'asc' },
@@ -184,6 +188,48 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
                   bookingId={booking.id}
                   clientId={booking.client.id}
                   locale={locale}
+                />
+              </div>
+            )}
+            {supplementaryInvoice && (
+              <div className="mt-4 pt-4 border-t border-[#F0D98A]/40 space-y-2">
+                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                  {locale === 'fr' ? 'Supplément prolongation' : 'Extension surcharge'}
+                </p>
+                <div className="flex items-center justify-between">
+                  <p className="font-mono text-sm font-semibold text-charcoal">{supplementaryInvoice.invoiceNumber}</p>
+                  <a href={`/api/invoices/${supplementaryInvoice.id}/pdf`} className="text-xs text-gold-600 hover:underline" target="_blank" rel="noopener noreferrer">PDF</a>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Total</span>
+                    <span className="font-bold text-charcoal">{formatMAD(supplementaryInvoice.amount)}</span>
+                  </div>
+                  {supplementaryInvoice.paidAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">{locale === 'fr' ? 'Payé' : 'Paid'}</span>
+                      <span className="font-medium text-green-700">{formatMAD(supplementaryInvoice.paidAmount)}</span>
+                    </div>
+                  )}
+                  {supplementaryInvoice.status !== 'PAID' && (
+                    <div className="flex justify-between border-t border-ivory-100 pt-1">
+                      <span className="text-gray-600 font-medium">{locale === 'fr' ? 'Restant' : 'Remaining'}</span>
+                      <span className="font-bold text-orange-600">{formatMAD(Math.max(0, supplementaryInvoice.amount - supplementaryInvoice.paidAmount))}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Statut</span>
+                    <span className={`text-xs font-semibold ${supplementaryInvoice.status === 'PAID' ? 'text-green-700' : 'text-orange-600'}`}>
+                      {supplementaryInvoice.status}
+                    </span>
+                  </div>
+                </div>
+                <RecordPaymentButton
+                  invoiceId={supplementaryInvoice.id}
+                  currentStatus={supplementaryInvoice.status}
+                  locale={locale}
+                  invoiceAmount={supplementaryInvoice.amount}
+                  paidAmount={supplementaryInvoice.paidAmount}
                 />
               </div>
             )}
