@@ -97,6 +97,7 @@ model PetDocument {
   petId      String
   name       String
   fileUrl    String
+  storageKey String?
   fileType   String
   uploadedAt DateTime @default(now())
 

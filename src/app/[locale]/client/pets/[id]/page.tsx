@@ -7,6 +7,7 @@ import { ArrowLeft, PawPrint, Edit } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDateShort, formatMAD, getAntiparasiticDurationDays } from '@/lib/utils';
+import { createSignedUrl } from '@/lib/supabase';
 import VaccinationSection from '@/components/pets/VaccinationSection';
 import { PROOF_PREFIX } from '@/components/pets/constants';
 import DocumentSection from '@/components/pets/DocumentSection';
@@ -54,7 +55,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
         orderBy: { date: 'desc' },
       },
       documents: {
-        select: { id: true, name: true, fileUrl: true, fileType: true, uploadedAt: true },
+        select: { id: true, name: true, fileUrl: true, storageKey: true, fileType: true, uploadedAt: true },
         orderBy: { uploadedAt: 'desc' },
       },
       bookingPets: {
@@ -95,10 +96,13 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
       isAutoDetected: false,
       sourceDocumentId: null as string | null,
     })),
-    documents: rawPet.documents.map(d => ({
-      ...d,
+    documents: await Promise.all(rawPet.documents.map(async d => ({
+      id: d.id,
+      name: d.name,
+      fileUrl: d.storageKey ? await createSignedUrl(d.storageKey) : d.fileUrl,
+      fileType: d.fileType,
       uploadedAt: d.uploadedAt.toISOString(),
-    })),
+    }))),
   };
   if (session.user.role !== 'ADMIN' && pet.ownerId !== session.user.id) {
     redirect(`/${locale}/client/pets`);

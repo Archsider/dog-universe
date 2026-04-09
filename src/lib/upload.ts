@@ -32,6 +32,7 @@ export type UploadType = 'pet-photo' | 'document' | 'stay-photo';
 
 export interface UploadResult {
   url: string;
+  storageKey?: string; // Private bucket key — present for 'document' uploads on Supabase
   filename: string;
   mimeType: string;
   size: number;
@@ -85,10 +86,10 @@ export async function uploadFile(
   if (hasSupabase) {
     const key = `${subfolder}/${filename}`;
     if (uploadType === 'document') {
-      // Documents go to the private bucket — return a 1-hour signed URL
+      // Documents go to the private bucket — return a 1-hour signed URL + permanent key
       await uploadBufferPrivate(buffer, key, detectedMime);
       const url = await createSignedUrl(key);
-      return { url, filename, mimeType: detectedMime, size: file.size };
+      return { url, storageKey: key, filename, mimeType: detectedMime, size: file.size };
     }
     // Pet photos and stay photos go to the public bucket
     const url = await uploadBuffer(buffer, key, detectedMime);

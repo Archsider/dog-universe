@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, PawPrint, Calendar, ShieldCheck, ShieldAlert, ShieldOff, ShieldQuestion, Edit } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDate, getBookingStatusColor, getAntiparasiticDurationDays } from '@/lib/utils';
+import { createSignedUrl } from '@/lib/supabase';
 import DeleteAnimalButton from './DeleteAnimalButton';
 import VaccinationSection from '@/components/pets/VaccinationSection';
 import DocumentSection from '@/components/pets/DocumentSection';
@@ -33,7 +34,7 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
         orderBy: { date: 'desc' },
       },
       documents: {
-        select: { id: true, name: true, fileUrl: true, fileType: true, uploadedAt: true },
+        select: { id: true, name: true, fileUrl: true, storageKey: true, fileType: true, uploadedAt: true },
         orderBy: { uploadedAt: 'desc' },
       },
       bookingPets: {
@@ -67,10 +68,13 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
       isAutoDetected: false,
       sourceDocumentId: null as string | null,
     })),
-    documents: rawPet.documents.map(d => ({
-      ...d,
+    documents: await Promise.all(rawPet.documents.map(async d => ({
+      id: d.id,
+      name: d.name,
+      fileUrl: d.storageKey ? await createSignedUrl(d.storageKey) : d.fileUrl,
+      fileType: d.fileType,
       uploadedAt: d.uploadedAt.toISOString(),
-    })),
+    }))),
   };
 
   const sl: Record<string, Record<string, string>> = {

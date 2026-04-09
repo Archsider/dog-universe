@@ -31,6 +31,7 @@ export async function POST(request: Request, { params }: Params) {
         petId: id,
         name: name?.trim() || file.name,
         fileUrl: uploadResult.url,
+        storageKey: uploadResult.storageKey ?? null,
         fileType: uploadResult.mimeType,
       },
     });

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 import { readFile } from 'fs/promises';
 import path from 'path';
+import { createSignedUrl } from '@/lib/supabase';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -144,7 +145,10 @@ export async function POST(request: Request, { params }: Params) {
     const { documentId } = await request.json();
     if (!documentId) return NextResponse.json({ error: 'MISSING_DOCUMENT_ID' }, { status: 400 });
 
-    const doc = await prisma.petDocument.findUnique({ where: { id: documentId, petId: id } });
+    const doc = await prisma.petDocument.findUnique({
+      where: { id: documentId, petId: id },
+      select: { id: true, fileUrl: true, storageKey: true, fileType: true },
+    });
     if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
 
     // Idempotent: if a DRAFT already exists for this document, return it
@@ -153,8 +157,9 @@ export async function POST(request: Request, { params }: Params) {
     });
     if (existingDraft) return NextResponse.json(existingDraft);
 
-    // Fetch file and call Claude
-    const fileData = await fetchFileAsBase64(doc.fileUrl);
+    // Use storageKey to generate a fresh signed URL (avoids 1-hour expiry issue)
+    const fileUrl = doc.storageKey ? await createSignedUrl(doc.storageKey) : doc.fileUrl;
+    const fileData = await fetchFileAsBase64(fileUrl);
     let extraction: ExtractionResult | null = null;
 
     if (fileData) {
