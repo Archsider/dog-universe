@@ -147,6 +147,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
               },
             });
             supplementaryInvoiceNumber = existing.invoiceNumber;
+            // Notify client of updated supplementary invoice (non-blocking)
+            try {
+              const { createInvoiceNotification } = await import('@/lib/notifications');
+              const { formatMAD } = await import('@/lib/utils');
+              await createInvoiceNotification(booking.clientId, existing.invoiceNumber, formatMAD(deltaAmount));
+              const client = await prisma.user.findUnique({ where: { id: booking.clientId }, select: { name: true, email: true, language: true } });
+              if (client) {
+                const locale = client.language ?? 'fr';
+                const { subject, html } = getEmailTemplate('invoice_available', { clientName: client.name ?? client.email, invoiceNumber: existing.invoiceNumber, amount: `${deltaAmount} MAD` }, locale);
+                await sendEmail({ to: client.email, subject, html });
+              }
+            } catch { /* non-blocking */ }
           } else {
             // Generate a new invoice number (same pattern as /api/invoices)
             const year = new Date().getFullYear();
@@ -179,6 +191,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
                 },
               });
               supplementaryInvoiceNumber = created.invoiceNumber;
+              // Notify client of new supplementary invoice (non-blocking)
+              try {
+                const { createInvoiceNotification } = await import('@/lib/notifications');
+                const { formatMAD } = await import('@/lib/utils');
+                await createInvoiceNotification(booking.clientId, suppNum, formatMAD(deltaAmount));
+                const client = await prisma.user.findUnique({ where: { id: booking.clientId }, select: { name: true, email: true, language: true } });
+                if (client) {
+                  const locale = client.language ?? 'fr';
+                  const { subject, html } = getEmailTemplate('invoice_available', { clientName: client.name ?? client.email, invoiceNumber: suppNum, amount: `${deltaAmount} MAD` }, locale);
+                  await sendEmail({ to: client.email, subject, html });
+                }
+              } catch { /* non-blocking */ }
             } else {
               invoiceWarning = true; // invoice number generation failed (collision — extremely rare)
             }

@@ -136,6 +136,16 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
 
   if (!booking || booking.clientId !== session.user.id) notFound();
 
+  // Supplementary extension invoice (bookingId: null, tracked via notes)
+  const supplementaryInvoice = await prisma.invoice.findFirst({
+    where: {
+      clientId: session.user.id,
+      notes: `EXTENSION_SURCHARGE:${id}`,
+      status: { notIn: ['CANCELLED'] },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
   // Admin messages related to this booking
   const adminMessages = await prisma.notification.findMany({
     where: {
@@ -178,6 +188,14 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
       noMessages: 'Aucun message pour l\'instant',
       cancel: 'Annuler la réservation',
       progression: 'Suivi de votre réservation',
+      supplementaryInvoice: 'Supplément prolongation',
+      invoiceNumber: 'Facture',
+      amount: 'Montant',
+      paid: 'Payé',
+      remaining: 'Reste à payer',
+      statusPaid: 'Payée',
+      statusPending: 'En attente',
+      statusPartial: 'Partiellement payée',
       statusLabels: {
         PENDING: 'En attente', CONFIRMED: 'Confirmée', IN_PROGRESS: 'En cours',
         COMPLETED: 'Terminée', CANCELLED: 'Annulée', REJECTED: 'Refusée',
@@ -212,6 +230,14 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
       noMessages: 'No messages yet',
       cancel: 'Cancel booking',
       progression: 'Booking progress',
+      supplementaryInvoice: 'Extension supplement',
+      invoiceNumber: 'Invoice',
+      amount: 'Amount',
+      paid: 'Paid',
+      remaining: 'Remaining',
+      statusPaid: 'Paid',
+      statusPending: 'Pending',
+      statusPartial: 'Partially paid',
       statusLabels: {
         PENDING: 'Pending', CONFIRMED: 'Confirmed', IN_PROGRESS: 'In progress',
         COMPLETED: 'Completed', CANCELLED: 'Cancelled', REJECTED: 'Rejected',
@@ -451,6 +477,55 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
                 <FileText className="h-4 w-4" />
                 PDF
               </a>
+            </div>
+          </div>
+        )}
+
+        {/* Supplementary extension invoice */}
+        {supplementaryInvoice && (
+          <div className="bg-white rounded-xl border border-amber-200 p-5 shadow-card">
+            <div className="flex items-center gap-2 mb-3">
+              <FileText className="h-4 w-4 text-amber-500" />
+              <h3 className="font-semibold text-charcoal text-sm">{t.supplementaryInvoice}</h3>
+              <span className="ml-auto text-xs px-2 py-0.5 rounded font-medium bg-amber-100 text-amber-700">
+                {locale === 'fr' ? `Réservation #${booking.id.slice(0, 8).toUpperCase()}` : `Booking #${booking.id.slice(0, 8).toUpperCase()}`}
+              </span>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">{t.invoiceNumber}</span>
+                <span className="font-mono font-semibold text-charcoal">{supplementaryInvoice.invoiceNumber}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">{t.amount}</span>
+                <span className="font-bold text-amber-600">{formatMAD(supplementaryInvoice.amount)}</span>
+              </div>
+              {supplementaryInvoice.paidAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">{t.paid}</span>
+                  <span className="text-green-600">{formatMAD(supplementaryInvoice.paidAmount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between pt-2 border-t border-ivory-100">
+                <span className="text-gray-500">{t.remaining}</span>
+                <span className="font-semibold text-charcoal">{formatMAD(supplementaryInvoice.amount - supplementaryInvoice.paidAmount)}</span>
+              </div>
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-gray-500">Statut</span>
+                <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                  supplementaryInvoice.status === 'PAID'
+                    ? 'bg-green-100 text-green-700'
+                    : supplementaryInvoice.status === 'PARTIALLY_PAID'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {supplementaryInvoice.status === 'PAID'
+                    ? t.statusPaid
+                    : supplementaryInvoice.status === 'PARTIALLY_PAID'
+                    ? t.statusPartial
+                    : t.statusPending}
+                </span>
+              </div>
             </div>
           </div>
         )}

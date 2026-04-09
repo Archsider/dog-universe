@@ -159,6 +159,19 @@ export default async function InvoicesPage({ params: { locale } }: PageProps) {
                     )}
                   </div>
                 )}
+                {/* Supplementary extension invoice context (no linked booking) */}
+                {!booking && invoice.notes?.startsWith('EXTENSION_SURCHARGE:') && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg mb-4 text-sm text-amber-700">
+                    <Receipt className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="font-medium">
+                      {locale === 'fr' ? 'Supplément prolongation' : 'Extension supplement'}
+                    </span>
+                    <span className="text-amber-400">·</span>
+                    <span>
+                      {locale === 'fr' ? 'Réservation' : 'Booking'} #{invoice.notes.replace('EXTENSION_SURCHARGE:', '').slice(0, 8).toUpperCase()}
+                    </span>
+                  </div>
+                )}
 
                 {/* Line items */}
                 {invoice.items.length > 0 && (
@@ -183,8 +196,8 @@ export default async function InvoicesPage({ params: { locale } }: PageProps) {
                   </div>
                 )}
 
-                {/* Notes */}
-                {invoice.notes && (
+                {/* Notes — hide internal tracking markers */}
+                {invoice.notes && !invoice.notes.startsWith('EXTENSION_SURCHARGE:') && (
                   <p className="text-xs text-gray-400 italic mt-3 pt-3 border-t border-ivory-100">{invoice.notes}</p>
                 )}
               </div>
