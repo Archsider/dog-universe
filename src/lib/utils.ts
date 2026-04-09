@@ -50,7 +50,13 @@ export function getInitials(name: string): string {
 export function calculateAge(dateOfBirth: Date | string | null | undefined, locale: string = 'fr'): string {
   if (!dateOfBirth) return locale === 'en' ? 'Unknown age' : 'Âge inconnu';
   const dob = typeof dateOfBirth === 'string' ? new Date(dateOfBirth) : dateOfBirth;
-  const years = Math.floor(differenceInDays(new Date(), dob) / 365);
+  const totalDays = differenceInDays(new Date(), dob);
+  const months = Math.floor(totalDays / 30.44);
+  if (months < 12) {
+    if (locale === 'en') return `${months} month${months !== 1 ? 's' : ''}`;
+    return `${months} mois`;
+  }
+  const years = Math.floor(totalDays / 365);
   if (locale === 'en') return `${years} year${years > 1 ? 's' : ''}`;
   return `${years} an${years > 1 ? 's' : ''}`;
 }

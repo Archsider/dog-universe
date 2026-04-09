@@ -11,26 +11,25 @@ interface SignaturePadProps {
 export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const padRef = useRef<SignaturePadLib | null>(null);
+  // Store callbacks in refs so effect never needs to re-run when parent re-renders
+  const onSignedRef = useRef(onSigned);
+  const onClearedRef = useRef(onCleared);
+  useEffect(() => { onSignedRef.current = onSigned; }, [onSigned]);
+  useEffect(() => { onClearedRef.current = onCleared; }, [onCleared]);
 
-  // Resize canvas to match CSS size (for HiDPI / retina screens)
-  // Preserves existing signature data across resize events (e.g. mobile keyboard open/close)
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const pad = padRef.current;
     if (!canvas) return;
 
-    // Save current signature data before resizing (resize clears the canvas)
     const data = pad && !pad.isEmpty() ? pad.toData() : null;
 
     const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    const width = canvas.offsetWidth;
-    const height = canvas.offsetHeight;
-    canvas.width = width * ratio;
-    canvas.height = height * ratio;
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
     const ctx = canvas.getContext('2d');
     if (ctx) ctx.scale(ratio, ratio);
 
-    // Restore signature data if there was one
     if (pad && data) {
       pad.fromData(data);
     }
@@ -48,24 +47,26 @@ export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
       minWidth: 0.5,
       maxWidth: 2.5,
     });
-
     padRef.current = pad;
 
     pad.addEventListener('endStroke', () => {
       if (!pad.isEmpty()) {
-        onSigned(pad.toDataURL('image/png'));
+        onSignedRef.current(pad.toDataURL('image/png'));
       }
     });
 
     window.addEventListener('resize', resizeCanvas);
     return () => {
       window.removeEventListener('resize', resizeCanvas);
+      pad.off();
     };
-  }, [resizeCanvas, onSigned]);
+  // intentionally only runs once on mount — callbacks accessed via refs
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resizeCanvas]);
 
   const handleClear = () => {
     padRef.current?.clear();
-    onCleared();
+    onClearedRef.current();
   };
 
   return (

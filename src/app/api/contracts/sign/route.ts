@@ -35,6 +35,12 @@ export async function POST(req: NextRequest) {
     if (signatureDataUrl.length > 2 * 1024 * 1024) {
       return NextResponse.json({ error: 'Signature image too large' }, { status: 400 });
     }
+    // A blank transparent canvas produces a very small PNG (~300 chars base64).
+    // A real signature is always significantly larger. Reject trivially empty ones.
+    const base64Data = signatureDataUrl.split(',')[1] ?? '';
+    if (base64Data.length < 1500) {
+      return NextResponse.json({ error: 'Signature vide — veuillez signer avant de valider' }, { status: 400 });
+    }
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }

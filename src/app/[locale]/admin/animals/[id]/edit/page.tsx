@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Camera, PawPrint } from 'lucide-react';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -65,6 +65,10 @@ export default function AdminEditPetPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const set = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
@@ -74,6 +78,8 @@ export default function AdminEditPetPage() {
     fetch(`/api/pets/${petId}`)
       .then(r => r.json())
       .then(data => {
+        setCurrentPhotoUrl(data.photoUrl || null);
+        setPhotoPreview(data.photoUrl || null);
         setForm({
           name: data.name || '',
           species: data.species || '',
@@ -111,6 +117,15 @@ export default function AdminEditPetPage() {
     }
     setLoading(true);
     try {
+      let photoUrl = currentPhotoUrl;
+      if (photoFile) {
+        const formData = new FormData();
+        formData.append('file', photoFile);
+        formData.append('type', 'pet-photo');
+        const uploadRes = await fetch('/api/uploads', { method: 'POST', body: formData });
+        if (uploadRes.ok) photoUrl = (await uploadRes.json()).url;
+      }
+
       const antiparasiticProduct = form.antiparasiticProductKey === 'OTHER'
         ? (form.antiparasiticCustomProduct.trim() || null)
         : (form.antiparasiticProductKey === '__none__' ? null : form.antiparasiticProductKey || null);
@@ -118,6 +133,7 @@ export default function AdminEditPetPage() {
       const { antiparasiticProductKey: _k, antiparasiticCustomProduct: _c, ...rest } = form;
       const payload = {
         ...rest,
+        photoUrl,
         isNeutered: form.isNeutered === '' ? null : form.isNeutered === 'true',
         weight: form.weight ? parseFloat(form.weight) : null,
         lastAntiparasiticDate: form.lastAntiparasiticDate || null,
@@ -165,6 +181,47 @@ export default function AdminEditPetPage() {
 
       <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-8 shadow-card">
         <form onSubmit={handleSubmit} className="space-y-8">
+
+          {/* Photo */}
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
+              {fr ? 'Photo de profil' : 'Profile photo'}
+            </h3>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-full bg-gold-50 border-2 border-dashed border-gold-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {photoPreview
+                  ? <img src={photoPreview} alt="preview" className="w-20 h-20 object-cover" />
+                  : <PawPrint className="h-8 w-8 text-gold-300" />}
+              </div>
+              <div className="space-y-2">
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setPhotoFile(file);
+                    setPhotoPreview(URL.createObjectURL(file));
+                  }}
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => photoInputRef.current?.click()}>
+                  <Camera className="h-4 w-4 mr-2" />
+                  {fr ? 'Choisir une photo' : 'Choose photo'}
+                </Button>
+                {photoPreview && (
+                  <button
+                    type="button"
+                    className="block text-xs text-red-400 hover:text-red-600 underline"
+                    onClick={() => { setPhotoFile(null); setPhotoPreview(null); setCurrentPhotoUrl(null); }}
+                  >
+                    {fr ? 'Supprimer la photo' : 'Remove photo'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
 
           {/* Identité */}
           <section className="space-y-4">
