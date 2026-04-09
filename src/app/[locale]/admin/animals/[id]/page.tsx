@@ -6,8 +6,9 @@ import { ArrowLeft, PawPrint, Calendar, ShieldCheck, ShieldAlert, ShieldOff, Shi
 import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDate, getBookingStatusColor, getAntiparasiticDurationDays } from '@/lib/utils';
 import DeleteAnimalButton from './DeleteAnimalButton';
-import VaccinationSection, { PROOF_PREFIX } from '@/components/pets/VaccinationSection';
+import VaccinationSection from '@/components/pets/VaccinationSection';
 import DocumentSection from '@/components/pets/DocumentSection';
+import { PROOF_PREFIX } from '@/components/pets/constants';
 
 interface PageProps { params: { locale: string; id: string } }
 

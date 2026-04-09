@@ -7,7 +7,8 @@ import { ArrowLeft, PawPrint, Edit } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDateShort, formatMAD, getAntiparasiticDurationDays } from '@/lib/utils';
-import VaccinationSection, { PROOF_PREFIX } from '@/components/pets/VaccinationSection';
+import VaccinationSection from '@/components/pets/VaccinationSection';
+import { PROOF_PREFIX } from '@/components/pets/constants';
 import DocumentSection from '@/components/pets/DocumentSection';
 
 type Params = { locale: string; id: string };

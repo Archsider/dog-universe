@@ -46,7 +46,8 @@ interface VaccinationSectionProps {
   locale: string;
 }
 
-export const PROOF_PREFIX = 'Preuve vaccination - ';
+export { PROOF_PREFIX } from './constants';
+import { PROOF_PREFIX } from './constants';
 
 const T = {
   fr: {
