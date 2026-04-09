@@ -27,6 +27,7 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
       boardingDetail: true,
       taxiDetail: true,
       invoice: true,
+      bookingItems: { orderBy: { id: 'asc' } },
     },
   });
 
@@ -299,6 +300,36 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
               )}
             </div>
           </div>
+
+          {booking.bookingItems.length > 0 && (
+            <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
+              <h3 className="font-semibold text-charcoal mb-3 text-sm">
+                {locale === 'fr' ? 'Produits / services additionnels' : 'Extra products / services'}
+              </h3>
+              <div className="border border-ivory-200 rounded-xl overflow-hidden">
+                <div className="bg-ivory-50 px-3 py-2 grid grid-cols-[1fr_36px_72px_64px] gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  <span>{locale === 'fr' ? 'Description' : 'Description'}</span>
+                  <span className="text-center">{locale === 'fr' ? 'Qté' : 'Qty'}</span>
+                  <span className="text-right">P.U.</span>
+                  <span className="text-right">Total</span>
+                </div>
+                {booking.bookingItems.map(item => (
+                  <div key={item.id} className="px-3 py-2 grid grid-cols-[1fr_36px_72px_64px] gap-2 border-t border-ivory-100 text-xs items-center">
+                    <span className="text-charcoal">{item.description}</span>
+                    <span className="text-center text-gray-500">{item.quantity}</span>
+                    <span className="text-right text-gray-500">{formatMAD(item.unitPrice)}</span>
+                    <span className="text-right font-medium text-charcoal">{formatMAD(item.total)}</span>
+                  </div>
+                ))}
+                <div className="px-3 py-2 border-t border-gold-200/60 bg-ivory-50 flex justify-between items-center text-xs">
+                  <span className="font-semibold text-charcoal">{locale === 'fr' ? 'Sous-total additionnels' : 'Extras subtotal'}</span>
+                  <span className="font-bold text-gold-600">
+                    {formatMAD(booking.bookingItems.reduce((s, i) => s + i.total, 0))}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <ReservationActions booking={{ id: booking.id, status: booking.status, serviceType: booking.serviceType }} locale={locale} />
           {isBoarding && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status) && (

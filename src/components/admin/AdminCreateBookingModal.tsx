@@ -45,10 +45,10 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-const TAXI_TYPES: { value: TaxiType; fr: string }[] = [
-  { value: 'STANDARD', fr: 'Standard (150 MAD)' },
-  { value: 'VET', fr: 'Vétérinaire (300 MAD)' },
-  { value: 'AIRPORT', fr: 'Aéroport (300 MAD)' },
+const TAXI_TYPE_LABELS: { value: TaxiType; labelFr: string; labelEn: string; priceKey: keyof typeof PRICING_DEFAULTS }[] = [
+  { value: 'STANDARD', labelFr: 'Course standard', labelEn: 'Standard trip', priceKey: 'taxi_standard' },
+  { value: 'VET', labelFr: 'Transport vétérinaire', labelEn: 'Vet transport', priceKey: 'taxi_vet' },
+  { value: 'AIRPORT', labelFr: 'Navette aéroport', labelEn: 'Airport shuttle', priceKey: 'taxi_airport' },
 ];
 
 export default function AdminCreateBookingModal({
@@ -620,7 +620,7 @@ export default function AdminCreateBookingModal({
                         {fr ? 'Type de taxi' : 'Taxi type'}
                       </label>
                       <div className="flex flex-col gap-1.5">
-                        {TAXI_TYPES.map(tt => (
+                        {TAXI_TYPE_LABELS.map(tt => (
                           <button
                             key={tt.value}
                             type="button"
@@ -631,7 +631,8 @@ export default function AdminCreateBookingModal({
                                 : 'border-gray-200 text-gray-600 hover:border-gold-300'
                             }`}
                           >
-                            {tt.fr}
+                            {fr ? tt.labelFr : tt.labelEn}
+                            {' '}— {formatMAD(pricing[tt.priceKey])}
                           </button>
                         ))}
                       </div>
