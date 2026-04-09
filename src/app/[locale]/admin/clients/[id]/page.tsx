@@ -12,6 +12,8 @@ import EditClientInfoForm from './EditClientInfoForm';
 import DeleteClientButton from './DeleteClientButton';
 import CreateAnimalModal from '../../animals/CreateAnimalModal';
 import HistoricalDataForm from './HistoricalDataForm';
+import AdminCreateBookingModal from '@/components/admin/AdminCreateBookingModal';
+import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -181,7 +183,15 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
           </div>
 
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
-            <div className="flex items-center gap-2 mb-3"><Calendar className="h-4 w-4 text-gold-500" /><h3 className="font-semibold text-charcoal text-sm">{l.bookings}</h3></div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-gold-500" /><h3 className="font-semibold text-charcoal text-sm">{l.bookings}</h3></div>
+              <AdminCreateBookingModal
+                locale={locale}
+                preselectedClientId={id}
+                preselectedClientName={client.name}
+                preselectedPets={client.pets.map(p => ({ id: p.id, name: p.name, species: p.species }))}
+              />
+            </div>
             {client.bookings.length === 0 ? <p className="text-sm text-gray-400">{l.noBookings}</p> : (
               <div className="space-y-2">
                 {client.bookings.map(booking => (
@@ -202,7 +212,14 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><Receipt className="h-4 w-4 text-gold-500" /><h3 className="font-semibold text-charcoal text-sm">{l.invoices}</h3></div>
-              <Link href={`/${locale}/admin/billing?clientId=${id}`} className="text-xs text-gold-600 hover:underline">{locale === 'fr' ? 'Voir tout' : 'View all'}</Link>
+              <div className="flex items-center gap-2">
+                <Link href={`/${locale}/admin/billing?clientId=${id}`} className="text-xs text-gold-600 hover:underline">{locale === 'fr' ? 'Voir tout' : 'View all'}</Link>
+                <CreateStandaloneInvoiceModal
+                  clients={[{ id: client.id, name: client.name, email: client.email }]}
+                  locale={locale}
+                  preselectedClientId={id}
+                />
+              </div>
             </div>
             {client.invoices.length === 0 ? <p className="text-sm text-gray-400">{l.noInvoices}</p> : (
               <div className="space-y-2">

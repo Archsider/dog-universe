@@ -24,6 +24,8 @@ interface CreateStandaloneInvoiceModalProps {
   clients: Client[];
   locale: string;
   onCreated?: () => void;
+  /** Pre-fill and lock the client selector */
+  preselectedClientId?: string;
 }
 
 const SERVICE_TYPES = [
@@ -43,13 +45,13 @@ const PAYMENT_METHODS = [
 
 const today = () => new Date().toISOString().split('T')[0];
 
-export default function CreateStandaloneInvoiceModal({ clients, locale, onCreated }: CreateStandaloneInvoiceModalProps) {
+export default function CreateStandaloneInvoiceModal({ clients, locale, onCreated, preselectedClientId }: CreateStandaloneInvoiceModalProps) {
   const fr = locale === 'fr';
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const [clientId, setClientId] = useState('');
+  const [clientId, setClientId] = useState(preselectedClientId ?? '');
   const [serviceType, setServiceType] = useState('');
   const [issuedAt, setIssuedAt] = useState(today());
   const [notes, setNotes] = useState('');
@@ -67,7 +69,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
   };
 
   const reset = () => {
-    setClientId('');
+    setClientId(preselectedClientId ?? '');
     setServiceType('');
     setIssuedAt(today());
     setNotes('');
@@ -149,16 +151,22 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-xs">{fr ? 'Client *' : 'Client *'}</Label>
-                <select
-                  value={clientId}
-                  onChange={e => setClientId(e.target.value)}
-                  className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 focus:outline-none focus:border-gold-400 bg-white"
-                >
-                  <option value="">{fr ? '— Sélectionner —' : '— Select —'}</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.email})</option>
-                  ))}
-                </select>
+                {preselectedClientId ? (
+                  <div className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 bg-ivory-50 text-charcoal font-medium">
+                    {clients.find(c => c.id === preselectedClientId)?.name ?? preselectedClientId}
+                  </div>
+                ) : (
+                  <select
+                    value={clientId}
+                    onChange={e => setClientId(e.target.value)}
+                    className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 focus:outline-none focus:border-gold-400 bg-white"
+                  >
+                    <option value="">{fr ? '— Sélectionner —' : '— Select —'}</option>
+                    {clients.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.email})</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>

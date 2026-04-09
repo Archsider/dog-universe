@@ -110,6 +110,11 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-serif font-bold text-charcoal font-mono">{booking.id.slice(0, 8).toUpperCase()}</h1>
             <Badge className={`${getBookingStatusColor(booking.status)}`}>{statusLbls[booking.status]}</Badge>
+            {booking.source === 'MANUAL' && (
+              <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
+                {locale === 'fr' ? 'Saisie manuelle' : 'Manual entry'}
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-500">{formatDate(booking.createdAt, locale)}</p>
         </div>

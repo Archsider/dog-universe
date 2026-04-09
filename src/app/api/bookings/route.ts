@@ -55,6 +55,7 @@ export async function POST(request: Request) {
       arrivalTime,
       notes,
       totalPrice,
+      source,
       // Boarding specific
       includeGrooming,
       groomingSize,
@@ -161,6 +162,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'MISSING_CLIENT_ID' }, { status: 400 });
     }
 
+    const VALID_SOURCES = ['ONLINE', 'MANUAL'];
+    const resolvedSource = source && VALID_SOURCES.includes(source)
+      ? source
+      : isAdmin ? 'MANUAL' : 'ONLINE';
+
     const booking = await prisma.booking.create({
       data: {
         clientId,
@@ -171,6 +177,7 @@ export async function POST(request: Request) {
         arrivalTime: arrivalTime || null,
         notes: notes?.trim() || null,
         totalPrice: totalPrice ?? 0,
+        source: resolvedSource,
         bookingPets: {
           create: petIds.map((petId: string) => ({ petId })),
         },

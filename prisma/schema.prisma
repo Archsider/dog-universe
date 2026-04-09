@@ -72,12 +72,26 @@ model Pet {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  vaccinations Vaccination[]
-  documents    PetDocument[]
-  bookingPets  BookingPet[]
+  owner         User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  vaccinations  Vaccination[]
+  documents     PetDocument[]
+  bookingPets   BookingPet[]
+  weightEntries PetWeightEntry[]
 
   @@index([ownerId])
+}
+
+model PetWeightEntry {
+  id          String   @id @default(cuid())
+  petId       String
+  weightKg    Float
+  measuredAt  DateTime @default(now())
+  note        String?
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([petId])
+  @@index([measuredAt])
 }
 
 model Vaccination {
@@ -123,6 +137,7 @@ model Booking {
   notes              String?
   cancellationReason String?
   totalPrice         Float    @default(0)
+  source             String?  // "ONLINE" | "MANUAL" — null = legacy / unknown
   // Boarding stay extension request (from client)
   hasExtensionRequest       Boolean   @default(false)
   extensionRequestedEndDate DateTime?

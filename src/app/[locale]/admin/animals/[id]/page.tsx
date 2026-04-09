@@ -8,6 +8,7 @@ import { calculateAge, formatDate, getBookingStatusColor, getAntiparasiticDurati
 import { createSignedUrl } from '@/lib/supabase';
 import DeleteAnimalButton from './DeleteAnimalButton';
 import AntiparasiticUpdateButton from '@/components/admin/AntiparasiticUpdateButton';
+import PetWeightHistorySection from '@/components/admin/PetWeightHistorySection';
 import VaccinationSection from '@/components/pets/VaccinationSection';
 import DocumentSection from '@/components/pets/DocumentSection';
 import { PROOF_PREFIX } from '@/components/pets/constants';
@@ -52,6 +53,12 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
   });
 
   if (!rawPet) notFound();
+
+  const weightEntries = await prisma.petWeightEntry.findMany({
+    where: { petId: id },
+    orderBy: { measuredAt: 'desc' },
+    select: { id: true, weightKg: true, measuredAt: true, note: true },
+  });
 
   // Dates are serialized to ISO strings to avoid Next.js RSC serialization errors
   // when passing Date objects from Server Components to Client Components.
@@ -205,6 +212,18 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
               </div>
             );
           })()}
+
+          <PetWeightHistorySection
+            petId={id}
+            locale={locale}
+            initialEntries={weightEntries.map(e => ({
+              id: e.id,
+              weightKg: e.weightKg,
+              measuredAt: e.measuredAt.toISOString(),
+              note: e.note,
+            }))}
+            currentWeight={rawPet.weight}
+          />
 
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
             <div className="flex items-center gap-2 mb-3"><Calendar className="h-4 w-4 text-gold-500" /><h3 className="font-semibold text-charcoal text-sm">{l.history}</h3></div>
