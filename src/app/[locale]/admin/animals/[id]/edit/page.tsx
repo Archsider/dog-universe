@@ -15,7 +15,7 @@ import { toast } from '@/hooks/use-toast';
 const KNOWN_PRODUCTS = ['NexGard', 'Simparica', 'Bravecto', 'Frontline'] as const;
 
 function detectProductKey(product: string): string {
-  if (!product) return '';
+  if (!product) return '__none__';
   if ((KNOWN_PRODUCTS as readonly string[]).includes(product)) return product;
   return 'OTHER';
 }
@@ -28,7 +28,7 @@ type FormState = {
   behaviorWithDogs: string; behaviorWithCats: string; behaviorWithHumans: string;
   notes: string;
   lastAntiparasiticDate: string;
-  antiparasiticProductKey: string;    // '' | 'NexGard' | 'Simparica' | 'Bravecto' | 'Frontline' | 'OTHER'
+  antiparasiticProductKey: string;    // '__none__' | 'NexGard' | 'Simparica' | 'Bravecto' | 'Frontline' | 'OTHER'
   antiparasiticCustomProduct: string; // free text when key === 'OTHER'
   antiparasiticNotes: string;
   antiparasiticDurationDays: string;  // admin override in days (empty = use product default)
@@ -42,7 +42,7 @@ const EMPTY_FORM: FormState = {
   behaviorWithDogs: '', behaviorWithCats: '', behaviorWithHumans: '',
   notes: '',
   lastAntiparasiticDate: '',
-  antiparasiticProductKey: '',
+  antiparasiticProductKey: '__none__',
   antiparasiticCustomProduct: '',
   antiparasiticNotes: '',
   antiparasiticDurationDays: '',
@@ -113,7 +113,7 @@ export default function AdminEditPetPage() {
     try {
       const antiparasiticProduct = form.antiparasiticProductKey === 'OTHER'
         ? (form.antiparasiticCustomProduct.trim() || null)
-        : (form.antiparasiticProductKey || null);
+        : (form.antiparasiticProductKey === '__none__' ? null : form.antiparasiticProductKey || null);
 
       const { antiparasiticProductKey: _k, antiparasiticCustomProduct: _c, ...rest } = form;
       const payload = {
@@ -321,7 +321,7 @@ export default function AdminEditPetPage() {
                     <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{fr ? '— Non renseigné' : '— Not specified'}</SelectItem>
+                    <SelectItem value="__none__">{fr ? '— Non renseigné' : '— Not specified'}</SelectItem>
                     <SelectItem value="NexGard">NexGard (30j)</SelectItem>
                     <SelectItem value="Simparica">Simparica (30j)</SelectItem>
                     <SelectItem value="Bravecto">Bravecto (84j)</SelectItem>
