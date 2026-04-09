@@ -101,11 +101,15 @@ export function getBookingStatusColor(status: string): string {
   }
 }
 
-export function getAntiparasiticDurationDays(product: string | null | undefined): number {
+export function getAntiparasiticDurationDays(
+  product: string | null | undefined,
+  durationOverride?: number | null,
+): number {
+  if (durationOverride && durationOverride > 0) return durationOverride;
   if (!product) return 30;
   const p = product.toLowerCase();
   if (p.includes('bravecto')) return 84; // 12 weeks
-  if (p.includes('nexgard') || p.includes('simparica')) return 30;
+  if (p.includes('nexgard') || p.includes('simparica') || p.includes('frontline')) return 30;
   return 30;
 }
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
+import { calculateSuggestedGrade } from '@/lib/loyalty';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -90,7 +91,41 @@ export async function PATCH(request: Request, { params }: Params) {
     updateData.email = email;
   }
 
+  // --- Historical baseline fields (admin only) ---
+  let recalculateLoyalty = false;
+  if (body.historicalStays !== undefined) {
+    const val = Math.max(0, Math.round(Number(body.historicalStays)));
+    if (!isNaN(val)) { updateData.historicalStays = val; recalculateLoyalty = true; }
+  }
+  if (body.historicalSpendMAD !== undefined) {
+    const val = Math.max(0, Number(body.historicalSpendMAD));
+    if (!isNaN(val)) { updateData.historicalSpendMAD = val; recalculateLoyalty = true; }
+  }
+  if (body.historicalNote !== undefined) {
+    updateData.historicalNote = body.historicalNote ? String(body.historicalNote).trim().slice(0, 500) : null;
+  }
+
   await prisma.user.update({ where: { id }, data: updateData });
+
+  // Recalculate loyalty grade when historical data changes (unless manually overridden)
+  if (recalculateLoyalty) {
+    const currentGrade = await prisma.loyaltyGrade.findUnique({ where: { clientId: id } });
+    if (!currentGrade?.isOverride) {
+      const user = await prisma.user.findUnique({ where: { id }, select: { historicalStays: true, historicalSpendMAD: true } });
+      const [totalPaid, completedStays] = await Promise.all([
+        prisma.invoice.aggregate({ where: { clientId: id, status: 'PAID' }, _sum: { amount: true } }),
+        prisma.booking.count({ where: { clientId: id, status: 'COMPLETED' } }),
+      ]);
+      const totalStays = completedStays + (user?.historicalStays ?? 0);
+      const totalRevenue = (totalPaid._sum.amount ?? 0) + (user?.historicalSpendMAD ?? 0);
+      const suggestedGrade = calculateSuggestedGrade(totalStays, totalRevenue);
+      await prisma.loyaltyGrade.upsert({
+        where: { clientId: id },
+        update: { grade: suggestedGrade },
+        create: { clientId: id, grade: suggestedGrade },
+      });
+    }
+  }
 
   return NextResponse.json({ message: 'ok' });
 }

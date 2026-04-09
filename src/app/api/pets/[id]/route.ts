@@ -19,6 +19,8 @@ export async function GET(_req: Request, { params }: Params) {
       isNeutered: true, microchipNumber: true, tattooNumber: true, weight: true,
       vetName: true, vetPhone: true, allergies: true, currentMedication: true,
       behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
+      lastAntiparasiticDate: true, antiparasiticProduct: true, antiparasiticNotes: true,
+      antiparasiticDurationDays: true,
       createdAt: true, updatedAt: true,
       vaccinations: {
         select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true },
@@ -74,7 +76,10 @@ export async function PATCH(_req: Request, { params }: Params) {
       vetName, vetPhone, allergies, currentMedication,
       behaviorWithDogs, behaviorWithCats, behaviorWithHumans, notes,
       lastAntiparasiticDate, antiparasiticProduct, antiparasiticNotes,
+      antiparasiticDurationDays,
     } = body;
+
+    const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN';
 
     const VALID_SPECIES = ['DOG', 'CAT'];
     const VALID_GENDERS = ['MALE', 'FEMALE'];
@@ -125,6 +130,10 @@ export async function PATCH(_req: Request, { params }: Params) {
         antiparasiticNotes: antiparasiticNotes !== undefined
           ? (antiparasiticNotes?.trim() || null)
           : undefined,
+        // Admin-only: duration override
+        ...(isAdmin && antiparasiticDurationDays !== undefined && {
+          antiparasiticDurationDays: antiparasiticDurationDays ? Math.max(1, Math.round(Number(antiparasiticDurationDays))) : null,
+        }),
       },
     });
 

@@ -27,10 +27,12 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
       isNeutered: true, microchipNumber: true, tattooNumber: true, weight: true,
       vetName: true, vetPhone: true, allergies: true, currentMedication: true,
       behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
+      lastAntiparasiticDate: true, antiparasiticProduct: true, antiparasiticNotes: true,
+      antiparasiticDurationDays: true,
       createdAt: true, updatedAt: true,
       owner: { select: { id: true, name: true, email: true } },
       vaccinations: {
-        select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true },
+        select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true, nextDueDate: true, status: true, isAutoDetected: true, sourceDocumentId: true },
         orderBy: { date: 'desc' },
       },
       documents: {
@@ -50,23 +52,23 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
 
   if (!rawPet) notFound();
 
-  // Pad with null for columns not yet in production DB — remove after applying migrations
   // Dates are serialized to ISO strings to avoid Next.js RSC serialization errors
   // when passing Date objects from Server Components to Client Components.
   const pet = {
     ...rawPet,
-    lastAntiparasiticDate: null as Date | null,
-    antiparasiticProduct: null as string | null,
-    antiparasiticNotes: null as string | null,
+    lastAntiparasiticDate: rawPet.lastAntiparasiticDate ?? null,
+    antiparasiticProduct: rawPet.antiparasiticProduct ?? null,
+    antiparasiticNotes: rawPet.antiparasiticNotes ?? null,
+    antiparasiticDurationDays: rawPet.antiparasiticDurationDays ?? null,
     vaccinations: rawPet.vaccinations.map(v => ({
       id: v.id,
       vaccineType: v.vaccineType,
       date: v.date ? v.date.toISOString() : null,
       comment: v.comment,
-      nextDueDate: null as string | null,
-      status: 'CONFIRMED' as string,
-      isAutoDetected: false,
-      sourceDocumentId: null as string | null,
+      nextDueDate: v.nextDueDate ? v.nextDueDate.toISOString() : null,
+      status: v.status,
+      isAutoDetected: v.isAutoDetected,
+      sourceDocumentId: v.sourceDocumentId,
     })),
     documents: await Promise.all(rawPet.documents.map(async d => ({
       id: d.id,
@@ -82,9 +84,9 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
     en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', CANCELLED: 'Cancelled', REJECTED: 'Rejected', COMPLETED: 'Completed', IN_PROGRESS: 'In progress' },
   };
 
-  function getAntiStatus(d: Date | null, product?: string | null): 'up_to_date' | 'expiring_soon' | 'expired' | 'unknown' {
+  function getAntiStatus(d: Date | null, product?: string | null, durationOverride?: number | null): 'up_to_date' | 'expiring_soon' | 'expired' | 'unknown' {
     if (!d) return 'unknown';
-    const duration = getAntiparasiticDurationDays(product);
+    const duration = getAntiparasiticDurationDays(product, durationOverride);
     const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
     if (days <= duration - 5) return 'up_to_date';
     if (days <= duration) return 'expiring_soon';
@@ -141,7 +143,7 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
 
           {/* Anti-parasitic card */}
           {(() => {
-            const antiStatus = getAntiStatus(pet.lastAntiparasiticDate, pet.antiparasiticProduct);
+            const antiStatus = getAntiStatus(pet.lastAntiparasiticDate, pet.antiparasiticProduct, pet.antiparasiticDurationDays);
             const iconMap = {
               up_to_date:    { Icon: ShieldCheck,    cls: 'text-green-600',  bg: 'bg-green-50',  label: locale === 'fr' ? 'À jour' : 'Up to date' },
               expiring_soon: { Icon: ShieldAlert,    cls: 'text-amber-600',  bg: 'bg-amber-50',  label: locale === 'fr' ? 'Expire bientôt' : 'Expiring soon' },
@@ -175,6 +177,16 @@ export default async function AdminAnimalDetailPage({ params: { locale, id } }: 
                       <span className="text-charcoal">{pet.antiparasiticProduct}</span>
                     </div>
                   )}
+                  {pet.lastAntiparasiticDate && (() => {
+                    const effectiveDays = getAntiparasiticDurationDays(pet.antiparasiticProduct, pet.antiparasiticDurationDays);
+                    const expiryDate = new Date(pet.lastAntiparasiticDate.getTime() + effectiveDays * 86400000);
+                    return (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">{locale === 'fr' ? 'Prochain traitement' : 'Next treatment'}</span>
+                        <span className="text-charcoal text-xs">{formatDate(expiryDate, locale)}{pet.antiparasiticDurationDays ? <span className="text-amber-600 ml-1">({pet.antiparasiticDurationDays}j)</span> : null}</span>
+                      </div>
+                    );
+                  })()}
                   {pet.antiparasiticNotes && (
                     <p className="text-xs text-gray-500 pt-1 border-t border-ivory-100">{pet.antiparasiticNotes}</p>
                   )}

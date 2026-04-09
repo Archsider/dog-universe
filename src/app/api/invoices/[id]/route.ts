@@ -102,18 +102,25 @@ export async function PATCH(request: Request, { params }: Params) {
       details: { invoiceNumber: invoice.invoiceNumber },
     });
 
-    const client = await prisma.user.findUnique({ where: { id: invoice.clientId } });
+    const client = await prisma.user.findUnique({
+      where: { id: invoice.clientId },
+      select: { language: true, historicalStays: true, historicalSpendMAD: true },
+    });
     if (client) {
       const totalPaid = await prisma.invoice.aggregate({
         where: { clientId: invoice.clientId, status: 'PAID' },
         _sum: { amount: true },
       });
-      const totalStays = await prisma.booking.count({
+      const completedStays = await prisma.booking.count({
         where: { clientId: invoice.clientId, status: 'COMPLETED' },
       });
 
+      // Include historical baseline in loyalty calculation
+      const totalStays = completedStays + (client.historicalStays ?? 0);
+      const totalRevenue = (totalPaid._sum.amount ?? 0) + (client.historicalSpendMAD ?? 0);
+
       const { calculateSuggestedGrade } = await import('@/lib/loyalty');
-      const suggestedGrade = calculateSuggestedGrade(totalStays, totalPaid._sum.amount ?? 0);
+      const suggestedGrade = calculateSuggestedGrade(totalStays, totalRevenue);
 
       const currentGrade = await prisma.loyaltyGrade.findUnique({
         where: { clientId: invoice.clientId },

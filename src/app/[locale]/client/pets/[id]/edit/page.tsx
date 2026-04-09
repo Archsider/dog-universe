@@ -19,6 +19,14 @@ const BEHAVIOR_OPTIONS = [
   { value: 'REACTIVE', fr: 'Réactif', en: 'Reactive' },
 ];
 
+const KNOWN_PRODUCTS = ['NexGard', 'Simparica', 'Bravecto', 'Frontline'] as const;
+
+function detectProductKey(product: string): string {
+  if (!product) return '';
+  if ((KNOWN_PRODUCTS as readonly string[]).includes(product)) return product;
+  return 'OTHER';
+}
+
 type FormState = {
   name: string; species: string; breed: string; dateOfBirth: string; gender: string;
   isNeutered: string; microchipNumber: string; tattooNumber: string; weight: string;
@@ -26,7 +34,10 @@ type FormState = {
   allergies: string; currentMedication: string;
   behaviorWithDogs: string; behaviorWithCats: string; behaviorWithHumans: string;
   notes: string;
-  lastAntiparasiticDate: string; antiparasiticProduct: string; antiparasiticNotes: string;
+  lastAntiparasiticDate: string;
+  antiparasiticProductKey: string;   // '' | 'NexGard' | 'Simparica' | 'Bravecto' | 'Frontline' | 'OTHER'
+  antiparasiticCustomProduct: string; // free text when key === 'OTHER'
+  antiparasiticNotes: string;
 };
 
 const EMPTY_FORM: FormState = {
@@ -36,7 +47,10 @@ const EMPTY_FORM: FormState = {
   allergies: '', currentMedication: '',
   behaviorWithDogs: '', behaviorWithCats: '', behaviorWithHumans: '',
   notes: '',
-  lastAntiparasiticDate: '', antiparasiticProduct: '', antiparasiticNotes: '',
+  lastAntiparasiticDate: '',
+  antiparasiticProductKey: '',
+  antiparasiticCustomProduct: '',
+  antiparasiticNotes: '',
 };
 
 export default function EditPetPage() {
@@ -82,7 +96,8 @@ export default function EditPetPage() {
           behaviorWithHumans: data.behaviorWithHumans || '',
           notes: data.notes || '',
           lastAntiparasiticDate: data.lastAntiparasiticDate ? data.lastAntiparasiticDate.split('T')[0] : '',
-          antiparasiticProduct: data.antiparasiticProduct || '',
+          antiparasiticProductKey: detectProductKey(data.antiparasiticProduct || ''),
+          antiparasiticCustomProduct: detectProductKey(data.antiparasiticProduct || '') === 'OTHER' ? (data.antiparasiticProduct || '') : '',
           antiparasiticNotes: data.antiparasiticNotes || '',
         });
         setFetching(false);
@@ -121,12 +136,18 @@ export default function EditPetPage() {
         if (uploadRes.ok) photoUrl = (await uploadRes.json()).url;
       }
 
+      const antiparasiticProduct = form.antiparasiticProductKey === 'OTHER'
+        ? (form.antiparasiticCustomProduct.trim() || null)
+        : (form.antiparasiticProductKey || null);
+
+      const { antiparasiticProductKey: _k, antiparasiticCustomProduct: _c, ...rest } = form;
       const payload = {
-        ...form,
+        ...rest,
         photoUrl,
         isNeutered: form.isNeutered === '' ? null : form.isNeutered === 'true',
         weight: form.weight ? parseFloat(form.weight) : null,
         lastAntiparasiticDate: form.lastAntiparasiticDate || null,
+        antiparasiticProduct,
       };
 
       const res = await fetch(`/api/pets/${petId}`, {
@@ -338,10 +359,28 @@ export default function EditPetPage() {
                 <Input id="antiDate" type="date" value={form.lastAntiparasiticDate} onChange={set('lastAntiparasiticDate')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
               </div>
               <div>
-                <Label htmlFor="antiProduct">{fr ? 'Produit utilisé' : 'Product used'}</Label>
-                <Input id="antiProduct" value={form.antiparasiticProduct} onChange={set('antiparasiticProduct')} className="mt-1" placeholder={fr ? 'Ex: Frontline, Bravecto...' : 'Ex: Frontline, Bravecto...'} />
+                <Label>{fr ? 'Produit utilisé' : 'Product used'}</Label>
+                <Select value={form.antiparasiticProductKey} onValueChange={v => setForm(p => ({ ...p, antiparasiticProductKey: v, antiparasiticCustomProduct: v !== 'OTHER' ? '' : p.antiparasiticCustomProduct }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">{fr ? '— Non renseigné' : '— Not specified'}</SelectItem>
+                    <SelectItem value="NexGard">NexGard</SelectItem>
+                    <SelectItem value="Simparica">Simparica</SelectItem>
+                    <SelectItem value="Bravecto">Bravecto</SelectItem>
+                    <SelectItem value="Frontline">Frontline</SelectItem>
+                    <SelectItem value="OTHER">{fr ? 'Autre…' : 'Other…'}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+            {form.antiparasiticProductKey === 'OTHER' && (
+              <div>
+                <Label htmlFor="antiCustom">{fr ? 'Nom du produit' : 'Product name'}</Label>
+                <Input id="antiCustom" value={form.antiparasiticCustomProduct} onChange={set('antiparasiticCustomProduct')} className="mt-1" placeholder={fr ? 'Ex: Seresto, Advantix...' : 'Ex: Seresto, Advantix...'} />
+              </div>
+            )}
             <div>
               <Label htmlFor="antiNotes">{fr ? 'Notes (optionnel)' : 'Notes (optional)'}</Label>
               <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" placeholder={fr ? 'Ex: traitement mensuel, réaction passée...' : 'Ex: monthly treatment, past reaction...'} rows={2} />

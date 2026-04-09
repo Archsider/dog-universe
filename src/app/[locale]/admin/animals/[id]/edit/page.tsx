@@ -12,6 +12,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 
+const KNOWN_PRODUCTS = ['NexGard', 'Simparica', 'Bravecto', 'Frontline'] as const;
+
+function detectProductKey(product: string): string {
+  if (!product) return '';
+  if ((KNOWN_PRODUCTS as readonly string[]).includes(product)) return product;
+  return 'OTHER';
+}
+
 type FormState = {
   name: string; species: string; breed: string; dateOfBirth: string; gender: string;
   isNeutered: string; microchipNumber: string; tattooNumber: string; weight: string;
@@ -19,7 +27,11 @@ type FormState = {
   allergies: string; currentMedication: string;
   behaviorWithDogs: string; behaviorWithCats: string; behaviorWithHumans: string;
   notes: string;
-  lastAntiparasiticDate: string; antiparasiticProduct: string; antiparasiticNotes: string;
+  lastAntiparasiticDate: string;
+  antiparasiticProductKey: string;    // '' | 'NexGard' | 'Simparica' | 'Bravecto' | 'Frontline' | 'OTHER'
+  antiparasiticCustomProduct: string; // free text when key === 'OTHER'
+  antiparasiticNotes: string;
+  antiparasiticDurationDays: string;  // admin override in days (empty = use product default)
 };
 
 const EMPTY_FORM: FormState = {
@@ -29,7 +41,11 @@ const EMPTY_FORM: FormState = {
   allergies: '', currentMedication: '',
   behaviorWithDogs: '', behaviorWithCats: '', behaviorWithHumans: '',
   notes: '',
-  lastAntiparasiticDate: '', antiparasiticProduct: '', antiparasiticNotes: '',
+  lastAntiparasiticDate: '',
+  antiparasiticProductKey: '',
+  antiparasiticCustomProduct: '',
+  antiparasiticNotes: '',
+  antiparasiticDurationDays: '',
 };
 
 const BEHAVIOR_OPTIONS = [
@@ -77,8 +93,10 @@ export default function AdminEditPetPage() {
           behaviorWithHumans: data.behaviorWithHumans || '',
           notes: data.notes || '',
           lastAntiparasiticDate: data.lastAntiparasiticDate ? data.lastAntiparasiticDate.split('T')[0] : '',
-          antiparasiticProduct: data.antiparasiticProduct || '',
+          antiparasiticProductKey: detectProductKey(data.antiparasiticProduct || ''),
+          antiparasiticCustomProduct: detectProductKey(data.antiparasiticProduct || '') === 'OTHER' ? (data.antiparasiticProduct || '') : '',
           antiparasiticNotes: data.antiparasiticNotes || '',
+          antiparasiticDurationDays: data.antiparasiticDurationDays ? String(data.antiparasiticDurationDays) : '',
         });
         setFetching(false);
       })
@@ -93,11 +111,18 @@ export default function AdminEditPetPage() {
     }
     setLoading(true);
     try {
+      const antiparasiticProduct = form.antiparasiticProductKey === 'OTHER'
+        ? (form.antiparasiticCustomProduct.trim() || null)
+        : (form.antiparasiticProductKey || null);
+
+      const { antiparasiticProductKey: _k, antiparasiticCustomProduct: _c, ...rest } = form;
       const payload = {
-        ...form,
+        ...rest,
         isNeutered: form.isNeutered === '' ? null : form.isNeutered === 'true',
         weight: form.weight ? parseFloat(form.weight) : null,
         lastAntiparasiticDate: form.lastAntiparasiticDate || null,
+        antiparasiticProduct,
+        antiparasiticDurationDays: form.antiparasiticDurationDays ? parseInt(form.antiparasiticDurationDays, 10) : null,
       };
 
       const res = await fetch(`/api/pets/${petId}`, {
@@ -290,13 +315,48 @@ export default function AdminEditPetPage() {
                 <Input id="antiDate" type="date" value={form.lastAntiparasiticDate} onChange={set('lastAntiparasiticDate')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
               </div>
               <div>
-                <Label htmlFor="antiProduct">{fr ? 'Produit utilisé' : 'Product used'}</Label>
-                <Input id="antiProduct" value={form.antiparasiticProduct} onChange={set('antiparasiticProduct')} className="mt-1" placeholder="Frontline, Bravecto..." />
+                <Label>{fr ? 'Produit utilisé' : 'Product used'}</Label>
+                <Select value={form.antiparasiticProductKey} onValueChange={v => setForm(p => ({ ...p, antiparasiticProductKey: v, antiparasiticCustomProduct: v !== 'OTHER' ? '' : p.antiparasiticCustomProduct }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">{fr ? '— Non renseigné' : '— Not specified'}</SelectItem>
+                    <SelectItem value="NexGard">NexGard (30j)</SelectItem>
+                    <SelectItem value="Simparica">Simparica (30j)</SelectItem>
+                    <SelectItem value="Bravecto">Bravecto (84j)</SelectItem>
+                    <SelectItem value="Frontline">Frontline (30j)</SelectItem>
+                    <SelectItem value="OTHER">{fr ? 'Autre…' : 'Other…'}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <div>
-              <Label htmlFor="antiNotes">{fr ? 'Notes (optionnel)' : 'Notes (optional)'}</Label>
-              <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" rows={2} />
+            {form.antiparasiticProductKey === 'OTHER' && (
+              <div>
+                <Label htmlFor="antiCustom">{fr ? 'Nom du produit' : 'Product name'}</Label>
+                <Input id="antiCustom" value={form.antiparasiticCustomProduct} onChange={set('antiparasiticCustomProduct')} className="mt-1" placeholder={fr ? 'Ex: Seresto, Advantix...' : 'Ex: Seresto, Advantix...'} />
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="antiDuration">
+                  {fr ? 'Durée protection (jours, optionnel)' : 'Protection duration (days, optional)'}
+                </Label>
+                <Input
+                  id="antiDuration"
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={form.antiparasiticDurationDays}
+                  onChange={set('antiparasiticDurationDays')}
+                  className="mt-1"
+                  placeholder={fr ? 'Ex: 30, 84… (remplace la valeur par défaut)' : 'Ex: 30, 84… (overrides default)'}
+                />
+              </div>
+              <div>
+                <Label htmlFor="antiNotes">{fr ? 'Notes (optionnel)' : 'Notes (optional)'}</Label>
+                <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" rows={2} />
+              </div>
             </div>
           </section>
 

@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { FileText, Download, FileDown, Eye } from 'lucide-react';
+import { FileText, Download, FileDown, Eye, Banknote, CreditCard, Receipt, Building2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getInvoiceStatusColor } from '@/lib/utils';
 import CreateInvoiceButton from './CreateInvoiceButton';
@@ -36,6 +36,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
       orderBy: { issuedAt: 'desc' },
       skip,
       take: limit,
+      // We need paymentMethod and paymentDate for display
     }),
     prisma.invoice.count({ where }),
     prisma.invoice.aggregate({ where: { status: 'PAID' }, _sum: { amount: true } }),
@@ -186,6 +187,20 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
                       </td>
                       <td className="px-4 py-3 text-center">
                         <Badge className={`text-xs ${getInvoiceStatusColor(inv.status)}`}>{statusLbls[inv.status] || inv.status}</Badge>
+                        {(inv.status === 'PAID' || inv.status === 'PARTIALLY_PAID') && inv.paymentMethod && (
+                          <div className="flex items-center justify-center gap-1 mt-1 text-gray-400">
+                            {inv.paymentMethod === 'CASH' && <Banknote className="h-3 w-3" />}
+                            {inv.paymentMethod === 'CARD' && <CreditCard className="h-3 w-3" />}
+                            {inv.paymentMethod === 'CHECK' && <Receipt className="h-3 w-3" />}
+                            {inv.paymentMethod === 'TRANSFER' && <Building2 className="h-3 w-3" />}
+                            <span className="text-xs">
+                              {locale === 'fr'
+                                ? ({ CASH: 'Espèces', CARD: 'TPE', CHECK: 'Chèque', TRANSFER: 'Virement' } as Record<string, string>)[inv.paymentMethod] ?? inv.paymentMethod
+                                : ({ CASH: 'Cash', CARD: 'Card', CHECK: 'Check', TRANSFER: 'Transfer' } as Record<string, string>)[inv.paymentMethod] ?? inv.paymentMethod}
+                            </span>
+                            {inv.paymentDate && <span className="text-xs text-gray-300 hidden xl:inline">· {new Date(inv.paymentDate).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { day: '2-digit', month: '2-digit' })}</span>}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
