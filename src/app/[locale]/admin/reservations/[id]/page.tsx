@@ -225,7 +225,15 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
             </div>
           </div>
 
-          <ReservationActions booking={{ id: booking.id, status: booking.status }} locale={locale} />
+          <ReservationActions
+            booking={{
+              id: booking.id,
+              status: booking.status,
+              serviceType: booking.serviceType,
+              endDate: booking.endDate?.toISOString() ?? null,
+            }}
+            locale={locale}
+          />
           <AdminMessageSection bookingId={booking.id} locale={locale} />
         </div>
       </div>

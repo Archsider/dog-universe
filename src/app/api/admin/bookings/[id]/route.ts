@@ -33,13 +33,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 
   const body = await request.json();
-  const { status, notes } = body;
+  const { status, notes, endDate } = body;
 
   const booking = await prisma.booking.findUnique({
     where: { id: params.id },
     include: {
       client: true,
       bookingPets: { include: { pet: true } },
+      boardingDetail: true,
+      invoice: { include: { items: true } },
     },
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -49,8 +51,72 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     data: {
       ...(status && { status }),
       ...(notes !== undefined && { notes }),
+      ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
     },
   });
+
+  // Handle invoice when admin extends BOARDING endDate
+  if (
+    endDate &&
+    booking.serviceType === 'BOARDING' &&
+    booking.endDate &&
+    new Date(endDate).getTime() > booking.endDate.getTime()
+  ) {
+    const extensionNights = Math.floor(
+      (new Date(endDate).getTime() - booking.endDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    const ppu = booking.boardingDetail?.pricePerNight ?? 0;
+    const deltaAmount = ppu > 0 ? ppu * extensionNights : 0;
+    const inv = booking.invoice;
+
+    if (inv && ppu > 0) {
+      const petNamesStr = booking.bookingPets.map((bp) => bp.pet.name).join(', ');
+      if (inv.status === 'PENDING') {
+        const pensionItem = inv.items.find((it) => it.description.startsWith('Pension'));
+        if (pensionItem) {
+          const newQty = pensionItem.quantity + extensionNights;
+          await prisma.$transaction(async (tx) => {
+            await tx.invoiceItem.update({
+              where: { id: pensionItem.id },
+              data: {
+                description: `Pension ${petNamesStr} — ${newQty} nuit${newQty > 1 ? 's' : ''}`,
+                quantity: newQty,
+                total: ppu * newQty,
+              },
+            });
+            await tx.invoice.update({
+              where: { id: inv.id },
+              data: { amount: inv.amount + deltaAmount },
+            });
+          });
+        }
+      } else if (inv.status === 'PAID' && deltaAmount > 0) {
+        const count = await prisma.invoice.count();
+        const year = new Date().getFullYear();
+        const invNumber = `DU-${year}-${String(count + 1).padStart(4, '0')}`;
+        await prisma.invoice.create({
+          data: {
+            invoiceNumber: invNumber,
+            clientId: booking.clientId,
+            bookingId: null,
+            amount: deltaAmount,
+            status: 'PENDING',
+            notes: `Complément extension — Résa ${params.id.slice(0, 8).toUpperCase()}`,
+            items: {
+              create: [
+                {
+                  description: `Extension pension ${petNamesStr} — ${extensionNights} nuit${extensionNights > 1 ? 's' : ''}`,
+                  quantity: extensionNights,
+                  unitPrice: ppu,
+                  total: deltaAmount,
+                },
+              ],
+            },
+          },
+        });
+      }
+    }
+  }
 
   // Send notifications on status change
   if (status && status !== booking.status) {

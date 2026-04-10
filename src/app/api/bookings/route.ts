@@ -93,6 +93,122 @@ export async function POST(request: Request) {
 
     const clientId = session.user.role === 'CLIENT' ? session.user.id : body.clientId;
 
+    // ── SAME-STAY DETECTION: pension extension → UPDATE instead of CREATE ──
+    if (serviceType === 'BOARDING' && endDate) {
+      const newStart = new Date(startDate);
+
+      const sameStay = await prisma.booking.findFirst({
+        where: {
+          clientId,
+          serviceType: 'BOARDING',
+          status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+          endDate: newStart,
+        },
+        include: {
+          bookingPets: true,
+          boardingDetail: true,
+          invoice: { include: { items: true } },
+          client: true,
+        },
+      });
+
+      if (sameStay) {
+        const existingPetIds = sameStay.bookingPets.map((bp) => bp.petId).sort();
+        const incomingPetIds = [...(petIds as string[])].sort();
+        const samePets =
+          existingPetIds.length === incomingPetIds.length &&
+          existingPetIds.every((pid, i) => pid === incomingPetIds[i]);
+
+        if (samePets) {
+          const extensionNights = Math.floor(
+            (new Date(endDate).getTime() - newStart.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          const deltaAmount = totalPrice ?? 0;
+
+          const extended = await prisma.booking.update({
+            where: { id: sameStay.id },
+            data: {
+              endDate: new Date(endDate),
+              totalPrice: sameStay.totalPrice + deltaAmount,
+            },
+            include: { bookingPets: { include: { pet: true } }, client: true },
+          });
+
+          // Billing: update PENDING invoice or create complement for PAID
+          const inv = sameStay.invoice;
+          if (inv) {
+            const petNamesStr = extended.bookingPets.map((bp) => bp.pet.name).join(', ');
+            const ppu = sameStay.boardingDetail?.pricePerNight ?? 0;
+
+            if (inv.status === 'PENDING') {
+              const pensionItem = inv.items.find((it) => it.description.startsWith('Pension'));
+              if (pensionItem && ppu > 0) {
+                const newQty = pensionItem.quantity + extensionNights;
+                await prisma.$transaction(async (tx) => {
+                  await tx.invoiceItem.update({
+                    where: { id: pensionItem.id },
+                    data: {
+                      description: `Pension ${petNamesStr} — ${newQty} nuit${newQty > 1 ? 's' : ''}`,
+                      quantity: newQty,
+                      total: ppu * newQty,
+                    },
+                  });
+                  await tx.invoice.update({
+                    where: { id: inv.id },
+                    data: { amount: inv.amount + ppu * extensionNights },
+                  });
+                });
+              } else if (deltaAmount > 0) {
+                // pricePerNight unknown (0): update total amount only
+                await prisma.invoice.update({
+                  where: { id: inv.id },
+                  data: { amount: inv.amount + deltaAmount },
+                });
+              }
+            } else if (inv.status === 'PAID' && deltaAmount > 0) {
+              // Create complementary invoice (bookingId=null: @unique on Invoice)
+              const count = await prisma.invoice.count();
+              const year = new Date().getFullYear();
+              const invNumber = `DU-${year}-${String(count + 1).padStart(4, '0')}`;
+              await prisma.invoice.create({
+                data: {
+                  invoiceNumber: invNumber,
+                  clientId,
+                  bookingId: null,
+                  amount: deltaAmount,
+                  status: 'PENDING',
+                  notes: `Complément extension — Résa ${sameStay.id.slice(0, 8).toUpperCase()}`,
+                  items: {
+                    create: [
+                      {
+                        description: `Extension pension ${petNamesStr} — ${extensionNights} nuit${extensionNights > 1 ? 's' : ''}`,
+                        quantity: extensionNights,
+                        unitPrice: ppu > 0 ? ppu : Math.round(deltaAmount / Math.max(1, extensionNights)),
+                        total: deltaAmount,
+                      },
+                    ],
+                  },
+                },
+              });
+            }
+          }
+          // No invoice → admin creates it after; nights on booking are now correct.
+
+          const bookingRef = sameStay.id.slice(0, 8).toUpperCase();
+          await logAction({
+            userId: session.user.id,
+            action: LOG_ACTIONS.BOOKING_CREATED,
+            entityType: 'Booking',
+            entityId: sameStay.id,
+            details: { bookingRef, extended: true, newEndDate: endDate, extensionNights },
+          });
+
+          return NextResponse.json({ ...extended, bookingRef }, { status: 200 });
+        }
+      }
+    }
+    // ── END SAME-STAY DETECTION ──
+
     const booking = await prisma.booking.create({
       data: {
         clientId,
