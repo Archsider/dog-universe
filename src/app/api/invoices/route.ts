@@ -5,6 +5,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createInvoiceNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { formatMAD } from '@/lib/utils';
+import { allocatePayments } from '@/lib/payments';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -129,10 +130,8 @@ export async function POST(request: Request) {
         bookingId: bookingId || null,
         amount,
         serviceType: serviceType || null,
-        status: isPaid ? 'PAID' : 'PENDING',
-        paidAmount: isPaid ? amount : 0,
-        paymentMethod: isPaid && paymentMethod ? paymentMethod : null,
-        paidAt: resolvedPaidAt,
+        status: 'PENDING',
+        paidAmount: 0,
         notes: notes?.trim() || null,
         ...(resolvedIssuedAt && { issuedAt: resolvedIssuedAt }),
         items: {
@@ -146,6 +145,19 @@ export async function POST(request: Request) {
       },
       include: { items: true, client: true },
     });
+
+    // If markPaid: create a Payment row and run allocation
+    if (isPaid && paymentMethod) {
+      await prisma.payment.create({
+        data: {
+          invoiceId: invoice.id,
+          amount,
+          paymentMethod,
+          paymentDate: resolvedPaidAt ?? new Date(),
+        },
+      });
+      await allocatePayments(invoice.id);
+    }
 
     // Notify client
     await createInvoiceNotification(clientId, invoiceNumber, formatMAD(amount));
