@@ -52,9 +52,8 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
     pets: b.bookingPets.map((bp) => ({ name: bp.pet.name, species: bp.pet.species })),
     taxiType: b.taxiDetail?.taxiType ?? null,
     includeGrooming: b.boardingDetail?.includeGrooming ?? false,
-    hasTaxiAddon: b.boardingDetail
-      ? (b.boardingDetail.taxiGoEnabled || b.boardingDetail.taxiReturnEnabled)
-      : false,
+    taxiGoEnabled: b.boardingDetail?.taxiGoEnabled ?? false,
+    taxiReturnEnabled: b.boardingDetail?.taxiReturnEnabled ?? false,
     updatedAt: (b as { updatedAt?: Date }).updatedAt?.toISOString() ?? b.startDate.toISOString(),
   }));
 
@@ -83,59 +82,55 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
       new Date(b.endDate) <= todayEnd
   );
 
-  const todayTaxis = bookings.filter(
-    (b) =>
-      b.serviceType === 'PET_TAXI' &&
-      ['CONFIRMED', 'IN_PROGRESS', 'PENDING'].includes(b.status) &&
-      new Date(b.startDate) >= todayStart &&
-      new Date(b.startDate) <= todayEnd
-  );
-
-  // Taxi add-ons from BOARDING bookings occurring today
-  const isDateToday = (date: Date) => {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    return d.getTime() === todayStart.getTime();
-  };
-
-  const todayBoardingTaxis: {
+  // All boarding taxi add-ons (source unique: boardingDetail)
+  const allBoardingTaxis: {
     bookingId: string;
     clientName: string;
     pets: string;
     direction: 'GO' | 'RETURN';
     time: string | null;
+    date: string;
+    bookingStartDate: string;
+    bookingEndDate: string | null;
   }[] = [];
 
   for (const b of bookings) {
     if (b.serviceType !== 'BOARDING' || !b.boardingDetail) continue;
     const { boardingDetail } = b;
-    if (boardingDetail.taxiGoEnabled && isDateToday(new Date(b.startDate))) {
-      todayBoardingTaxis.push({
+    const clientName = b.client.name ?? b.client.email;
+    const pets = b.bookingPets.map((bp) => bp.pet.name).join(', ');
+    if (boardingDetail.taxiGoEnabled) {
+      allBoardingTaxis.push({
         bookingId: b.id,
-        clientName: b.client.name ?? b.client.email,
-        pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
+        clientName,
+        pets,
         direction: 'GO',
         time: boardingDetail.taxiGoTime ?? null,
+        date: b.startDate.toISOString(),
+        bookingStartDate: b.startDate.toISOString(),
+        bookingEndDate: b.endDate?.toISOString() ?? null,
       });
     }
-    if (boardingDetail.taxiReturnEnabled && b.endDate && isDateToday(new Date(b.endDate))) {
-      todayBoardingTaxis.push({
+    if (boardingDetail.taxiReturnEnabled && b.endDate) {
+      allBoardingTaxis.push({
         bookingId: b.id,
-        clientName: b.client.name ?? b.client.email,
-        pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
+        clientName,
+        pets,
         direction: 'RETURN',
         time: boardingDetail.taxiReturnTime ?? null,
+        date: b.endDate.toISOString(),
+        bookingStartDate: b.startDate.toISOString(),
+        bookingEndDate: b.endDate.toISOString(),
       });
     }
   }
 
-  // Sort: entries with time first (ASC), then alphabetical by clientName
-  todayBoardingTaxis.sort((a, b) => {
-    if (a.time && b.time) return a.time.localeCompare(b.time);
-    if (a.time) return -1;
-    if (b.time) return 1;
-    return a.clientName.localeCompare(b.clientName);
-  });
+  // Count taxi add-ons happening today
+  const todayBoardingTaxisCount = allBoardingTaxis.filter((t) => {
+    const d = new Date(t.date);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime() === todayStart.getTime();
+  }).length;
 
   const dogCount = activeBoarders.reduce(
     (sum, b) => sum + b.bookingPets.filter((bp) => bp.pet.species === 'DOG').length,
@@ -156,7 +151,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
         catCount,
         todayArrivals: todayArrivals.length,
         todayDepartures: todayDepartures.length,
-        todayTaxis: todayTaxis.length,
+        todayTaxis: todayBoardingTaxisCount,
         todayArrivalDetails: todayArrivals.map((b) => ({
           id: b.id,
           clientName: b.client.name ?? b.client.email,
@@ -168,14 +163,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
           clientName: b.client.name ?? b.client.email,
           pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
         })),
-        todayTaxiDetails: todayTaxis.map((b) => ({
-          id: b.id,
-          clientName: b.client.name ?? b.client.email,
-          pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
-          arrivalTime: b.arrivalTime ?? null,
-          taxiType: b.taxiDetail?.taxiType ?? 'STANDARD',
-        })),
-        todayBoardingTaxis,
+        allBoardingTaxis,
       }}
     />
   );

@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  PawPrint, Car, Home, ArrowRight, ArrowLeft,
-  Clock, CheckCircle2, Loader2, Trophy, Scissors,
+  PawPrint, Car, Home, ArrowRight, ArrowLeft, Scissors,
 } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 
@@ -21,9 +20,21 @@ interface BookingCard {
   pets: { name: string; species: string }[];
   taxiType: string | null;
   includeGrooming: boolean;
-  hasTaxiAddon: boolean;
+  taxiGoEnabled: boolean;
+  taxiReturnEnabled: boolean;
   updatedAt: string;
 }
+
+type AllBoardingTaxi = {
+  bookingId: string;
+  clientName: string;
+  pets: string;
+  direction: 'GO' | 'RETURN';
+  time: string | null;
+  date: string;
+  bookingStartDate: string;
+  bookingEndDate: string | null;
+};
 
 interface Stats {
   activeBoarders: number;
@@ -34,8 +45,7 @@ interface Stats {
   todayTaxis: number;
   todayArrivalDetails: { id: string; clientName: string; pets: string; arrivalTime: string | null }[];
   todayDepartureDetails: { id: string; clientName: string; pets: string }[];
-  todayTaxiDetails: { id: string; clientName: string; pets: string; arrivalTime: string | null; taxiType: string }[];
-  todayBoardingTaxis: { bookingId: string; clientName: string; pets: string; direction: 'GO' | 'RETURN'; time: string | null }[];
+  allBoardingTaxis: AllBoardingTaxi[];
 }
 
 interface Props {
@@ -65,6 +75,12 @@ function nightCount(start: string, end: string | null): number {
 
 function getInitials(name: string) {
   return name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function normDateTs(iso: string): number {
+  const d = new Date(iso);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }
 
 // Categorize bookings into 4 kanban columns
@@ -101,6 +117,12 @@ function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href:
   const isFr = locale === 'fr';
   const nights = nightCount(b.startDate, b.endDate);
   const petLine = b.pets.map((p) => `${SPECIES_EMOJI[p.species] ?? '🐾'} ${p.name}`).join(' · ');
+  const hasTaxi = b.taxiGoEnabled || b.taxiReturnEnabled;
+  const taxiBadgeLabel = b.taxiGoEnabled && b.taxiReturnEnabled
+    ? 'Aller + Retour'
+    : b.taxiGoEnabled
+    ? 'Aller'
+    : 'Retour';
 
   return (
     <Link
@@ -145,10 +167,9 @@ function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href:
             {isFr ? 'Toilettage' : 'Grooming'}
           </span>
         )}
-        {b.hasTaxiAddon && (
-          <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">
-            <Car className="h-2.5 w-2.5" />
-            Taxi
+        {hasTaxi && (
+          <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 font-medium">
+            🚗 {taxiBadgeLabel}
           </span>
         )}
         {b.taxiType && (
@@ -197,19 +218,79 @@ function Column({ title, count, cards, color, dotColor, locale }: ColumnProps) {
   );
 }
 
+function TaxiCard({ t, locale }: { t: AllBoardingTaxi; locale: string }) {
+  const isFr = locale === 'fr';
+  const dirLabel = t.direction === 'GO' ? (isFr ? 'Aller' : 'Go') : (isFr ? 'Retour' : 'Return');
+  const timeLabel = t.time ?? (isFr ? 'À confirmer' : 'TBD');
+
+  return (
+    <Link
+      href={`/${locale}/admin/reservations/${t.bookingId}`}
+      className="block bg-white border border-ivory-200 rounded-xl p-3 hover:border-orange-300 hover:shadow-sm transition-all"
+    >
+      <p className="text-sm font-medium text-charcoal truncate">
+        {t.clientName}{' '}
+        <span className="font-normal text-charcoal/55">— {t.pets}</span>
+      </p>
+      <p className="text-xs text-charcoal/70 mt-1">
+        🚗 {dirLabel} ·{' '}
+        {t.time
+          ? <span className="font-semibold text-charcoal">{t.time}</span>
+          : <span className="italic text-charcoal/40">{timeLabel}</span>
+        }
+      </p>
+      <p className="text-xs text-charcoal/40 mt-0.5">
+        {formatDateShortLocal(t.bookingStartDate, locale)}
+        {t.bookingEndDate && ` → ${formatDateShortLocal(t.bookingEndDate, locale)}`}
+      </p>
+    </Link>
+  );
+}
+
 export default function BoardView({ locale, bookings, stats }: Props) {
   const [tab, setTab] = useState<'BOARDING' | 'PET_TAXI'>('BOARDING');
   const isFr = locale === 'fr';
 
-  const { pending, confirmed, inProgress, completed } = categorize(bookings, tab);
+  const { pending, confirmed, inProgress, completed } = categorize(bookings, 'BOARDING');
+
+  // Compute date buckets for taxi sections
+  const todayTs = new Date();
+  todayTs.setHours(0, 0, 0, 0);
+  const sevenDaysTs = new Date(todayTs);
+  sevenDaysTs.setDate(sevenDaysTs.getDate() + 7);
+
+  const sortByTimeAsc = (a: AllBoardingTaxi, b: AllBoardingTaxi) => {
+    if (a.time && b.time) return a.time.localeCompare(b.time);
+    return a.time ? -1 : b.time ? 1 : 0;
+  };
+  const sortByDateThenTime = (a: AllBoardingTaxi, b: AllBoardingTaxi) => {
+    const da = normDateTs(a.date);
+    const db = normDateTs(b.date);
+    if (da !== db) return da - db;
+    return sortByTimeAsc(a, b);
+  };
+
+  const todayBoardingTaxisList = stats.allBoardingTaxis
+    .filter((t) => normDateTs(t.date) === todayTs.getTime())
+    .sort(sortByTimeAsc);
+
+  const taxiSoon = stats.allBoardingTaxis
+    .filter((t) => normDateTs(t.date) > todayTs.getTime() && normDateTs(t.date) <= sevenDaysTs.getTime())
+    .sort(sortByDateThenTime);
+
+  const taxiLater = stats.allBoardingTaxis
+    .filter((t) => normDateTs(t.date) > sevenDaysTs.getTime())
+    .sort(sortByDateThenTime);
+
+  const taxiTabCount = new Set(stats.allBoardingTaxis.map((t) => t.bookingId)).size;
 
   const l = {
     title: isFr ? 'Tableau opérationnel' : 'Operations Board',
     subtitle: isFr ? 'Vue en temps réel des séjours et trajets' : 'Real-time view of stays and rides',
     activeBoarders: isFr ? 'Pensionnaires actifs' : 'Active boarders',
-    arrivals: isFr ? 'Arrivées aujourd\'hui' : 'Today\'s arrivals',
-    departures: isFr ? 'Départs aujourd\'hui' : 'Today\'s departures',
-    taxis: isFr ? 'Taxis aujourd\'hui' : 'Today\'s taxis',
+    arrivals: isFr ? "Arrivées aujourd'hui" : "Today's arrivals",
+    departures: isFr ? "Départs aujourd'hui" : "Today's departures",
+    taxis: isFr ? "Taxis aujourd'hui" : "Today's taxis",
     pension: isFr ? 'Pension' : 'Boarding',
     petTaxi: 'Pet Taxi',
     colPending: isFr ? 'En attente' : 'Pending',
@@ -217,6 +298,10 @@ export default function BoardView({ locale, bookings, stats }: Props) {
     colInProgress: isFr ? 'En cours' : 'In progress',
     colCompleted: isFr ? 'Terminé (7j)' : 'Completed (7d)',
     at: isFr ? 'à' : 'at',
+    taxiToday: isFr ? "Aujourd'hui" : 'Today',
+    taxiSoon: isFr ? 'À venir — 7 prochains jours' : 'Upcoming — next 7 days',
+    taxiLater: isFr ? 'Plus tard' : 'Later',
+    noTaxi: isFr ? 'Aucun taxi planifié' : 'No taxi scheduled',
   };
 
   return (
@@ -299,51 +384,51 @@ export default function BoardView({ locale, bookings, stats }: Props) {
 
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card p-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-              <Car className="h-4 w-4 text-blue-600" />
+            <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
+              <Car className="h-4 w-4 text-orange-600" />
             </div>
             <div>
               <p className="text-2xl font-serif font-bold text-charcoal">{stats.todayTaxis}</p>
               <p className="text-xs text-charcoal/50">{l.taxis}</p>
             </div>
           </div>
-          {stats.todayTaxiDetails.length > 0 && (
+          {todayBoardingTaxisList.length > 0 && (
             <ul className="mt-2 space-y-0.5 pl-12">
-              {stats.todayTaxiDetails.slice(0, 3).map((d) => (
-                <li key={d.id} className="text-xs text-gray-500 truncate">
-                  {d.clientName}
-                  {d.arrivalTime && <span className="text-gray-400"> {l.at} {d.arrivalTime}</span>}
+              {todayBoardingTaxisList.slice(0, 3).map((t) => (
+                <li key={`${t.bookingId}-${t.direction}`} className="text-xs text-gray-500 truncate">
+                  {t.clientName} — {t.pets}
+                  {t.time && <span className="text-gray-400"> {l.at} {t.time}</span>}
                 </li>
               ))}
-              {stats.todayTaxiDetails.length > 3 && (
-                <li className="text-xs text-gray-400">+{stats.todayTaxiDetails.length - 3} autres</li>
+              {todayBoardingTaxisList.length > 3 && (
+                <li className="text-xs text-gray-400">+{todayBoardingTaxisList.length - 3} autres</li>
               )}
             </ul>
           )}
         </div>
       </div>
 
-      {/* Pet Taxi du jour — taxi add-ons from BOARDING bookings */}
-      {stats.todayBoardingTaxis.length > 0 && (
-        <div className="bg-white rounded-xl border border-blue-100 shadow-card p-4">
+      {/* Pet Taxi du jour — taxi add-ons happening today */}
+      {todayBoardingTaxisList.length > 0 && (
+        <div className="bg-white rounded-xl border border-orange-100 shadow-card p-4">
           <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
-            <Car className="h-4 w-4 text-blue-600" />
+            <Car className="h-4 w-4 text-orange-600" />
             {isFr ? 'Pet Taxi du jour' : "Today's Pet Taxi"}
           </h3>
           <div className="space-y-2">
-            {stats.todayBoardingTaxis.map((t) => {
+            {todayBoardingTaxisList.map((t) => {
               const dirLabel = t.direction === 'GO'
                 ? (isFr ? 'Aller' : 'Go')
                 : (isFr ? 'Retour' : 'Return');
-              const timeLabel = t.time ?? (isFr ? 'Heure à confirmer' : 'Time TBD');
+              const timeLabel = t.time ?? (isFr ? 'À confirmer' : 'TBD');
               return (
                 <div key={`${t.bookingId}-${t.direction}`} className="flex items-center gap-1.5 text-sm flex-wrap">
                   <span className="font-medium text-charcoal">{t.clientName}</span>
                   <span className="text-charcoal/30">—</span>
                   <span className="text-charcoal/70">{t.pets}</span>
                   <span className="text-charcoal/30">—</span>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium">
-                    {t.direction === 'GO' ? '↗' : '↙'} {dirLabel}
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 text-xs font-medium">
+                    🚗 {dirLabel}
                   </span>
                   <span className="text-charcoal/30">—</span>
                   <span className={t.time ? 'text-charcoal font-medium' : 'text-charcoal/40 italic text-xs'}>
@@ -383,48 +468,103 @@ export default function BoardView({ locale, bookings, stats }: Props) {
           <Car className="h-4 w-4" />
           {l.petTaxi}
           <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${tab === 'PET_TAXI' ? 'bg-white/20 text-white' : 'bg-ivory-100 text-charcoal/50'}`}>
-            {bookings.filter((b) => b.serviceType === 'PET_TAXI' && b.status !== 'COMPLETED').length}
+            {taxiTabCount}
           </span>
         </button>
       </div>
 
-      {/* Kanban */}
-      <div className="overflow-x-auto pb-4">
-        <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
-          <Column
-            title={l.colPending}
-            count={pending.length}
-            cards={pending}
-            locale={locale}
-            color="bg-amber-50 border-amber-100"
-            dotColor="bg-amber-400"
-          />
-          <Column
-            title={l.colConfirmed}
-            count={confirmed.length}
-            cards={confirmed}
-            locale={locale}
-            color="bg-blue-50 border-blue-100"
-            dotColor="bg-blue-400"
-          />
-          <Column
-            title={l.colInProgress}
-            count={inProgress.length}
-            cards={inProgress}
-            locale={locale}
-            color="bg-green-50 border-green-100"
-            dotColor="bg-green-400"
-          />
-          <Column
-            title={l.colCompleted}
-            count={completed.length}
-            cards={completed}
-            locale={locale}
-            color="bg-gray-50 border-gray-100"
-            dotColor="bg-gray-300"
-          />
+      {/* BOARDING Kanban */}
+      {tab === 'BOARDING' && (
+        <div className="overflow-x-auto pb-4">
+          <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
+            <Column
+              title={l.colPending}
+              count={pending.length}
+              cards={pending}
+              locale={locale}
+              color="bg-amber-50 border-amber-100"
+              dotColor="bg-amber-400"
+            />
+            <Column
+              title={l.colConfirmed}
+              count={confirmed.length}
+              cards={confirmed}
+              locale={locale}
+              color="bg-blue-50 border-blue-100"
+              dotColor="bg-blue-400"
+            />
+            <Column
+              title={l.colInProgress}
+              count={inProgress.length}
+              cards={inProgress}
+              locale={locale}
+              color="bg-green-50 border-green-100"
+              dotColor="bg-green-400"
+            />
+            <Column
+              title={l.colCompleted}
+              count={completed.length}
+              cards={completed}
+              locale={locale}
+              color="bg-gray-50 border-gray-100"
+              dotColor="bg-gray-300"
+            />
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* PET TAXI — 3 sections */}
+      {tab === 'PET_TAXI' && (
+        <div className="space-y-6">
+          {todayBoardingTaxisList.length === 0 && taxiSoon.length === 0 && taxiLater.length === 0 ? (
+            <p className="text-sm text-charcoal/40 text-center py-10">{l.noTaxi}</p>
+          ) : (
+            <>
+              {todayBoardingTaxisList.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
+                    {l.taxiToday}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {todayBoardingTaxisList.map((t) => (
+                      <TaxiCard key={`${t.bookingId}-${t.direction}`} t={t} locale={locale} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {taxiSoon.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
+                    {l.taxiSoon}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {taxiSoon.map((t) => (
+                      <TaxiCard key={`${t.bookingId}-${t.direction}`} t={t} locale={locale} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {taxiLater.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" />
+                    {l.taxiLater}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {taxiLater.map((t) => (
+                      <TaxiCard key={`${t.bookingId}-${t.direction}`} t={t} locale={locale} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

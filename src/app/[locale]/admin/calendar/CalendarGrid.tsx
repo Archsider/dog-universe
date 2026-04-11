@@ -26,6 +26,7 @@ export interface CalendarBooking {
 interface TaxiDayEntry {
   bookingId: string;
   clientName: string;
+  pets: string;
   direction: 'aller' | 'retour';
   time: string | null;
 }
@@ -132,7 +133,8 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
       if (start.getFullYear() === year && start.getMonth() + 1 === month) {
         const d = start.getDate();
         const entries = dayTaxiMap.get(d) ?? [];
-        entries.push({ bookingId: b.id, clientName: b.client.name, direction: 'aller', time: b.taxiGoTime ?? null });
+        const pets = b.bookingPets.map((bp) => bp.pet.name).join(', ');
+        entries.push({ bookingId: b.id, clientName: b.client.name, pets, direction: 'aller', time: b.taxiGoTime ?? null });
         dayTaxiMap.set(d, entries);
       }
     }
@@ -141,7 +143,8 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
       if (end.getFullYear() === year && end.getMonth() + 1 === month) {
         const d = end.getDate();
         const entries = dayTaxiMap.get(d) ?? [];
-        entries.push({ bookingId: b.id, clientName: b.client.name, direction: 'retour', time: b.taxiReturnTime ?? null });
+        const pets = b.bookingPets.map((bp) => bp.pet.name).join(', ');
+        entries.push({ bookingId: b.id, clientName: b.client.name, pets, direction: 'retour', time: b.taxiReturnTime ?? null });
         dayTaxiMap.set(d, entries);
       }
     }
@@ -257,17 +260,16 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
                 {/* Taxi add-on indicators */}
                 {(dayTaxiMap.get(day) ?? []).map((t) => {
                   const dir = t.direction === 'aller' ? (isEn ? 'Go' : 'Aller') : (isEn ? 'Return' : 'Retour');
-                  const timeLabel = t.time ?? (isEn ? 'Time TBD' : 'Heure à confirmer');
-                  const tooltip = `Pet Taxi ${dir} — ${t.clientName} — ${timeLabel}`;
+                  const timeLabel = t.time ?? (isEn ? 'TBD' : 'À confirmer');
+                  const tooltip = `Pet Taxi ${dir} — ${t.clientName} — ${t.pets} — ${timeLabel}`;
                   return (
                     <div
                       key={`${t.bookingId}-${t.direction}`}
                       title={tooltip}
-                      className="text-[10px] leading-tight px-1.5 py-0.5 rounded border flex items-center gap-1 overflow-hidden bg-blue-50 border-blue-200 text-blue-700 cursor-help mt-0.5"
+                      className="text-[10px] leading-tight px-1.5 py-0.5 rounded border flex items-center gap-1 overflow-hidden bg-orange-50 border-orange-200 text-orange-700 cursor-help mt-0.5"
                     >
-                      <Car className="h-2.5 w-2.5 flex-shrink-0" />
                       <span className="truncate font-medium">
-                        {t.direction === 'aller' ? '↗' : '↙'} {t.time ?? '?'}
+                        🚗 {dir} · {timeLabel}
                       </span>
                     </div>
                   );
