@@ -18,8 +18,10 @@ export interface CalendarBooking {
   client: { name: string };
   bookingPets: BookingPet[];
   taxiGoEnabled?: boolean;
+  taxiGoDate?: string | null;
   taxiGoTime?: string | null;
   taxiReturnEnabled?: boolean;
+  taxiReturnDate?: string | null;
   taxiReturnTime?: string | null;
 }
 
@@ -124,24 +126,25 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
     if (active.length > 0) dayBookingsMap.set(d, active);
   }
 
-  // Precompute taxi add-on indicators per day (BOARDING only, on startDate for aller, endDate for retour)
+  // Precompute taxi add-on indicators per day (BOARDING only)
+  // Use taxiGoDate/taxiReturnDate from boardingDetail when set; fall back to startDate/endDate.
   const dayTaxiMap = new Map<number, TaxiDayEntry[]>();
   for (const b of bookings) {
     if (b.serviceType !== 'BOARDING') continue;
     if (b.taxiGoEnabled) {
-      const start = new Date(b.startDate);
-      if (start.getFullYear() === year && start.getMonth() + 1 === month) {
-        const d = start.getDate();
+      const goDate = b.taxiGoDate ? new Date(b.taxiGoDate) : new Date(b.startDate);
+      if (goDate.getFullYear() === year && goDate.getMonth() + 1 === month) {
+        const d = goDate.getDate();
         const entries = dayTaxiMap.get(d) ?? [];
         const pets = b.bookingPets.map((bp) => bp.pet.name).join(', ');
         entries.push({ bookingId: b.id, clientName: b.client.name, pets, direction: 'aller', time: b.taxiGoTime ?? null });
         dayTaxiMap.set(d, entries);
       }
     }
-    if (b.taxiReturnEnabled && b.endDate) {
-      const end = new Date(b.endDate);
-      if (end.getFullYear() === year && end.getMonth() + 1 === month) {
-        const d = end.getDate();
+    if (b.taxiReturnEnabled) {
+      const retDate = b.taxiReturnDate ? new Date(b.taxiReturnDate) : (b.endDate ? new Date(b.endDate) : null);
+      if (retDate && retDate.getFullYear() === year && retDate.getMonth() + 1 === month) {
+        const d = retDate.getDate();
         const entries = dayTaxiMap.get(d) ?? [];
         const pets = b.bookingPets.map((bp) => bp.pet.name).join(', ');
         entries.push({ bookingId: b.id, clientName: b.client.name, pets, direction: 'retour', time: b.taxiReturnTime ?? null });
