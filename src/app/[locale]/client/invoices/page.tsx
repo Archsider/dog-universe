@@ -120,11 +120,6 @@ export default async function InvoicesPage({ params: { locale } }: PageProps) {
                         {isPaid && invoice.paidAt && (
                           <span className="ml-2 text-green-600">· {t.paid} {formatDate(invoice.paidAt, locale)}</span>
                         )}
-                        {isPaid && invoice.paymentMethod && (
-                          <span className="ml-2 font-medium text-green-700">
-                            · {t.paymentBy} : {t.paymentMethods[invoice.paymentMethod as keyof typeof t.paymentMethods] ?? invoice.paymentMethod}
-                          </span>
-                        )}
                       </div>
                     </div>
                   </div>

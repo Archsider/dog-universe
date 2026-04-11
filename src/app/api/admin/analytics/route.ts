@@ -18,13 +18,12 @@ export async function GET(request: Request) {
   const startCurrentYear = new Date(`${currentYear}-01-01T00:00:00.000Z`);
   const endCurrentYear = new Date(`${currentYear}-12-31T23:59:59.999Z`);
 
-  // Fetch both fully paid and partially paid invoices for the yearly chart
-  const [invoices2026Paid, invoices2026Partial] = await Promise.all([
+  // Fetch both fully paid invoices and individual payments for partially paid ones
+  const [invoices2026Paid, payments2026Partial] = await Promise.all([
     prisma.invoice.findMany({
       where: { status: 'PAID', paidAt: { gte: startCurrentYear, lte: endCurrentYear } },
       select: {
         amount: true,
-        paidAmount: true,
         paidAt: true,
         serviceType: true,
         booking: {
@@ -35,16 +34,25 @@ export async function GET(request: Request) {
         },
       },
     }),
-    prisma.invoice.findMany({
-      where: { status: 'PARTIALLY_PAID', paymentDate: { gte: startCurrentYear, lte: endCurrentYear } },
+    // Each Payment row for PARTIALLY_PAID invoices, attributed by its own paymentDate
+    prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: startCurrentYear, lte: endCurrentYear },
+        invoice: { status: 'PARTIALLY_PAID' },
+      },
       select: {
-        paidAmount: true,
+        amount: true,
         paymentDate: true,
-        serviceType: true,
-        booking: {
+        invoice: {
           select: {
             serviceType: true,
-            boardingDetail: { select: { groomingPrice: true } },
+            paidAmount: true,
+            booking: {
+              select: {
+                serviceType: true,
+                boardingDetail: { select: { groomingPrice: true } },
+              },
+            },
           },
         },
       },
@@ -69,17 +77,16 @@ export async function GET(request: Request) {
     }
   }
 
-  // Include paidAmount from PARTIALLY_PAID invoices in the monthly chart
-  for (const inv of invoices2026Partial) {
-    if (!inv.paymentDate) continue;
-    const m = new Date(inv.paymentDate).getMonth();
-    const svcType = inv.booking?.serviceType ?? inv.serviceType;
+  // Include each payment from PARTIALLY_PAID invoices, attributed by payment date
+  for (const pmt of payments2026Partial) {
+    const m = new Date(pmt.paymentDate).getMonth();
+    const svcType = pmt.invoice.booking?.serviceType ?? pmt.invoice.serviceType;
     if (svcType === 'PET_TAXI') {
-      monthly[m].taxi += inv.paidAmount;
+      monthly[m].taxi += pmt.amount;
     } else if (svcType === 'BOARDING') {
-      const g = Math.min(inv.booking?.boardingDetail?.groomingPrice ?? 0, inv.paidAmount);
+      const g = Math.min(pmt.invoice.booking?.boardingDetail?.groomingPrice ?? 0, pmt.amount);
       monthly[m].grooming += g;
-      monthly[m].boarding += inv.paidAmount - g;
+      monthly[m].boarding += pmt.amount - g;
     }
   }
 
@@ -124,17 +131,17 @@ export async function GET(request: Request) {
       _sum: { amount: true },
     }),
     // PARTIALLY_PAID invoices contribute their paidAmount to the monthly CA
-    prisma.invoice.aggregate({
-      where: { status: 'PARTIALLY_PAID', paymentDate: { gte: thisMonthStart, lte: thisMonthEnd } },
-      _sum: { paidAmount: true },
+    prisma.payment.aggregate({
+      where: { paymentDate: { gte: thisMonthStart, lte: thisMonthEnd }, invoice: { status: 'PARTIALLY_PAID' } },
+      _sum: { amount: true },
     }),
     prisma.invoice.aggregate({
       where: { status: 'PAID', paidAt: { gte: lastMonthStart, lte: lastMonthEnd } },
       _sum: { amount: true },
     }),
-    prisma.invoice.aggregate({
-      where: { status: 'PARTIALLY_PAID', paymentDate: { gte: lastMonthStart, lte: lastMonthEnd } },
-      _sum: { paidAmount: true },
+    prisma.payment.aggregate({
+      where: { paymentDate: { gte: lastMonthStart, lte: lastMonthEnd }, invoice: { status: 'PARTIALLY_PAID' } },
+      _sum: { amount: true },
     }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
     prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingNow } }),
@@ -146,9 +153,9 @@ export async function GET(request: Request) {
   ]);
 
   const thisMonthAmt =
-    (thisMonthRevenuePaid._sum.amount ?? 0) + (thisMonthRevenuePartial._sum.paidAmount ?? 0);
+    (thisMonthRevenuePaid._sum.amount ?? 0) + (thisMonthRevenuePartial._sum.amount ?? 0);
   const lastMonthAmt =
-    (lastMonthRevenuePaid._sum.amount ?? 0) + (lastMonthRevenuePartial._sum.paidAmount ?? 0);
+    (lastMonthRevenuePaid._sum.amount ?? 0) + (lastMonthRevenuePartial._sum.amount ?? 0);
   const monthVariation =
     lastMonthAmt > 0 ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10 : 0;
   const currentBoarders = currentCatBoarders + currentDogBoarders;
@@ -178,27 +185,27 @@ export async function GET(request: Request) {
       _sum: { amount: true },
       _count: true,
     }),
-    prisma.invoice.aggregate({
-      where: { status: 'PARTIALLY_PAID', paymentDate: { gte: periodStart } },
-      _sum: { paidAmount: true },
+    prisma.payment.aggregate({
+      where: { paymentDate: { gte: periodStart }, invoice: { status: 'PARTIALLY_PAID' } },
+      _sum: { amount: true },
     }),
     prisma.invoice.findMany({
       where: { status: 'PAID', paidAt: { gte: periodStart } },
       select: { clientId: true },
     }),
-    prisma.invoice.findMany({
-      where: { status: 'PARTIALLY_PAID', paymentDate: { gte: periodStart } },
-      select: { clientId: true },
+    prisma.payment.findMany({
+      where: { paymentDate: { gte: periodStart }, invoice: { status: 'PARTIALLY_PAID' } },
+      select: { invoice: { select: { clientId: true } } },
     }),
   ]);
 
   const allPeriodClients = [
     ...periodInvoicesPaid.map(i => i.clientId),
-    ...periodInvoicesPartial.map(i => i.clientId),
+    ...periodInvoicesPartial.map(p => p.invoice.clientId),
   ];
   const uniqueClients = new Set(allPeriodClients).size;
   const totalPeriodRevenue =
-    (periodRevenuePaid._sum.amount ?? 0) + (periodRevenuePartial._sum.paidAmount ?? 0);
+    (periodRevenuePaid._sum.amount ?? 0) + (periodRevenuePartial._sum.amount ?? 0);
   const avgBasket = uniqueClients > 0 ? Math.round(totalPeriodRevenue / uniqueClients) : 0;
 
   // ── Client segmentation ───────────────────────────────────────────────────

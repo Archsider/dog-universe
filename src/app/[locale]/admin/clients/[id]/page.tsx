@@ -32,7 +32,7 @@ export default async function AdminClientDetailPage({ params: { locale, id } }: 
         orderBy: { startDate: 'desc' },
         take: 10,
       },
-      invoices: { orderBy: { issuedAt: 'desc' }, take: 10, select: { id: true, invoiceNumber: true, amount: true, paidAmount: true, status: true, paymentMethod: true, paymentDate: true, issuedAt: true } },
+      invoices: { orderBy: { issuedAt: 'desc' }, take: 10, select: { id: true, invoiceNumber: true, amount: true, paidAmount: true, status: true, issuedAt: true, paidAt: true } },
       adminNotes: { include: { author: { select: { name: true } } }, orderBy: { createdAt: 'desc' } },
       _count: { select: { bookings: true, pets: true } },
     },

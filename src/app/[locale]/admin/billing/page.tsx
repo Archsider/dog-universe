@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { FileText, Download, FileDown, Eye, Banknote, CreditCard, Receipt, Building2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getInvoiceStatusColor } from '@/lib/utils';
-import CreateInvoiceButton from './CreateInvoiceButton';
+import PaymentModal from './PaymentModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
 
@@ -42,10 +42,9 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
     prisma.invoice.count({ where }),
     prisma.invoice.aggregate({ where: { status: 'PAID' }, _sum: { amount: true } }),
     prisma.user.findMany({ where: { role: 'CLIENT' }, select: { id: true, name: true, email: true }, orderBy: { name: 'asc' } }),
-    prisma.invoice.groupBy({
+    prisma.payment.groupBy({
       by: ['paymentMethod'],
-      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] }, paymentMethod: { not: null } },
-      _sum: { paidAmount: true },
+      _sum: { amount: true },
       _count: { id: true },
     }),
   ]);
@@ -129,7 +128,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
           CHECK:    { Icon: Receipt,    color: 'text-purple-700', bg: 'bg-purple-50',  bar: 'bg-purple-400',  labelFr: 'Chèque',      labelEn: 'Check' },
           TRANSFER: { Icon: Building2,  color: 'text-indigo-700', bg: 'bg-indigo-50',  bar: 'bg-indigo-400',  labelFr: 'Virement',    labelEn: 'Transfer' },
         };
-        const totalPaid = paymentMethodStats.reduce((s, r) => s + (r._sum.paidAmount ?? 0), 0) || 1;
+        const totalPaid = paymentMethodStats.reduce((s, r) => s + (r._sum.amount ?? 0), 0) || 1;
         return (
           <div className="mb-5">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
@@ -138,7 +137,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {(['CASH', 'CARD', 'CHECK', 'TRANSFER'] as const).map(method => {
                 const stat = paymentMethodStats.find(s => s.paymentMethod === method);
-                const amount = stat?._sum.paidAmount ?? 0;
+                const amount = stat?._sum.amount ?? 0;
                 const count = stat?._count.id ?? 0;
                 const pct = Math.round((amount / totalPaid) * 100);
                 const cfg = METHOD_CONFIG[method];
@@ -241,20 +240,6 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
                       </td>
                       <td className="px-4 py-3 text-center">
                         <Badge className={`text-xs ${getInvoiceStatusColor(inv.status)}`}>{statusLbls[inv.status] || inv.status}</Badge>
-                        {(inv.status === 'PAID' || inv.status === 'PARTIALLY_PAID') && inv.paymentMethod && (
-                          <div className="flex items-center justify-center gap-1 mt-1 text-gray-400">
-                            {inv.paymentMethod === 'CASH' && <Banknote className="h-3 w-3" />}
-                            {inv.paymentMethod === 'CARD' && <CreditCard className="h-3 w-3" />}
-                            {inv.paymentMethod === 'CHECK' && <Receipt className="h-3 w-3" />}
-                            {inv.paymentMethod === 'TRANSFER' && <Building2 className="h-3 w-3" />}
-                            <span className="text-xs">
-                              {locale === 'fr'
-                                ? ({ CASH: 'Espèces', CARD: 'TPE', CHECK: 'Chèque', TRANSFER: 'Virement' } as Record<string, string>)[inv.paymentMethod] ?? inv.paymentMethod
-                                : ({ CASH: 'Cash', CARD: 'Card', CHECK: 'Check', TRANSFER: 'Transfer' } as Record<string, string>)[inv.paymentMethod] ?? inv.paymentMethod}
-                            </span>
-                            {inv.paymentDate && <span className="text-xs text-gray-300 hidden xl:inline">· {new Date(inv.paymentDate).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { day: '2-digit', month: '2-digit' })}</span>}
-                          </div>
-                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
@@ -265,7 +250,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
                             <Download className="h-4 w-4" />
                           </a>
                           <ResendInvoiceButton invoiceId={inv.id} locale={locale} />
-                          <CreateInvoiceButton
+                          <PaymentModal
                             invoiceId={inv.id}
                             currentStatus={inv.status}
                             locale={locale}

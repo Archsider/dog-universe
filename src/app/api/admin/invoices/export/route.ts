@@ -51,6 +51,7 @@ export async function GET(request: Request) {
     include: {
       client: { select: { name: true, email: true, phone: true } },
       booking: { select: { serviceType: true } },
+      payments: { orderBy: { paymentDate: 'desc' }, take: 1 },
     },
     orderBy: { issuedAt: 'desc' },
   });
@@ -72,8 +73,10 @@ export async function GET(request: Request) {
 
   const rows = invoices.map(inv => {
     const remaining = Math.max(0, inv.amount - inv.paidAmount);
-    const paymentDateStr = inv.paymentDate
-      ? inv.paymentDate.toISOString().slice(0, 10)
+    // Use the most recent payment's date/method (last payment chronologically)
+    const lastPayment = inv.payments[0] ?? null;
+    const paymentDateStr = lastPayment
+      ? lastPayment.paymentDate.toISOString().slice(0, 10)
       : (inv.paidAt ? inv.paidAt.toISOString().slice(0, 10) : '');
     return [
       escapeCsv(inv.invoiceNumber),
@@ -82,7 +85,7 @@ export async function GET(request: Request) {
       escapeCsv(inv.client.phone),
       escapeCsv(inv.issuedAt.toISOString().slice(0, 10)),
       escapeCsv(paymentDateStr),
-      escapeCsv(inv.paymentMethod ? PAYMENT_LABELS[inv.paymentMethod] ?? inv.paymentMethod : ''),
+      escapeCsv(lastPayment ? PAYMENT_LABELS[lastPayment.paymentMethod] ?? lastPayment.paymentMethod : ''),
       escapeCsv(inv.amount.toFixed(2)),
       escapeCsv(inv.paidAmount.toFixed(2)),
       escapeCsv(remaining.toFixed(2)),
