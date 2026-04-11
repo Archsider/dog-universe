@@ -307,15 +307,16 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
             {/* Rows — PARTIAL items are split into two visual lines (paid / pending) */}
             {invoice.items.flatMap((item, i) => {
               if (item.status === 'PARTIAL' && item.allocatedAmount != null && item.unitPrice > 0) {
-                const paidQty = Math.round(item.allocatedAmount / item.unitPrice);
+                const paidQty = Math.floor(item.allocatedAmount / item.unitPrice);
+                const paidAmt = paidQty * item.unitPrice;
                 const pendingQty = item.quantity - paidQty;
-                const pendingAmt = item.total - item.allocatedAmount;
+                const pendingAmt = item.total - paidAmt;
                 return [
                   <View key={`${i}-a`} style={styles.tableRow}>
                     <Text style={[{ fontSize: 10 }, styles.colDescription]}>{item.description}</Text>
                     <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colQty]}>{paidQty}</Text>
                     <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(item.unitPrice)}</Text>
-                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(item.allocatedAmount)}</Text>
+                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(paidAmt)}</Text>
                     <View style={[styles.colStatus, { alignItems: 'center' }]}>
                       <ItemStatusBadge status="PAID" />
                     </View>

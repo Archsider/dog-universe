@@ -209,6 +209,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       });
 
       if (booking.invoice && ['PENDING', 'PARTIALLY_PAID', 'PAID'].includes(booking.invoice.status)) {
+        // Update pension InvoiceItems to reflect the new night count
+        const invoiceItems = await tx.invoiceItem.findMany({
+          where: { invoiceId: booking.invoice.id },
+        });
+        for (const item of invoiceItems) {
+          const d = item.description.toLowerCase();
+          const isPensionItem = (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi');
+          if (isPensionItem && item.unitPrice > 0) {
+            await tx.invoiceItem.update({
+              where: { id: item.id },
+              data: { quantity: newNights, total: newNights * item.unitPrice },
+            });
+          }
+        }
+
         const newPaidAmount = booking.invoice.paidAmount;
         const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
         await tx.invoice.update({
@@ -217,6 +232,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         });
       }
     });
+
+    // Reallocate payments after dates/items update
+    if (booking.invoice) {
+      const { allocatePayments } = await import('@/lib/payments');
+      await allocatePayments(booking.invoice.id);
+    }
 
     await logAction({
       userId: session.user.id,
@@ -287,24 +308,40 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     // Invoice impact — always update existing, never create supplementary
     let invoiceWarning = false;
     if (booking.invoice) {
-      if (['PENDING', 'PARTIALLY_PAID'].includes(booking.invoice.status)) {
+      if (['PENDING', 'PARTIALLY_PAID', 'PAID'].includes(booking.invoice.status)) {
+        // Update pension InvoiceItems to reflect the new night count
+        const invoiceItems = await prisma.invoiceItem.findMany({
+          where: { invoiceId: booking.invoice.id },
+        });
+        for (const item of invoiceItems) {
+          const d = item.description.toLowerCase();
+          const isPensionItem = (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi');
+          if (isPensionItem && item.unitPrice > 0) {
+            await prisma.invoiceItem.update({
+              where: { id: item.id },
+              data: { quantity: newNights, total: newNights * item.unitPrice },
+            });
+          }
+        }
+
         const newPaidAmount = booking.invoice.paidAmount;
         const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
         await prisma.invoice.update({
           where: { id: booking.invoice.id },
-          data: { amount: newTotal, status: newStatus },
+          data: {
+            amount: newTotal,
+            status: newStatus,
+            ...(newStatus !== 'PAID' && booking.invoice.status === 'PAID' ? { paidAt: null } : {}),
+          },
         });
-      } else if (booking.invoice.status === 'PAID') {
-        // Invoice already paid — update total (may now be partially paid)
-        const newStatus = booking.invoice.paidAmount >= newTotal ? 'PAID' : 'PARTIALLY_PAID';
-        await prisma.invoice.update({
-          where: { id: booking.invoice.id },
-          data: { amount: newTotal, status: newStatus },
-        });
-        if (booking.invoice.paidAmount < newTotal) {
+        if (booking.invoice.status === 'PAID' && newPaidAmount < newTotal) {
           invoiceWarning = true; // remainder needs to be collected
         }
       }
+
+      // Reallocate payments across the updated items
+      const { allocatePayments } = await import('@/lib/payments');
+      await allocatePayments(booking.invoice.id);
     }
 
     await prisma.booking.update({

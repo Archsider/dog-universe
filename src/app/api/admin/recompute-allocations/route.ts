@@ -6,14 +6,11 @@ import { allocatePayments } from '@/lib/payments';
 /**
  * POST /api/admin/recompute-allocations
  *
- * TEMPORARY endpoint — delete after use.
- *
  * Loops over all non-CANCELLED invoices and calls allocatePayments() on each,
- * correcting any stale paidAmount / InvoiceItem.allocatedAmount values left
- * by the previous (buggy) allocation logic.
- *
- * Already-PAID invoices will NOT re-trigger loyalty/notification side-effects
- * because allocatePayments() skips those when wasAlreadyPaid === true.
+ * correcting any stale paidAmount / InvoiceItem.allocatedAmount values.
+ * Safe to call at any time — already-PAID invoices will NOT re-trigger
+ * loyalty/notification side-effects (allocatePayments skips those when
+ * wasAlreadyPaid === true).
  */
 export async function POST() {
   const session = await auth();
