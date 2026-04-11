@@ -126,6 +126,19 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
     if (active.length > 0) dayBookingsMap.set(d, active);
   }
 
+  // Precompute departure days: Set of booking IDs whose endDate falls on each day of the month
+  const dayDepartureIds = new Map<number, Set<string>>();
+  for (const b of bookings) {
+    if (b.serviceType !== 'BOARDING' || !b.endDate) continue;
+    const endD = new Date(b.endDate);
+    if (endD.getFullYear() === year && endD.getMonth() + 1 === month) {
+      const d = endD.getDate();
+      const ids = dayDepartureIds.get(d) ?? new Set<string>();
+      ids.add(b.id);
+      dayDepartureIds.set(d, ids);
+    }
+  }
+
   // Precompute taxi add-on indicators per day (BOARDING only)
   // Use taxiGoDate/taxiReturnDate from boardingDetail when set; fall back to startDate/endDate.
   const dayTaxiMap = new Map<number, TaxiDayEntry[]>();
@@ -237,13 +250,16 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
                   {dayBks.slice(0, 2).map((b) => {
                     const petName = b.bookingPets[0]?.pet.name ?? '?';
                     const extra = b.bookingPets.length > 1 ? ` +${b.bookingPets.length - 1}` : '';
+                    const isDeparture = dayDepartureIds.get(day)?.has(b.id) ?? false;
                     return (
                       <div
                         key={b.id}
                         className={cn(
                           'text-[10px] leading-tight px-1.5 py-0.5 rounded border flex items-center gap-1 overflow-hidden',
                           STATUS_CHIP[b.status] ?? 'bg-gray-100 text-gray-600 border-gray-200',
+                          isDeparture && 'border-dashed',
                         )}
+                        title={isDeparture ? (isEn ? 'Departure day' : 'Jour de départ') : undefined}
                       >
                         {b.serviceType === 'PET_TAXI' ? (
                           <Car className="h-2.5 w-2.5 flex-shrink-0" />
@@ -251,6 +267,7 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
                           <PawPrint className="h-2.5 w-2.5 flex-shrink-0" />
                         )}
                         <span className="truncate font-medium">{petName}{extra}</span>
+                        {isDeparture && <span className="ml-auto text-[9px] flex-shrink-0">↩</span>}
                       </div>
                     );
                   })}
@@ -263,9 +280,11 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
 
                 {/* Taxi add-on indicators */}
                 {(dayTaxiMap.get(day) ?? []).map((t) => {
-                  const dir = t.direction === 'aller' ? (isEn ? 'Go' : 'Aller') : (isEn ? 'Return' : 'Retour');
+                  const dirLabel = t.direction === 'aller' ? (isEn ? 'Go' : 'Aller') : (isEn ? 'Return' : 'Retour');
+                  const dirIcon = t.direction === 'aller' ? '→' : '↩';
                   const timeLabel = t.time ?? (isEn ? 'TBD' : 'À confirmer');
-                  const tooltip = `Pet Taxi ${dir} — ${t.clientName} — ${t.pets} — ${timeLabel}`;
+                  const tooltip = `Pet Taxi ${dirLabel} — ${t.clientName} — ${t.pets} — ${timeLabel}`;
+                  const firstPet = t.pets.split(', ')[0];
                   return (
                     <div
                       key={`${t.bookingId}-${t.direction}`}
@@ -273,7 +292,7 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
                       className="text-[10px] leading-tight px-1.5 py-0.5 rounded border flex items-center gap-1 overflow-hidden bg-orange-50 border-orange-200 text-orange-700 cursor-help mt-0.5"
                     >
                       <span className="truncate font-medium">
-                        🚗 {dir} · {timeLabel}
+                        🚗 {firstPet} {dirIcon}
                       </span>
                     </div>
                   );

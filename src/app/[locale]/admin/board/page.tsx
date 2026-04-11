@@ -82,6 +82,22 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
       new Date(b.endDate) <= todayEnd
   );
 
+  // Upcoming departures: boardings ending in the next 7 days (tomorrow to day+7)
+  const sevenDaysLater = new Date(todayStart);
+  sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+  sevenDaysLater.setHours(23, 59, 59, 999);
+
+  const upcomingDepartures = bookings
+    .filter(
+      (dep) =>
+        dep.serviceType === 'BOARDING' &&
+        dep.endDate &&
+        ['CONFIRMED', 'IN_PROGRESS'].includes(dep.status) &&
+        new Date(dep.endDate) > todayEnd &&
+        new Date(dep.endDate) <= sevenDaysLater
+    )
+    .sort((dep1, dep2) => new Date(dep1.endDate!).getTime() - new Date(dep2.endDate!).getTime());
+
   // All boarding taxi add-ons (source unique: boardingDetail)
   const allBoardingTaxis: {
     bookingId: string;
@@ -167,6 +183,12 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
           pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
         })),
         allBoardingTaxis,
+        upcomingDepartureDetails: upcomingDepartures.map((dep) => ({
+          id: dep.id,
+          clientName: dep.client.name ?? dep.client.email,
+          pets: dep.bookingPets.map((bp) => bp.pet.name).join(', '),
+          endDate: dep.endDate!.toISOString(),
+        })),
       }}
     />
   );

@@ -46,6 +46,7 @@ interface Stats {
   todayArrivalDetails: { id: string; clientName: string; pets: string; arrivalTime: string | null }[];
   todayDepartureDetails: { id: string; clientName: string; pets: string }[];
   allBoardingTaxis: AllBoardingTaxi[];
+  upcomingDepartureDetails: { id: string; clientName: string; pets: string; endDate: string }[];
 }
 
 interface Props {
@@ -411,6 +412,33 @@ export default function BoardView({ locale, bookings, stats }: Props) {
           )}
         </div>
       </div>
+
+      {/* Départs à venir — boardings ending in the next 7 days */}
+      {stats.upcomingDepartureDetails.length > 0 && (
+        <div className="bg-white rounded-xl border border-purple-100 shadow-card p-4">
+          <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4 text-purple-600" />
+            {isFr ? 'Départs à venir — 7 prochains jours' : 'Upcoming departures — next 7 days'}
+          </h3>
+          <div className="space-y-2">
+            {stats.upcomingDepartureDetails.map((d) => (
+              <Link
+                key={d.id}
+                href={`/${locale}/admin/reservations/${d.id}`}
+                className="flex items-center gap-1.5 text-sm hover:text-gold-700 transition-colors"
+              >
+                <span className="text-xs font-semibold text-purple-700 min-w-[72px]">
+                  {formatDateShortLocal(d.endDate, locale)}
+                </span>
+                <span className="text-charcoal/30">—</span>
+                <span className="font-medium text-charcoal">{d.clientName}</span>
+                <span className="text-charcoal/30">—</span>
+                <span className="text-charcoal/70">{d.pets}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Pet Taxi du jour — taxi add-ons happening today */}
       {todayBoardingTaxisList.length > 0 && (
