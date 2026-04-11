@@ -36,6 +36,7 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
     include: {
       client: { select: { name: true } },
       bookingPets: { include: { pet: { select: { name: true, species: true } } } },
+      boardingDetail: { select: { taxiGoEnabled: true, taxiGoTime: true, taxiReturnEnabled: true, taxiReturnTime: true } },
     },
     orderBy: { startDate: 'asc' },
   });
@@ -51,6 +52,10 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
     bookingPets: b.bookingPets.map((bp) => ({
       pet: { name: bp.pet.name, species: bp.pet.species },
     })),
+    taxiGoEnabled: b.boardingDetail?.taxiGoEnabled ?? false,
+    taxiGoTime: b.boardingDetail?.taxiGoTime ?? null,
+    taxiReturnEnabled: b.boardingDetail?.taxiReturnEnabled ?? false,
+    taxiReturnTime: b.boardingDetail?.taxiReturnTime ?? null,
   }));
 
   // Stats

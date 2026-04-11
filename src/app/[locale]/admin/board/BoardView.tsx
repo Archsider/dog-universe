@@ -35,6 +35,7 @@ interface Stats {
   todayArrivalDetails: { id: string; clientName: string; pets: string; arrivalTime: string | null }[];
   todayDepartureDetails: { id: string; clientName: string; pets: string }[];
   todayTaxiDetails: { id: string; clientName: string; pets: string; arrivalTime: string | null; taxiType: string }[];
+  todayBoardingTaxis: { bookingId: string; clientName: string; pets: string; direction: 'GO' | 'RETURN'; time: string | null }[];
 }
 
 interface Props {
@@ -321,6 +322,39 @@ export default function BoardView({ locale, bookings, stats }: Props) {
           )}
         </div>
       </div>
+
+      {/* Pet Taxi du jour — taxi add-ons from BOARDING bookings */}
+      {stats.todayBoardingTaxis.length > 0 && (
+        <div className="bg-white rounded-xl border border-blue-100 shadow-card p-4">
+          <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+            <Car className="h-4 w-4 text-blue-600" />
+            {isFr ? 'Pet Taxi du jour' : "Today's Pet Taxi"}
+          </h3>
+          <div className="space-y-2">
+            {stats.todayBoardingTaxis.map((t) => {
+              const dirLabel = t.direction === 'GO'
+                ? (isFr ? 'Aller' : 'Go')
+                : (isFr ? 'Retour' : 'Return');
+              const timeLabel = t.time ?? (isFr ? 'Heure à confirmer' : 'Time TBD');
+              return (
+                <div key={`${t.bookingId}-${t.direction}`} className="flex items-center gap-1.5 text-sm flex-wrap">
+                  <span className="font-medium text-charcoal">{t.clientName}</span>
+                  <span className="text-charcoal/30">—</span>
+                  <span className="text-charcoal/70">{t.pets}</span>
+                  <span className="text-charcoal/30">—</span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium">
+                    {t.direction === 'GO' ? '↗' : '↙'} {dirLabel}
+                  </span>
+                  <span className="text-charcoal/30">—</span>
+                  <span className={t.time ? 'text-charcoal font-medium' : 'text-charcoal/40 italic text-xs'}>
+                    {timeLabel}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2">
