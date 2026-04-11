@@ -32,7 +32,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
       bookingPets: {
         include: { pet: { select: { name: true, species: true } } },
       },
-      boardingDetail: { select: { includeGrooming: true, taxiGoEnabled: true, taxiGoTime: true, taxiReturnEnabled: true, taxiReturnTime: true } },
+      boardingDetail: { select: { includeGrooming: true, taxiGoEnabled: true, taxiGoDate: true, taxiGoTime: true, taxiReturnEnabled: true, taxiReturnDate: true, taxiReturnTime: true } },
       taxiDetail: { select: { taxiType: true } },
     },
     orderBy: { startDate: 'asc' },
@@ -106,22 +106,25 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
         pets,
         direction: 'GO',
         time: boardingDetail.taxiGoTime ?? null,
-        date: b.startDate.toISOString(),
+        date: boardingDetail.taxiGoDate ?? b.startDate.toISOString(),
         bookingStartDate: b.startDate.toISOString(),
         bookingEndDate: b.endDate?.toISOString() ?? null,
       });
     }
-    if (boardingDetail.taxiReturnEnabled && b.endDate) {
-      allBoardingTaxis.push({
-        bookingId: b.id,
-        clientName,
-        pets,
-        direction: 'RETURN',
-        time: boardingDetail.taxiReturnTime ?? null,
-        date: b.endDate.toISOString(),
-        bookingStartDate: b.startDate.toISOString(),
-        bookingEndDate: b.endDate.toISOString(),
-      });
+    if (boardingDetail.taxiReturnEnabled) {
+      const taxiReturnDate = boardingDetail.taxiReturnDate ?? b.endDate?.toISOString() ?? null;
+      if (taxiReturnDate) {
+        allBoardingTaxis.push({
+          bookingId: b.id,
+          clientName,
+          pets,
+          direction: 'RETURN',
+          time: boardingDetail.taxiReturnTime ?? null,
+          date: taxiReturnDate,
+          bookingStartDate: b.startDate.toISOString(),
+          bookingEndDate: b.endDate?.toISOString() ?? null,
+        });
+      }
     }
   }
 

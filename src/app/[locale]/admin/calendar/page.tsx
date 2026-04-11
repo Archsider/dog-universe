@@ -23,6 +23,9 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
   firstDay.setHours(0, 0, 0, 0);
   const lastDay = new Date(year, month, 0);
   lastDay.setHours(23, 59, 59, 999);
+  // String format for taxi date comparisons (stored as "YYYY-MM-DD" strings)
+  const firstDayStr = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDayStr = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
 
   const bookings = await prisma.booking.findMany({
     where: {
@@ -31,6 +34,10 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
       OR: [
         { endDate: { gte: firstDay } },
         { endDate: null, startDate: { gte: firstDay } },
+        // Boarding with taxi return date in this month (even if stay endDate is before month)
+        { boardingDetail: { taxiReturnEnabled: true, taxiReturnDate: { gte: firstDayStr, lte: lastDayStr } } },
+        // Boarding with taxi go date in this month
+        { boardingDetail: { taxiGoEnabled: true, taxiGoDate: { gte: firstDayStr, lte: lastDayStr } } },
       ],
     },
     include: {
