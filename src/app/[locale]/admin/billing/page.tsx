@@ -8,6 +8,7 @@ import { formatDate, formatMAD, getInvoiceStatusColor } from '@/lib/utils';
 import PaymentModal from './PaymentModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
+import RecomputeAllocationsButton from '@/components/admin/RecomputeAllocationsButton';
 
 interface PageProps {
   params: { locale: string };
@@ -116,6 +117,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
             <FileDown className="h-3.5 w-3.5" />
             {locale === 'fr' ? 'Export CSV' : 'Export CSV'}
           </a>
+          <RecomputeAllocationsButton locale={locale} />
           <CreateStandaloneInvoiceModal clients={allClients} locale={locale} />
         </div>
       </div>
