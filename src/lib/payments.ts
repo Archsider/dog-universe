@@ -16,20 +16,25 @@ import { formatMAD } from '@/lib/utils';
 import { calculateSuggestedGrade } from '@/lib/loyalty';
 
 // ---------------------------------------------------------------------------
-// Item sort priority: Pension (0) → Taxi (1) → Others (2)
+// Item sort priority:
+//   0 — Pet Taxi — Aller  (taxi + aller)
+//   1 — Pension / Boarding
+//   2 — Pet Taxi — Retour (taxi + retour)
+//   3 — Others
 // Preserves insertion order within each group.
 // ---------------------------------------------------------------------------
 function getItemAllocationPriority(description: string): number {
   const d = description.toLowerCase();
+  if (d.includes('taxi') && d.includes('aller')) return 0;
   if (
     d.includes('pension') ||
     d.includes('nuit') ||
     d.includes('séjour') ||
     d.includes('sejour') ||
     d.includes('boarding')
-  ) return 0;
-  if (d.includes('taxi') || d.includes('transport')) return 1;
-  return 2;
+  ) return 1;
+  if (d.includes('taxi') && d.includes('retour')) return 2;
+  return 3;
 }
 
 // ---------------------------------------------------------------------------

@@ -304,18 +304,45 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
               <Text style={[styles.tableHeaderText, styles.colStatus]}>Statut</Text>
             </View>
 
-            {/* Rows */}
-            {invoice.items.map((item, i) => (
-              <View key={i} style={styles.tableRow}>
-                <Text style={[{ fontSize: 10 }, styles.colDescription]}>{item.description}</Text>
-                <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colQty]}>{item.quantity}</Text>
-                <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(item.unitPrice)}</Text>
-                <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(item.total)}</Text>
-                <View style={[styles.colStatus, { alignItems: 'center' }]}>
-                  <ItemStatusBadge status={item.status} />
-                </View>
-              </View>
-            ))}
+            {/* Rows — PARTIAL items are split into two visual lines (paid / pending) */}
+            {invoice.items.flatMap((item, i) => {
+              if (item.status === 'PARTIAL' && item.allocatedAmount != null && item.unitPrice > 0) {
+                const paidQty = Math.round(item.allocatedAmount / item.unitPrice);
+                const pendingQty = item.quantity - paidQty;
+                const pendingAmt = item.total - item.allocatedAmount;
+                return [
+                  <View key={`${i}-a`} style={styles.tableRow}>
+                    <Text style={[{ fontSize: 10 }, styles.colDescription]}>{item.description}</Text>
+                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colQty]}>{paidQty}</Text>
+                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(item.unitPrice)}</Text>
+                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(item.allocatedAmount)}</Text>
+                    <View style={[styles.colStatus, { alignItems: 'center' }]}>
+                      <ItemStatusBadge status="PAID" />
+                    </View>
+                  </View>,
+                  <View key={`${i}-b`} style={styles.tableRow}>
+                    <Text style={[{ fontSize: 10 }, styles.colDescription]}>{item.description}</Text>
+                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colQty]}>{pendingQty}</Text>
+                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(item.unitPrice)}</Text>
+                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(pendingAmt)}</Text>
+                    <View style={[styles.colStatus, { alignItems: 'center' }]}>
+                      <ItemStatusBadge status="PENDING" />
+                    </View>
+                  </View>,
+                ];
+              }
+              return [
+                <View key={i} style={styles.tableRow}>
+                  <Text style={[{ fontSize: 10 }, styles.colDescription]}>{item.description}</Text>
+                  <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colQty]}>{item.quantity}</Text>
+                  <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(item.unitPrice)}</Text>
+                  <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(item.total)}</Text>
+                  <View style={[styles.colStatus, { alignItems: 'center' }]}>
+                    <ItemStatusBadge status={item.status} />
+                  </View>
+                </View>,
+              ];
+            })}
 
             {/* HT / TVA */}
             <View style={{ paddingTop: 6, paddingHorizontal: 8, gap: 3 }}>
@@ -359,7 +386,6 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
                     {PAYMENT_LABELS[pmt.paymentMethod] ?? pmt.paymentMethod}
                     {' — '}
                     {formatDateShort(new Date(pmt.paymentDate), 'fr')}
-                    {pmt.notes ? `  (${pmt.notes})` : ''}
                   </Text>
                   <Text style={{ fontSize: 10, color: '#166534', fontFamily: 'Helvetica-Bold' }}>
                     -{formatMAD(pmt.amount)}
