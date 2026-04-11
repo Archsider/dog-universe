@@ -147,9 +147,11 @@ const styles = StyleSheet.create({
 interface InvoiceData {
   invoiceNumber: string;
   amount: number;
+  paidAmount?: number | null;
   status: string;
   issuedAt: Date;
   paidAt?: Date | null;
+  paymentDate?: Date | null;
   paymentMethod?: string | null;
   notes?: string | null;
   client: {
@@ -180,6 +182,9 @@ const PAYMENT_LABELS: Record<string, string> = {
 
 function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
   const isPaid = invoice.status === 'PAID';
+  const isPartial = invoice.status === 'PARTIALLY_PAID';
+  const paidAmount = invoice.paidAmount ?? 0;
+  const remaining = Math.max(0, invoice.amount - paidAmount);
 
   return (
     <Document>
@@ -223,10 +228,16 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
           <View style={{ alignItems: 'flex-end' }}>
             <View style={[
               styles.statusBadge,
-              { backgroundColor: isPaid ? '#DCFCE7' : '#FEF9C3', color: isPaid ? '#166534' : '#854D0E' }
+              {
+                backgroundColor: isPaid ? '#DCFCE7' : isPartial ? '#FEF3C7' : '#FEF9C3',
+              }
             ]}>
-              <Text style={{ color: isPaid ? '#166534' : '#854D0E', fontFamily: 'Helvetica-Bold', fontSize: 10 }}>
-                {isPaid ? '✓ PAYÉE' : '⏳ EN ATTENTE'}
+              <Text style={{
+                color: isPaid ? '#166534' : isPartial ? '#92400E' : '#854D0E',
+                fontFamily: 'Helvetica-Bold',
+                fontSize: 10,
+              }}>
+                {isPaid ? '✓ PAYÉE' : isPartial ? '◑ PARTIEL' : '⏳ EN ATTENTE'}
               </Text>
             </View>
           </View>
@@ -302,6 +313,31 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
             </View>
           </View>
         </View>
+
+        {/* Payment summary — shown for partial and pending-with-payment invoices */}
+        {isPartial && paidAmount > 0 && (
+          <View style={{ marginBottom: 20 }}>
+            <Text style={styles.sectionTitle}>Paiement</Text>
+            <View style={{ gap: 4 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#F5EDD8' }}>
+                <Text style={{ fontSize: 10, color: '#6B7280' }}>
+                  Déjà réglé
+                  {invoice.paymentMethod ? ` (${PAYMENT_LABELS[invoice.paymentMethod] ?? invoice.paymentMethod})` : ''}
+                  {invoice.paymentDate ? ` — ${formatDateShort(invoice.paymentDate, 'fr')}` : ''}
+                </Text>
+                <Text style={{ fontSize: 10, color: '#166534', fontFamily: 'Helvetica-Bold' }}>
+                  -{formatMAD(paidAmount)}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
+                <Text style={{ fontSize: 12, fontFamily: 'Helvetica-Bold' }}>Reste à payer</Text>
+                <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: '#C9A84C' }}>
+                  {formatMAD(remaining)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Notes */}
         {invoice.notes && (

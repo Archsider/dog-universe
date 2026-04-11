@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
+import { calculateBoardingBreakdown, getPricingSettings } from '@/lib/pricing';
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
       include: {
         invoice: true,
         boardingDetail: true,
-        bookingPets: { include: { pet: true } },
+        bookingPets: { include: { pet: { select: { id: true, name: true, species: true } } } },
       },
     }),
     prisma.booking.findUnique({
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
       include: {
         invoice: true,
         boardingDetail: true,
-        bookingPets: { include: { pet: true } },
+        bookingPets: { include: { pet: { select: { id: true, name: true, species: true } } } },
       },
     }),
   ]);
@@ -98,13 +99,42 @@ export async function POST(request: NextRequest) {
 
   const newEndDate = source.endDate ?? source.startDate;
 
-  // ── Invoice merge: UPDATE existing invoice (never create supplementary) ──
-  // new total = ancien_total + montant_extension
-  // ancien_total = target invoice amount (or target.totalPrice if no invoice)
-  // montant_extension = source invoice amount (or source.totalPrice if no invoice)
-  const ancienTotal = target.invoice?.amount ?? target.totalPrice;
-  const montantExtension = source.invoice?.amount ?? source.totalPrice;
-  const newTotal = Math.round((ancienTotal + montantExtension) * 100) / 100;
+  // ── Pre-compute merged boarding detail (taxi addons: OR of both) ──────────
+  // Taxi Aller typically on target (start of stay), Retour on source (end).
+  // After merge, the consolidated booking should carry both flags.
+  const mergedTaxiGoEnabled =
+    (target.boardingDetail?.taxiGoEnabled ?? false) || (source.boardingDetail?.taxiGoEnabled ?? false);
+  const mergedTaxiReturnEnabled =
+    (target.boardingDetail?.taxiReturnEnabled ?? false) || (source.boardingDetail?.taxiReturnEnabled ?? false);
+
+  // Pre-compute new nights and items for invoice regeneration
+  const pricing = await getPricingSettings();
+  const newNights = Math.max(
+    0,
+    Math.floor((newEndDate.getTime() - target.startDate.getTime()) / (1000 * 60 * 60 * 24)),
+  );
+  const pets = target.bookingPets.map(bp => bp.pet);
+
+  // Build grooming map (only for target's boarding detail — grooming is a single event)
+  const groomingMap: Record<string, 'SMALL' | 'LARGE'> = {};
+  if (target.boardingDetail?.includeGrooming && target.boardingDetail.groomingSize) {
+    const dogs = pets.filter(p => p.species === 'DOG');
+    dogs.forEach(dog => {
+      groomingMap[dog.id] = target.boardingDetail!.groomingSize as 'SMALL' | 'LARGE';
+    });
+  }
+
+  const breakdown = calculateBoardingBreakdown(
+    newNights,
+    pets,
+    target.boardingDetail?.includeGrooming ? groomingMap : undefined,
+    mergedTaxiGoEnabled,
+    mergedTaxiReturnEnabled,
+    pricing,
+  );
+
+  // New total derived from recalculated breakdown — authoritative for BOARDING merges
+  const newTotal = Math.round(breakdown.total * 100) / 100;
 
   await prisma.$transaction(async (tx) => {
     // 1. Migrate StayPhotos from source to target
@@ -119,9 +149,40 @@ export async function POST(request: NextRequest) {
       data: { bookingId: target.id },
     });
 
+    // 2b. Merge taxi addon flags from source's boardingDetail into target's
+    //     (e.g. Retour on source + Aller on target → both enabled on merged booking)
+    if (target.boardingDetail) {
+      const taxiAddonPrice =
+        (mergedTaxiGoEnabled ? pricing.taxi_standard : 0) +
+        (mergedTaxiReturnEnabled ? pricing.taxi_standard : 0);
+      await tx.boardingDetail.update({
+        where: { bookingId: target.id },
+        data: {
+          taxiGoEnabled: mergedTaxiGoEnabled,
+          taxiReturnEnabled: mergedTaxiReturnEnabled,
+          taxiAddonPrice,
+          // Copy source taxi dates when target didn't have that leg
+          ...(source.boardingDetail?.taxiGoEnabled && !target.boardingDetail.taxiGoEnabled
+            ? {
+                taxiGoDate: source.boardingDetail.taxiGoDate,
+                taxiGoTime: source.boardingDetail.taxiGoTime,
+                taxiGoAddress: source.boardingDetail.taxiGoAddress,
+              }
+            : {}),
+          ...(source.boardingDetail?.taxiReturnEnabled && !target.boardingDetail.taxiReturnEnabled
+            ? {
+                taxiReturnDate: source.boardingDetail.taxiReturnDate,
+                taxiReturnTime: source.boardingDetail.taxiReturnTime,
+                taxiReturnAddress: source.boardingDetail.taxiReturnAddress,
+              }
+            : {}),
+        },
+      });
+    }
+
     // 3. Handle invoices — always update existing, never create supplementary
     if (target.invoice && source.invoice) {
-      // Both have invoices → merge source into target, delete source invoice
+      // Both have invoices → merge paidAmounts, regenerate items, delete source invoice
       const newPaidAmount = Math.round(
         (target.invoice.paidAmount + source.invoice.paidAmount) * 100
       ) / 100;
@@ -129,6 +190,19 @@ export async function POST(request: NextRequest) {
         newPaidAmount >= newTotal ? 'PAID'
         : newPaidAmount > 0 ? 'PARTIALLY_PAID'
         : 'PENDING';
+
+      // Regenerate invoice items from the merged breakdown
+      await tx.invoiceItem.deleteMany({ where: { invoiceId: target.invoice.id } });
+      await tx.invoiceItem.createMany({
+        data: breakdown.items.map(item => ({
+          invoiceId: target.invoice!.id,
+          description: item.descriptionFr,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total,
+        })),
+      });
+
       await tx.invoice.update({
         where: { id: target.invoice.id },
         data: {
@@ -142,14 +216,33 @@ export async function POST(request: NextRequest) {
       await tx.invoiceItem.deleteMany({ where: { invoiceId: source.invoice.id } });
       await tx.invoice.delete({ where: { id: source.invoice.id } });
     } else if (!target.invoice && source.invoice) {
-      // Only source has invoice → re-link to target
+      // Only source has invoice → re-link to target, regenerate items
+      await tx.invoiceItem.deleteMany({ where: { invoiceId: source.invoice.id } });
+      await tx.invoiceItem.createMany({
+        data: breakdown.items.map(item => ({
+          invoiceId: source.invoice!.id,
+          description: item.descriptionFr,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total,
+        })),
+      });
       await tx.invoice.update({
         where: { id: source.invoice.id },
         data: { bookingId: target.id, amount: newTotal },
       });
-    }
-    // If neither has an invoice or only target has invoice: just update target invoice amount
-    if (target.invoice && !source.invoice) {
+    } else if (target.invoice && !source.invoice) {
+      // Only target has invoice → regenerate items with new dates/taxi
+      await tx.invoiceItem.deleteMany({ where: { invoiceId: target.invoice.id } });
+      await tx.invoiceItem.createMany({
+        data: breakdown.items.map(item => ({
+          invoiceId: target.invoice!.id,
+          description: item.descriptionFr,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total,
+        })),
+      });
       const newStatus =
         target.invoice.paidAmount >= newTotal ? 'PAID'
         : target.invoice.paidAmount > 0 ? 'PARTIALLY_PAID'
