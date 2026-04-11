@@ -226,6 +226,7 @@ export function getGroomingPriceForPet(groomingSize: GroomingSize, pricing?: Pri
  * Recalculate total boarding price for a stay extension.
  * Grooming and taxi add-on are fixed (already paid/set at booking time) —
  * only the night rate portion changes with the new duration.
+ * Delegates to calculateBoardingBreakdown to avoid duplicating the rate logic.
  */
 export function calculateBoardingTotalForExtension(
   pets: { species: string }[],
@@ -234,17 +235,8 @@ export function calculateBoardingTotalForExtension(
   taxiAddonPrice: number,
   pricing?: PricingSettings,
 ): number {
-  const p = pricing ?? PRICING_DEFAULTS;
-  const dogCount = pets.filter(pet => pet.species === 'DOG').length;
-  const catCount = pets.filter(pet => pet.species === 'CAT').length;
-
-  let nightsTotal = 0;
-  if (dogCount === 1) {
-    nightsTotal += (newNights > p.long_stay_threshold ? p.boarding_dog_long_stay : p.boarding_dog_per_night) * newNights;
-  } else if (dogCount > 1) {
-    nightsTotal += p.boarding_dog_multi * dogCount * newNights;
-  }
-  nightsTotal += p.boarding_cat_per_night * catCount * newNights;
-
+  // Use placeholder id/name — only species matters for rate calculation
+  const petsForCalc = pets.map((pet, i) => ({ id: String(i), name: '', species: pet.species }));
+  const { total: nightsTotal } = calculateBoardingBreakdown(newNights, petsForCalc, undefined, false, false, pricing);
   return nightsTotal + groomingPrice + taxiAddonPrice;
 }

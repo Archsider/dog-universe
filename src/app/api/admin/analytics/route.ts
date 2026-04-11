@@ -23,6 +23,7 @@ export async function GET(request: Request) {
     select: {
       amount: true,
       paidAt: true,
+      serviceType: true,
       booking: {
         select: {
           serviceType: true,
@@ -38,10 +39,13 @@ export async function GET(request: Request) {
   for (const inv of invoices2026) {
     if (!inv.paidAt) continue;
     const m = new Date(inv.paidAt).getMonth();
-    if (inv.booking?.serviceType === 'PET_TAXI') {
+    // Supplementary invoices have bookingId=null — use the invoice's own serviceType as fallback
+    const svcType = inv.booking?.serviceType ?? inv.serviceType;
+    if (svcType === 'PET_TAXI') {
       monthly[m].taxi += inv.amount;
-    } else if (inv.booking?.serviceType === 'BOARDING') {
-      const g = inv.booking.boardingDetail?.groomingPrice ?? 0;
+    } else if (svcType === 'BOARDING') {
+      // Grooming split only applies to the original booking invoice (supplementary = nights only)
+      const g = inv.booking?.boardingDetail?.groomingPrice ?? 0;
       monthly[m].grooming += g;
       monthly[m].boarding += inv.amount - g;
     }

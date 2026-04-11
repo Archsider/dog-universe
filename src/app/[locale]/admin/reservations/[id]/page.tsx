@@ -34,7 +34,14 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
   if (!booking) notFound();
 
   const supplementaryInvoice = await prisma.invoice.findFirst({
-    where: { clientId: booking.client.id, notes: `EXTENSION_SURCHARGE:${id}` },
+    where: {
+      OR: [
+        { supplementaryForBookingId: id },
+        // legacy fallback for rows created before the FK column was added
+        { clientId: booking.client.id, notes: `EXTENSION_SURCHARGE:${id}` },
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
   });
 
   const bookingMessages = await prisma.notification.findMany({
@@ -225,8 +232,18 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
                   )}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Statut</span>
-                    <span className={`text-xs font-semibold ${supplementaryInvoice.status === 'PAID' ? 'text-green-700' : 'text-orange-600'}`}>
-                      {supplementaryInvoice.status}
+                    <span className={`text-xs font-semibold ${
+                      supplementaryInvoice.status === 'PAID'
+                        ? 'text-green-700'
+                        : supplementaryInvoice.status === 'PARTIALLY_PAID'
+                        ? 'text-blue-600'
+                        : 'text-orange-600'
+                    }`}>
+                      {supplementaryInvoice.status === 'PAID'
+                        ? (locale === 'fr' ? 'Payée' : 'Paid')
+                        : supplementaryInvoice.status === 'PARTIALLY_PAID'
+                        ? (locale === 'fr' ? 'Part. payée' : 'Part. paid')
+                        : (locale === 'fr' ? 'En attente' : 'Pending')}
                     </span>
                   </div>
                 </div>

@@ -113,20 +113,32 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if (booking.invoice.status === 'PENDING') {
         await prisma.invoice.update({ where: { id: booking.invoice.id }, data: { amount: newTotal } });
       } else if (booking.invoice.status === 'PARTIALLY_PAID') {
-        // Update amount — paidAmount stays; status stays PARTIALLY_PAID (paidAmount < newTotal)
-        await prisma.invoice.update({ where: { id: booking.invoice.id }, data: { amount: newTotal } });
+        // Update amount — if the extension makes paidAmount sufficient, promote to PAID
+        const invoiceUpdate: Record<string, unknown> = { amount: newTotal };
+        if (booking.invoice.paidAmount >= newTotal) {
+          invoiceUpdate.status = 'PAID';
+          invoiceUpdate.paidAt = booking.invoice.paidAt ?? new Date();
+        }
+        await prisma.invoice.update({ where: { id: booking.invoice.id }, data: invoiceUpdate });
       } else if (booking.invoice.status === 'PAID') {
         // Original invoice is paid — do NOT touch it.
         // Create (or update/merge) a supplementary PENDING invoice for the extension delta.
         const deltaAmount = Math.round((newTotal - booking.invoice.amount) * 100) / 100;
+        if (deltaAmount <= 0) {
+          // Long-stay discount made the new total ≤ the already-paid amount.
+          // Keep booking.totalPrice in sync with the invoice to avoid inconsistency.
+          invoiceWarning = true;
+        }
         if (deltaAmount > 0) {
           const bookingRefShort = params.id.slice(0, 8).toUpperCase();
           const surchargeNote = `EXTENSION_SURCHARGE:${params.id}`;
           const existing = await prisma.invoice.findFirst({
             where: {
-              clientId: booking.clientId,
-              notes: surchargeNote,
-              status: { notIn: ['PAID', 'CANCELLED'] },
+              OR: [
+                { supplementaryForBookingId: params.id, status: { notIn: ['PAID', 'CANCELLED'] } },
+                // legacy fallback for rows created before the FK column was added
+                { clientId: booking.clientId, notes: surchargeNote, status: { notIn: ['PAID', 'CANCELLED'] } },
+              ],
             },
           });
           if (existing) {
@@ -180,6 +192,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
                   status: 'PENDING',
                   serviceType: 'BOARDING',
                   notes: surchargeNote,
+                  supplementaryForBookingId: params.id,
                   items: {
                     create: [{
                       description: `Supplément prolongation séjour #${bookingRefShort}`,
@@ -211,11 +224,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
 
+    // If the invoice is PAID and the recalculated total is ≤ what was already billed
+    // (long-stay discount edge case), keep totalPrice aligned with invoice.amount to
+    // avoid a confusing mismatch. invoiceWarning is already set above in this case.
+    const effectiveTotalPrice =
+      booking.invoice?.status === 'PAID' && newTotal < booking.invoice.amount
+        ? booking.invoice.amount
+        : newTotal;
+
     await prisma.booking.update({
       where: { id: params.id },
       data: {
         endDate: newEndDate,
-        totalPrice: newTotal,
+        totalPrice: effectiveTotalPrice,
         hasExtensionRequest: false,
         extensionRequestedEndDate: null,
         extensionRequestNote: null,

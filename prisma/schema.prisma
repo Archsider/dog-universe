@@ -224,8 +224,9 @@ model Invoice {
   status        String   @default("PENDING") // "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED"
   serviceType   String?  // "BOARDING" | "PET_TAXI" | "GROOMING" | "PRODUCT_SALE" | null (legacy)
   pdfUrl        String?
-  notes         String?
-  paymentMethod String?  // "CASH" | "CARD" | "CHECK" | "TRANSFER"
+  notes                     String?
+  supplementaryForBookingId String?  // set on extension-surcharge invoices (bookingId=null) — replaces fragile notes pattern
+  paymentMethod             String?  // "CASH" | "CARD" | "CHECK" | "TRANSFER"
   paymentDate   DateTime?
   issuedAt      DateTime @default(now())
   paidAt        DateTime?
@@ -238,6 +239,7 @@ model Invoice {
 
   @@index([clientId])
   @@index([status])
+  @@index([supplementaryForBookingId])
 }
 
 model InvoiceItem {

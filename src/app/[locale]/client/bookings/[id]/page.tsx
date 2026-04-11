@@ -136,12 +136,15 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
 
   if (!booking || booking.clientId !== session.user.id) notFound();
 
-  // Supplementary extension invoice (bookingId: null, tracked via notes)
+  // Supplementary extension invoice (bookingId: null, tracked via supplementaryForBookingId or legacy notes)
   const supplementaryInvoice = await prisma.invoice.findFirst({
     where: {
-      clientId: session.user.id,
-      notes: `EXTENSION_SURCHARGE:${id}`,
       status: { notIn: ['CANCELLED'] },
+      OR: [
+        { supplementaryForBookingId: id },
+        // legacy fallback for rows created before the FK column was added
+        { clientId: session.user.id, notes: `EXTENSION_SURCHARGE:${id}` },
+      ],
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -463,9 +466,17 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
                 <p className="font-mono text-sm font-semibold text-charcoal">{booking.invoice.invoiceNumber}</p>
                 <p className="text-lg font-bold text-gold-600">{formatMAD(booking.invoice.amount)}</p>
                 <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                  booking.invoice.status === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                  booking.invoice.status === 'PAID'
+                    ? 'bg-green-100 text-green-700'
+                    : booking.invoice.status === 'PARTIALLY_PAID'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-amber-100 text-amber-700'
                 }`}>
-                  {booking.invoice.status === 'PAID' ? (locale === 'fr' ? 'Payée' : 'Paid') : (locale === 'fr' ? 'En attente' : 'Pending')}
+                  {booking.invoice.status === 'PAID'
+                    ? (locale === 'fr' ? 'Payée' : 'Paid')
+                    : booking.invoice.status === 'PARTIALLY_PAID'
+                    ? (locale === 'fr' ? 'Partiellement payée' : 'Partially paid')
+                    : (locale === 'fr' ? 'En attente' : 'Pending')}
                 </span>
               </div>
               <a
