@@ -237,7 +237,7 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
                 fontFamily: 'Helvetica-Bold',
                 fontSize: 10,
               }}>
-                {isPaid ? '✓ PAYÉE' : isPartial ? '◑ PARTIEL' : '⏳ EN ATTENTE'}
+                {isPaid ? 'PAYEE' : isPartial ? 'PARTIEL' : 'EN ATTENTE'}
               </Text>
             </View>
           </View>
