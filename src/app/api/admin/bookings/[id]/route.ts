@@ -51,6 +51,37 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // ── Patch BoardingDetail fields (taxi return / taxi go) ───────────────────
+  if (body.patchBoardingDetail !== undefined) {
+    if (booking.serviceType !== 'BOARDING') {
+      return NextResponse.json({ error: 'Only applies to BOARDING bookings' }, { status: 400 });
+    }
+    const ALLOWED_BD_FIELDS = [
+      'taxiReturnEnabled', 'taxiReturnDate', 'taxiReturnTime', 'taxiReturnAddress',
+      'taxiGoEnabled', 'taxiGoDate', 'taxiGoTime', 'taxiGoAddress',
+    ];
+    const patch = body.patchBoardingDetail as Record<string, unknown>;
+    const invalidKeys = Object.keys(patch).filter(k => !ALLOWED_BD_FIELDS.includes(k));
+    if (invalidKeys.length > 0) {
+      return NextResponse.json({ error: `Invalid fields: ${invalidKeys.join(', ')}` }, { status: 400 });
+    }
+    await prisma.boardingDetail.upsert({
+      where: { bookingId: params.id },
+      update: patch,
+      create: { bookingId: params.id, ...patch },
+    });
+    await logAction({
+      userId: session.user.id,
+      action: 'BOARDING_DETAIL_PATCHED',
+      entityType: 'Booking',
+      entityId: params.id,
+      details: { patch },
+    });
+    const updated = await prisma.boardingDetail.findUnique({ where: { bookingId: params.id } });
+    return NextResponse.json({ message: 'boarding_detail_patched', boardingDetail: updated });
+  }
+  // ── End patchBoardingDetail ───────────────────────────────────────────────
+
   // ── PENDING_EXTENSION: Approve (merge into original) ──────────────────────
   if (body.approveExtension && booking.status === 'PENDING_EXTENSION') {
     if (!booking.extensionForBookingId) {
