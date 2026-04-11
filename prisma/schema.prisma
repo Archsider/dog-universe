@@ -222,22 +222,21 @@ model Invoice {
   clientId      String
   invoiceNumber String   @unique
   amount        Float
-  paidAmount    Float    @default(0)
+  paidAmount    Float    @default(0) // Calculé = SUM(payments.amount), mis à jour par allocatePayments()
   status        String   @default("PENDING") // "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED"
   serviceType   String?  // "BOARDING" | "PET_TAXI" | "GROOMING" | "PRODUCT_SALE" | null (legacy)
   pdfUrl        String?
   notes                     String?
   supplementaryForBookingId String?  // set on extension-surcharge invoices (bookingId=null) — replaces fragile notes pattern
-  paymentMethod             String?  // "CASH" | "CARD" | "CHECK" | "TRANSFER"
-  paymentDate   DateTime?
   issuedAt      DateTime @default(now())
   paidAt        DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  client  User        @relation(fields: [clientId], references: [id])
-  booking Booking?    @relation(fields: [bookingId], references: [id])
-  items   InvoiceItem[]
+  client   User          @relation(fields: [clientId], references: [id])
+  booking  Booking?      @relation(fields: [bookingId], references: [id])
+  items    InvoiceItem[]
+  payments Payment[]
 
   @@index([clientId])
   @@index([status])
@@ -245,14 +244,29 @@ model Invoice {
 }
 
 model InvoiceItem {
-  id          String @id @default(cuid())
-  invoiceId   String
-  description String
-  quantity    Int    @default(1)
-  unitPrice   Float
-  total       Float
+  id              String @id @default(cuid())
+  invoiceId       String
+  description     String
+  quantity        Int    @default(1)
+  unitPrice       Float
+  total           Float
+  allocatedAmount Float  @default(0)   // Montant alloué par allocatePayments()
+  status          String @default("PENDING") // "PENDING" | "PARTIAL" | "PAID"
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  invoiceId     String
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount        Float
+  paymentMethod String   // "CASH" | "CARD" | "CHECK" | "TRANSFER"
+  paymentDate   DateTime
+  notes         String?
+  createdAt     DateTime @default(now())
 
   @@index([invoiceId])
 }
