@@ -91,10 +91,12 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textTransform: 'uppercase',
   },
+  // Table columns — Description | Qté | P.U. | Total | Statut
   colDescription: { flex: 3 },
-  colQty: { flex: 1, textAlign: 'right' },
-  colUnit: { flex: 1.5, textAlign: 'right' },
-  colTotal: { flex: 1.5, textAlign: 'right' },
+  colQty:         { flex: 0.8, textAlign: 'right' },
+  colUnit:        { flex: 1.5, textAlign: 'right' },
+  colTotal:       { flex: 1.5, textAlign: 'right' },
+  colStatus:      { flex: 1.3, textAlign: 'center' },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -144,6 +146,13 @@ const styles = StyleSheet.create({
   },
 });
 
+interface PaymentRow {
+  amount: number;
+  paymentMethod: string;
+  paymentDate: Date;
+  notes?: string | null;
+}
+
 interface InvoiceData {
   invoiceNumber: string;
   amount: number;
@@ -151,8 +160,6 @@ interface InvoiceData {
   status: string;
   issuedAt: Date;
   paidAt?: Date | null;
-  paymentDate?: Date | null;
-  paymentMethod?: string | null;
   notes?: string | null;
   client: {
     name: string;
@@ -164,7 +171,10 @@ interface InvoiceData {
     quantity: number;
     unitPrice: number;
     total: number;
+    allocatedAmount?: number;
+    status?: string;
   }[];
+  payments?: PaymentRow[];
   booking?: {
     serviceType?: string;
     startDate?: Date;
@@ -180,16 +190,36 @@ const PAYMENT_LABELS: Record<string, string> = {
   TRANSFER: 'Virement bancaire',
 };
 
+function ItemStatusBadge({ status }: { status?: string }) {
+  if (status === 'PAID') {
+    return (
+      <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#166534' }}>✓ Payé</Text>
+    );
+  }
+  if (status === 'PARTIAL') {
+    return (
+      <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#92400E' }}>Partiel</Text>
+    );
+  }
+  return (
+    <Text style={{ fontSize: 8, color: '#9CA3AF' }}>En attente</Text>
+  );
+}
+
 function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
   const isPaid = invoice.status === 'PAID';
   const isPartial = invoice.status === 'PARTIALLY_PAID';
   const paidAmount = invoice.paidAmount ?? 0;
   const remaining = Math.max(0, invoice.amount - paidAmount);
+  const payments = (invoice.payments ?? []).slice().sort(
+    (a, b) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime()
+  );
+  const hasPayments = payments.length > 0;
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Header */}
+        {/* ── Header ── */}
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <Image src={LOGO_PATH} style={{ width: 52, height: 52, objectFit: 'contain' }} />
@@ -206,7 +236,7 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
           </View>
         </View>
 
-        {/* Invoice Title & Meta */}
+        {/* ── Invoice title & meta ── */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 28 }}>
           <View>
             <Text style={styles.invoiceTitle}>FACTURE</Text>
@@ -214,23 +244,12 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
             <Text style={styles.invoiceMeta}>
               Émise le : {formatDateShort(invoice.issuedAt, 'fr')}
             </Text>
-            {invoice.paidAt && (
-              <Text style={styles.invoiceMeta}>
-                Payée le : {formatDateShort(invoice.paidAt, 'fr')}
-              </Text>
-            )}
-            {invoice.paymentMethod && (
-              <Text style={styles.invoiceMeta}>
-                Mode de paiement : {PAYMENT_LABELS[invoice.paymentMethod] ?? invoice.paymentMethod}
-              </Text>
-            )}
+            {/* "Payée le" and "Mode de paiement" removed — see section PAIEMENT below */}
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <View style={[
               styles.statusBadge,
-              {
-                backgroundColor: isPaid ? '#DCFCE7' : isPartial ? '#FEF3C7' : '#FEF9C3',
-              }
+              { backgroundColor: isPaid ? '#DCFCE7' : isPartial ? '#FEF3C7' : '#FEF9C3' }
             ]}>
               <Text style={{
                 color: isPaid ? '#166534' : isPartial ? '#92400E' : '#854D0E',
@@ -243,7 +262,7 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
           </View>
         </View>
 
-        {/* Client */}
+        {/* ── Client ── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Client</Text>
           <View style={styles.clientInfo}>
@@ -253,7 +272,7 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
           </View>
         </View>
 
-        {/* Booking reference if applicable */}
+        {/* ── Booking reference ── */}
         {invoice.booking && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Prestation</Text>
@@ -272,7 +291,7 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
           </View>
         )}
 
-        {/* Items table */}
+        {/* ── Items table — with STATUT column ── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Détail</Text>
           <View style={styles.table}>
@@ -282,6 +301,7 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
               <Text style={[styles.tableHeaderText, styles.colQty]}>Qté</Text>
               <Text style={[styles.tableHeaderText, styles.colUnit]}>P.U.</Text>
               <Text style={[styles.tableHeaderText, styles.colTotal]}>Total</Text>
+              <Text style={[styles.tableHeaderText, styles.colStatus]}>Statut</Text>
             </View>
 
             {/* Rows */}
@@ -291,10 +311,13 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
                 <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colQty]}>{item.quantity}</Text>
                 <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(item.unitPrice)}</Text>
                 <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(item.total)}</Text>
+                <View style={[styles.colStatus, { alignItems: 'center' }]}>
+                  <ItemStatusBadge status={item.status} />
+                </View>
               </View>
             ))}
 
-            {/* TVA breakdown */}
+            {/* HT / TVA */}
             <View style={{ paddingTop: 6, paddingHorizontal: 8, gap: 3 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 32 }}>
                 <Text style={{ fontSize: 9, color: '#6B7280' }}>Montant HT</Text>
@@ -306,7 +329,7 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
               </View>
             </View>
 
-            {/* Total */}
+            {/* Total TTC */}
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>TOTAL TTC</Text>
               <Text style={styles.totalAmount}>{formatMAD(invoice.amount)}</Text>
@@ -314,32 +337,67 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
           </View>
         </View>
 
-        {/* Payment summary — shown for partial and pending-with-payment invoices */}
-        {isPartial && paidAmount > 0 && (
+        {/* ── Section PAIEMENT — une ligne par Payment ── */}
+        {hasPayments && (
           <View style={{ marginBottom: 20 }}>
             <Text style={styles.sectionTitle}>Paiement</Text>
-            <View style={{ gap: 4 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#F5EDD8' }}>
-                <Text style={{ fontSize: 10, color: '#6B7280' }}>
-                  Déjà réglé
-                  {invoice.paymentMethod ? ` (${PAYMENT_LABELS[invoice.paymentMethod] ?? invoice.paymentMethod})` : ''}
-                  {invoice.paymentDate ? ` — ${formatDateShort(invoice.paymentDate, 'fr')}` : ''}
-                </Text>
-                <Text style={{ fontSize: 10, color: '#166534', fontFamily: 'Helvetica-Bold' }}>
+            <View style={{ gap: 0 }}>
+              {/* One row per Payment, chronological */}
+              {payments.map((pmt, i) => (
+                <View
+                  key={i}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    paddingVertical: 5,
+                    paddingHorizontal: 4,
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#F5EDD8',
+                  }}
+                >
+                  <Text style={{ fontSize: 10, color: '#6B7280' }}>
+                    {PAYMENT_LABELS[pmt.paymentMethod] ?? pmt.paymentMethod}
+                    {' — '}
+                    {formatDateShort(new Date(pmt.paymentDate), 'fr')}
+                    {pmt.notes ? `  (${pmt.notes})` : ''}
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#166534', fontFamily: 'Helvetica-Bold' }}>
+                    -{formatMAD(pmt.amount)}
+                  </Text>
+                </View>
+              ))}
+
+              {/* Separator */}
+              <View style={{ borderBottomWidth: 1.5, borderBottomColor: '#C9A84C', marginVertical: 4 }} />
+
+              {/* Total réglé */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, paddingHorizontal: 4 }}>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#2C2C2C' }}>Total réglé</Text>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#166534' }}>
                   -{formatMAD(paidAmount)}
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
-                <Text style={{ fontSize: 12, fontFamily: 'Helvetica-Bold' }}>Reste à payer</Text>
-                <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: '#C9A84C' }}>
-                  {formatMAD(remaining)}
-                </Text>
-              </View>
+
+              {/* Reste à payer OR Payé intégralement */}
+              {remaining > 0 ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, paddingHorizontal: 4 }}>
+                  <Text style={{ fontSize: 12, fontFamily: 'Helvetica-Bold' }}>Reste à payer</Text>
+                  <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: '#C9A84C' }}>
+                    {formatMAD(remaining)}
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ paddingVertical: 8, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#166534' }}>
+                    ✓ Payé intégralement
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         )}
 
-        {/* Notes */}
+        {/* ── Notes ── */}
         {invoice.notes && (
           <View style={styles.notesSection}>
             <Text style={{ ...styles.notesText, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>Notes :</Text>
@@ -347,7 +405,7 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
           </View>
         )}
 
-        {/* Footer */}
+        {/* ── Footer ── */}
         <Text style={styles.footer}>
           DOG UNIVERSE SARLAU — RC : 87023 — IF : 25081867 — ICE : 002035800000002
           {'\n'}Tél : 00212669183981 — contact@doguniverse.ma — Marrakech, Maroc — Merci pour votre confiance.

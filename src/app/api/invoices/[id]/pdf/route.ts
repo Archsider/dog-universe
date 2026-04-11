@@ -23,7 +23,8 @@ export async function GET(req: Request, { params }: Params) {
           taxiDetail: true,
         },
       },
-      items: true,
+      items: { orderBy: { id: 'asc' } },
+      payments: { orderBy: { paymentDate: 'asc' } },
     },
   });
 
