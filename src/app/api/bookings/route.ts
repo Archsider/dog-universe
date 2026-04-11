@@ -113,6 +113,9 @@ export async function POST(request: Request) {
         taxiMinute = taxiDate.getMinutes();
       }
       if (taxiHour !== null) {
+        if (isNaN(taxiHour) || isNaN(taxiMinute)) {
+          return NextResponse.json({ error: 'INVALID_TIME_SLOT' }, { status: 400 });
+        }
         const totalMinutes = taxiHour * 60 + taxiMinute;
         if (totalMinutes < 10 * 60 || totalMinutes > 17 * 60) {
           return NextResponse.json({ error: 'INVALID_TIME_SLOT' }, { status: 400 });

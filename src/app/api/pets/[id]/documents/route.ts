@@ -58,6 +58,12 @@ export async function DELETE(request: Request, { params }: Params) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  await prisma.petDocument.delete({ where: { id: documentId, petId: id } });
+  try {
+    await prisma.petDocument.delete({ where: { id: documentId, petId: id } });
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code === 'P2025') return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    throw err;
+  }
   return NextResponse.json({ message: 'Deleted' });
 }

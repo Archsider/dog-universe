@@ -20,10 +20,14 @@ export async function POST(request: Request, { params }: Params) {
   if (content.length > 10000) {
     return NextResponse.json({ error: 'CONTENT_TOO_LONG' }, { status: 400 });
   }
+  const VALID_ENTITY_TYPES = ['CLIENT', 'PET'];
+  if (!VALID_ENTITY_TYPES.includes(entityType)) {
+    return NextResponse.json({ error: 'INVALID_ENTITY_TYPE' }, { status: 400 });
+  }
 
   const note = await prisma.adminNote.create({
     data: {
-      entityType: entityType as string,
+      entityType,
       entityId: entityId ?? id,
       content: content.trim(),
       createdBy: session.user.id,

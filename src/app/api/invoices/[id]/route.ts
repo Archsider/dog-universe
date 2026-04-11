@@ -59,6 +59,9 @@ export async function PATCH(request: Request, { params }: Params) {
     if (isNaN(paidAmount) || paidAmount < 0) {
       return NextResponse.json({ error: 'Invalid paidAmount' }, { status: 400 });
     }
+    if (paidAmount > invoice.amount) {
+      return NextResponse.json({ error: 'OVERPAYMENT_NOT_ALLOWED' }, { status: 400 });
+    }
     updateData.paidAmount = paidAmount;
 
     if (body.paymentMethod) {
