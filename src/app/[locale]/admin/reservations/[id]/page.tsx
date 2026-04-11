@@ -11,6 +11,7 @@ import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import StayPhotosSection from './StayPhotosSection';
 import AdminMessageSection from './AdminMessageSection';
 import ExtendBookingSection from './ExtendBookingSection';
+import MergeBookingsSection from './MergeBookingsSection';
 import RecordPaymentButton from '@/app/[locale]/admin/billing/CreateInvoiceButton';
 
 interface PageProps { params: { locale: string; id: string } }
@@ -43,6 +44,81 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
     },
     orderBy: { createdAt: 'desc' },
   });
+
+  // Adjacent bookings for manual merge (same client, BOARDING, contiguous dates)
+  type AdjacentBooking = {
+    id: string;
+    startDate: Date;
+    endDate: Date | null;
+    totalPrice: number;
+    status: string;
+    pets: string;
+    relation: 'before' | 'after';
+  };
+  const adjacentBookings: AdjacentBooking[] = [];
+  if (booking.serviceType === 'BOARDING') {
+    const clientId = booking.client.id;
+    // Booking that ends the day before this one starts
+    if (booking.startDate) {
+      const dayBefore = new Date(booking.startDate);
+      dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+      const dayBeforeStart = new Date(dayBefore);
+      dayBeforeStart.setUTCHours(0, 0, 0, 0);
+      const dayBeforeEnd = new Date(dayBefore);
+      dayBeforeEnd.setUTCHours(23, 59, 59, 999);
+      const before = await prisma.booking.findFirst({
+        where: {
+          id: { not: id },
+          clientId,
+          serviceType: 'BOARDING',
+          status: { notIn: ['CANCELLED', 'REJECTED'] },
+          endDate: { gte: dayBeforeStart, lte: dayBeforeEnd },
+        },
+        include: { bookingPets: { include: { pet: true } } },
+      });
+      if (before) {
+        adjacentBookings.push({
+          id: before.id,
+          startDate: before.startDate,
+          endDate: before.endDate,
+          totalPrice: before.totalPrice,
+          status: before.status,
+          pets: before.bookingPets.map(bp => bp.pet.name).join(', '),
+          relation: 'before',
+        });
+      }
+    }
+    // Booking that starts the day after this one ends
+    if (booking.endDate) {
+      const dayAfter = new Date(booking.endDate);
+      dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+      const dayAfterStart = new Date(dayAfter);
+      dayAfterStart.setUTCHours(0, 0, 0, 0);
+      const dayAfterEnd = new Date(dayAfter);
+      dayAfterEnd.setUTCHours(23, 59, 59, 999);
+      const after = await prisma.booking.findFirst({
+        where: {
+          id: { not: id },
+          clientId,
+          serviceType: 'BOARDING',
+          status: { notIn: ['CANCELLED', 'REJECTED'] },
+          startDate: { gte: dayAfterStart, lte: dayAfterEnd },
+        },
+        include: { bookingPets: { include: { pet: true } } },
+      });
+      if (after) {
+        adjacentBookings.push({
+          id: after.id,
+          startDate: after.startDate,
+          endDate: after.endDate,
+          totalPrice: after.totalPrice,
+          status: after.status,
+          pets: after.bookingPets.map(bp => bp.pet.name).join(', '),
+          relation: 'after',
+        });
+      }
+    }
+  }
 
   const bookingMessages = await prisma.notification.findMany({
     where: { userId: booking.client.id, type: 'ADMIN_MESSAGE', metadata: { contains: id } },
@@ -360,6 +436,13 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
                 extensionRequestedEndDate: booking.extensionRequestedEndDate ?? null,
                 extensionRequestNote: booking.extensionRequestNote ?? null,
               }}
+              locale={locale}
+            />
+          )}
+          {isBoarding && (
+            <MergeBookingsSection
+              booking={{ id: booking.id }}
+              adjacentBookings={adjacentBookings}
               locale={locale}
             />
           )}

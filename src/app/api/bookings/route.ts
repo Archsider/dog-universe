@@ -5,7 +5,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingConfirmationNotification, notifyAdminsNewBooking } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { formatDate } from '@/lib/utils';
-import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice } from '@/lib/pricing';
+import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -236,6 +236,105 @@ export async function POST(request: Request) {
         }
       } catch { /* fallback: keep 0 — better than crashing */ }
     }
+
+    // ── Auto-merge: if this BOARDING booking is contiguous with an existing one ──
+    // Detect when someone creates a booking whose startDate is the day after
+    // an existing booking's endDate (same client, same pet(s)).
+    // Instead of creating a duplicate, extend the existing booking.
+    if (serviceType === 'BOARDING' && endDate) {
+      const newStartMs = new Date(startDate).getTime();
+      const dayBeforeMs = newStartMs - 24 * 60 * 60 * 1000;
+      const dayBefore = new Date(dayBeforeMs);
+      const dayBeforeStart = new Date(dayBefore);
+      dayBeforeStart.setUTCHours(0, 0, 0, 0);
+      const dayBeforeEnd = new Date(dayBefore);
+      dayBeforeEnd.setUTCHours(23, 59, 59, 999);
+
+      const existingContiguous = await prisma.booking.findFirst({
+        where: {
+          clientId,
+          serviceType: 'BOARDING',
+          status: { notIn: ['CANCELLED', 'REJECTED', 'COMPLETED'] },
+          endDate: { gte: dayBeforeStart, lte: dayBeforeEnd },
+          bookingPets: { some: { petId: { in: petIds } } },
+        },
+        include: {
+          invoice: true,
+          boardingDetail: true,
+          bookingPets: { include: { pet: true } },
+          client: true,
+        },
+      });
+
+      if (existingContiguous) {
+        // AUTO-MERGE: extend the existing booking instead of creating a new one
+        const mergedEndDate = new Date(endDate);
+        const mergedNights = Math.floor(
+          (mergedEndDate.getTime() - existingContiguous.startDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
+        const mergePets = existingContiguous.bookingPets.map(bp => bp.pet);
+        const mergeGroomingPrice = existingContiguous.boardingDetail?.groomingPrice ?? 0;
+        const mergeTaxiAddonPrice = existingContiguous.boardingDetail?.taxiAddonPrice ?? 0;
+        const mergedTotal = calculateBoardingTotalForExtension(
+          mergePets,
+          mergedNights,
+          mergeGroomingPrice,
+          mergeTaxiAddonPrice,
+          await getPricingSettings(),
+        );
+
+        // Handle invoice update (same logic as extension)
+        if (existingContiguous.invoice) {
+          if (existingContiguous.invoice.status === 'PENDING') {
+            await prisma.invoice.update({
+              where: { id: existingContiguous.invoice.id },
+              data: { amount: mergedTotal },
+            });
+          } else if (existingContiguous.invoice.status === 'PARTIALLY_PAID') {
+            const invoiceUpdate: Record<string, unknown> = { amount: mergedTotal };
+            if (existingContiguous.invoice.paidAmount >= mergedTotal) {
+              invoiceUpdate.status = 'PAID';
+              invoiceUpdate.paidAt = existingContiguous.invoice.paidAt ?? new Date();
+            }
+            await prisma.invoice.update({
+              where: { id: existingContiguous.invoice.id },
+              data: invoiceUpdate,
+            });
+          }
+          // If PAID: don't touch — admin will handle supplementary invoice manually
+        }
+
+        await prisma.booking.update({
+          where: { id: existingContiguous.id },
+          data: {
+            endDate: mergedEndDate,
+            totalPrice: mergedTotal,
+            hasExtensionRequest: false,
+            extensionRequestedEndDate: null,
+            extensionRequestNote: null,
+          },
+        });
+
+        const mergedRef = existingContiguous.id.slice(0, 8).toUpperCase();
+        await logAction({
+          userId: session.user.id,
+          action: 'BOOKING_AUTO_MERGED',
+          entityType: 'Booking',
+          entityId: existingContiguous.id,
+          details: {
+            mergedEndDate: mergedEndDate.toISOString().slice(0, 10),
+            mergedTotal,
+            petIds,
+          },
+        });
+
+        return NextResponse.json(
+          { ...existingContiguous, bookingRef: mergedRef, autoMerged: true, newEndDate: endDate, newTotal: mergedTotal },
+          { status: 200 },
+        );
+      }
+    }
+    // ── End auto-merge ────────────────────────────────────────────────────────────
 
     const booking = await prisma.booking.create({
       data: {
