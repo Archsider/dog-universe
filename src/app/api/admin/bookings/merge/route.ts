@@ -171,7 +171,10 @@ export async function POST(request: NextRequest) {
             : {}),
           ...(source.boardingDetail?.taxiReturnEnabled
             ? {
-                taxiReturnDate: source.boardingDetail.taxiReturnDate,
+                // If source has a return date, use it; otherwise fall back to the
+                // last day of the merged stay — taxi retour always rides the end of
+                // the combined booking, so newEndDate is always a valid default.
+                taxiReturnDate: source.boardingDetail.taxiReturnDate ?? toDateStr(newEndDate),
                 taxiReturnTime: source.boardingDetail.taxiReturnTime,
                 taxiReturnAddress: source.boardingDetail.taxiReturnAddress,
               }
