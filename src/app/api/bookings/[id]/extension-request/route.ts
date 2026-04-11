@@ -35,33 +35,73 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: 'A pending extension request already exists' }, { status: 409 });
   }
 
-  const newDate = new Date(requestedEndDate + 'T12:00:00');
-  if (isNaN(newDate.getTime())) {
-    return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
-  }
-  if (booking.endDate && newDate <= booking.endDate) {
-    return NextResponse.json({ error: 'Requested date must be after current checkout date' }, { status: 400 });
-  }
-  if (newDate <= booking.startDate) {
-    return NextResponse.json({ error: 'Requested date must be after start date' }, { status: 400 });
+  if (!booking.endDate) {
+    return NextResponse.json({ error: 'Booking has no end date' }, { status: 400 });
   }
 
-  await prisma.booking.update({
-    where: { id: params.id },
-    data: {
-      hasExtensionRequest: true,
-      extensionRequestedEndDate: newDate,
-      extensionRequestNote: note ? note.trim().slice(0, 500) : null,
-    },
+  const newEndDate = new Date(requestedEndDate + 'T12:00:00Z');
+  if (isNaN(newEndDate.getTime())) {
+    return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
+  }
+
+  // Extension end date must be strictly after current end date
+  if (newEndDate <= booking.endDate) {
+    return NextResponse.json({ error: 'Requested date must be after current checkout date' }, { status: 400 });
+  }
+
+  // Extension start date = booking end date (same day — locked)
+  const extensionStartDate = booking.endDate;
+  const extensionStartStr = extensionStartDate.toISOString().slice(0, 10);
+  const requestedEndStr = requestedEndDate;
+
+  // Validate that the requested end date is actually after the extension start
+  if (requestedEndStr <= extensionStartStr) {
+    return NextResponse.json({
+      error: `L'extension doit commencer le ${extensionStartStr}`,
+    }, { status: 400 });
+  }
+
+  // Create the PENDING_EXTENSION booking
+  const extensionBooking = await prisma.$transaction(async (tx) => {
+    // Mark original booking as having a pending extension
+    await tx.booking.update({
+      where: { id: params.id },
+      data: {
+        hasExtensionRequest: true,
+        extensionRequestedEndDate: newEndDate,
+        extensionRequestNote: note ? note.trim().slice(0, 500) : null,
+      },
+    });
+
+    // Create extension booking with PENDING_EXTENSION status
+    const ext = await tx.booking.create({
+      data: {
+        clientId: booking.clientId,
+        serviceType: 'BOARDING',
+        status: 'PENDING_EXTENSION',
+        startDate: extensionStartDate,
+        endDate: newEndDate,
+        totalPrice: 0,
+        source: 'ONLINE',
+        notes: note ? note.trim().slice(0, 500) : null,
+        extensionForBookingId: params.id,
+        // Copy pets from original booking
+        bookingPets: {
+          create: booking.bookingPets.map(bp => ({ petId: bp.petId })),
+        },
+      },
+    });
+
+    return ext;
   });
 
   const bookingRef = booking.id.slice(0, 8).toUpperCase();
   const petNames = booking.bookingPets.map(bp => bp.pet.name).join(', ');
   const client = await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true } });
   const clientName = client?.name ?? session.user.email ?? 'Client';
-  const dateDisplay = newDate.toLocaleDateString('fr-MA');
+  const dateDisplay = newEndDate.toLocaleDateString('fr-MA');
 
   await notifyAdminsExtensionRequest(bookingRef, clientName, petNames, dateDisplay, params.id).catch(() => {});
 
-  return NextResponse.json({ message: 'extension_request_submitted' });
+  return NextResponse.json({ message: 'extension_request_submitted', extensionBookingId: extensionBooking.id });
 }

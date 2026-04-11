@@ -2,7 +2,7 @@ import { auth } from '../../../../../../auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import ReservationActions from './ReservationActions';
@@ -12,6 +12,7 @@ import StayPhotosSection from './StayPhotosSection';
 import AdminMessageSection from './AdminMessageSection';
 import ExtendBookingSection from './ExtendBookingSection';
 import MergeBookingsSection from './MergeBookingsSection';
+import EditDatesSection from './EditDatesSection';
 import RecordPaymentButton from '@/app/[locale]/admin/billing/CreateInvoiceButton';
 
 interface PageProps { params: { locale: string; id: string } }
@@ -45,7 +46,22 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
     orderBy: { createdAt: 'desc' },
   });
 
+  // Pending extension booking (if any) — for showing a notice on the original booking
+  const pendingExtensionBooking = await prisma.booking.findFirst({
+    where: { extensionForBookingId: id, status: 'PENDING_EXTENSION' },
+    select: { id: true, startDate: true, endDate: true, totalPrice: true },
+  });
+
+  // If this IS a PENDING_EXTENSION booking, find the original booking
+  const originalBooking = booking.extensionForBookingId
+    ? await prisma.booking.findUnique({
+        where: { id: booking.extensionForBookingId },
+        select: { id: true, startDate: true, endDate: true, totalPrice: true, status: true },
+      })
+    : null;
+
   // Adjacent bookings for manual merge (same client, BOARDING, contiguous dates)
+  // New rule: same-day contiguity (endDate === startDate)
   type AdjacentBooking = {
     id: string;
     startDate: Date;
@@ -58,23 +74,36 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
   const adjacentBookings: AdjacentBooking[] = [];
   if (booking.serviceType === 'BOARDING') {
     const clientId = booking.client.id;
-    // Booking that ends the day before this one starts
+
+    // Booking that ends on the same day this one starts (same-day contiguous)
+    // OR ends the day before (legacy next-day contiguous)
     if (booking.startDate) {
+      const startDayStart = new Date(booking.startDate);
+      startDayStart.setUTCHours(0, 0, 0, 0);
+      const startDayEnd = new Date(booking.startDate);
+      startDayEnd.setUTCHours(23, 59, 59, 999);
+
+      // Also check the day before (legacy behavior)
       const dayBefore = new Date(booking.startDate);
       dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
       const dayBeforeStart = new Date(dayBefore);
       dayBeforeStart.setUTCHours(0, 0, 0, 0);
       const dayBeforeEnd = new Date(dayBefore);
       dayBeforeEnd.setUTCHours(23, 59, 59, 999);
+
       const before = await prisma.booking.findFirst({
         where: {
           id: { not: id },
           clientId,
           serviceType: 'BOARDING',
           status: { notIn: ['CANCELLED', 'REJECTED'] },
-          endDate: { gte: dayBeforeStart, lte: dayBeforeEnd },
+          endDate: {
+            gte: dayBeforeStart,
+            lte: startDayEnd, // covers both same-day and day-before
+          },
         },
         include: { bookingPets: { include: { pet: true } } },
+        orderBy: { startDate: 'desc' },
       });
       if (before) {
         adjacentBookings.push({
@@ -88,23 +117,36 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
         });
       }
     }
-    // Booking that starts the day after this one ends
+
+    // Booking that starts on the same day this one ends (same-day contiguous)
+    // OR starts the day after (legacy next-day contiguous)
     if (booking.endDate) {
+      const endDayStart = new Date(booking.endDate);
+      endDayStart.setUTCHours(0, 0, 0, 0);
+      const endDayEnd = new Date(booking.endDate);
+      endDayEnd.setUTCHours(23, 59, 59, 999);
+
+      // Also check the day after (legacy behavior)
       const dayAfter = new Date(booking.endDate);
       dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
       const dayAfterStart = new Date(dayAfter);
       dayAfterStart.setUTCHours(0, 0, 0, 0);
       const dayAfterEnd = new Date(dayAfter);
       dayAfterEnd.setUTCHours(23, 59, 59, 999);
+
       const after = await prisma.booking.findFirst({
         where: {
           id: { not: id },
           clientId,
           serviceType: 'BOARDING',
           status: { notIn: ['CANCELLED', 'REJECTED'] },
-          startDate: { gte: dayAfterStart, lte: dayAfterEnd },
+          startDate: {
+            gte: endDayStart, // covers same-day and day-after
+            lte: dayAfterEnd,
+          },
         },
         include: { bookingPets: { include: { pet: true } } },
+        orderBy: { startDate: 'asc' },
       });
       if (after) {
         adjacentBookings.push({
@@ -152,6 +194,10 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
       noInvoice: 'Aucune facture',
       notes: 'Notes client',
       cancelReason: "Motif d'annulation",
+      originalBooking: 'Réservation d\'origine',
+      pendingExtension: 'Extension en attente',
+      viewExtension: 'Voir la demande',
+      viewOriginal: 'Voir la réservation d\'origine',
     },
     en: {
       back: 'Bookings',
@@ -169,17 +215,22 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
       noInvoice: 'No invoice',
       notes: 'Client notes',
       cancelReason: 'Cancellation reason',
+      originalBooking: 'Original booking',
+      pendingExtension: 'Pending extension',
+      viewExtension: 'View request',
+      viewOriginal: 'View original booking',
     },
   };
 
   const sl: Record<string, Record<string, string>> = {
-    fr: { PENDING: 'En attente', CONFIRMED: 'Confirmé', CANCELLED: 'Annulé', REJECTED: 'Refusé', COMPLETED: 'Terminé', IN_PROGRESS: 'En cours' },
-    en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', CANCELLED: 'Cancelled', REJECTED: 'Rejected', COMPLETED: 'Completed', IN_PROGRESS: 'In progress' },
+    fr: { PENDING: 'En attente', CONFIRMED: 'Confirmé', CANCELLED: 'Annulé', REJECTED: 'Refusé', COMPLETED: 'Terminé', IN_PROGRESS: 'En cours', PENDING_EXTENSION: 'Extension en attente' },
+    en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', CANCELLED: 'Cancelled', REJECTED: 'Rejected', COMPLETED: 'Completed', IN_PROGRESS: 'In progress', PENDING_EXTENSION: 'Extension pending' },
   };
 
   const l = labels[locale as keyof typeof labels] || labels.fr;
   const statusLbls = sl[locale] || sl.fr;
   const isBoarding = booking.serviceType === 'BOARDING';
+  const isPendingExtension = booking.status === 'PENDING_EXTENSION';
   const nights = booking.endDate
     ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
@@ -191,12 +242,17 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-serif font-bold text-charcoal font-mono">{booking.id.slice(0, 8).toUpperCase()}</h1>
-            <Badge className={`${getBookingStatusColor(booking.status)}`}>{statusLbls[booking.status]}</Badge>
+            <Badge className={`${getBookingStatusColor(booking.status)}`}>{statusLbls[booking.status] ?? booking.status}</Badge>
             {booking.source === 'MANUAL' && (
               <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
                 {locale === 'fr' ? 'Saisie manuelle' : 'Manual entry'}
+              </span>
+            )}
+            {isPendingExtension && (
+              <span className="text-xs bg-orange-50 text-orange-700 border border-orange-200 px-2 py-0.5 rounded-full font-medium">
+                {locale === 'fr' ? 'Demande d\'extension' : 'Extension request'}
               </span>
             )}
           </div>
@@ -204,6 +260,43 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
         </div>
         <DeleteBookingButton bookingId={id} locale={locale} />
       </div>
+
+      {/* Link to original booking if this is a PENDING_EXTENSION */}
+      {isPendingExtension && originalBooking && (
+        <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl text-sm">
+          <span className="font-medium text-orange-800">{l.originalBooking} :</span>
+          <Link
+            href={`/${locale}/admin/reservations/${originalBooking.id}`}
+            className="font-mono font-bold text-orange-700 hover:underline flex items-center gap-1"
+          >
+            #{originalBooking.id.slice(0, 8).toUpperCase()}
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+          <span className="text-gray-500">
+            {formatDate(originalBooking.startDate, locale)}
+            {originalBooking.endDate ? ` → ${formatDate(originalBooking.endDate, locale)}` : ''}
+          </span>
+        </div>
+      )}
+
+      {/* Notice on original booking if there's a pending extension */}
+      {!isPendingExtension && pendingExtensionBooking && (
+        <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
+          <span className="font-medium text-amber-800">{l.pendingExtension} :</span>
+          <Link
+            href={`/${locale}/admin/reservations/${pendingExtensionBooking.id}`}
+            className="font-mono font-bold text-amber-700 hover:underline flex items-center gap-1"
+          >
+            #{pendingExtensionBooking.id.slice(0, 8).toUpperCase()}
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+          {pendingExtensionBooking.endDate && (
+            <span className="text-gray-500">
+              → {formatDate(pendingExtensionBooking.endDate, locale)}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Left */}
@@ -425,7 +518,16 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
           )}
 
           <ReservationActions booking={{ id: booking.id, status: booking.status, serviceType: booking.serviceType }} locale={locale} />
-          {isBoarding && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
+
+          {/* Edit dates (available on all BOARDING bookings) */}
+          {isBoarding && (
+            <EditDatesSection
+              booking={{ id: booking.id, startDate: booking.startDate, endDate: booking.endDate ?? null, serviceType: booking.serviceType }}
+              locale={locale}
+            />
+          )}
+
+          {isBoarding && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status) && !isPendingExtension && (
             <ExtendBookingSection
               booking={{
                 id: booking.id,
@@ -446,12 +548,14 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
               locale={locale}
             />
           )}
-          <AdminMessageSection bookingId={booking.id} locale={locale} initialMessages={bookingMessages} />
+          {!isPendingExtension && (
+            <AdminMessageSection bookingId={booking.id} locale={locale} initialMessages={bookingMessages} />
+          )}
         </div>
       </div>
 
       {/* Stay photos — full width below the grid */}
-      {isBoarding && (
+      {isBoarding && !isPendingExtension && (
         <div className="mt-4">
           <StayPhotosSection bookingId={booking.id} locale={locale} />
         </div>

@@ -142,6 +142,8 @@ model Booking {
   hasExtensionRequest       Boolean   @default(false)
   extensionRequestedEndDate DateTime?
   extensionRequestNote      String?
+  // For PENDING_EXTENSION bookings: links back to the original booking being extended
+  extensionForBookingId     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

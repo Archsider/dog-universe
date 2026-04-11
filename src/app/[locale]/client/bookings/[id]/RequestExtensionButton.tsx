@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarPlus, Clock, X } from 'lucide-react';
+import { CalendarPlus, Clock, X, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
+import { formatDate } from '@/lib/utils';
 
 interface RequestExtensionButtonProps {
   bookingId: string;
@@ -17,7 +18,9 @@ const l = {
   fr: {
     requestExtension: 'Demander une prolongation',
     pending: 'Prolongation en attente de validation',
-    newEndDate: 'Nouvelle date de départ souhaitée *',
+    stayEndsOn: 'Votre séjour se termine le',
+    extensionStartsOn: 'Date de début de l\'extension (verrouillée)',
+    newEndDate: 'Nouvelle date de départ *',
     note: 'Note (facultatif)',
     notePlaceholder: 'Raison de la prolongation…',
     submit: 'Envoyer la demande',
@@ -30,6 +33,8 @@ const l = {
   en: {
     requestExtension: 'Request extension',
     pending: 'Extension request pending',
+    stayEndsOn: 'Your stay ends on',
+    extensionStartsOn: 'Extension start date (locked)',
     newEndDate: 'New requested checkout date *',
     note: 'Note (optional)',
     notePlaceholder: 'Reason for the extension…',
@@ -50,7 +55,10 @@ export default function RequestExtensionButton({ bookingId, currentEndDate, hasE
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const minDate = new Date(currentEndDate.getTime() + 86400000).toISOString().slice(0, 10);
+  // The extension start date is locked to the current booking end date (same day)
+  const extensionStartStr = currentEndDate.toISOString().slice(0, 10);
+  // Minimum end date for the extension: at least 1 day after the extension start (= current end date + 1)
+  const minEndDate = new Date(currentEndDate.getTime() + 86400000).toISOString().slice(0, 10);
 
   if (hasExtensionRequest) {
     return (
@@ -63,7 +71,7 @@ export default function RequestExtensionButton({ bookingId, currentEndDate, hasE
 
   async function handleSubmit() {
     if (!requestedEndDate) { toast({ title: t.errorRequired, variant: 'destructive' }); return; }
-    if (new Date(requestedEndDate) <= currentEndDate) {
+    if (requestedEndDate <= extensionStartStr) {
       toast({ title: t.errorMustBeLater, variant: 'destructive' }); return;
     }
     setLoading(true);
@@ -116,11 +124,32 @@ export default function RequestExtensionButton({ bookingId, currentEndDate, hasE
         </button>
       </div>
 
+      {/* Info: stay end date = extension start date */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-white border border-amber-100 rounded-lg text-xs text-amber-800">
+        <CalendarPlus className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+        <span>{t.stayEndsOn} <strong>{formatDate(currentEndDate, locale)}</strong></span>
+      </div>
+
+      {/* Locked start date */}
+      <div>
+        <label className="text-xs font-medium text-gray-500 block mb-1 flex items-center gap-1">
+          <Lock className="h-3 w-3" />
+          {t.extensionStartsOn}
+        </label>
+        <input
+          type="date"
+          value={extensionStartStr}
+          disabled
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed"
+        />
+      </div>
+
+      {/* End date picker */}
       <div>
         <label className="text-xs font-medium text-gray-600 block mb-1">{t.newEndDate}</label>
         <input
           type="date"
-          min={minDate}
+          min={minEndDate}
           value={requestedEndDate}
           onChange={e => setRequestedEndDate(e.target.value)}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"

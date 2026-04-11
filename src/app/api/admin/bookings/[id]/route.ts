@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const body = await request.json();
   const { status, notes } = body;
 
-  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'CANCELLED', 'REJECTED', 'COMPLETED'];
+  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'CANCELLED', 'REJECTED', 'COMPLETED', 'PENDING_EXTENSION'];
   if (status && !VALID_STATUSES.includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
@@ -51,7 +51,185 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // ── Extension: direct admin extend OR approve client request ─────────────────
+  // ── PENDING_EXTENSION: Approve (merge into original) ──────────────────────
+  if (body.approveExtension && booking.status === 'PENDING_EXTENSION') {
+    if (!booking.extensionForBookingId) {
+      return NextResponse.json({ error: 'NO_ORIGINAL_BOOKING' }, { status: 400 });
+    }
+
+    const originalBooking = await prisma.booking.findUnique({
+      where: { id: booking.extensionForBookingId },
+      include: { invoice: true, bookingPets: { include: { pet: true } }, client: true },
+    });
+
+    if (!originalBooking) {
+      return NextResponse.json({ error: 'ORIGINAL_BOOKING_NOT_FOUND' }, { status: 404 });
+    }
+
+    const newEndDate = booking.endDate ?? booking.startDate;
+
+    // Invoice merge: original_total + extension_total = new total
+    const ancienTotal = originalBooking.invoice?.amount ?? originalBooking.totalPrice;
+    const montantExtension = booking.invoice?.amount ?? booking.totalPrice;
+    const newTotal = Math.round((ancienTotal + montantExtension) * 100) / 100;
+
+    await prisma.$transaction(async (tx) => {
+      // Migrate photos and items from extension booking to original
+      await tx.stayPhoto.updateMany({ where: { bookingId: params.id }, data: { bookingId: originalBooking.id } });
+      await tx.bookingItem.updateMany({ where: { bookingId: params.id }, data: { bookingId: originalBooking.id } });
+
+      // Update invoice
+      if (originalBooking.invoice && booking.invoice) {
+        const newPaidAmount = Math.round((originalBooking.invoice.paidAmount + booking.invoice.paidAmount) * 100) / 100;
+        const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+        await tx.invoice.update({
+          where: { id: originalBooking.invoice.id },
+          data: {
+            amount: newTotal,
+            paidAmount: newPaidAmount,
+            status: newStatus,
+            ...(newStatus === 'PAID' && !originalBooking.invoice.paidAt ? { paidAt: new Date() } : {}),
+          },
+        });
+        await tx.invoiceItem.deleteMany({ where: { invoiceId: booking.invoice.id } });
+        await tx.invoice.delete({ where: { id: booking.invoice.id } });
+      } else if (!originalBooking.invoice && booking.invoice) {
+        await tx.invoice.update({ where: { id: booking.invoice.id }, data: { bookingId: originalBooking.id, amount: newTotal } });
+      } else if (originalBooking.invoice && !booking.invoice) {
+        const newPaidAmount = originalBooking.invoice.paidAmount;
+        const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+        await tx.invoice.update({ where: { id: originalBooking.invoice.id }, data: { amount: newTotal, status: newStatus } });
+      }
+
+      // Update original booking end date and total
+      await tx.booking.update({
+        where: { id: originalBooking.id },
+        data: {
+          endDate: newEndDate,
+          totalPrice: newTotal,
+          hasExtensionRequest: false,
+          extensionRequestedEndDate: null,
+          extensionRequestNote: null,
+        },
+      });
+
+      // Delete the extension booking (cascades BookingPets, BoardingDetail, etc.)
+      await tx.booking.delete({ where: { id: params.id } });
+    });
+
+    const bookingRef = originalBooking.id.slice(0, 8).toUpperCase();
+    const newEndDateDisplay = newEndDate.toLocaleDateString(originalBooking.client?.language === 'en' ? 'en-GB' : 'fr-MA');
+    const { createBookingExtendedNotification } = await import('@/lib/notifications');
+    await createBookingExtendedNotification(originalBooking.clientId, bookingRef, newEndDateDisplay, originalBooking.client?.language ?? 'fr').catch(() => {});
+
+    await logAction({
+      userId: session.user.id,
+      action: 'EXTENSION_APPROVED',
+      entityType: 'Booking',
+      entityId: originalBooking.id,
+      details: { extensionBookingId: params.id, newEndDate: newEndDate.toISOString().slice(0, 10), newTotal },
+    });
+
+    return NextResponse.json({ message: 'extension_approved', originalBookingId: originalBooking.id, newTotal });
+  }
+
+  // ── PENDING_EXTENSION: Reject (delete extension booking) ─────────────────
+  if (body.rejectExtension && booking.status === 'PENDING_EXTENSION') {
+    const originalBookingId = booking.extensionForBookingId;
+
+    await prisma.$transaction(async (tx) => {
+      // Delete extension invoice if exists
+      if (booking.invoice) {
+        await tx.invoiceItem.deleteMany({ where: { invoiceId: booking.invoice.id } });
+        await tx.invoice.delete({ where: { id: booking.invoice.id } });
+      }
+      await tx.booking.delete({ where: { id: params.id } });
+
+      // Clear hasExtensionRequest flag on original booking
+      if (originalBookingId) {
+        await tx.booking.update({
+          where: { id: originalBookingId },
+          data: { hasExtensionRequest: false, extensionRequestedEndDate: null, extensionRequestNote: null },
+        });
+      }
+    });
+
+    if (originalBookingId) {
+      const bookingRef = originalBookingId.slice(0, 8).toUpperCase();
+      const { createExtensionRejectedNotification } = await import('@/lib/notifications');
+      await createExtensionRejectedNotification(booking.clientId, bookingRef).catch(() => {});
+    }
+
+    await logAction({
+      userId: session.user.id,
+      action: 'EXTENSION_REJECTED',
+      entityType: 'Booking',
+      entityId: params.id,
+      details: { originalBookingId },
+    });
+
+    return NextResponse.json({ message: 'extension_rejected', originalBookingId });
+  }
+
+  // ── Edit dates (admin corrects start/end date + regenerates invoice) ──────
+  if (body.editDates) {
+    const { startDate: newStartStr, endDate: newEndStr } = body.editDates as { startDate?: string; endDate?: string };
+    if (!newStartStr || !newEndStr) {
+      return NextResponse.json({ error: 'editDates requires startDate and endDate' }, { status: 400 });
+    }
+
+    const newStart = new Date(newStartStr + 'T12:00:00Z');
+    const newEnd = new Date(newEndStr + 'T12:00:00Z');
+
+    if (isNaN(newStart.getTime()) || isNaN(newEnd.getTime())) {
+      return NextResponse.json({ error: 'Invalid dates' }, { status: 400 });
+    }
+    if (newEnd <= newStart) {
+      return NextResponse.json({ error: 'endDate must be after startDate' }, { status: 400 });
+    }
+
+    const newNights = Math.floor((newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Recalculate price
+    let newTotal = booking.totalPrice;
+    if (booking.serviceType === 'BOARDING') {
+      const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
+      const pricingSettings = await getPricingSettings();
+      const pets = booking.bookingPets.map(bp => bp.pet);
+      const groomingPrice = booking.boardingDetail?.groomingPrice ?? 0;
+      const taxiAddonPrice = booking.boardingDetail?.taxiAddonPrice ?? 0;
+      newTotal = calculateBoardingTotalForExtension(pets, newNights, groomingPrice, taxiAddonPrice, pricingSettings);
+    }
+
+    // Update booking and invoice
+    await prisma.$transaction(async (tx) => {
+      await tx.booking.update({
+        where: { id: params.id },
+        data: { startDate: newStart, endDate: newEnd, totalPrice: newTotal },
+      });
+
+      if (booking.invoice && ['PENDING', 'PARTIALLY_PAID', 'PAID'].includes(booking.invoice.status)) {
+        const newPaidAmount = booking.invoice.paidAmount;
+        const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+        await tx.invoice.update({
+          where: { id: booking.invoice.id },
+          data: { amount: newTotal, status: newStatus },
+        });
+      }
+    });
+
+    await logAction({
+      userId: session.user.id,
+      action: 'BOOKING_DATES_EDITED',
+      entityType: 'Booking',
+      entityId: params.id,
+      details: { newStartDate: newStartStr, newEndDate: newEndStr, newNights, newTotal },
+    });
+
+    return NextResponse.json({ message: 'dates_updated', newStartDate: newStartStr, newEndDate: newEndStr, newNights, newTotal });
+  }
+
+  // ── Extension: direct admin extend OR approve client request (flag-based) ─
   const newEndDateStr: string | undefined = body.extendEndDate ?? (body.approveExtension ? booking.extensionRequestedEndDate?.toISOString().slice(0, 10) : undefined);
 
   if (newEndDateStr || body.rejectExtension) {
@@ -59,7 +237,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ error: 'Extensions only apply to boarding stays' }, { status: 400 });
     }
 
-    // ── Reject extension request ─────────────────────────────────────────────
+    // ── Reject extension request (flag-based) ────────────────────────────────
     if (body.rejectExtension) {
       if (!booking.hasExtensionRequest) {
         return NextResponse.json({ error: 'No pending extension request' }, { status: 400 });
@@ -106,137 +284,34 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const pricingSettings = await getPricingSettings();
     const newTotal = calculateBoardingTotalForExtension(pets, newNights, groomingPrice, taxiAddonPrice, pricingSettings);
 
-    // Invoice impact
+    // Invoice impact — always update existing, never create supplementary
     let invoiceWarning = false;
-    let supplementaryInvoiceNumber: string | null = null;
     if (booking.invoice) {
-      if (booking.invoice.status === 'PENDING') {
-        await prisma.invoice.update({ where: { id: booking.invoice.id }, data: { amount: newTotal } });
-      } else if (booking.invoice.status === 'PARTIALLY_PAID') {
-        // Update amount — if the extension makes paidAmount sufficient, promote to PAID
-        const invoiceUpdate: Record<string, unknown> = { amount: newTotal };
-        if (booking.invoice.paidAmount >= newTotal) {
-          invoiceUpdate.status = 'PAID';
-          invoiceUpdate.paidAt = booking.invoice.paidAt ?? new Date();
-        }
-        await prisma.invoice.update({ where: { id: booking.invoice.id }, data: invoiceUpdate });
+      if (['PENDING', 'PARTIALLY_PAID'].includes(booking.invoice.status)) {
+        const newPaidAmount = booking.invoice.paidAmount;
+        const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+        await prisma.invoice.update({
+          where: { id: booking.invoice.id },
+          data: { amount: newTotal, status: newStatus },
+        });
       } else if (booking.invoice.status === 'PAID') {
-        // Original invoice is paid — do NOT touch it.
-        // Create (or update/merge) a supplementary PENDING invoice for the extension delta.
-        const deltaAmount = Math.round((newTotal - booking.invoice.amount) * 100) / 100;
-        if (deltaAmount <= 0) {
-          // Long-stay discount made the new total ≤ the already-paid amount.
-          // Keep booking.totalPrice in sync with the invoice to avoid inconsistency.
-          invoiceWarning = true;
-        }
-        if (deltaAmount > 0) {
-          const bookingRefShort = params.id.slice(0, 8).toUpperCase();
-          const surchargeNote = `EXTENSION_SURCHARGE:${params.id}`;
-          const existing = await prisma.invoice.findFirst({
-            where: {
-              OR: [
-                { supplementaryForBookingId: params.id, status: { notIn: ['PAID', 'CANCELLED'] } },
-                // legacy fallback for rows created before the FK column was added
-                { clientId: booking.clientId, notes: surchargeNote, status: { notIn: ['PAID', 'CANCELLED'] } },
-              ],
-            },
-          });
-          if (existing) {
-            // Merge delta into the existing unpaid supplementary invoice
-            await prisma.invoice.update({
-              where: { id: existing.id },
-              data: {
-                amount: deltaAmount,
-                items: {
-                  deleteMany: {},
-                  create: [{
-                    description: `Supplément prolongation séjour #${bookingRefShort}`,
-                    quantity: 1,
-                    unitPrice: deltaAmount,
-                    total: deltaAmount,
-                  }],
-                },
-              },
-            });
-            supplementaryInvoiceNumber = existing.invoiceNumber;
-            // Notify client of updated supplementary invoice (non-blocking)
-            try {
-              const { createInvoiceNotification } = await import('@/lib/notifications');
-              const { formatMAD } = await import('@/lib/utils');
-              await createInvoiceNotification(booking.clientId, existing.invoiceNumber, formatMAD(deltaAmount));
-              const client = await prisma.user.findUnique({ where: { id: booking.clientId }, select: { name: true, email: true, language: true } });
-              if (client) {
-                const locale = client.language ?? 'fr';
-                const { subject, html } = getEmailTemplate('invoice_available', { clientName: client.name ?? client.email, invoiceNumber: existing.invoiceNumber, amount: `${deltaAmount} MAD` }, locale);
-                await sendEmail({ to: client.email, subject, html });
-              }
-            } catch { /* non-blocking */ }
-          } else {
-            // Generate a new invoice number (same pattern as /api/invoices)
-            const year = new Date().getFullYear();
-            let suppNum = '';
-            for (let attempt = 0; attempt < 5; attempt++) {
-              const count = await prisma.invoice.count();
-              const candidate = `DU-${year}-${String(count + 1 + attempt).padStart(4, '0')}`;
-              const taken = await prisma.invoice.findUnique({ where: { invoiceNumber: candidate } });
-              if (!taken) { suppNum = candidate; break; }
-            }
-            if (suppNum) {
-              const created = await prisma.invoice.create({
-                data: {
-                  invoiceNumber: suppNum,
-                  clientId: booking.clientId,
-                  bookingId: null,
-                  amount: deltaAmount,
-                  paidAmount: 0,
-                  status: 'PENDING',
-                  serviceType: 'BOARDING',
-                  notes: surchargeNote,
-                  supplementaryForBookingId: params.id,
-                  items: {
-                    create: [{
-                      description: `Supplément prolongation séjour #${bookingRefShort}`,
-                      quantity: 1,
-                      unitPrice: deltaAmount,
-                      total: deltaAmount,
-                    }],
-                  },
-                },
-              });
-              supplementaryInvoiceNumber = created.invoiceNumber;
-              // Notify client of new supplementary invoice (non-blocking)
-              try {
-                const { createInvoiceNotification } = await import('@/lib/notifications');
-                const { formatMAD } = await import('@/lib/utils');
-                await createInvoiceNotification(booking.clientId, suppNum, formatMAD(deltaAmount));
-                const client = await prisma.user.findUnique({ where: { id: booking.clientId }, select: { name: true, email: true, language: true } });
-                if (client) {
-                  const locale = client.language ?? 'fr';
-                  const { subject, html } = getEmailTemplate('invoice_available', { clientName: client.name ?? client.email, invoiceNumber: suppNum, amount: `${deltaAmount} MAD` }, locale);
-                  await sendEmail({ to: client.email, subject, html });
-                }
-              } catch { /* non-blocking */ }
-            } else {
-              invoiceWarning = true; // invoice number generation failed (collision — extremely rare)
-            }
-          }
+        // Invoice already paid — update total (may now be partially paid)
+        const newStatus = booking.invoice.paidAmount >= newTotal ? 'PAID' : 'PARTIALLY_PAID';
+        await prisma.invoice.update({
+          where: { id: booking.invoice.id },
+          data: { amount: newTotal, status: newStatus },
+        });
+        if (booking.invoice.paidAmount < newTotal) {
+          invoiceWarning = true; // remainder needs to be collected
         }
       }
     }
-
-    // If the invoice is PAID and the recalculated total is ≤ what was already billed
-    // (long-stay discount edge case), keep totalPrice aligned with invoice.amount to
-    // avoid a confusing mismatch. invoiceWarning is already set above in this case.
-    const effectiveTotalPrice =
-      booking.invoice?.status === 'PAID' && newTotal < booking.invoice.amount
-        ? booking.invoice.amount
-        : newTotal;
 
     await prisma.booking.update({
       where: { id: params.id },
       data: {
         endDate: newEndDate,
-        totalPrice: effectiveTotalPrice,
+        totalPrice: newTotal,
         hasExtensionRequest: false,
         extensionRequestedEndDate: null,
         extensionRequestNote: null,
@@ -253,10 +328,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       action: body.approveExtension ? 'EXTENSION_APPROVED' : 'EXTENSION_DIRECT',
       entityType: 'Booking',
       entityId: params.id,
-      details: { newEndDate: newEndDateStr, newTotal, invoiceWarning, supplementaryInvoiceNumber },
+      details: { newEndDate: newEndDateStr, newTotal, invoiceWarning },
     });
 
-    return NextResponse.json({ message: 'extended', newEndDate: newEndDateStr, newTotal, invoiceWarning, supplementaryInvoiceNumber });
+    return NextResponse.json({ message: 'extended', newEndDate: newEndDateStr, newTotal, invoiceWarning });
   }
   // ── End extension handling ────────────────────────────────────────────────────
 

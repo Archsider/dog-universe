@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, ArrowRight, Settings2 } from 'lucide-react';
+import { Loader2, ArrowRight, Settings2, Check, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface Props {
@@ -33,12 +33,13 @@ const ACTION_LABELS: Record<string, Record<string, { fr: string; en: string }>> 
 };
 
 const STATUS_LABELS: Record<string, { fr: string; en: string }> = {
-  PENDING:     { fr: 'En attente',  en: 'Pending' },
-  CONFIRMED:   { fr: 'Confirmé',   en: 'Confirmed' },
-  IN_PROGRESS: { fr: 'En cours',   en: 'In progress' },
-  COMPLETED:   { fr: 'Terminé',    en: 'Completed' },
-  CANCELLED:   { fr: 'Annulé',     en: 'Cancelled' },
-  REJECTED:    { fr: 'Refusé',     en: 'Rejected' },
+  PENDING:           { fr: 'En attente',              en: 'Pending' },
+  CONFIRMED:         { fr: 'Confirmé',                en: 'Confirmed' },
+  IN_PROGRESS:       { fr: 'En cours',                en: 'In progress' },
+  COMPLETED:         { fr: 'Terminé',                 en: 'Completed' },
+  CANCELLED:         { fr: 'Annulé',                  en: 'Cancelled' },
+  REJECTED:          { fr: 'Refusé',                  en: 'Rejected' },
+  PENDING_EXTENSION: { fr: 'Extension en attente',    en: 'Extension pending' },
 };
 
 export default function ReservationActions({ booking, locale }: Props) {
@@ -46,6 +47,8 @@ export default function ReservationActions({ booking, locale }: Props) {
   const [forceStatus, setForceStatus] = useState(booking.status);
   const [loadingNext, setLoadingNext] = useState(false);
   const [loadingForce, setLoadingForce] = useState(false);
+  const [loadingApprove, setLoadingApprove] = useState(false);
+  const [loadingReject, setLoadingReject] = useState(false);
   const [showForce, setShowForce] = useState(false);
   const router = useRouter();
   const isFr = locale === 'fr';
@@ -53,6 +56,7 @@ export default function ReservationActions({ booking, locale }: Props) {
   const pipeline = booking.serviceType === 'PET_TAXI' ? 'PET_TAXI' : 'BOARDING';
   const nextStatus = NEXT_STATUS[currentStatus];
   const actionLabel = nextStatus ? ACTION_LABELS[pipeline]?.[currentStatus] : null;
+  const isPendingExtension = currentStatus === 'PENDING_EXTENSION';
 
   const patchStatus = async (status: string, setLoading: (v: boolean) => void) => {
     setLoading(true);
@@ -73,6 +77,104 @@ export default function ReservationActions({ booking, locale }: Props) {
       setLoading(false);
     }
   };
+
+  // Approve PENDING_EXTENSION booking — triggers merge with original booking
+  const handleApproveExtension = async () => {
+    setLoadingApprove(true);
+    try {
+      const res = await fetch(`/api/admin/bookings/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approveExtension: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error ?? (isFr ? 'Erreur lors de l\'approbation' : 'Approval error'), variant: 'destructive' });
+        return;
+      }
+      toast({ title: isFr ? 'Extension approuvée — réservations fusionnées.' : 'Extension approved — bookings merged.' });
+      // Redirect to the original booking
+      if (data.originalBookingId) {
+        router.push(`/${locale}/admin/reservations/${data.originalBookingId}`);
+      } else {
+        router.push(`/${locale}/admin/reservations`);
+      }
+    } catch {
+      toast({ title: isFr ? 'Erreur lors de l\'approbation' : 'Approval error', variant: 'destructive' });
+    } finally {
+      setLoadingApprove(false);
+    }
+  };
+
+  // Reject PENDING_EXTENSION booking — deletes it
+  const handleRejectExtension = async () => {
+    setLoadingReject(true);
+    try {
+      const res = await fetch(`/api/admin/bookings/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rejectExtension: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error ?? (isFr ? 'Erreur lors du refus' : 'Rejection error'), variant: 'destructive' });
+        return;
+      }
+      toast({ title: isFr ? 'Extension refusée.' : 'Extension rejected.' });
+      if (data.originalBookingId) {
+        router.push(`/${locale}/admin/reservations/${data.originalBookingId}`);
+      } else {
+        router.push(`/${locale}/admin/reservations`);
+      }
+    } catch {
+      toast({ title: isFr ? 'Erreur lors du refus' : 'Rejection error', variant: 'destructive' });
+    } finally {
+      setLoadingReject(false);
+    }
+  };
+
+  // PENDING_EXTENSION: special approve/reject UI
+  if (isPendingExtension) {
+    return (
+      <div className="bg-white rounded-xl border border-orange-200 p-5 shadow-card space-y-4">
+        <h3 className="font-semibold text-orange-700 text-sm">
+          {isFr ? 'Demande d\'extension' : 'Extension request'}
+        </h3>
+        <p className="text-xs text-gray-500">
+          {isFr
+            ? 'Cette réservation est une demande d\'extension en attente de validation. L\'approbation fusionnera automatiquement les deux réservations et mettra à jour la facture.'
+            : 'This booking is a pending extension request. Approval will automatically merge the two bookings and update the invoice.'}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+            disabled={loadingApprove || loadingReject}
+            onClick={handleApproveExtension}
+          >
+            {loadingApprove ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Check className="h-4 w-4 mr-2" />
+            )}
+            {isFr ? 'Approuver' : 'Approve'}
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
+            disabled={loadingApprove || loadingReject}
+            onClick={handleRejectExtension}
+          >
+            {loadingReject ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <X className="h-4 w-4 mr-2" />
+            )}
+            {isFr ? 'Refuser' : 'Reject'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-4">
