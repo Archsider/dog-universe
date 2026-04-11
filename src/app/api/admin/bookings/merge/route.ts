@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
                 taxiGoAddress: source.boardingDetail.taxiGoAddress,
               }
             : {}),
-          ...(source.boardingDetail?.taxiReturnEnabled && !target.boardingDetail.taxiReturnEnabled
+          ...(source.boardingDetail?.taxiReturnEnabled
             ? {
                 taxiReturnDate: source.boardingDetail.taxiReturnDate,
                 taxiReturnTime: source.boardingDetail.taxiReturnTime,
