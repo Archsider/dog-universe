@@ -151,6 +151,7 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
   }
 
   const selectedBookings = selectedDay ? (dayBookingsMap.get(selectedDay) ?? []) : [];
+  const selectedTaxis = selectedDay ? (dayTaxiMap.get(selectedDay) ?? []) : [];
 
   return (
     <div className="flex flex-col xl:flex-row gap-6">
@@ -319,51 +320,90 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
             </button>
           </div>
 
-          <div className="p-4">
-            {selectedBookings.length === 0 ? (
+          <div className="p-4 space-y-4">
+            {/* Pensionnaires */}
+            {selectedBookings.length === 0 && selectedTaxis.length === 0 ? (
               <p className="text-sm text-charcoal/40 text-center py-6">
                 {isEn ? 'No bookings this day' : 'Aucune réservation ce jour'}
               </p>
             ) : (
-              <div className="space-y-3">
-                {selectedBookings.map((b) => (
-                  <a
-                    key={b.id}
-                    href={`/${locale}/admin/reservations/${b.id}`}
-                    className="block p-3 rounded-xl border border-ivory-200 hover:border-gold-300 hover:bg-ivory-50 transition-colors group"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5">
-                        {b.serviceType === 'PET_TAXI' ? (
-                          <Car className="h-3.5 w-3.5 text-charcoal/40" />
-                        ) : (
-                          <PawPrint className="h-3.5 w-3.5 text-charcoal/40" />
-                        )}
-                        <span className="text-xs font-semibold text-charcoal">
-                          {b.serviceType === 'BOARDING' ? (isEn ? 'Boarding' : 'Pension') : 'Taxi'}
-                        </span>
-                      </div>
-                      <span
-                        className={cn(
-                          'text-[10px] px-1.5 py-0.5 rounded border',
-                          STATUS_CHIP[b.status] ?? 'bg-gray-100 border-gray-200 text-gray-600',
-                        )}
+              <>
+                {selectedBookings.length > 0 && (
+                  <div className="space-y-3">
+                    {selectedBookings.map((b) => (
+                      <a
+                        key={b.id}
+                        href={`/${locale}/admin/reservations/${b.id}`}
+                        className="block p-3 rounded-xl border border-ivory-200 hover:border-gold-300 hover:bg-ivory-50 transition-colors group"
                       >
-                        {statusLabel[b.status] ?? b.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-charcoal/50 mb-0.5">{b.client.name}</p>
-                    <p className="text-xs font-medium text-charcoal group-hover:text-gold-700 transition-colors">
-                      {b.bookingPets.map((bp) => bp.pet.name).join(', ')}
-                    </p>
-                    {b.bookingPets.length > 0 && (
-                      <p className="text-[10px] text-charcoal/40 mt-0.5">
-                        {b.bookingPets.map((bp) => bp.pet.species === 'DOG' ? '🐶' : '🐱').join(' ')}
-                      </p>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-1.5">
+                            {b.serviceType === 'PET_TAXI' ? (
+                              <Car className="h-3.5 w-3.5 text-charcoal/40" />
+                            ) : (
+                              <PawPrint className="h-3.5 w-3.5 text-charcoal/40" />
+                            )}
+                            <span className="text-xs font-semibold text-charcoal">
+                              {b.serviceType === 'BOARDING' ? (isEn ? 'Boarding' : 'Pension') : 'Taxi'}
+                            </span>
+                          </div>
+                          <span
+                            className={cn(
+                              'text-[10px] px-1.5 py-0.5 rounded border',
+                              STATUS_CHIP[b.status] ?? 'bg-gray-100 border-gray-200 text-gray-600',
+                            )}
+                          >
+                            {statusLabel[b.status] ?? b.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-charcoal/50 mb-0.5">{b.client.name}</p>
+                        <p className="text-xs font-medium text-charcoal group-hover:text-gold-700 transition-colors">
+                          {b.bookingPets.map((bp) => bp.pet.name).join(', ')}
+                        </p>
+                        {b.bookingPets.length > 0 && (
+                          <p className="text-[10px] text-charcoal/40 mt-0.5">
+                            {b.bookingPets.map((bp) => bp.pet.species === 'DOG' ? '🐶' : '🐱').join(' ')}
+                          </p>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                )}
+
+                {/* Transports du jour */}
+                {selectedTaxis.length > 0 && (
+                  <div>
+                    {selectedBookings.length > 0 && (
+                      <div className="border-t border-ivory-100 pt-3 mb-3" />
                     )}
-                  </a>
-                ))}
-              </div>
+                    <p className="text-[10px] font-semibold text-charcoal/40 uppercase tracking-wide mb-2">
+                      {isEn ? 'Transports' : 'Transports'}
+                    </p>
+                    <div className="space-y-2">
+                      {selectedTaxis.map((t) => {
+                        const dir = t.direction === 'aller' ? (isEn ? 'Go' : 'Aller') : (isEn ? 'Return' : 'Retour');
+                        const timeLabel = t.time ?? (isEn ? 'TBD' : 'À confirmer');
+                        return (
+                          <div
+                            key={`${t.bookingId}-${t.direction}`}
+                            className="flex items-start gap-2 p-2.5 rounded-lg bg-orange-50 border border-orange-100"
+                          >
+                            <span className="text-base leading-none mt-0.5">🚗</span>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-orange-800">
+                                {dir}
+                                {t.time && <span className="ml-1 font-normal text-orange-700">· {t.time}</span>}
+                                {!t.time && <span className="ml-1 font-normal italic text-orange-500">· {timeLabel}</span>}
+                              </p>
+                              <p className="text-[11px] text-orange-700/70 truncate">{t.clientName} — {t.pets}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

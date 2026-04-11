@@ -282,7 +282,11 @@ export default function BoardView({ locale, bookings, stats }: Props) {
     .filter((t) => normDateTs(t.date) > sevenDaysTs.getTime())
     .sort(sortByDateThenTime);
 
-  const taxiTabCount = new Set(stats.allBoardingTaxis.map((t) => t.bookingId)).size;
+  const taxiTabCount = new Set(
+    stats.allBoardingTaxis
+      .filter((t) => normDateTs(t.date) >= todayTs.getTime())
+      .map((t) => t.bookingId)
+  ).size;
 
   const l = {
     title: isFr ? 'Tableau opérationnel' : 'Operations Board',
