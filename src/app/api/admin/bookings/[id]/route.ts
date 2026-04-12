@@ -90,7 +90,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     const originalBooking = await prisma.booking.findUnique({
       where: { id: booking.extensionForBookingId },
-      include: { invoice: true, bookingPets: { include: { pet: true } }, client: true },
+      include: { invoice: true, bookingPets: { include: { pet: true } }, boardingDetail: true, client: true },
     });
 
     if (!originalBooking) {
@@ -99,10 +99,24 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     const newEndDate = booking.endDate ?? booking.startDate;
 
-    // Invoice merge: original_total + extension_total = new total
-    const ancienTotal = originalBooking.invoice?.amount ?? originalBooking.totalPrice;
-    const montantExtension = booking.invoice?.amount ?? booking.totalPrice;
-    const newTotal = Math.round((ancienTotal + montantExtension) * 100) / 100;
+    // Recalculate new total based on the full merged duration (not a naive sum)
+    // The extension booking is created with totalPrice:0 and no invoice, so summing would
+    // produce the original total unchanged — i.e. a free extension. We compute from scratch.
+    const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
+    const pricingSettingsForExt = await getPricingSettings();
+    const petsForExt = originalBooking.bookingPets.map(bp => bp.pet);
+    const mergedNights = Math.floor(
+      (newEndDate.getTime() - originalBooking.startDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    const groomingPriceForExt = originalBooking.boardingDetail?.groomingPrice ?? 0;
+    const taxiAddonPriceForExt = originalBooking.boardingDetail?.taxiAddonPrice ?? 0;
+    const newTotal = Math.round(
+      calculateBoardingTotalForExtension(petsForExt, mergedNights, groomingPriceForExt, taxiAddonPriceForExt, pricingSettingsForExt) * 100
+    ) / 100;
+
+    if (newTotal <= 0) {
+      return NextResponse.json({ error: 'INVALID_COMPUTED_TOTAL' }, { status: 400 });
+    }
 
     await prisma.$transaction(async (tx) => {
       // Migrate photos and items from extension booking to original
@@ -209,6 +223,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ error: 'editDates requires startDate and endDate' }, { status: 400 });
     }
 
+    // Block edit if invoice is PAID unless the admin explicitly acknowledges the risk
+    if (booking.invoice?.status === 'PAID' && !body.forcePaidInvoice) {
+      return NextResponse.json({ error: 'INVOICE_ALREADY_PAID', hint: 'Pass forcePaidInvoice:true to override' }, { status: 409 });
+    }
+
     const newStart = new Date(newStartStr + 'T12:00:00Z');
     const newEnd = new Date(newEndStr + 'T12:00:00Z');
 
@@ -230,6 +249,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       const groomingPrice = booking.boardingDetail?.groomingPrice ?? 0;
       const taxiAddonPrice = booking.boardingDetail?.taxiAddonPrice ?? 0;
       newTotal = calculateBoardingTotalForExtension(pets, newNights, groomingPrice, taxiAddonPrice, pricingSettings);
+    }
+
+    if (newTotal <= 0) {
+      return NextResponse.json({ error: 'INVALID_COMPUTED_TOTAL' }, { status: 400 });
     }
 
     // Update booking and invoice
@@ -316,6 +339,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
 
     // ── Apply extension (direct or approved) ─────────────────────────────────
+    // Block if invoice is PAID unless admin explicitly acknowledges the risk
+    if (booking.invoice?.status === 'PAID' && !body.forcePaidInvoice) {
+      return NextResponse.json({ error: 'INVOICE_ALREADY_PAID', hint: 'Pass forcePaidInvoice:true to override' }, { status: 409 });
+    }
+
     const newEndDate = new Date(newEndDateStr + 'T12:00:00');
     if (isNaN(newEndDate.getTime())) {
       return NextResponse.json({ error: 'Invalid end date' }, { status: 400 });
@@ -335,6 +363,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
     const pricingSettings = await getPricingSettings();
     const newTotal = calculateBoardingTotalForExtension(pets, newNights, groomingPrice, taxiAddonPrice, pricingSettings);
+
+    if (newTotal <= 0) {
+      return NextResponse.json({ error: 'INVALID_COMPUTED_TOTAL' }, { status: 400 });
+    }
 
     // Invoice impact — always update existing, never create supplementary
     let invoiceWarning = false;
@@ -515,8 +547,20 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const booking = await prisma.booking.findUnique({ where: { id: params.id } });
+  const booking = await prisma.booking.findUnique({
+    where: { id: params.id },
+    include: { invoice: { select: { id: true, status: true, invoiceNumber: true } } },
+  });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // Refuse to delete a booking whose invoice has already been paid — this would
+  // silently erase financial records. Cancel the booking instead.
+  if (booking.invoice?.status === 'PAID') {
+    return NextResponse.json(
+      { error: 'BOOKING_HAS_PAID_INVOICE', invoiceNumber: booking.invoice.invoiceNumber },
+      { status: 409 }
+    );
+  }
 
   await prisma.$transaction(async (tx) => {
     // BookingPets, BoardingDetail, TaxiDetail cascade from Booking

@@ -48,13 +48,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id!;
         token.role = user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
         token.language = (user as { language?: string }).language ?? 'fr';
+        // Store tokenVersion at login time — used to detect password changes
+        const dbUserAtLogin = await prisma.user.findUnique({
+          where: { id: user.id! },
+          select: { tokenVersion: true },
+        });
+        token.tokenVersion = dbUserAtLogin?.tokenVersion ?? 0;
       } else if (token.id) {
-        // Re-fetch role from DB on every token renewal — allows immediate revocation
+        // Re-fetch role and tokenVersion from DB on every token renewal
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id },
-          select: { role: true, language: true },
+          select: { role: true, language: true, tokenVersion: true },
         });
         if (!dbUser) return null; // Account deleted → invalidate session
+        // If tokenVersion changed (password changed/reset), reject the token
+        if (dbUser.tokenVersion !== token.tokenVersion) return null;
         token.role = dbUser.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
         token.language = dbUser.language ?? 'fr';
       }

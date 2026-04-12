@@ -26,5 +26,6 @@ declare module 'next-auth/jwt' {
     id: string;
     role: 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
     language: string;
+    tokenVersion: number;
   }
 }

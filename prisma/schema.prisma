@@ -19,6 +19,9 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Incremented on password change / reset → invalidates all existing JWT tokens
+  tokenVersion Int @default(0)
+
   // Historical baseline (for pre-existing clients before the app)
   historicalStays    Int    @default(0)
   historicalSpendMAD Float  @default(0)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth();
@@ -33,6 +34,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   await prisma.user.update({ where: { id }, data: { role } });
+
+  await logAction({
+    userId: session.user.id,
+    action: LOG_ACTIONS.USER_ROLE_CHANGED,
+    entityType: 'User',
+    entityId: id,
+    details: { from: user.role, to: role, targetEmail: user.email },
+  });
 
   return NextResponse.json({ success: true, role });
 }

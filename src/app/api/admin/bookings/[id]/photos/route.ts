@@ -39,7 +39,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const formData = await request.formData();
   const file = formData.get('file') as File;
-  const caption = (formData.get('caption') as string) || undefined;
+  const caption = (formData.get('caption') as string)?.trim().slice(0, 500) || undefined;
 
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 

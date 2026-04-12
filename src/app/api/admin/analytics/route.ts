@@ -11,7 +11,8 @@ export async function GET(request: Request) {
 
   const now = new Date();
   const { searchParams } = new URL(request.url);
-  const periodMonths = parseInt(searchParams.get('months') ?? '1');
+  const rawMonths = parseInt(searchParams.get('months') ?? '1');
+  const periodMonths = isNaN(rawMonths) ? 1 : Math.min(Math.max(rawMonths, 1), 24);
 
   // ── Current year chart (dynamic — never hardcoded) ────────────────────────
   const currentYear = now.getFullYear();

@@ -40,18 +40,24 @@ export async function PUT(request: Request) {
 
   const body = await request.json() as Record<string, string>;
 
-  // Only allow known keys
+  // Only allow known keys with positive numeric values
   const allowedKeys = Object.keys(DEFAULT_SETTINGS);
-  const updates = Object.entries(body).filter(([k]) => allowedKeys.includes(k));
+  const updates = Object.entries(body)
+    .filter(([k]) => allowedKeys.includes(k))
+    .filter(([, v]) => {
+      const parsed = Number(v);
+      return !isNaN(parsed) && parsed > 0;
+    });
 
+  if (updates.length === 0) return NextResponse.json({ ok: true });
   if (!prisma.setting) return NextResponse.json({ ok: true });
 
   await Promise.all(
     updates.map(([key, value]) =>
       prisma.setting!.upsert({
         where: { key },
-        update: { value: String(value) },
-        create: { key, value: String(value) },
+        update: { value: String(Number(value)) },
+        create: { key, value: String(Number(value)) },
       })
     )
   );

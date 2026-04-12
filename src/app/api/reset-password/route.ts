@@ -65,8 +65,9 @@ export async function PUT(request: Request) {
     const bcrypt = await import('bcryptjs');
     const passwordHash = await bcrypt.hash(password, 12);
 
+    // Increment tokenVersion to invalidate all existing sessions immediately
     await prisma.$transaction([
-      prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash } }),
+      prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash, tokenVersion: { increment: 1 } } }),
       prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { used: true } }),
     ]);
 

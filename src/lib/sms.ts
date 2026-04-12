@@ -54,10 +54,11 @@ export async function sendSms({ to, message }: SendSmsOptions): Promise<SmsResul
   const user = process.env.SMS_GATEWAY_USER;
   const pass = process.env.SMS_GATEWAY_PASS;
 
-  // Warn if gateway URL is plain HTTP in production — Basic auth credentials would be sent in
-  // cleartext over the network (SMS_GATEWAY_URL should use HTTPS or a local tunnel).
+  // Block if gateway URL is plain HTTP in production — Basic auth credentials would be sent in
+  // cleartext. SMS_GATEWAY_URL must use HTTPS (or a local loopback address) in production.
   if (gatewayUrl && !gatewayUrl.startsWith('https://') && process.env.NODE_ENV === 'production') {
-    console.warn('[SMS] WARNING: SMS_GATEWAY_URL is not HTTPS — Basic auth credentials transmitted in plaintext');
+    console.error('[SMS] BLOCKED: SMS_GATEWAY_URL is not HTTPS in production — refusing to transmit Basic auth credentials in plaintext');
+    return { ok: false, error: 'INSECURE_GATEWAY_URL' };
   }
 
   if (!enabled || !gatewayUrl) {
