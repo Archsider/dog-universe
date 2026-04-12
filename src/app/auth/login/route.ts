@@ -7,7 +7,13 @@ import { NextResponse } from 'next/server';
  */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
-  const callbackUrl = searchParams.get('callbackUrl') ?? '';
+  const rawCallback = searchParams.get('callbackUrl') ?? '';
+
+  // Reject open-redirect attempts (next-intl GHSA-8f24-v5vv-gm5j):
+  // callbackUrl must be a relative path starting with a single '/' —
+  // protocol-relative (//evil.com) and absolute URLs are refused.
+  const isSafeCallback = rawCallback === '' || /^\/(?!\/)/.test(rawCallback);
+  const callbackUrl = isSafeCallback ? rawCallback : '';
 
   // Infer locale from the callbackUrl (e.g. /en/client/dashboard → 'en')
   const locale = /^\/(en)(\/|$)/.test(callbackUrl) ? 'en' : 'fr';

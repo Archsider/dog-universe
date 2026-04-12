@@ -33,6 +33,12 @@ async function getTransporter(): Promise<nodemailer.Transporter> {
   return transporter;
 }
 
+// Prevent SMTP header injection (CVE nodemailer GHSA-vvjj-xcjg-gr5g / GHSA-c7w3-x93f-qmm8):
+// Strip CR/LF characters from any value that ends up in an SMTP header line.
+function sanitizeSmtpHeader(value: string): string {
+  return value.replace(/[\r\n]/g, '');
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -48,8 +54,8 @@ export async function sendEmail({
     const transport = await getTransporter();
     const info = await transport.sendMail({
       from: process.env.EMAIL_FROM ?? '"Dog Universe" <noreply@doguniverse.ma>',
-      to,
-      subject,
+      to: sanitizeSmtpHeader(to),
+      subject: sanitizeSmtpHeader(subject),
       html,
       text: text ?? html.replace(/<[^>]*>/g, ''),
     });

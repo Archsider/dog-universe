@@ -173,9 +173,13 @@ export async function POST(request: Request) {
       : isAdmin ? 'MANUAL' : 'ONLINE';
 
     // ── Auto-compute totalPrice before inserting the booking ──────────────────
-    // Prevents the "0" / "0.06" bug: if the client sends 0 (or nothing),
-    // we calculate the correct total from service details + pricing settings.
-    let resolvedTotalPrice: number = typeof totalPrice === 'number' && totalPrice > 0 ? totalPrice : 0;
+    // CLIENT role: always recalculate server-side — the client-supplied
+    // totalPrice is never trusted (price manipulation vector).
+    // ADMIN role: accept provided value as-is (data-entry use case), fall back
+    // to server calculation when 0 or absent.
+    let resolvedTotalPrice: number = isAdmin && typeof totalPrice === 'number' && totalPrice > 0
+      ? totalPrice
+      : 0;
     let resolvedPricePerNight = typeof pricePerNight === 'number' && pricePerNight > 0 ? pricePerNight : 0;
 
     const nights = endDate

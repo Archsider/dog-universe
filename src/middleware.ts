@@ -61,6 +61,12 @@ export async function middleware(request: NextRequest) {
     return new NextResponse(null, { status: 400 });
   }
 
+  // Block protocol-relative URL paths (//host) — open-redirect vector
+  // exploitable via next-intl redirect() (GHSA-8f24-v5vv-gm5j).
+  if (request.nextUrl.pathname.startsWith('//')) {
+    return new NextResponse(null, { status: 400 });
+  }
+
   const path = request.nextUrl.pathname;
 
   // Rate limiting — only for specific POST routes
@@ -105,7 +111,11 @@ export async function middleware(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data: https://*.supabase.co https://supabase.co",
     "font-src 'self'",
-    "connect-src 'self' https:",
+    // Restrict connect-src to known origins — 'https:' was too permissive.
+    // Upstash Redis is called server-side only (no browser fetch needed).
+    isDev
+      ? "connect-src 'self' https://*.supabase.co https://supabase.co ws://localhost:* http://localhost:*"
+      : "connect-src 'self' https://*.supabase.co https://supabase.co",
     "frame-ancestors 'none'",
   ].join('; ');
 

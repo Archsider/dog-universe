@@ -63,6 +63,12 @@
     "uuid": "^11.0.3",
     "zod": "^3.23.8"
   },
+  "overrides": {
+    "flatted": "3.4.2",
+    "picomatch": "2.3.2",
+    "brace-expansion": "1.1.14",
+    "lodash": "4.18.1"
+  },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.1",
