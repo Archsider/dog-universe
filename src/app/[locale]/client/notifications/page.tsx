@@ -40,9 +40,15 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   BOOKING_EXTENDED:     { icon: CalendarClock,  color: 'text-blue-600',   bg: 'bg-blue-50' },
 };
 
-function parseMetadata(raw: string | null): Record<string, string> {
+function parseMetadata(raw: string | null): Record<string, unknown> {
   if (!raw) return {};
-  try { return JSON.parse(raw); } catch { return {}; }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return {};
+  } catch { return {}; }
 }
 
 export default function NotificationsPage() {

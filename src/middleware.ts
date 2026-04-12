@@ -36,6 +36,12 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(30, '60 m'),
       prefix: 'rl:uploads',
     }),
+    // Admin mutations: 300 per hour per IP (generous — admins are trusted users)
+    adminMutation: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(300, '60 m'),
+      prefix: 'rl:admin',
+    }),
   };
 }
 
@@ -53,6 +59,8 @@ const RATE_LIMITED_ROUTES: Record<
   '/api/uploads': 'uploads',
 };
 
+const ADMIN_MUTATION_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
+
 export async function middleware(request: NextRequest) {
   // Defense-in-depth against CVE-2025-29927 (GHSA-f82v-jwr5-mffw):
   // x-middleware-subrequest is an internal Next.js header that must never arrive
@@ -69,31 +77,42 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
-  // Rate limiting — only for specific POST routes
+  // Rate limiting — fail-open: if Upstash is unavailable, log and continue
+  // (blocking all requests due to a Redis outage would be worse than skipping rate limiting)
   if (limiter) {
-    const limitKey = RATE_LIMITED_ROUTES[path];
-    if (limitKey && request.method === 'POST') {
+    try {
       const ip =
         request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
         request.headers.get('x-real-ip') ||
         '127.0.0.1';
 
-      const { success, limit, remaining, reset } = await limiter[limitKey].limit(ip);
+      const exactKey = RATE_LIMITED_ROUTES[path];
+      const isAdminMutation =
+        path.startsWith('/api/admin/') && ADMIN_MUTATION_METHODS.has(request.method);
 
-      if (!success) {
-        return NextResponse.json(
-          { error: 'Too many requests. Please try again later.' },
-          {
-            status: 429,
-            headers: {
-              'X-RateLimit-Limit': String(limit),
-              'X-RateLimit-Remaining': String(remaining),
-              'X-RateLimit-Reset': String(reset),
-              'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)),
-            },
-          }
-        );
+      const limitKey = exactKey ?? (isAdminMutation ? 'adminMutation' : null);
+
+      if (limitKey && (exactKey ? request.method === 'POST' : true)) {
+        const { success, limit, remaining, reset } = await limiter[limitKey].limit(ip);
+
+        if (!success) {
+          return NextResponse.json(
+            { error: 'Too many requests. Please try again later.' },
+            {
+              status: 429,
+              headers: {
+                'X-RateLimit-Limit': String(limit),
+                'X-RateLimit-Remaining': String(remaining),
+                'X-RateLimit-Reset': String(reset),
+                'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)),
+              },
+            }
+          );
+        }
       }
+    } catch (err) {
+      // Upstash unavailable — fail-open, never block legitimate traffic over a Redis outage
+      console.error('[middleware] rate-limit check failed, skipping:', err);
     }
   }
 
@@ -108,6 +127,12 @@ export async function middleware(request: NextRequest) {
     isDev
       ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval'`
       : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    // CSP Level 3 split style directives:
+    // style-src-elem: controls <style> tags — requires nonce (no unsafe-inline)
+    // style-src-attr: controls style="" attributes — unsafe-inline needed for Radix/Tailwind
+    // style-src: fallback for browsers that don't support the split (kept as-is)
+    `style-src-elem 'self' 'nonce-${nonce}'`,
+    "style-src-attr 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data: https://*.supabase.co https://supabase.co",
     "font-src 'self'",

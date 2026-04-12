@@ -27,7 +27,7 @@ async function getTransporter(): Promise<nodemailer.Transporter> {
         pass: testAccount.pass,
       },
     });
-    console.log('📧 Ethereal test account:', testAccount.user);
+    // Intentionally not logging Ethereal credentials — use nodemailer.getTestMessageUrl() per send
   }
 
   return transporter;

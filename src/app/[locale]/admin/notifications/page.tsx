@@ -29,9 +29,15 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   // fallback handles everything else
 };
 
-function parseMetadata(raw: string | null): Record<string, string> {
+function parseMetadata(raw: string | null): Record<string, unknown> {
   if (!raw) return {};
-  try { return JSON.parse(raw); } catch { return {}; }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return {};
+  } catch { return {}; }
 }
 
 export default function AdminNotificationsPage() {
@@ -130,7 +136,7 @@ export default function AdminNotificationsPage() {
                     <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">{getMessage(n)}</p>
                     <div className="flex items-center justify-between mt-2">
                       <p className="text-xs text-gray-400">{formatRelativeTime(new Date(n.createdAt), locale)}</p>
-                      {n.type === 'BOOKING_REQUEST' && meta.bookingId && (
+                      {n.type === 'BOOKING_REQUEST' && typeof meta.bookingId === 'string' && meta.bookingId && (
                         <Link
                           href={`/${locale}/admin/reservations/${meta.bookingId}`}
                           onClick={e => e.stopPropagation()}
@@ -148,7 +154,7 @@ export default function AdminNotificationsPage() {
                           {l.viewClaim} <ArrowRight className="h-3 w-3" />
                         </Link>
                       )}
-                      {n.type === 'NEW_CLIENT_REGISTRATION' && meta.clientId && (
+                      {n.type === 'NEW_CLIENT_REGISTRATION' && typeof meta.clientId === 'string' && meta.clientId && (
                         <Link
                           href={`/${locale}/admin/clients/${meta.clientId}`}
                           onClick={e => e.stopPropagation()}

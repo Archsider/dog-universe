@@ -54,6 +54,12 @@ export async function sendSms({ to, message }: SendSmsOptions): Promise<SmsResul
   const user = process.env.SMS_GATEWAY_USER;
   const pass = process.env.SMS_GATEWAY_PASS;
 
+  // Warn if gateway URL is plain HTTP in production — Basic auth credentials would be sent in
+  // cleartext over the network (SMS_GATEWAY_URL should use HTTPS or a local tunnel).
+  if (gatewayUrl && !gatewayUrl.startsWith('https://') && process.env.NODE_ENV === 'production') {
+    console.warn('[SMS] WARNING: SMS_GATEWAY_URL is not HTTPS — Basic auth credentials transmitted in plaintext');
+  }
+
   if (!enabled || !gatewayUrl) {
     // Always mask phone number in logs regardless of environment
     const maskedTo = to.length > 4 ? `${to.slice(0, 3)}****${to.slice(-2)}` : '****';
