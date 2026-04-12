@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { Calendar, PawPrint, Package, Car, Plus, FileText, Clock, CheckCircle2, XCircle, AlertCircle, PlayCircle, Camera } from 'lucide-react';
+import { Calendar, PawPrint, Package, Car, Plus, FileText, Clock, CheckCircle2, XCircle, AlertCircle, PlayCircle, Camera, MapPin } from 'lucide-react';
 import Image from 'next/image';
 import { formatDate, formatMAD } from '@/lib/utils';
 import CancelBookingButton from './CancelBookingButton';
@@ -15,6 +15,7 @@ interface PageProps {
 const STATUS_COLORS: Record<string, string> = {
   PENDING:     'bg-amber-50 text-amber-700 border-amber-200',
   CONFIRMED:   'bg-blue-50 text-blue-700 border-blue-200',
+  AT_PICKUP:   'bg-teal-50 text-teal-700 border-teal-200',
   IN_PROGRESS: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   COMPLETED:   'bg-green-50 text-green-700 border-green-200',
   CANCELLED:   'bg-gray-100 text-gray-500 border-gray-200',
@@ -23,7 +24,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STATUS_ICONS: Record<string, React.ElementType> = {
   PENDING:     AlertCircle,
-  CONFIRMED:   CheckCircle2,
+  CONFIRMED:   PlayCircle,
+  AT_PICKUP:   MapPin,
   IN_PROGRESS: PlayCircle,
   COMPLETED:   CheckCircle2,
   CANCELLED:   XCircle,
@@ -80,7 +82,7 @@ export default async function HistoryPage({ params: { locale }, searchParams }: 
       invoicePending: 'En attente',
       notes: 'Notes',
       estimated: 'estimé',
-      statusLabels: { PENDING: 'En attente', CONFIRMED: 'Confirmée', IN_PROGRESS: 'En cours', COMPLETED: 'Terminée', CANCELLED: 'Annulée', REJECTED: 'Refusée' },
+      statusLabels: { PENDING: 'En attente', CONFIRMED: 'Confirmée', AT_PICKUP: 'Véhicule sur place', IN_PROGRESS: 'En cours', COMPLETED: 'Terminée', CANCELLED: 'Annulée', REJECTED: 'Refusée' },
     },
     en: {
       title: 'My bookings',
@@ -99,7 +101,7 @@ export default async function HistoryPage({ params: { locale }, searchParams }: 
       invoicePending: 'Pending',
       notes: 'Notes',
       estimated: 'estimated',
-      statusLabels: { PENDING: 'Pending', CONFIRMED: 'Confirmed', IN_PROGRESS: 'In progress', COMPLETED: 'Completed', CANCELLED: 'Cancelled', REJECTED: 'Rejected' },
+      statusLabels: { PENDING: 'Pending', CONFIRMED: 'Confirmed', AT_PICKUP: 'Vehicle on site', IN_PROGRESS: 'In progress', COMPLETED: 'Completed', CANCELLED: 'Cancelled', REJECTED: 'Rejected' },
     },
   };
   const t = l[locale as keyof typeof l] || l.fr;

@@ -34,8 +34,8 @@ const ACTION_LABELS: Record<string, Record<string, { fr: string; en: string }>> 
     IN_PROGRESS: { fr: 'Clôturer le séjour',             en: 'Close stay' },
   },
   PET_TAXI: {
-    PENDING:     { fr: 'Mettre le chauffeur en route',   en: 'Driver en route' },
-    CONFIRMED:   { fr: 'Marquer sur place',              en: 'Mark at pickup point' },
+    PENDING:     { fr: 'Mettre le véhicule en route',     en: 'Vehicle en route to pickup' },
+    CONFIRMED:   { fr: 'Véhicule sur place',             en: 'Vehicle on site' },
     AT_PICKUP:   { fr: 'Marquer animal à bord',          en: 'Mark pet on board' },
     IN_PROGRESS: { fr: 'Marquer arrivé à destination',   en: 'Mark arrived' },
   },
@@ -44,7 +44,7 @@ const ACTION_LABELS: Record<string, Record<string, { fr: string; en: string }>> 
 const STATUS_LABELS: Record<string, { fr: string; en: string }> = {
   PENDING:           { fr: 'En attente',              en: 'Pending' },
   CONFIRMED:         { fr: 'Confirmé',                en: 'Confirmed' },
-  AT_PICKUP:         { fr: 'Sur place',               en: 'At pickup point' },
+  AT_PICKUP:         { fr: 'Véhicule sur place',       en: 'Vehicle on site' },
   IN_PROGRESS:       { fr: 'En cours',                en: 'In progress' },
   COMPLETED:         { fr: 'Terminé',                 en: 'Completed' },
   CANCELLED:         { fr: 'Annulé',                  en: 'Cancelled' },

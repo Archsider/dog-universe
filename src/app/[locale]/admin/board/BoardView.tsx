@@ -268,8 +268,8 @@ const TAXI_NEXT_STATUS: Record<string, string> = {
 };
 
 const TAXI_ACTION_LABELS: Record<string, { fr: string; en: string }> = {
-  PENDING:     { fr: 'Chauffeur en route',   en: 'Driver en route' },
-  CONFIRMED:   { fr: 'Sur place',            en: 'At pickup point' },
+  PENDING:     { fr: 'Véhicule en route vers le point de départ', en: 'Vehicle en route to pickup' },
+  CONFIRMED:   { fr: 'Véhicule sur place',   en: 'Vehicle on site' },
   AT_PICKUP:   { fr: 'Animal à bord',        en: 'Pet on board' },
   IN_PROGRESS: { fr: 'Arrivé à destination', en: 'Mark arrived' },
 };

@@ -27,8 +27,8 @@ const BOARDING_STEPS = [
 
 const TAXI_STEPS = [
   { status: 'PENDING',     labelFr: 'Transport planifié',              labelEn: 'Transport planned',    descFr: 'Votre transport a été programmé',                  descEn: 'Your transport has been scheduled' },
-  { status: 'CONFIRMED',   labelFr: 'En route vers vous',              labelEn: 'En route to you',      descFr: 'Le chauffeur est en chemin vers le point de départ', descEn: 'The driver is heading to the pickup point' },
-  { status: 'AT_PICKUP',   labelFr: 'Chauffeur sur place',             labelEn: 'Driver on site',       descFr: 'Le chauffeur est arrivé au point de départ',       descEn: 'The driver has arrived at the pickup point' },
+  { status: 'CONFIRMED',   labelFr: 'Véhicule en route vers le point de départ', labelEn: 'Vehicle en route to pickup', descFr: 'Le véhicule est en chemin vers le point de départ', descEn: 'The vehicle is heading to the pickup point' },
+  { status: 'AT_PICKUP',   labelFr: 'Véhicule sur place',              labelEn: 'Vehicle on site',      descFr: 'Le véhicule est arrivé au point de départ',        descEn: 'The vehicle has arrived at the pickup point' },
   { status: 'IN_PROGRESS', labelFr: 'Animal à bord',                   labelEn: 'Pet on board',         descFr: 'Votre animal est dans le véhicule',                descEn: 'Your pet is in the vehicle' },
   { status: 'COMPLETED',   labelFr: 'Arrivé à destination',            labelEn: 'Arrived',              descFr: 'Votre animal est arrivé à destination',            descEn: 'Your pet has arrived safely' },
 ];
@@ -259,7 +259,7 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
   };
   const t = l[locale as keyof typeof l] || l.fr;
 
-  const isActive = ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(booking.status);
+  const isActive = ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'].includes(booking.status);
   const isBoarding = booking.serviceType === 'BOARDING';
   const nights = booking.endDate
     ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))

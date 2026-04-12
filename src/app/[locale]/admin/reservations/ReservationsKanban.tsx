@@ -53,8 +53,8 @@ const ACTION_LABELS: Record<'BOARDING' | 'PET_TAXI', Record<string, { fr: string
     IN_PROGRESS: { fr: 'Clôturer le séjour',          en: 'Close stay' },
   },
   PET_TAXI: {
-    PENDING:     { fr: 'Chauffeur en route',           en: 'Driver en route' },
-    CONFIRMED:   { fr: 'Sur place',                    en: 'At pickup point' },
+    PENDING:     { fr: 'Véhicule en route vers le point de départ', en: 'Vehicle en route to pickup' },
+    CONFIRMED:   { fr: 'Véhicule sur place',            en: 'Vehicle on site' },
     AT_PICKUP:   { fr: 'Animal à bord',                en: 'Pet on board' },
     IN_PROGRESS: { fr: 'Arrivé à destination',         en: 'Mark arrived' },
   },
