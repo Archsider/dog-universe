@@ -54,6 +54,13 @@ const RATE_LIMITED_ROUTES: Record<
 };
 
 export async function middleware(request: NextRequest) {
+  // Defense-in-depth against CVE-2025-29927 (GHSA-f82v-jwr5-mffw):
+  // x-middleware-subrequest is an internal Next.js header that must never arrive
+  // from an external client. Block any request carrying it.
+  if (request.headers.has('x-middleware-subrequest')) {
+    return new NextResponse(null, { status: 400 });
+  }
+
   const path = request.nextUrl.pathname;
 
   // Rate limiting — only for specific POST routes
