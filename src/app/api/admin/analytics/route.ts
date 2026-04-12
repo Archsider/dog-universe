@@ -128,15 +128,15 @@ export async function GET(request: Request) {
   const [boardingTotal, taxiTotal, groomingTotal] = await Promise.all([
     prisma.invoiceItem.aggregate({
       where: { description: { contains: 'Pension' } },
-      _sum: { total: true },
+      _sum: { allocatedAmount: true },
     }),
     prisma.invoiceItem.aggregate({
       where: { description: { contains: 'Taxi' } },
-      _sum: { total: true },
+      _sum: { allocatedAmount: true },
     }),
     prisma.invoiceItem.aggregate({
       where: { description: { contains: 'Toilettage' } },
-      _sum: { total: true },
+      _sum: { allocatedAmount: true },
     }),
   ]);
 
@@ -210,9 +210,9 @@ export async function GET(request: Request) {
     totalClients,
     yearlyData,
     revenueBreakdown: {
-      boarding: boardingTotal._sum.total ?? 0,
-      taxi: taxiTotal._sum.total ?? 0,
-      grooming: groomingTotal._sum.total ?? 0,
+      boarding: boardingTotal._sum.allocatedAmount ?? 0,
+      taxi: taxiTotal._sum.allocatedAmount ?? 0,
+      grooming: groomingTotal._sum.allocatedAmount ?? 0,
     },
     periodRevenue: totalPeriodRevenue,
     avgBasket,
