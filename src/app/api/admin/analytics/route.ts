@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   const startCurrentYear = new Date(`${currentYear}-01-01T00:00:00.000Z`);
   const endCurrentYear = new Date(`${currentYear}-12-31T23:59:59.999Z`);
 
-  // Yearly chart — single unified source: all payments on non-cancelled invoices
+  // Yearly chart — payments on paid invoices, split by InvoiceItem allocatedAmount
   const paymentsCurrentYear = await prisma.payment.findMany({
     where: {
       paymentDate: { gte: startCurrentYear, lte: endCurrentYear },
@@ -36,6 +36,12 @@ export async function GET(request: Request) {
               boardingDetail: { select: { groomingPrice: true } },
             },
           },
+          items: {
+            select: {
+              description: true,
+              allocatedAmount: true,
+            },
+          },
         },
       },
     },
@@ -47,15 +53,34 @@ export async function GET(request: Request) {
   for (const pmt of paymentsCurrentYear) {
     const m = new Date(pmt.paymentDate).getMonth();
     const svcType = pmt.invoice.booking?.serviceType ?? pmt.invoice.serviceType;
+
     if (svcType === 'PRODUCT_SALE') {
       monthly[m].croquettes += pmt.amount;
     } else if (svcType === 'PET_TAXI') {
       monthly[m].taxi += pmt.amount;
     } else if (svcType === 'BOARDING') {
-      // Grooming assumed paid first, capped to payment amount
-      const g = Math.min(pmt.invoice.booking?.boardingDetail?.groomingPrice ?? 0, pmt.amount);
-      monthly[m].grooming += g;
-      monthly[m].boarding += pmt.amount - g;
+      const items = pmt.invoice.items;
+      const totalAllocated = items.reduce((s, i) => s + i.allocatedAmount, 0);
+
+      if (totalAllocated > 0) {
+        // Distribute payment proportionally based on each item's allocated share
+        for (const item of items) {
+          const ratio = item.allocatedAmount / totalAllocated;
+          const itemAmt = pmt.amount * ratio;
+          if (item.description.includes('Taxi')) {
+            monthly[m].taxi += itemAmt;
+          } else if (item.description.includes('Toilettage')) {
+            monthly[m].grooming += itemAmt;
+          } else {
+            monthly[m].boarding += itemAmt;
+          }
+        }
+      } else {
+        // Fallback: no allocatedAmount data, use grooming price heuristic
+        const g = Math.min(pmt.invoice.booking?.boardingDetail?.groomingPrice ?? 0, pmt.amount);
+        monthly[m].grooming += g;
+        monthly[m].boarding += pmt.amount - g;
+      }
     }
   }
 
@@ -93,7 +118,6 @@ export async function GET(request: Request) {
     newClientsThisMonth,
     totalClients,
   ] = await Promise.all([
-    // CA = SUM(Payment.amount) on non-cancelled invoices, attributed by payment date
     prisma.payment.aggregate({
       where: {
         paymentDate: { gte: thisMonthStart, lte: thisMonthEnd },
@@ -124,32 +148,34 @@ export async function GET(request: Request) {
   const currentBoarders = currentCatBoarders + currentDogBoarders;
   const maxCapacity = 60; // cats: 10, dogs: 50
 
-  // ── Revenue breakdown all-time (via InvoiceItem) ──────────────────────────
+  // ── Revenue breakdown all-time — only PAID/PARTIALLY_PAID invoices ────────
   const [boardingTotal, taxiTotal, groomingTotal] = await Promise.all([
     prisma.invoiceItem.aggregate({
-      where: { description: { contains: 'Pension' } },
+      where: {
+        description: { contains: 'Pension' },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
       _sum: { allocatedAmount: true },
     }),
     prisma.invoiceItem.aggregate({
-      where: { description: { contains: 'Taxi' } },
+      where: {
+        description: { contains: 'Taxi' },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
       _sum: { allocatedAmount: true },
     }),
     prisma.invoiceItem.aggregate({
-      where: { description: { contains: 'Toilettage' } },
+      where: {
+        description: { contains: 'Toilettage' },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
       _sum: { allocatedAmount: true },
     }),
   ]);
 
-  console.log('revenueBreakdown raw:', {
-    boarding: boardingTotal._sum.allocatedAmount,
-    taxi: taxiTotal._sum.allocatedAmount,
-    grooming: groomingTotal._sum.allocatedAmount,
-  });
-
   // ── Period analytics (avg basket) ────────────────────────────────────────
   const periodStart = subMonths(now, periodMonths);
   const [periodRevenue, periodPayments] = await Promise.all([
-    // CA = SUM(Payment.amount) on non-cancelled invoices
     prisma.payment.aggregate({
       where: {
         paymentDate: { gte: periodStart },
@@ -157,7 +183,6 @@ export async function GET(request: Request) {
       },
       _sum: { amount: true },
     }),
-    // Unique clients for avg basket
     prisma.payment.findMany({
       where: {
         paymentDate: { gte: periodStart },
