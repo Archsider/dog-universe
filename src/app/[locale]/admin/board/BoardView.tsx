@@ -707,24 +707,18 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
 
       {/* PET TAXI — Kanban 5 colonnes */}
       {tab === 'PET_TAXI' && (
-        <div className="space-y-4">
-          {taxiBookings.length === 0 ? (
-            <p className="text-sm text-charcoal/40 text-center py-10">{l.noTaxi}</p>
-          ) : (
-            <div className="overflow-x-auto pb-4">
-              <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
-                {TAXI_KANBAN_COLS.map((col) => (
-                  <TaxiKanbanColumn
-                    key={col.status}
-                    col={col}
-                    cards={taxiBookings.filter((b) => b.status === col.status)}
-                    locale={locale}
-                    onStatusChange={handleTaxiStatusChange}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+        <div className="overflow-x-auto pb-4">
+          <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
+            {TAXI_KANBAN_COLS.map((col) => (
+              <TaxiKanbanColumn
+                key={col.status}
+                col={col}
+                cards={taxiBookings.filter((b) => b.status === col.status)}
+                locale={locale}
+                onStatusChange={handleTaxiStatusChange}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
