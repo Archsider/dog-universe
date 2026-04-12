@@ -100,6 +100,7 @@ export function getBookingStatusColor(status: string): string {
     case 'PENDING':           return 'text-amber-700 bg-amber-50 border-amber-200';
     case 'PENDING_EXTENSION': return 'text-orange-700 bg-orange-50 border-orange-200';
     case 'CONFIRMED':         return 'text-blue-700 bg-blue-50 border-blue-200';
+    case 'AT_PICKUP':         return 'text-teal-700 bg-teal-50 border-teal-200';
     case 'IN_PROGRESS':       return 'text-purple-700 bg-purple-50 border-purple-200';
     case 'COMPLETED':         return 'text-green-700 bg-green-50 border-green-200';
     case 'CANCELLED':         return 'text-red-700 bg-red-50 border-red-200';

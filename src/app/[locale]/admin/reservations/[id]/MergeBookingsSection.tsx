@@ -63,8 +63,8 @@ const l = {
 };
 
 const STATUS_LABELS: Record<string, Record<string, string>> = {
-  fr: { PENDING: 'En attente', CONFIRMED: 'Confirmé', IN_PROGRESS: 'En cours', COMPLETED: 'Terminé', CANCELLED: 'Annulé', REJECTED: 'Refusé', PENDING_EXTENSION: 'Extension en attente' },
-  en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', IN_PROGRESS: 'In progress', COMPLETED: 'Completed', CANCELLED: 'Cancelled', REJECTED: 'Rejected', PENDING_EXTENSION: 'Extension pending' },
+  fr: { PENDING: 'En attente', CONFIRMED: 'Confirmé', AT_PICKUP: 'Sur place', IN_PROGRESS: 'En cours', COMPLETED: 'Terminé', CANCELLED: 'Annulé', REJECTED: 'Refusé', PENDING_EXTENSION: 'Extension en attente' },
+  en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', AT_PICKUP: 'At pickup', IN_PROGRESS: 'In progress', COMPLETED: 'Completed', CANCELLED: 'Cancelled', REJECTED: 'Rejected', PENDING_EXTENSION: 'Extension pending' },
 };
 
 export default function MergeBookingsSection({

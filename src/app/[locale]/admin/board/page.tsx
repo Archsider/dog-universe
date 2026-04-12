@@ -23,7 +23,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
   const bookings = await prisma.booking.findMany({
     where: {
       OR: [
-        { status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] } },
+        { status: { in: ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'] } },
         { status: 'COMPLETED', updatedAt: { gte: sevenDaysAgo } },
       ],
     },
@@ -54,6 +54,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
     includeGrooming: b.boardingDetail?.includeGrooming ?? false,
     taxiGoEnabled: b.boardingDetail?.taxiGoEnabled ?? false,
     taxiReturnEnabled: b.boardingDetail?.taxiReturnEnabled ?? false,
+    notes: b.notes ?? null,
     updatedAt: (b as { updatedAt?: Date }).updatedAt?.toISOString() ?? b.startDate.toISOString(),
   }));
 
@@ -61,7 +62,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
   const activeBoarders = bookings.filter(
     (b) =>
       b.serviceType === 'BOARDING' &&
-      ['CONFIRMED', 'IN_PROGRESS'].includes(b.status) &&
+      ['CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'].includes(b.status) &&
       new Date(b.startDate) <= now &&
       (b.endDate ? new Date(b.endDate) >= todayStart : true)
   );
@@ -92,7 +93,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
       (dep) =>
         dep.serviceType === 'BOARDING' &&
         dep.endDate &&
-        ['CONFIRMED', 'IN_PROGRESS'].includes(dep.status) &&
+        ['CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'].includes(dep.status) &&
         new Date(dep.endDate) > todayEnd &&
         new Date(dep.endDate) <= sevenDaysLater
     )

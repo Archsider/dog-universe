@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  PawPrint, Car, Home, ArrowRight, ArrowLeft, Scissors,
+  PawPrint, Car, Home, ArrowRight, ArrowLeft, Scissors, Loader2, MapPin, Clock,
 } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast';
 
 interface BookingCard {
   id: string;
@@ -22,6 +23,7 @@ interface BookingCard {
   includeGrooming: boolean;
   taxiGoEnabled: boolean;
   taxiReturnEnabled: boolean;
+  notes: string | null;
   updatedAt: string;
 }
 
@@ -219,7 +221,7 @@ function Column({ title, count, cards, color, dotColor, locale }: ColumnProps) {
   );
 }
 
-function TaxiCard({ t, locale }: { t: AllBoardingTaxi; locale: string }) {
+function BoardingTaxiCard({ t, locale }: { t: AllBoardingTaxi; locale: string }) {
   const isFr = locale === 'fr';
   const dirLabel = t.direction === 'GO' ? (isFr ? 'Aller' : 'Go') : (isFr ? 'Retour' : 'Return');
   const timeLabel = t.time ?? (isFr ? 'À confirmer' : 'TBD');
@@ -248,13 +250,185 @@ function TaxiCard({ t, locale }: { t: AllBoardingTaxi; locale: string }) {
   );
 }
 
-export default function BoardView({ locale, bookings, stats }: Props) {
+// ─── PET TAXI Kanban ───────────────────────────────────────────────────────
+
+const TAXI_KANBAN_COLS = [
+  { status: 'PENDING',     label: { fr: 'Transport planifié',               en: 'Transport planned' },   color: 'bg-amber-50 border-amber-100',  dot: 'bg-amber-400' },
+  { status: 'CONFIRMED',   label: { fr: 'En route vers le point de départ',  en: 'En route to pickup' },  color: 'bg-blue-50 border-blue-100',    dot: 'bg-blue-400' },
+  { status: 'AT_PICKUP',   label: { fr: 'Sur place',                         en: 'At pickup point' },     color: 'bg-teal-50 border-teal-100',    dot: 'bg-teal-400' },
+  { status: 'IN_PROGRESS', label: { fr: 'Animal à bord',                     en: 'Pet on board' },        color: 'bg-green-50 border-green-100',  dot: 'bg-green-400' },
+  { status: 'COMPLETED',   label: { fr: 'Arrivé à destination',              en: 'Arrived' },             color: 'bg-gray-50 border-gray-100',    dot: 'bg-gray-300' },
+];
+
+const TAXI_NEXT_STATUS: Record<string, string> = {
+  PENDING:     'CONFIRMED',
+  CONFIRMED:   'AT_PICKUP',
+  AT_PICKUP:   'IN_PROGRESS',
+  IN_PROGRESS: 'COMPLETED',
+};
+
+const TAXI_ACTION_LABELS: Record<string, { fr: string; en: string }> = {
+  PENDING:     { fr: 'Chauffeur en route',   en: 'Driver en route' },
+  CONFIRMED:   { fr: 'Sur place',            en: 'At pickup point' },
+  AT_PICKUP:   { fr: 'Animal à bord',        en: 'Pet on board' },
+  IN_PROGRESS: { fr: 'Arrivé à destination', en: 'Mark arrived' },
+};
+
+function parseAddresses(notes: string | null): { departure: string | null; arrival: string | null } {
+  if (!notes) return { departure: null, arrival: null };
+  const departureMatch = notes.match(/Départ:\s*([^|]+)/);
+  const arrivalMatch = notes.match(/Arrivée:\s*([^|]+)/);
+  return {
+    departure: departureMatch ? departureMatch[1].trim() : null,
+    arrival: arrivalMatch ? arrivalMatch[1].trim() : null,
+  };
+}
+
+function TaxiKanbanCard({
+  b,
+  locale,
+  onStatusChange,
+}: {
+  b: BookingCard;
+  locale: string;
+  onStatusChange: (id: string, newStatus: string) => void;
+}) {
+  const isFr = locale === 'fr';
+  const [loading, setLoading] = useState(false);
+  const nextStatus = TAXI_NEXT_STATUS[b.status];
+  const actionLabel = nextStatus ? TAXI_ACTION_LABELS[b.status] : null;
+  const { departure, arrival } = parseAddresses(b.notes);
+  const petLine = b.pets.map((p) => `${SPECIES_EMOJI[p.species] ?? '🐾'} ${p.name}`).join(' · ');
+
+  const handleAction = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!nextStatus) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/bookings/${b.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      onStatusChange(b.id, nextStatus);
+      toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
+    } catch {
+      toast({ title: isFr ? 'Erreur' : 'Error', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group">
+      <Link href={`/${locale}/admin/reservations/${b.id}`} className="block">
+        <div className="flex items-start justify-between gap-1 mb-1.5">
+          <div>
+            <p className="text-sm font-semibold text-charcoal leading-tight">{b.clientName}</p>
+            <p className="text-xs text-gray-500 mt-0.5 truncate">{petLine}</p>
+          </div>
+          <ArrowRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-400 flex-shrink-0 mt-0.5" />
+        </div>
+        {(departure || arrival) && (
+          <div className="space-y-0.5 mb-1.5">
+            {departure && (
+              <div className="flex items-start gap-1 text-xs text-gray-500">
+                <MapPin className="h-3 w-3 flex-shrink-0 text-green-500 mt-px" />
+                <span className="truncate">{departure}</span>
+              </div>
+            )}
+            {arrival && (
+              <div className="flex items-start gap-1 text-xs text-gray-500">
+                <MapPin className="h-3 w-3 flex-shrink-0 text-red-400 mt-px" />
+                <span className="truncate">{arrival}</span>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <span>{formatDateShortLocal(b.startDate, locale)}</span>
+          {b.arrivalTime && (
+            <span className="flex items-center gap-0.5">
+              <Clock className="h-3 w-3" />
+              {b.arrivalTime}
+            </span>
+          )}
+          {b.taxiType && (
+            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">
+              {TAXI_LABELS[b.taxiType]?.[locale] ?? b.taxiType}
+            </span>
+          )}
+        </div>
+      </Link>
+      {actionLabel && (
+        <button
+          onClick={handleAction}
+          disabled={loading}
+          className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium bg-charcoal/5 hover:bg-charcoal/10 text-charcoal border border-charcoal/10 hover:border-charcoal/20 transition-all disabled:opacity-50"
+        >
+          {loading ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <ArrowRight className="h-3 w-3 flex-shrink-0" />
+          )}
+          <span className="truncate">{isFr ? actionLabel.fr : actionLabel.en}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TaxiKanbanColumn({
+  col,
+  cards,
+  locale,
+  onStatusChange,
+}: {
+  col: typeof TAXI_KANBAN_COLS[number];
+  cards: BookingCard[];
+  locale: string;
+  onStatusChange: (id: string, newStatus: string) => void;
+}) {
+  const label = locale === 'fr' ? col.label.fr : col.label.en;
+  return (
+    <div className="flex flex-col min-w-[220px] w-[220px] flex-shrink-0">
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-t-lg ${col.color} border-b`}>
+        <span className={`w-2 h-2 rounded-full ${col.dot}`} />
+        <span className="text-xs font-semibold text-charcoal flex-1 leading-tight">{label}</span>
+        <span className="text-xs font-bold text-charcoal/50">{cards.length}</span>
+      </div>
+      <div className="flex-1 bg-ivory-50/80 rounded-b-lg p-2 space-y-2 min-h-[120px]">
+        {cards.length === 0 ? (
+          <div className="flex items-center justify-center h-20 text-xs text-gray-300">—</div>
+        ) : (
+          cards.map((b) => (
+            <TaxiKanbanCard key={b.id} b={b} locale={locale} onStatusChange={onStatusChange} />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function BoardView({ locale, bookings: initialBookings, stats }: Props) {
   const [tab, setTab] = useState<'BOARDING' | 'PET_TAXI'>('BOARDING');
+  const [bookings, setBookings] = useState<BookingCard[]>(initialBookings);
   const isFr = locale === 'fr';
 
   const { pending, confirmed, inProgress, completed } = categorize(bookings, 'BOARDING');
 
-  // Compute date buckets for taxi sections
+  // Optimistic update for taxi status changes
+  const handleTaxiStatusChange = (id: string, newStatus: string) => {
+    setBookings(prev => prev.map(b => b.id === id ? { ...b, status: newStatus } : b));
+  };
+
+  // Standalone PET_TAXI bookings grouped by status
+  const taxiBookings = bookings.filter((b) => b.serviceType === 'PET_TAXI');
+  const taxiTabCount = taxiBookings.filter((b) => b.status !== 'COMPLETED').length;
+
+  // Compute date buckets for boarding taxi add-on sections
   const todayTs = new Date();
   todayTs.setHours(0, 0, 0, 0);
   const sevenDaysTs = new Date(todayTs);
@@ -274,20 +448,6 @@ export default function BoardView({ locale, bookings, stats }: Props) {
   const todayBoardingTaxisList = stats.allBoardingTaxis
     .filter((t) => normDateTs(t.date) === todayTs.getTime())
     .sort(sortByTimeAsc);
-
-  const taxiSoon = stats.allBoardingTaxis
-    .filter((t) => normDateTs(t.date) > todayTs.getTime() && normDateTs(t.date) <= sevenDaysTs.getTime())
-    .sort(sortByDateThenTime);
-
-  const taxiLater = stats.allBoardingTaxis
-    .filter((t) => normDateTs(t.date) > sevenDaysTs.getTime())
-    .sort(sortByDateThenTime);
-
-  const taxiTabCount = new Set(
-    stats.allBoardingTaxis
-      .filter((t) => normDateTs(t.date) >= todayTs.getTime())
-      .map((t) => t.bookingId)
-  ).size;
 
   const l = {
     title: isFr ? 'Tableau opérationnel' : 'Operations Board',
@@ -545,55 +705,25 @@ export default function BoardView({ locale, bookings, stats }: Props) {
         </div>
       )}
 
-      {/* PET TAXI — 3 sections */}
+      {/* PET TAXI — Kanban 5 colonnes */}
       {tab === 'PET_TAXI' && (
-        <div className="space-y-6">
-          {todayBoardingTaxisList.length === 0 && taxiSoon.length === 0 && taxiLater.length === 0 ? (
+        <div className="space-y-4">
+          {taxiBookings.length === 0 ? (
             <p className="text-sm text-charcoal/40 text-center py-10">{l.noTaxi}</p>
           ) : (
-            <>
-              {todayBoardingTaxisList.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
-                    {l.taxiToday}
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {todayBoardingTaxisList.map((t) => (
-                      <TaxiCard key={`${t.bookingId}-${t.direction}`} t={t} locale={locale} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {taxiSoon.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
-                    {l.taxiSoon}
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {taxiSoon.map((t) => (
-                      <TaxiCard key={`${t.bookingId}-${t.direction}`} t={t} locale={locale} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {taxiLater.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" />
-                    {l.taxiLater}
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {taxiLater.map((t) => (
-                      <TaxiCard key={`${t.bookingId}-${t.direction}`} t={t} locale={locale} />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
+            <div className="overflow-x-auto pb-4">
+              <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
+                {TAXI_KANBAN_COLS.map((col) => (
+                  <TaxiKanbanColumn
+                    key={col.status}
+                    col={col}
+                    cards={taxiBookings.filter((b) => b.status === col.status)}
+                    locale={locale}
+                    onStatusChange={handleTaxiStatusChange}
+                  />
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}

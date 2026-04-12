@@ -26,13 +26,15 @@ const BOARDING_STEPS = [
 ];
 
 const TAXI_STEPS = [
-  { status: 'PENDING',     labelFr: 'Transport planifié',   labelEn: 'Transport planned',   descFr: 'Votre transport a été programmé',                  descEn: 'Your transport has been scheduled' },
-  { status: 'CONFIRMED',   labelFr: 'Chauffeur en route',   labelEn: 'Driver en route',     descFr: 'Le chauffeur est en chemin vers vous',             descEn: 'The driver is on the way' },
-  { status: 'IN_PROGRESS', labelFr: 'Animal à bord',        labelEn: 'Pet on board',        descFr: 'Votre animal est dans le véhicule',                descEn: 'Your pet is in the vehicle' },
-  { status: 'COMPLETED',   labelFr: 'Arrivé à destination', labelEn: 'Arrived',             descFr: 'Votre animal est arrivé à destination',            descEn: 'Your pet has arrived safely' },
+  { status: 'PENDING',     labelFr: 'Transport planifié',              labelEn: 'Transport planned',    descFr: 'Votre transport a été programmé',                  descEn: 'Your transport has been scheduled' },
+  { status: 'CONFIRMED',   labelFr: 'En route vers vous',              labelEn: 'En route to you',      descFr: 'Le chauffeur est en chemin vers le point de départ', descEn: 'The driver is heading to the pickup point' },
+  { status: 'AT_PICKUP',   labelFr: 'Chauffeur sur place',             labelEn: 'Driver on site',       descFr: 'Le chauffeur est arrivé au point de départ',       descEn: 'The driver has arrived at the pickup point' },
+  { status: 'IN_PROGRESS', labelFr: 'Animal à bord',                   labelEn: 'Pet on board',         descFr: 'Votre animal est dans le véhicule',                descEn: 'Your pet is in the vehicle' },
+  { status: 'COMPLETED',   labelFr: 'Arrivé à destination',            labelEn: 'Arrived',              descFr: 'Votre animal est arrivé à destination',            descEn: 'Your pet has arrived safely' },
 ];
 
-const STATUS_ORDER = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED'];
+const BOARDING_STATUS_ORDER = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED'];
+const TAXI_STATUS_ORDER = ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS', 'COMPLETED'];
 
 function BookingStepper({
   status,
@@ -46,7 +48,8 @@ function BookingStepper({
   const isFr = locale === 'fr';
   const isCancelled = status === 'CANCELLED' || status === 'REJECTED';
   const steps = serviceType === 'PET_TAXI' ? TAXI_STEPS : BOARDING_STEPS;
-  const currentIdx = STATUS_ORDER.indexOf(status);
+  const statusOrder = serviceType === 'PET_TAXI' ? TAXI_STATUS_ORDER : BOARDING_STATUS_ORDER;
+  const currentIdx = statusOrder.indexOf(status);
 
   if (isCancelled) {
     return (

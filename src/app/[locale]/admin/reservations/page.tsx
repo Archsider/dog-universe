@@ -34,8 +34,8 @@ export default async function AdminReservationsPage({ params: { locale }, search
   };
 
   const sl: Record<string, Record<string, string>> = {
-    fr: { PENDING: 'En attente', CONFIRMED: 'Confirmé', CANCELLED: 'Annulé', REJECTED: 'Refusé', COMPLETED: 'Terminé', IN_PROGRESS: 'En cours', PENDING_EXTENSION: 'Extension' },
-    en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', CANCELLED: 'Cancelled', REJECTED: 'Rejected', COMPLETED: 'Completed', IN_PROGRESS: 'In progress', PENDING_EXTENSION: 'Extension' },
+    fr: { PENDING: 'En attente', CONFIRMED: 'Confirmé', AT_PICKUP: 'Sur place', CANCELLED: 'Annulé', REJECTED: 'Refusé', COMPLETED: 'Terminé', IN_PROGRESS: 'En cours', PENDING_EXTENSION: 'Extension' },
+    en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', AT_PICKUP: 'At pickup', CANCELLED: 'Cancelled', REJECTED: 'Rejected', COMPLETED: 'Completed', IN_PROGRESS: 'In progress', PENDING_EXTENSION: 'Extension' },
   };
 
   const l = labels[locale as keyof typeof labels] || labels.fr;
@@ -53,7 +53,7 @@ export default async function AdminReservationsPage({ params: { locale }, search
     const raw = await prisma.booking.findMany({
       where: {
         OR: [
-          { status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] } },
+          { status: { in: ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'] } },
           { status: 'COMPLETED', updatedAt: { gte: sevenDaysAgo } },
         ],
       },

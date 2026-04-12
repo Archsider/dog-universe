@@ -14,8 +14,16 @@ interface Props {
 
 // Transitions linéaires par pipeline
 const NEXT_STATUS: Record<string, string> = {
-  PENDING: 'CONFIRMED',
-  CONFIRMED: 'IN_PROGRESS',
+  PENDING:     'CONFIRMED',
+  CONFIRMED:   'AT_PICKUP',
+  AT_PICKUP:   'IN_PROGRESS',
+  IN_PROGRESS: 'COMPLETED',
+};
+
+// Pour le boarding, CONFIRMED → IN_PROGRESS directement (pas d'AT_PICKUP)
+const BOARDING_NEXT_STATUS: Record<string, string> = {
+  PENDING:     'CONFIRMED',
+  CONFIRMED:   'IN_PROGRESS',
   IN_PROGRESS: 'COMPLETED',
 };
 
@@ -27,7 +35,8 @@ const ACTION_LABELS: Record<string, Record<string, { fr: string; en: string }>> 
   },
   PET_TAXI: {
     PENDING:     { fr: 'Mettre le chauffeur en route',   en: 'Driver en route' },
-    CONFIRMED:   { fr: 'Marquer animal à bord',          en: 'Mark pet on board' },
+    CONFIRMED:   { fr: 'Marquer sur place',              en: 'Mark at pickup point' },
+    AT_PICKUP:   { fr: 'Marquer animal à bord',          en: 'Mark pet on board' },
     IN_PROGRESS: { fr: 'Marquer arrivé à destination',   en: 'Mark arrived' },
   },
 };
@@ -35,6 +44,7 @@ const ACTION_LABELS: Record<string, Record<string, { fr: string; en: string }>> 
 const STATUS_LABELS: Record<string, { fr: string; en: string }> = {
   PENDING:           { fr: 'En attente',              en: 'Pending' },
   CONFIRMED:         { fr: 'Confirmé',                en: 'Confirmed' },
+  AT_PICKUP:         { fr: 'Sur place',               en: 'At pickup point' },
   IN_PROGRESS:       { fr: 'En cours',                en: 'In progress' },
   COMPLETED:         { fr: 'Terminé',                 en: 'Completed' },
   CANCELLED:         { fr: 'Annulé',                  en: 'Cancelled' },
@@ -54,7 +64,8 @@ export default function ReservationActions({ booking, locale }: Props) {
   const isFr = locale === 'fr';
 
   const pipeline = booking.serviceType === 'PET_TAXI' ? 'PET_TAXI' : 'BOARDING';
-  const nextStatus = NEXT_STATUS[currentStatus];
+  const nextStatusMap = pipeline === 'PET_TAXI' ? NEXT_STATUS : BOARDING_NEXT_STATUS;
+  const nextStatus = nextStatusMap[currentStatus];
   const actionLabel = nextStatus ? ACTION_LABELS[pipeline]?.[currentStatus] : null;
   const isPendingExtension = currentStatus === 'PENDING_EXTENSION';
 

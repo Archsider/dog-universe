@@ -31,16 +31,18 @@ const BOARDING_COLS = [
 ];
 
 const TAXI_COLS = [
-  { status: 'PENDING',     label: { fr: 'Transport planifié',   en: 'Transport planned' }, color: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-400' },
-  { status: 'CONFIRMED',   label: { fr: 'Chauffeur en route',   en: 'Driver en route' },   color: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-400' },
-  { status: 'IN_PROGRESS', label: { fr: 'Animal à bord',        en: 'Pet on board' },      color: 'bg-green-50  border-green-200',  dot: 'bg-green-400' },
-  { status: 'COMPLETED',   label: { fr: 'Arrivé à destination', en: 'Arrived' },           color: 'bg-gray-50   border-gray-200',   dot: 'bg-gray-400' },
+  { status: 'PENDING',     label: { fr: 'Transport planifié',              en: 'Transport planned' },    color: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-400' },
+  { status: 'CONFIRMED',   label: { fr: 'En route vers le point de départ', en: 'En route to pickup' },  color: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-400' },
+  { status: 'AT_PICKUP',   label: { fr: 'Sur place',                        en: 'At pickup point' },     color: 'bg-teal-50   border-teal-200',   dot: 'bg-teal-400' },
+  { status: 'IN_PROGRESS', label: { fr: 'Animal à bord',                    en: 'Pet on board' },        color: 'bg-green-50  border-green-200',  dot: 'bg-green-400' },
+  { status: 'COMPLETED',   label: { fr: 'Arrivé à destination',             en: 'Arrived' },             color: 'bg-gray-50   border-gray-200',   dot: 'bg-gray-400' },
 ];
 
 // Centralisation des transitions : status courant → status suivant + label du bouton
 const NEXT_STATUS: Record<string, string> = {
-  PENDING: 'CONFIRMED',
-  CONFIRMED: 'IN_PROGRESS',
+  PENDING:     'CONFIRMED',
+  CONFIRMED:   'AT_PICKUP',
+  AT_PICKUP:   'IN_PROGRESS',
   IN_PROGRESS: 'COMPLETED',
 };
 
@@ -52,7 +54,8 @@ const ACTION_LABELS: Record<'BOARDING' | 'PET_TAXI', Record<string, { fr: string
   },
   PET_TAXI: {
     PENDING:     { fr: 'Chauffeur en route',           en: 'Driver en route' },
-    CONFIRMED:   { fr: 'Animal à bord',                en: 'Pet on board' },
+    CONFIRMED:   { fr: 'Sur place',                    en: 'At pickup point' },
+    AT_PICKUP:   { fr: 'Animal à bord',                en: 'Pet on board' },
     IN_PROGRESS: { fr: 'Arrivé à destination',         en: 'Mark arrived' },
   },
 };
