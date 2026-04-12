@@ -377,8 +377,8 @@ export default function NewBookingPage() {
         body.taxiReturnAddress = taxiReturnEnabled ? taxiReturnAddress : null;
         body.taxiAddonPrice = (taxiGoEnabled ? TAXI_ADDON_PRICE : 0) + (taxiReturnEnabled ? TAXI_ADDON_PRICE : 0);
       } else {
-        const dateTime = new Date(`${taxiDate}T${taxiTime}`);
-        body.startDate = dateTime.toISOString();
+        body.startDate = taxiDate; // date only — pas de conversion UTC pour éviter le décalage horaire
+        body.arrivalTime = taxiTime; // heure brute parsée côté serveur
         body.taxiType = taxiType;
         const notes = [taxiNotes, pickupAddress && `Départ: ${pickupAddress}`, dropoffAddress && `Arrivée: ${dropoffAddress}`].filter(Boolean).join(' | ');
         body.notes = notes || undefined;
