@@ -30,7 +30,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   };
 
   const [
-    invoicesCurrentYear,
+    paymentsCurrentYear,
     thisMonthRevenue,
     lastMonthRevenue,
     pendingCount,
@@ -45,22 +45,39 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     completedBoardings,
     activeClients,
     semiActiveIds,
-    lastMonthInvoices,
+    lastMonthPayments,
     historicalSummaries,
   ] = await Promise.all([
-    prisma.invoice.findMany({
-      where: { status: 'PAID', paidAt: { gte: startCurrentYear, lte: endCurrentYear } },
+    // Yearly chart — attributed by payment date, covers PAID + PARTIALLY_PAID
+    prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: startCurrentYear, lte: endCurrentYear },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
       select: {
-        amount: true, paidAt: true, serviceType: true,
-        booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } },
+        amount: true,
+        paymentDate: true,
+        invoice: {
+          select: {
+            serviceType: true,
+            booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } },
+          },
+        },
       },
     }),
-    prisma.invoice.aggregate({
-      where: { status: 'PAID', paidAt: { gte: thisMonthStart, lte: thisMonthEnd } },
+    // CA = SUM(Payment.amount) on non-cancelled invoices, attributed by payment date
+    prisma.payment.aggregate({
+      where: {
+        paymentDate: { gte: thisMonthStart, lte: thisMonthEnd },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
       _sum: { amount: true },
     }),
-    prisma.invoice.aggregate({
-      where: { status: 'PAID', paidAt: { gte: lastMonthStart, lte: lastMonthEnd } },
+    prisma.payment.aggregate({
+      where: {
+        paymentDate: { gte: lastMonthStart, lte: lastMonthEnd },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
       _sum: { amount: true },
     }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
@@ -81,9 +98,13 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       where: { createdAt: { gte: sixMonthsAgo, lt: threeMonthsAgo } },
       select: { clientId: true }, distinct: ['clientId'],
     }),
-    prisma.invoice.findMany({
-      where: { status: 'PAID', paidAt: { gte: lastMonthStart, lte: lastMonthEnd } },
-      select: { clientId: true },
+    // Unique clients for avg basket — payment-attributed (PAID + PARTIALLY_PAID)
+    prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: lastMonthStart, lte: lastMonthEnd },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
+      select: { invoice: { select: { clientId: true } } },
     }),
     // Historical revenue summaries for current year (pre-production data)
     prisma.monthlyRevenueSummary.findMany({
@@ -96,18 +117,19 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const monthly: Record<number, { boarding: number; grooming: number; taxi: number; croquettes: number }> = {};
   for (let m = 0; m < 12; m++) monthly[m] = { boarding: 0, grooming: 0, taxi: 0, croquettes: 0 };
 
-  // Real invoices
-  for (const inv of invoicesCurrentYear) {
-    if (!inv.paidAt) continue;
-    const m = new Date(inv.paidAt).getMonth();
-    if (inv.serviceType === 'PRODUCT_SALE') {
-      monthly[m].croquettes += inv.amount;
-    } else if (inv.booking?.serviceType === 'PET_TAXI') {
-      monthly[m].taxi += inv.amount;
-    } else if (inv.booking?.serviceType === 'BOARDING') {
-      const g = inv.booking.boardingDetail?.groomingPrice ?? 0;
+  // Real payments (PAID + PARTIALLY_PAID invoices), attributed by paymentDate
+  for (const pmt of paymentsCurrentYear) {
+    const m = new Date(pmt.paymentDate).getMonth();
+    const svcType = pmt.invoice.booking?.serviceType ?? pmt.invoice.serviceType;
+    if (svcType === 'PRODUCT_SALE') {
+      monthly[m].croquettes += pmt.amount;
+    } else if (svcType === 'PET_TAXI') {
+      monthly[m].taxi += pmt.amount;
+    } else if (svcType === 'BOARDING') {
+      // Grooming assumed paid first, capped to payment amount
+      const g = Math.min(pmt.invoice.booking?.boardingDetail?.groomingPrice ?? 0, pmt.amount);
       monthly[m].grooming += g;
-      monthly[m].boarding += inv.amount - g;
+      monthly[m].boarding += pmt.amount - g;
     }
   }
 
@@ -130,17 +152,17 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     croquettes: monthly[i].croquettes,
   }));
 
-  // Current month KPI (real invoices only — historical is pre-production)
+  // Current month KPI — historical is pre-production, not mixed in
   const thisMonthAmt = thisMonthRevenue._sum.amount ?? 0;
 
-  // Last month: real invoices first, fall back to historical summary
-  const lastMonthInvoiceAmt = lastMonthRevenue._sum.amount ?? 0;
+  // Last month: real payments first, fall back to historical summary
+  const lastMonthPaymentsAmt = lastMonthRevenue._sum.amount ?? 0;
   const lastMonthNum = subMonths(now, 1).getMonth() + 1; // 1-indexed
   const lastMonthSummary = historicalSummaries.find(s => s.month === lastMonthNum);
   const lastMonthSummaryAmt = lastMonthSummary
     ? lastMonthSummary.boardingRevenue + lastMonthSummary.groomingRevenue + lastMonthSummary.taxiRevenue + lastMonthSummary.otherRevenue
     : 0;
-  const lastMonthAmt = lastMonthInvoiceAmt > 0 ? lastMonthInvoiceAmt : lastMonthSummaryAmt;
+  const lastMonthAmt = lastMonthPaymentsAmt > 0 ? lastMonthPaymentsAmt : lastMonthSummaryAmt;
 
   const monthVariation = lastMonthAmt > 0
     ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
@@ -164,8 +186,8 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const inactiveCount = Math.max(0, totalClients - activeClients - semiActiveCount);
   const totalSegments = activeClients + semiActiveCount + inactiveCount || 1;
 
-  const uniqueLastMonth = new Set(lastMonthInvoices.map(i => i.clientId)).size;
-  const avgBasket = uniqueLastMonth > 0 ? Math.round(lastMonthInvoiceAmt / uniqueLastMonth) : 0;
+  const uniqueLastMonth = new Set(lastMonthPayments.map(p => p.invoice.clientId)).size;
+  const avgBasket = uniqueLastMonth > 0 ? Math.round(lastMonthPaymentsAmt / uniqueLastMonth) : 0;
 
   // Service breakdown: real invoice items + historical summaries
   const summaryBoarding = historicalSummaries.reduce((s, r) => s + r.boardingRevenue, 0);
