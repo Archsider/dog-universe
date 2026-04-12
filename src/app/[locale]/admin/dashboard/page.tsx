@@ -34,13 +34,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     pendingBookings,
     currentCatBoarders,
     currentDogBoarders,
-    monthlyRevenue,
-    lastMonthRevenue,
+    thisMonthCA,
+    lastMonthCA,
     recentBookings,
-    revenueData,
-    monthlyBoardingInvoices,
-    monthlyTaxiAgg,
-    monthlyCroquettesAgg,
+    last12MonthsPayments,
     loyalClientsGroups,
     newClientsThisMonth,
     top5Revenue,
@@ -54,13 +51,20 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     prisma.booking.count({ where: { status: 'PENDING' } }),
     prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingNow } }),
     prisma.bookingPet.count({ where: { pet: { species: 'DOG' }, booking: boardingNow } }),
-    prisma.invoice.aggregate({
-      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] }, issuedAt: { gte: thisMonthStart, lte: thisMonthEnd } },
-      _sum: { paidAmount: true },
+    // CA mensuel — source unique : Payment.amount / paymentDate
+    prisma.payment.aggregate({
+      where: {
+        paymentDate: { gte: thisMonthStart, lte: thisMonthEnd },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
+      _sum: { amount: true },
     }),
-    prisma.invoice.aggregate({
-      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] }, issuedAt: { gte: lastMonthStart, lte: lastMonthEnd } },
-      _sum: { paidAmount: true },
+    prisma.payment.aggregate({
+      where: {
+        paymentDate: { gte: lastMonthStart, lte: lastMonthEnd },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
+      _sum: { amount: true },
     }),
     prisma.booking.findMany({
       include: {
@@ -70,21 +74,21 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       orderBy: { startDate: 'desc' },
       take: 8,
     }),
-    prisma.invoice.findMany({
-      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] }, issuedAt: { gte: startOfLast12Months } },
-      select: { amount: true, paidAmount: true, issuedAt: true, serviceType: true, booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } } },
-    }),
-    prisma.invoice.findMany({
-      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] }, issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, booking: { serviceType: 'BOARDING' } },
-      select: { amount: true, paidAmount: true, booking: { select: { boardingDetail: { select: { groomingPrice: true } } } } },
-    }),
-    prisma.invoice.aggregate({
-      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] }, issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, booking: { serviceType: 'PET_TAXI' } },
-      _sum: { paidAmount: true },
-    }),
-    prisma.invoice.aggregate({
-      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] }, issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, serviceType: 'PRODUCT_SALE' },
-      _sum: { paidAmount: true },
+    // Graphique 12 mois + ventilation services — source unique : Payment / InvoiceItem
+    prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: startOfLast12Months },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
+      select: {
+        amount: true,
+        paymentDate: true,
+        invoice: {
+          select: {
+            items: { select: { description: true, total: true } },
+          },
+        },
+      },
     }),
     prisma.booking.groupBy({
       by: ['clientId'],
@@ -159,21 +163,14 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     totalRevenue: r._sum.amount ?? 0,
   }));
 
-  // CA variation vs previous month — use historical summary if no real invoices for last month
-  const thisMonthAmt = monthlyRevenue._sum.paidAmount ?? 0;
-  const lastMonthInvoiceAmt = lastMonthRevenue._sum.paidAmount ?? 0;
-  const lastMonthNum = subMonths(now, 1).getMonth() + 1; // 1-indexed
-  const lastMonthYear = subMonths(now, 1).getFullYear();
-  const lastMonthSummary = historicalSummaries.find(s => s.year === lastMonthYear && s.month === lastMonthNum);
-  const lastMonthSummaryAmt = lastMonthSummary
-    ? lastMonthSummary.boardingRevenue + lastMonthSummary.groomingRevenue + lastMonthSummary.taxiRevenue + lastMonthSummary.otherRevenue
-    : 0;
-  const lastMonthAmt = lastMonthInvoiceAmt > 0 ? lastMonthInvoiceAmt : lastMonthSummaryAmt;
+  // CA variation vs previous month — source : Payment.amount / paymentDate (aligné sur analytics)
+  const thisMonthAmt = thisMonthCA._sum.amount ?? 0;
+  const lastMonthAmt = lastMonthCA._sum.amount ?? 0;
   const monthVariation = lastMonthAmt > 0
     ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
     : 0;
 
-  // Build monthly chart data — last 12 months
+  // Build monthly chart data — last 12 months (source : Payment.paymentDate, aligné sur analytics)
   const chartLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
   const monthlyData: Record<string, { boarding: number; taxi: number; grooming: number; croquettes: number }> = {};
   for (let i = 11; i >= 0; i--) {
@@ -181,24 +178,36 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
     monthlyData[key] = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
   }
-  // Real invoices
-  revenueData.forEach(inv => {
-    const d = new Date(inv.issuedAt);
-    const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
-    const invAmount = inv.paidAmount ?? inv.amount;
-    if (monthlyData[key]) {
-      if (inv.serviceType === 'PRODUCT_SALE') {
-        monthlyData[key].croquettes += invAmount;
-      } else if (inv.booking?.serviceType === 'PET_TAXI') {
-        monthlyData[key].taxi += invAmount;
-      } else if (inv.booking?.serviceType === 'BOARDING') {
-        const groomingPrice = inv.booking?.boardingDetail?.groomingPrice ?? 0;
-        monthlyData[key].grooming += groomingPrice;
-        monthlyData[key].boarding += invAmount - groomingPrice;
-      }
+
+  // Catégorisation par description d'InvoiceItem
+  const categoriseItem = (description: string): 'boarding' | 'taxi' | 'grooming' | 'croquettes' => {
+    const desc = description.toLowerCase();
+    if (desc.includes('taxi')) return 'taxi';
+    if (desc.includes('toilettage') || desc.includes('grooming')) return 'grooming';
+    if (desc.includes('croquette') || desc.includes('kibble')) return 'croquettes';
+    return 'boarding'; // pension / nuit / boarding / tout le reste
+  };
+
+  // Chaque paiement est distribué proportionnellement sur les items de sa facture (poids = item.total)
+  for (const pmt of last12MonthsPayments) {
+    const key = new Date(pmt.paymentDate).toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
+    if (!monthlyData[key]) continue;
+    const invoiceTotal = pmt.invoice.items.reduce((s, i) => s + i.total, 0);
+    if (invoiceTotal === 0) { monthlyData[key].boarding += pmt.amount; continue; }
+    for (const item of pmt.invoice.items) {
+      monthlyData[key][categoriseItem(item.description)] += pmt.amount * (item.total / invoiceTotal);
     }
-  });
-  // Historical summaries — fill in months that have no real invoices
+  }
+
+  // KPIs services ce mois — extraits avant le backfill historique (données réelles uniquement)
+  const thisMonthKey = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
+  const thisMonthBreakdown = monthlyData[thisMonthKey] ?? { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
+  const monthlyBoardingRevenue = thisMonthBreakdown.boarding;
+  const monthlyTaxiRevenue = thisMonthBreakdown.taxi;
+  const monthlyGroomingRevenue = thisMonthBreakdown.grooming;
+  const monthlyCroquettesRevenue = thisMonthBreakdown.croquettes;
+
+  // Historical summaries — complète les mois pré-production sans paiements réels
   historicalSummaries.forEach(s => {
     const d = new Date(s.year, s.month - 1, 1);
     const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
@@ -210,12 +219,6 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     }
   });
   const chartData = Object.entries(monthlyData).map(([month, v]) => ({ month, ...v }));
-
-  // Service revenue this month
-  const monthlyGroomingRevenue = monthlyBoardingInvoices.reduce((sum, inv) => sum + (inv.booking?.boardingDetail?.groomingPrice ?? 0), 0);
-  const monthlyBoardingRevenue = monthlyBoardingInvoices.reduce((sum, inv) => sum + (inv.paidAmount ?? inv.amount), 0) - monthlyGroomingRevenue;
-  const monthlyTaxiRevenue = monthlyTaxiAgg._sum.paidAmount ?? 0;
-  const monthlyCroquettesRevenue = monthlyCroquettesAgg._sum.paidAmount ?? 0;
   const loyalClients = loyalClientsGroups.length;
   const pendingInvoicesAmount = pendingInvoicesAgg._sum.amount ?? 0;
   const pendingInvoicesCount = pendingInvoicesAgg._count.id ?? 0;
