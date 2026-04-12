@@ -61,6 +61,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
           select: {
             serviceType: true,
             booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } },
+            items: { select: { description: true, allocatedAmount: true } },
           },
         },
       },
@@ -85,10 +86,20 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     prisma.bookingPet.count({ where: { pet: { species: 'DOG' }, booking: boardingNow } }),
     prisma.user.count({ where: { role: 'CLIENT', createdAt: { gte: thisMonthStart, lte: thisMonthEnd } } }),
     prisma.user.count({ where: { role: 'CLIENT' } }),
-    prisma.invoiceItem.aggregate({ where: { description: { contains: 'Pension' } }, _sum: { total: true } }),
-    prisma.invoiceItem.aggregate({ where: { description: { contains: 'Taxi' } }, _sum: { total: true } }),
-    prisma.invoiceItem.aggregate({ where: { description: { contains: 'Toilettage' } }, _sum: { total: true } }),
-    prisma.invoice.aggregate({ where: { status: 'PAID', serviceType: 'PRODUCT_SALE' }, _sum: { amount: true } }),
+    // Breakdown all-time — PAID + PARTIALLY_PAID uniquement, allocatedAmount pour les paiements partiels
+    prisma.invoiceItem.aggregate({
+      where: { description: { contains: 'Pension' }, invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } } },
+      _sum: { allocatedAmount: true },
+    }),
+    prisma.invoiceItem.aggregate({
+      where: { description: { contains: 'Taxi' }, invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } } },
+      _sum: { allocatedAmount: true },
+    }),
+    prisma.invoiceItem.aggregate({
+      where: { description: { contains: 'Toilettage' }, invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } } },
+      _sum: { allocatedAmount: true },
+    }),
+    prisma.invoice.aggregate({ where: { status: { in: ['PAID', 'PARTIALLY_PAID'] }, serviceType: 'PRODUCT_SALE' }, _sum: { amount: true } }),
     prisma.booking.findMany({
       where: { serviceType: 'BOARDING', status: 'COMPLETED', endDate: { not: null } },
       select: { startDate: true, endDate: true }, take: 100,
@@ -126,10 +137,23 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     } else if (svcType === 'PET_TAXI') {
       monthly[m].taxi += pmt.amount;
     } else if (svcType === 'BOARDING') {
-      // Grooming assumed paid first, capped to payment amount
-      const g = Math.min(pmt.invoice.booking?.boardingDetail?.groomingPrice ?? 0, pmt.amount);
-      monthly[m].grooming += g;
-      monthly[m].boarding += pmt.amount - g;
+      const items = pmt.invoice.items;
+      const totalAllocated = items.reduce((s, i) => s + i.allocatedAmount, 0);
+      if (totalAllocated > 0) {
+        // Distribute payment proportionally based on allocatedAmount — taxi add-ons bien séparés
+        for (const item of items) {
+          const ratio = item.allocatedAmount / totalAllocated;
+          const itemAmt = pmt.amount * ratio;
+          if (item.description.includes('Taxi')) monthly[m].taxi += itemAmt;
+          else if (item.description.includes('Toilettage')) monthly[m].grooming += itemAmt;
+          else monthly[m].boarding += itemAmt;
+        }
+      } else {
+        // Fallback: pas d'allocatedAmount → heuristic groomingPrice
+        const g = Math.min(pmt.invoice.booking?.boardingDetail?.groomingPrice ?? 0, pmt.amount);
+        monthly[m].grooming += g;
+        monthly[m].boarding += pmt.amount - g;
+      }
     }
   }
 
@@ -195,9 +219,9 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const summaryTaxi = historicalSummaries.reduce((s, r) => s + r.taxiRevenue, 0);
   const summaryCroquettes = historicalSummaries.reduce((s, r) => s + r.otherRevenue, 0);
 
-  const boardingRevenue = (boardingTotal._sum.total ?? 0) + summaryBoarding;
-  const taxiRevenue = (taxiTotal._sum.total ?? 0) + summaryTaxi;
-  const groomingRevenue = (groomingTotal._sum.total ?? 0) + summaryGrooming;
+  const boardingRevenue = (boardingTotal._sum.allocatedAmount ?? 0) + summaryBoarding;
+  const taxiRevenue = (taxiTotal._sum.allocatedAmount ?? 0) + summaryTaxi;
+  const groomingRevenue = (groomingTotal._sum.allocatedAmount ?? 0) + summaryGrooming;
   const croquettesRevenue = (productSaleTotal._sum.amount ?? 0) + summaryCroquettes;
 
   const l = {
