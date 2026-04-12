@@ -116,31 +116,27 @@ export async function GET(request: Request) {
   };
 
   const [
-    thisMonthRevenuePaid,
-    thisMonthRevenuePartial,
-    lastMonthRevenuePaid,
-    lastMonthRevenuePartial,
+    thisMonthRevenue,
+    lastMonthRevenue,
     pendingCount,
     currentCatBoarders,
     currentDogBoarders,
     newClientsThisMonth,
     totalClients,
   ] = await Promise.all([
-    prisma.invoice.aggregate({
-      where: { status: 'PAID', paidAt: { gte: thisMonthStart, lte: thisMonthEnd } },
-      _sum: { amount: true },
-    }),
-    // PARTIALLY_PAID invoices contribute their paidAmount to the monthly CA
+    // CA = SUM(Payment.amount) on non-cancelled invoices, attributed by payment date
     prisma.payment.aggregate({
-      where: { paymentDate: { gte: thisMonthStart, lte: thisMonthEnd }, invoice: { status: 'PARTIALLY_PAID' } },
-      _sum: { amount: true },
-    }),
-    prisma.invoice.aggregate({
-      where: { status: 'PAID', paidAt: { gte: lastMonthStart, lte: lastMonthEnd } },
+      where: {
+        paymentDate: { gte: thisMonthStart, lte: thisMonthEnd },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
       _sum: { amount: true },
     }),
     prisma.payment.aggregate({
-      where: { paymentDate: { gte: lastMonthStart, lte: lastMonthEnd }, invoice: { status: 'PARTIALLY_PAID' } },
+      where: {
+        paymentDate: { gte: lastMonthStart, lte: lastMonthEnd },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      },
       _sum: { amount: true },
     }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
@@ -152,10 +148,8 @@ export async function GET(request: Request) {
     prisma.user.count({ where: { role: 'CLIENT' } }),
   ]);
 
-  const thisMonthAmt =
-    (thisMonthRevenuePaid._sum.amount ?? 0) + (thisMonthRevenuePartial._sum.amount ?? 0);
-  const lastMonthAmt =
-    (lastMonthRevenuePaid._sum.amount ?? 0) + (lastMonthRevenuePartial._sum.amount ?? 0);
+  const thisMonthAmt = thisMonthRevenue._sum.amount ?? 0;
+  const lastMonthAmt = lastMonthRevenue._sum.amount ?? 0;
   const monthVariation =
     lastMonthAmt > 0 ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10 : 0;
   const currentBoarders = currentCatBoarders + currentDogBoarders;
