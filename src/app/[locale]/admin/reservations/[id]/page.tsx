@@ -13,6 +13,7 @@ import AdminMessageSection from './AdminMessageSection';
 import ExtendBookingSection from './ExtendBookingSection';
 import MergeBookingsSection from './MergeBookingsSection';
 import EditDatesSection from './EditDatesSection';
+import EditTaxiAddonSection from './EditTaxiAddonSection';
 import RecordPaymentButton from '@/app/[locale]/admin/billing/CreateInvoiceButton';
 
 interface PageProps { params: { locale: string; id: string } }
@@ -523,6 +524,24 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
           {isBoarding && (
             <EditDatesSection
               booking={{ id: booking.id, startDate: booking.startDate, endDate: booking.endDate ?? null, serviceType: booking.serviceType }}
+              locale={locale}
+            />
+          )}
+
+          {/* Edit taxi add-ons (available on all BOARDING bookings) */}
+          {isBoarding && (
+            <EditTaxiAddonSection
+              bookingId={booking.id}
+              boardingDetail={booking.boardingDetail ? {
+                taxiGoEnabled: booking.boardingDetail.taxiGoEnabled,
+                taxiGoDate: booking.boardingDetail.taxiGoDate,
+                taxiGoTime: booking.boardingDetail.taxiGoTime,
+                taxiGoAddress: booking.boardingDetail.taxiGoAddress,
+                taxiReturnEnabled: booking.boardingDetail.taxiReturnEnabled,
+                taxiReturnDate: booking.boardingDetail.taxiReturnDate,
+                taxiReturnTime: booking.boardingDetail.taxiReturnTime,
+                taxiReturnAddress: booking.boardingDetail.taxiReturnAddress,
+              } : null}
               locale={locale}
             />
           )}
