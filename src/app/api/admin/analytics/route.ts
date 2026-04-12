@@ -140,6 +140,12 @@ export async function GET(request: Request) {
     }),
   ]);
 
+  console.log('revenueBreakdown raw:', {
+    boarding: boardingTotal._sum.allocatedAmount,
+    taxi: taxiTotal._sum.allocatedAmount,
+    grooming: groomingTotal._sum.allocatedAmount,
+  });
+
   // ── Period analytics (avg basket) ────────────────────────────────────────
   const periodStart = subMonths(now, periodMonths);
   const [periodRevenue, periodPayments] = await Promise.all([
