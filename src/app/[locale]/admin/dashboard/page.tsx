@@ -85,7 +85,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
         paymentDate: true,
         invoice: {
           select: {
-            items: { select: { description: true, total: true } },
+            items: { select: { description: true, total: true, allocatedAmount: true } },
           },
         },
       },
@@ -188,14 +188,12 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     return 'boarding'; // pension / nuit / boarding / tout le reste
   };
 
-  // Chaque paiement est distribué proportionnellement sur les items de sa facture (poids = item.total)
+  // Chaque paiement est ventilé par allocatedAmount (montant exact alloué à chaque item)
   for (const pmt of last12MonthsPayments) {
     const key = new Date(pmt.paymentDate).toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
     if (!monthlyData[key]) continue;
-    const invoiceTotal = pmt.invoice.items.reduce((s, i) => s + i.total, 0);
-    if (invoiceTotal === 0) { monthlyData[key].boarding += pmt.amount; continue; }
     for (const item of pmt.invoice.items) {
-      monthlyData[key][categoriseItem(item.description)] += pmt.amount * (item.total / invoiceTotal);
+      monthlyData[key][categoriseItem(item.description)] += item.allocatedAmount;
     }
   }
 
