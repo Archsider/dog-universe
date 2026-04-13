@@ -88,6 +88,7 @@ export default async function AdminReservationsPage({ params: { locale }, search
             client: { select: { id: true, name: true, email: true } },
             bookingPets: { include: { pet: { select: { name: true } } } },
             taxiDetail: true,
+            boardingDetail: { select: { taxiGoEnabled: true, taxiGoDate: true, taxiReturnEnabled: true, taxiReturnDate: true } },
             invoice: { select: { amount: true } },
           },
           orderBy: { startDate: 'desc' },
@@ -159,12 +160,20 @@ export default async function AdminReservationsPage({ params: { locale }, search
                   <tbody>
                     {bookings.map(booking => {
                       const isBoarding = booking.serviceType === 'BOARDING';
+                      const taxiGo = isBoarding && booking.boardingDetail?.taxiGoEnabled;
+                      const taxiReturn = isBoarding && booking.boardingDetail?.taxiReturnEnabled;
+                      const hasTaxiAddon = taxiGo || taxiReturn;
                       return (
                         <tr key={booking.id} className="border-b border-ivory-100 last:border-0 hover:bg-ivory-50 transition-colors">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1.5">
                               {isBoarding ? <Package className="h-4 w-4 text-gold-400" /> : <Car className="h-4 w-4 text-blue-400" />}
                               <span className="font-mono text-xs text-gray-500">{booking.id.slice(0, 8)}</span>
+                              {hasTaxiAddon && (
+                                <span className="text-xs bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full font-medium" title={[taxiGo ? `Taxi aller${booking.boardingDetail?.taxiGoDate ? ': ' + booking.boardingDetail.taxiGoDate : ''}` : '', taxiReturn ? `Taxi retour${booking.boardingDetail?.taxiReturnDate ? ': ' + booking.boardingDetail.taxiReturnDate : ''}` : ''].filter(Boolean).join(' | ')}>
+                                  Taxi {[taxiGo && 'aller', taxiReturn && 'retour'].filter(Boolean).join('+')}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3">

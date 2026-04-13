@@ -339,6 +339,44 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
                     <span className="font-medium text-charcoal">{booking.boardingDetail.includeGrooming ? t.yes : t.no}</span>
                   </div>
                 )}
+                {booking.boardingDetail?.taxiGoEnabled && (
+                  <>
+                    <div className="mt-2 pt-2 border-t border-ivory-100">
+                      <p className="text-xs font-semibold text-orange-700 mb-1">{locale === 'fr' ? 'Taxi aller — dépôt à la pension' : 'Taxi go — drop-off at facility'}</p>
+                    </div>
+                    {booking.boardingDetail.taxiGoDate && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{locale === 'fr' ? 'Date' : 'Date'}</span>
+                        <span className="font-medium text-charcoal">{booking.boardingDetail.taxiGoDate}{booking.boardingDetail.taxiGoTime ? ` — ${booking.boardingDetail.taxiGoTime}` : ''}</span>
+                      </div>
+                    )}
+                    {booking.boardingDetail.taxiGoAddress && (
+                      <div className="flex justify-between gap-4">
+                        <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-orange-400" />{locale === 'fr' ? 'Adresse' : 'Address'}</span>
+                        <span className="font-medium text-charcoal text-right">{booking.boardingDetail.taxiGoAddress}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                {booking.boardingDetail?.taxiReturnEnabled && (
+                  <>
+                    <div className="mt-2 pt-2 border-t border-ivory-100">
+                      <p className="text-xs font-semibold text-orange-700 mb-1">{locale === 'fr' ? 'Taxi retour — récupération à domicile' : 'Taxi return — pick-up at home'}</p>
+                    </div>
+                    {booking.boardingDetail.taxiReturnDate && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{locale === 'fr' ? 'Date' : 'Date'}</span>
+                        <span className="font-medium text-charcoal">{booking.boardingDetail.taxiReturnDate}{booking.boardingDetail.taxiReturnTime ? ` — ${booking.boardingDetail.taxiReturnTime}` : ''}</span>
+                      </div>
+                    )}
+                    {booking.boardingDetail.taxiReturnAddress && (
+                      <div className="flex justify-between gap-4">
+                        <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-orange-400" />{locale === 'fr' ? 'Adresse' : 'Address'}</span>
+                        <span className="font-medium text-charcoal text-right">{booking.boardingDetail.taxiReturnAddress}</span>
+                      </div>
+                    )}
+                  </>
+                )}
                 {['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && booking.endDate && (
                   <div className="mt-3 pt-3 border-t border-ivory-100">
                     <RequestExtensionButton

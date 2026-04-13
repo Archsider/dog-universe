@@ -63,7 +63,8 @@ const l = {
 export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale }: EditTaxiAddonSectionProps) {
   const router = useRouter();
   const t = l[locale as keyof typeof l] || l.fr;
-  const [open, setOpen] = useState(false);
+  const hasAnyTaxi = !!(boardingDetail?.taxiGoEnabled || boardingDetail?.taxiReturnEnabled);
+  const [open, setOpen] = useState(hasAnyTaxi);
   const [loading, setLoading] = useState(false);
 
   // Taxi go state
@@ -124,8 +125,6 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
     setReturnAddress(boardingDetail?.taxiReturnAddress ?? '');
   }
 
-  const hasAnyTaxi = (boardingDetail?.taxiGoEnabled || boardingDetail?.taxiReturnEnabled);
-
   return (
     <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-3">
       <button
@@ -143,6 +142,26 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
         </div>
         {open ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
       </button>
+
+      {/* Summary visible when collapsed and taxi is active */}
+      {!open && hasAnyTaxi && (
+        <div className="space-y-2 text-xs text-gray-600 border-t border-gray-100 pt-2">
+          {boardingDetail?.taxiGoEnabled && (
+            <div className="flex flex-col gap-0.5">
+              <span className="font-semibold text-orange-700">↗ Aller (dépôt pension)</span>
+              {boardingDetail.taxiGoDate && <span>{boardingDetail.taxiGoDate}{boardingDetail.taxiGoTime ? ` — ${boardingDetail.taxiGoTime}` : ''}</span>}
+              {boardingDetail.taxiGoAddress && <span className="text-gray-500 italic">{boardingDetail.taxiGoAddress}</span>}
+            </div>
+          )}
+          {boardingDetail?.taxiReturnEnabled && (
+            <div className="flex flex-col gap-0.5">
+              <span className="font-semibold text-orange-700">↙ Retour (domicile)</span>
+              {boardingDetail.taxiReturnDate && <span>{boardingDetail.taxiReturnDate}{boardingDetail.taxiReturnTime ? ` — ${boardingDetail.taxiReturnTime}` : ''}</span>}
+              {boardingDetail.taxiReturnAddress && <span className="text-gray-500 italic">{boardingDetail.taxiReturnAddress}</span>}
+            </div>
+          )}
+        </div>
+      )}
 
       {open && (
         <div className="space-y-5 pt-1">
