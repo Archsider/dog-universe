@@ -38,8 +38,14 @@ const TAXI_COLS = [
   { status: 'COMPLETED',   label: { fr: 'Arrivé à destination',             en: 'Arrived' },             color: 'bg-gray-50   border-gray-200',   dot: 'bg-gray-400' },
 ];
 
-// Centralisation des transitions : status courant → status suivant + label du bouton
-const NEXT_STATUS: Record<string, string> = {
+// Centralisation des transitions par pipeline
+const BOARDING_NEXT_STATUS: Record<string, string> = {
+  PENDING:     'CONFIRMED',
+  CONFIRMED:   'IN_PROGRESS', // Boarding n'a pas d'étape AT_PICKUP
+  IN_PROGRESS: 'COMPLETED',
+};
+
+const TAXI_NEXT_STATUS: Record<string, string> = {
   PENDING:     'CONFIRMED',
   CONFIRMED:   'AT_PICKUP',
   AT_PICKUP:   'IN_PROGRESS',
@@ -88,7 +94,8 @@ function ActionButton({
   onStatusChange: (id: string, newStatus: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
-  const nextStatus = NEXT_STATUS[currentStatus];
+  const nextStatusMap = pipeline === 'BOARDING' ? BOARDING_NEXT_STATUS : TAXI_NEXT_STATUS;
+  const nextStatus = nextStatusMap[currentStatus];
   const actionLabels = ACTION_LABELS[pipeline][currentStatus];
   if (!nextStatus || !actionLabels) return null;
 

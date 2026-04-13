@@ -195,6 +195,7 @@ model BoardingDetail {
   includeGrooming Boolean @default(false)
   groomingSize    String? // "SMALL" | "LARGE"
   groomingPrice   Float   @default(0)
+  groomingStatus  String? // "PLANNED" | "IN_PROGRESS" | "DONE" — null si pas de toilettage
   pricePerNight   Float   @default(0)
   // Pet taxi addon
   taxiGoEnabled     Boolean @default(false)

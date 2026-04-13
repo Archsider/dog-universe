@@ -59,6 +59,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const ALLOWED_BD_FIELDS = [
       'taxiReturnEnabled', 'taxiReturnDate', 'taxiReturnTime', 'taxiReturnAddress',
       'taxiGoEnabled', 'taxiGoDate', 'taxiGoTime', 'taxiGoAddress',
+      'includeGrooming', 'groomingSize', 'groomingPrice', 'groomingStatus',
     ];
     const patch = body.patchBoardingDetail as Record<string, unknown>;
     const invalidKeys = Object.keys(patch).filter(k => !ALLOWED_BD_FIELDS.includes(k));

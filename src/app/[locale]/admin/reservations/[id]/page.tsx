@@ -14,6 +14,7 @@ import ExtendBookingSection from './ExtendBookingSection';
 import MergeBookingsSection from './MergeBookingsSection';
 import EditDatesSection from './EditDatesSection';
 import EditTaxiAddonSection from './EditTaxiAddonSection';
+import EditGroomingSection from './EditGroomingSection';
 import RecordPaymentButton from '@/app/[locale]/admin/billing/CreateInvoiceButton';
 
 interface PageProps { params: { locale: string; id: string } }
@@ -451,9 +452,21 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
                     <span className="font-medium text-charcoal">{nights} {locale === 'fr' ? 'nuit(s)' : 'night(s)'}</span>
                   </div>
                   {booking.boardingDetail && (
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-gray-500">{l.grooming}</span>
-                      <span className="font-medium text-charcoal">{booking.boardingDetail.includeGrooming ? l.yes : l.no}</span>
+                      {booking.boardingDetail.includeGrooming ? (
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                          booking.boardingDetail.groomingStatus === 'DONE'        ? 'bg-green-100 text-green-700 border-green-200' :
+                          booking.boardingDetail.groomingStatus === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                                                    'bg-amber-100 text-amber-700 border-amber-200'
+                        }`}>
+                          {booking.boardingDetail.groomingStatus === 'DONE'        ? (locale === 'fr' ? 'Terminé' : 'Done') :
+                           booking.boardingDetail.groomingStatus === 'IN_PROGRESS' ? (locale === 'fr' ? 'En cours' : 'In progress') :
+                                                                                     (locale === 'fr' ? 'Planifié' : 'Planned')}
+                        </span>
+                      ) : (
+                        <span className="font-medium text-gray-400 text-sm">{l.no}</span>
+                      )}
                     </div>
                   )}
                 </>
@@ -541,6 +554,19 @@ export default async function AdminReservationDetailPage({ params: { locale, id 
                 taxiReturnDate: booking.boardingDetail.taxiReturnDate,
                 taxiReturnTime: booking.boardingDetail.taxiReturnTime,
                 taxiReturnAddress: booking.boardingDetail.taxiReturnAddress,
+              } : null}
+              locale={locale}
+            />
+          )}
+
+          {/* Grooming status (available on all BOARDING bookings) */}
+          {isBoarding && (
+            <EditGroomingSection
+              bookingId={booking.id}
+              boardingDetail={booking.boardingDetail ? {
+                includeGrooming: booking.boardingDetail.includeGrooming,
+                groomingSize: booking.boardingDetail.groomingSize,
+                groomingStatus: booking.boardingDetail.groomingStatus,
               } : null}
               locale={locale}
             />

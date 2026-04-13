@@ -210,7 +210,9 @@ export default function ReservationActions({ booking, locale }: Props) {
       ) : (
         <p className="text-xs text-gray-400 text-center py-1">
           {currentStatus === 'COMPLETED'
-            ? (isFr ? 'Séjour terminé — aucune action disponible' : 'Stay completed — no further action')
+            ? (isFr
+                ? (pipeline === 'PET_TAXI' ? 'Transport terminé — aucune action disponible' : 'Séjour terminé — aucune action disponible')
+                : (pipeline === 'PET_TAXI' ? 'Transport completed — no further action' : 'Stay completed — no further action'))
             : (isFr ? 'Statut final atteint' : 'Final status reached')}
         </p>
       )}
