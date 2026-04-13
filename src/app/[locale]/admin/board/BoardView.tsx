@@ -374,7 +374,14 @@ function TaxiKanbanCard({
           </div>
         )}
         <div className="flex items-center gap-2 text-xs text-gray-400">
-          <span>{formatDateShortLocal(b.startDate, locale)}</span>
+          <span>{formatDateShortLocal(
+            b._cardType === 'GO'
+              ? (b.taxiGoDate ?? b.startDate)
+              : b._cardType === 'RETURN'
+              ? (b.taxiReturnDate ?? b.startDate)
+              : b.startDate,
+            locale
+          )}</span>
           {b.arrivalTime && (
             <span className="flex items-center gap-0.5">
               <Clock className="h-3 w-3" />
