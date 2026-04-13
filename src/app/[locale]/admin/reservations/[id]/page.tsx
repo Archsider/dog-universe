@@ -17,9 +17,10 @@ import EditTaxiAddonSection from './EditTaxiAddonSection';
 import EditGroomingSection from './EditGroomingSection';
 import RecordPaymentButton from '@/app/[locale]/admin/billing/CreateInvoiceButton';
 
-interface PageProps { params: { locale: string; id: string } }
+interface PageProps { params: Promise<{ locale: string; id: string }> }
 
-export default async function AdminReservationDetailPage({ params: { locale, id } }: PageProps) {
+export default async function AdminReservationDetailPage({ params }: PageProps) {
+  const { locale, id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 

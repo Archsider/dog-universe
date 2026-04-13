@@ -13,9 +13,10 @@ import VaccinationSection from '@/components/pets/VaccinationSection';
 import DocumentSection from '@/components/pets/DocumentSection';
 import { PROOF_PREFIX } from '@/components/pets/constants';
 
-interface PageProps { params: { locale: string; id: string } }
+interface PageProps { params: Promise<{ locale: string; id: string }> }
 
-export default async function AdminAnimalDetailPage({ params: { locale, id } }: PageProps) {
+export default async function AdminAnimalDetailPage({ params }: PageProps) {
+  const { locale, id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 

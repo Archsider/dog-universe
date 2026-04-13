@@ -152,6 +152,17 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
     return d.getTime() === todayStart.getTime();
   }).length;
 
+  // Upcoming standalone PET_TAXI bookings: tomorrow to day+7
+  const upcomingTaxis = bookings
+    .filter(
+      (b) =>
+        b.serviceType === 'PET_TAXI' &&
+        ['PENDING', 'CONFIRMED'].includes(b.status) &&
+        new Date(b.startDate) > todayEnd &&
+        new Date(b.startDate) <= sevenDaysLater
+    )
+    .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
   const dogCount = activeBoarders.reduce(
     (sum, b) => sum + b.bookingPets.filter((bp) => bp.pet.species === 'DOG').length,
     0
@@ -184,6 +195,13 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
           pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
         })),
         allBoardingTaxis,
+        upcomingTaxiDetails: upcomingTaxis.map((b) => ({
+          id: b.id,
+          clientName: b.client.name ?? b.client.email,
+          pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
+          startDate: b.startDate.toISOString(),
+          arrivalTime: b.arrivalTime ?? null,
+        })),
         upcomingDepartureDetails: upcomingDepartures.map((dep) => ({
           id: dep.id,
           clientName: dep.client.name ?? dep.client.email,

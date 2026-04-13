@@ -15,9 +15,10 @@ import HistoricalDataForm from './HistoricalDataForm';
 import AdminCreateBookingModal from '@/components/admin/AdminCreateBookingModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 
-interface PageProps { params: { locale: string; id: string } }
+interface PageProps { params: Promise<{ locale: string; id: string }> }
 
-export default async function AdminClientDetailPage({ params: { locale, id } }: PageProps) {
+export default async function AdminClientDetailPage({ params }: PageProps) {
+  const { locale, id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
