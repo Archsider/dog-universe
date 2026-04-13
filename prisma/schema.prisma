@@ -202,10 +202,12 @@ model BoardingDetail {
   taxiGoDate        String?
   taxiGoTime        String?
   taxiGoAddress     String?
+  taxiGoStatus      String? // "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "COMPLETED"
   taxiReturnEnabled Boolean @default(false)
   taxiReturnDate    String?
   taxiReturnTime    String?
   taxiReturnAddress String?
+  taxiReturnStatus  String? // "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "COMPLETED"
   taxiAddonPrice    Float   @default(0)
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)

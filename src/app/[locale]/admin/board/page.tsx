@@ -32,7 +32,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
       bookingPets: {
         include: { pet: { select: { name: true, species: true } } },
       },
-      boardingDetail: { select: { includeGrooming: true, taxiGoEnabled: true, taxiGoDate: true, taxiGoTime: true, taxiReturnEnabled: true, taxiReturnDate: true, taxiReturnTime: true } },
+      boardingDetail: { select: { includeGrooming: true, taxiGoEnabled: true, taxiGoDate: true, taxiGoTime: true, taxiGoStatus: true, taxiReturnEnabled: true, taxiReturnDate: true, taxiReturnTime: true, taxiReturnStatus: true } },
       taxiDetail: { select: { taxiType: true } },
     },
     orderBy: { startDate: 'asc' },
@@ -53,7 +53,13 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
     taxiType: b.taxiDetail?.taxiType ?? null,
     includeGrooming: b.boardingDetail?.includeGrooming ?? false,
     taxiGoEnabled: b.boardingDetail?.taxiGoEnabled ?? false,
+    taxiGoStatus: b.boardingDetail?.taxiGoStatus ?? null,
+    taxiGoDate: b.boardingDetail?.taxiGoDate ?? null,
+    taxiGoTime: b.boardingDetail?.taxiGoTime ?? null,
     taxiReturnEnabled: b.boardingDetail?.taxiReturnEnabled ?? false,
+    taxiReturnStatus: b.boardingDetail?.taxiReturnStatus ?? null,
+    taxiReturnDate: b.boardingDetail?.taxiReturnDate ?? null,
+    taxiReturnTime: b.boardingDetail?.taxiReturnTime ?? null,
     notes: b.notes ?? null,
     updatedAt: (b as { updatedAt?: Date }).updatedAt?.toISOString() ?? b.startDate.toISOString(),
   }));

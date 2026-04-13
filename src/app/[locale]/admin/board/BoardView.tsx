@@ -22,10 +22,22 @@ interface BookingCard {
   taxiType: string | null;
   includeGrooming: boolean;
   taxiGoEnabled: boolean;
+  taxiGoStatus: string | null;
+  taxiGoDate: string | null;
+  taxiGoTime: string | null;
   taxiReturnEnabled: boolean;
+  taxiReturnStatus: string | null;
+  taxiReturnDate: string | null;
+  taxiReturnTime: string | null;
   notes: string | null;
   updatedAt: string;
 }
+
+type TaxiCard = BookingCard & {
+  _cardType: 'GO' | 'RETURN' | null;
+  _colStatus: string;
+  _taxiCardKey: string;
+};
 
 type AllBoardingTaxi = {
   bookingId: string;
@@ -290,14 +302,14 @@ function TaxiKanbanCard({
   locale,
   onStatusChange,
 }: {
-  b: BookingCard;
+  b: TaxiCard;
   locale: string;
-  onStatusChange: (id: string, newStatus: string) => void;
+  onStatusChange: (id: string, newStatus: string, field?: 'taxiGoStatus' | 'taxiReturnStatus') => void;
 }) {
   const isFr = locale === 'fr';
   const [loading, setLoading] = useState(false);
-  const nextStatus = TAXI_NEXT_STATUS[b.status];
-  const actionLabel = nextStatus ? TAXI_ACTION_LABELS[b.status] : null;
+  const nextStatus = TAXI_NEXT_STATUS[b._colStatus];
+  const actionLabel = nextStatus ? TAXI_ACTION_LABELS[b._colStatus] : null;
   const { departure, arrival } = parseAddresses(b.notes);
   const petLine = b.pets.map((p) => `${SPECIES_EMOJI[p.species] ?? '🐾'} ${p.name}`).join(' · ');
 
@@ -307,13 +319,26 @@ function TaxiKanbanCard({
     if (!nextStatus) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${b.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
-      });
+      let res: Response;
+      if (b._cardType === null) {
+        // Standalone PET_TAXI: update booking status
+        res = await fetch(`/api/admin/bookings/${b.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: nextStatus }),
+        });
+      } else {
+        // Boarding taxi add-on: update taxiGoStatus or taxiReturnStatus
+        const field = b._cardType === 'GO' ? 'taxiGoStatus' : 'taxiReturnStatus';
+        res = await fetch(`/api/reservations/${b.id}/taxi-status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ field, nextStatus }),
+        });
+      }
       if (!res.ok) throw new Error('Failed');
-      onStatusChange(b.id, nextStatus);
+      const field = b._cardType === 'GO' ? 'taxiGoStatus' : b._cardType === 'RETURN' ? 'taxiReturnStatus' : undefined;
+      onStatusChange(b.id, nextStatus, field);
       toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
     } catch {
       toast({ title: isFr ? 'Erreur' : 'Error', variant: 'destructive' });
@@ -361,6 +386,11 @@ function TaxiKanbanCard({
               {TAXI_LABELS[b.taxiType]?.[locale] ?? b.taxiType}
             </span>
           )}
+          {b._cardType && (
+            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 font-medium">
+              🚗 {b._cardType === 'GO' ? (isFr ? 'Aller' : 'Go') : (isFr ? 'Retour' : 'Return')}
+            </span>
+          )}
         </div>
       </Link>
       {actionLabel && (
@@ -388,9 +418,9 @@ function TaxiKanbanColumn({
   onStatusChange,
 }: {
   col: typeof TAXI_KANBAN_COLS[number];
-  cards: BookingCard[];
+  cards: TaxiCard[];
   locale: string;
-  onStatusChange: (id: string, newStatus: string) => void;
+  onStatusChange: (id: string, newStatus: string, field?: 'taxiGoStatus' | 'taxiReturnStatus') => void;
 }) {
   const label = locale === 'fr' ? col.label.fr : col.label.en;
   return (
@@ -404,8 +434,8 @@ function TaxiKanbanColumn({
         {cards.length === 0 ? (
           <div className="flex items-center justify-center h-20 text-xs text-gray-300">—</div>
         ) : (
-          cards.map((b) => (
-            <TaxiKanbanCard key={b.id} b={b} locale={locale} onStatusChange={onStatusChange} />
+          cards.map((c) => (
+            <TaxiKanbanCard key={c._taxiCardKey} b={c} locale={locale} onStatusChange={onStatusChange} />
           ))
         )}
       </div>
@@ -421,13 +451,30 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
   const { pending, confirmed, inProgress, completed } = categorize(bookings, 'BOARDING');
 
   // Optimistic update for taxi status changes
-  const handleTaxiStatusChange = (id: string, newStatus: string) => {
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status: newStatus } : b));
+  const handleTaxiStatusChange = (id: string, newStatus: string, field?: 'taxiGoStatus' | 'taxiReturnStatus') => {
+    setBookings(prev => prev.map(b => {
+      if (b.id !== id) return b;
+      if (field === 'taxiGoStatus') return { ...b, taxiGoStatus: newStatus };
+      if (field === 'taxiReturnStatus') return { ...b, taxiReturnStatus: newStatus };
+      return { ...b, status: newStatus };
+    }));
   };
 
-  // Standalone PET_TAXI bookings grouped by status
-  const taxiBookings = bookings.filter((b) => b.serviceType === 'PET_TAXI');
-  const taxiTabCount = taxiBookings.filter((b) => b.status !== 'COMPLETED').length;
+  // Build unified taxi cards: boarding add-ons + standalone PET_TAXI
+  const taxiCards: TaxiCard[] = [];
+  for (const b of bookings) {
+    if (b.serviceType === 'BOARDING') {
+      if (b.taxiGoEnabled) {
+        taxiCards.push({ ...b, _cardType: 'GO', _colStatus: b.taxiGoStatus ?? 'PENDING', _taxiCardKey: `${b.id}-GO` });
+      }
+      if (b.taxiReturnEnabled) {
+        taxiCards.push({ ...b, _cardType: 'RETURN', _colStatus: b.taxiReturnStatus ?? 'PENDING', _taxiCardKey: `${b.id}-RETURN` });
+      }
+    } else if (b.serviceType === 'PET_TAXI') {
+      taxiCards.push({ ...b, _cardType: null, _colStatus: b.status, _taxiCardKey: b.id });
+    }
+  }
+  const taxiTabCount = taxiCards.filter((c) => c._colStatus !== 'COMPLETED').length;
 
   // Compute date buckets for boarding taxi add-on sections
   const todayTs = new Date();
@@ -749,7 +796,7 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
               <TaxiKanbanColumn
                 key={col.status}
                 col={col}
-                cards={taxiBookings.filter((b) => b.status === col.status)}
+                cards={taxiCards.filter((c) => c._colStatus === col.status)}
                 locale={locale}
                 onStatusChange={handleTaxiStatusChange}
               />
