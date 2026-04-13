@@ -48,7 +48,7 @@ interface Stats {
   todayArrivalDetails: { id: string; clientName: string; pets: string; arrivalTime: string | null }[];
   todayDepartureDetails: { id: string; clientName: string; pets: string }[];
   allBoardingTaxis: AllBoardingTaxi[];
-  upcomingTaxiDetails: { id: string; clientName: string; pets: string; startDate: string; arrivalTime: string | null }[];
+  upcomingTaxiDetails: { id: string; bookingId: string; clientName: string; pets: string; startDate: string; time: string | null; direction: 'GO' | 'RETURN' | null }[];
   upcomingDepartureDetails: { id: string; clientName: string; pets: string; endDate: string }[];
 }
 
@@ -601,7 +601,7 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
         </div>
       )}
 
-      {/* Pet Taxi à venir — standalone taxis in the next 7 days */}
+      {/* Pet Taxi à venir — standalone taxis + boarding taxi add-ons in the next 7 days */}
       {stats.upcomingTaxiDetails.length > 0 && (
         <div className="bg-white rounded-xl border border-blue-100 shadow-card p-4">
           <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
@@ -612,8 +612,8 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
             {stats.upcomingTaxiDetails.map((d) => (
               <Link
                 key={d.id}
-                href={`/${locale}/admin/reservations/${d.id}`}
-                className="flex items-center gap-1.5 text-sm hover:text-gold-700 transition-colors"
+                href={`/${locale}/admin/reservations/${d.bookingId}`}
+                className="flex items-center gap-1.5 text-sm hover:text-gold-700 transition-colors flex-wrap"
               >
                 <span className="text-xs font-semibold text-blue-700 min-w-[72px]">
                   {formatDateShortLocal(d.startDate, locale)}
@@ -622,8 +622,13 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
                 <span className="font-medium text-charcoal">{d.clientName}</span>
                 <span className="text-charcoal/30">—</span>
                 <span className="text-charcoal/70">{d.pets}</span>
-                {d.arrivalTime && (
-                  <span className="text-charcoal/40 text-xs ml-1">{isFr ? 'à' : 'at'} {d.arrivalTime}</span>
+                {d.direction && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium">
+                    🚗 {d.direction === 'GO' ? (isFr ? 'Aller' : 'Go') : (isFr ? 'Retour' : 'Return')}
+                  </span>
+                )}
+                {d.time && (
+                  <span className="text-charcoal/40 text-xs ml-1">{isFr ? 'à' : 'at'} {d.time}</span>
                 )}
               </Link>
             ))}

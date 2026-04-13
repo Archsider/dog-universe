@@ -163,6 +163,34 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
     )
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
+  // Upcoming BOARDING taxi add-ons: taxi date in the next 7 days (excluding today)
+  const upcomingBoardingTaxiItems: {
+    id: string;
+    bookingId: string;
+    clientName: string;
+    pets: string;
+    startDate: string;
+    time: string | null;
+    direction: 'GO' | 'RETURN';
+  }[] = [];
+
+  for (const t of allBoardingTaxis) {
+    const booking = bookings.find((b) => b.id === t.bookingId);
+    if (!booking || !['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'].includes(booking.status)) continue;
+    const taxiDate = new Date(t.date);
+    if (taxiDate > todayEnd && taxiDate <= sevenDaysLater) {
+      upcomingBoardingTaxiItems.push({
+        id: `${t.bookingId}-${t.direction}`,
+        bookingId: t.bookingId,
+        clientName: t.clientName,
+        pets: t.pets,
+        startDate: t.date,
+        time: t.time,
+        direction: t.direction,
+      });
+    }
+  }
+
   const dogCount = activeBoarders.reduce(
     (sum, b) => sum + b.bookingPets.filter((bp) => bp.pet.species === 'DOG').length,
     0
@@ -195,13 +223,18 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
           pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
         })),
         allBoardingTaxis,
-        upcomingTaxiDetails: upcomingTaxis.map((b) => ({
-          id: b.id,
-          clientName: b.client.name ?? b.client.email,
-          pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
-          startDate: b.startDate.toISOString(),
-          arrivalTime: b.arrivalTime ?? null,
-        })),
+        upcomingTaxiDetails: [
+          ...upcomingTaxis.map((b) => ({
+            id: b.id,
+            bookingId: b.id,
+            clientName: b.client.name ?? b.client.email,
+            pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
+            startDate: b.startDate.toISOString(),
+            time: b.arrivalTime ?? null,
+            direction: null as null,
+          })),
+          ...upcomingBoardingTaxiItems,
+        ].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()),
         upcomingDepartureDetails: upcomingDepartures.map((dep) => ({
           id: dep.id,
           clientName: dep.client.name ?? dep.client.email,
