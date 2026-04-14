@@ -24,6 +24,7 @@ export default async function AdminClientsPage({ params: { locale }, searchParam
 
   const where: Record<string, unknown> = {
     role: 'CLIENT',
+    email: { not: 'passage@doguniverse.ma' },
     ...(q && { OR: [{ name: { contains: q } }, { email: { contains: q } }] }),
   };
 
