@@ -51,18 +51,18 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     prisma.booking.count({ where: { status: 'PENDING' } }),
     prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingNow } }),
     prisma.bookingPet.count({ where: { pet: { species: 'DOG' }, booking: boardingNow } }),
-    // CA mensuel — source unique : Payment.amount / paymentDate
-    prisma.payment.aggregate({
+    // CA mensuel — Invoice.amount où status IN (PAID, PARTIALLY_PAID) et createdAt dans le mois
+    prisma.invoice.aggregate({
       where: {
-        paymentDate: { gte: thisMonthStart, lte: thisMonthEnd },
-        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+        status: { in: ['PAID', 'PARTIALLY_PAID'] },
+        createdAt: { gte: thisMonthStart, lte: thisMonthEnd },
       },
       _sum: { amount: true },
     }),
-    prisma.payment.aggregate({
+    prisma.invoice.aggregate({
       where: {
-        paymentDate: { gte: lastMonthStart, lte: lastMonthEnd },
-        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+        status: { in: ['PAID', 'PARTIALLY_PAID'] },
+        createdAt: { gte: lastMonthStart, lte: lastMonthEnd },
       },
       _sum: { amount: true },
     }),
@@ -163,12 +163,12 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     totalRevenue: r._sum.amount ?? 0,
   }));
 
-  // CA variation vs previous month — source : Payment.amount / paymentDate (aligné sur analytics)
+  // CA variation vs previous month
   const thisMonthAmt = thisMonthCA._sum.amount ?? 0;
   const lastMonthAmt = lastMonthCA._sum.amount ?? 0;
-  const monthVariation = lastMonthAmt > 0
+  const monthVariation: number | null = lastMonthAmt > 0
     ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
-    : 0;
+    : null; // null = mois précédent sans CA → affiche N/A
 
   // Build monthly chart data — last 12 months (source : Payment.paymentDate, aligné sur analytics)
   const chartLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
@@ -296,8 +296,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   const sl = statusLabels[locale] || statusLabels.fr;
 
   const monthName = now.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
-  const variationColor = monthVariation > 0 ? 'text-green-600' : monthVariation < 0 ? 'text-red-500' : 'text-gray-400';
-  const variationSign = monthVariation > 0 ? '+' : '';
+  const variationColor = monthVariation === null ? 'text-gray-400' : monthVariation > 0 ? 'text-green-600' : monthVariation < 0 ? 'text-red-500' : 'text-gray-400';
+  const variationSign = monthVariation !== null && monthVariation > 0 ? '+' : '';
 
   return (
     <div>
@@ -329,7 +329,9 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <div className="text-xl font-bold text-charcoal">{formatMAD(thisMonthAmt)}</div>
             <div className="text-xs text-gray-500 mt-0.5">{l.caMonthly}</div>
             <div className={`text-xs mt-1 font-medium ${variationColor}`}>
-              {variationSign}{monthVariation}% vs mois préc.
+              {monthVariation === null
+                ? (locale === 'fr' ? 'N/A vs mois préc.' : 'N/A vs prev. month')
+                : `${variationSign}${monthVariation}% vs mois préc.`}
             </div>
           </div>
         </Link>
