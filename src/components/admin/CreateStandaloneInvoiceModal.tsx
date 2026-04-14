@@ -114,6 +114,13 @@ const today = () => new Date().toISOString().split('T')[0];
 
 export default function CreateStandaloneInvoiceModal({ clients, locale, onCreated, preselectedClientId }: CreateStandaloneInvoiceModalProps) {
   const fr = locale === 'fr';
+
+  // "Client de passage" always first, then alphabetical
+  const sortedClients = [...clients].sort((a, b) => {
+    if (a.email === 'passage@doguniverse.ma') return -1;
+    if (b.email === 'passage@doguniverse.ma') return 1;
+    return a.name.localeCompare(b.name);
+  });
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -246,7 +253,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
                     className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 focus:outline-none focus:border-gold-400 bg-white"
                   >
                     <option value="">{fr ? '— Sélectionner —' : '— Select —'}</option>
-                    {clients.map(c => (
+                    {sortedClients.map(c => (
                       <option key={c.id} value={c.id}>{c.name} ({c.email})</option>
                     ))}
                   </select>

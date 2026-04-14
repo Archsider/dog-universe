@@ -478,6 +478,21 @@ async function main() {
   });
   console.log('✅ Action logs created');
 
+  // "Client de passage" — placeholder client for walk-in / standalone invoices
+  const passagePassword = await bcrypt.hash('__passage_account_nologin__', 10);
+  await prisma.user.upsert({
+    where: { email: 'passage@doguniverse.ma' },
+    update: {},
+    create: {
+      email: 'passage@doguniverse.ma',
+      name: 'Client de passage',
+      passwordHash: passagePassword,
+      role: 'CLIENT',
+      language: 'fr',
+    },
+  });
+  console.log('✅ Client de passage upserted');
+
   console.log('\n🎉 Database seeded successfully!');
   console.log('\n📋 Test accounts:');
   console.log('   Admin:  admin@doguniverse.ma  / Admin2024!');
