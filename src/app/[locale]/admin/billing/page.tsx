@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { FileText, Download, FileDown, Eye, Banknote, CreditCard, Receipt, Building2 } from 'lucide-react';
+import { FileText, Download, FileDown, Eye, Pencil, Banknote, CreditCard, Receipt, Building2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getInvoiceStatusColor } from '@/lib/utils';
 import PaymentModal from './PaymentModal';
@@ -245,6 +245,9 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
+                          <Link href={`/${locale}/admin/invoices/${inv.id}`} title={locale === 'fr' ? 'Fiche facture' : 'Invoice details'} className="p-1.5 text-gray-400 hover:text-gold-600 rounded">
+                            <Pencil className="h-4 w-4" />
+                          </Link>
                           <a href={`/api/invoices/${inv.id}/pdf?view=1`} target="_blank" rel="noopener noreferrer" title={locale === 'fr' ? 'Aperçu' : 'Preview'} className="p-1.5 text-gray-400 hover:text-gold-600 rounded">
                             <Eye className="h-4 w-4" />
                           </a>
