@@ -66,7 +66,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         },
       },
     }),
-    // CA = SUM(Payment.amount) on non-cancelled invoices, attributed by payment date
+    // CA mensuel — Payment.amount attribué par paymentDate
     prisma.payment.aggregate({
       where: {
         paymentDate: { gte: thisMonthStart, lte: thisMonthEnd },
@@ -176,21 +176,12 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     croquettes: monthly[i].croquettes,
   }));
 
-  // Current month KPI — historical is pre-production, not mixed in
-  const thisMonthAmt = thisMonthRevenue._sum.amount ?? 0;
-
-  // Last month: real payments first, fall back to historical summary
-  const lastMonthPaymentsAmt = lastMonthRevenue._sum.amount ?? 0;
-  const lastMonthNum = subMonths(now, 1).getMonth() + 1; // 1-indexed
-  const lastMonthSummary = historicalSummaries.find(s => s.month === lastMonthNum);
-  const lastMonthSummaryAmt = lastMonthSummary
-    ? lastMonthSummary.boardingRevenue + lastMonthSummary.groomingRevenue + lastMonthSummary.taxiRevenue + lastMonthSummary.otherRevenue
-    : 0;
-  const lastMonthAmt = lastMonthPaymentsAmt > 0 ? lastMonthPaymentsAmt : lastMonthSummaryAmt;
-
-  const monthVariation = lastMonthAmt === 0
-    ? (thisMonthAmt > 0 ? 100 : 0)
-    : Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10;
+  // CA KPI
+  const thisAmt = thisMonthRevenue._sum.amount ?? 0;
+  const lastAmt = lastMonthRevenue._sum.amount ?? 0;
+  const delta = lastAmt === 0
+    ? (thisAmt > 0 ? 100 : 0)
+    : Math.round(((thisAmt - lastAmt) / lastAmt) * 1000) / 10;
 
   const capacitySettings = await prisma.setting.findMany({
     where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
@@ -211,7 +202,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const totalSegments = activeClients + semiActiveCount + inactiveCount || 1;
 
   const uniqueLastMonth = new Set(lastMonthPayments.map(p => p.invoice.clientId)).size;
-  const avgBasket = uniqueLastMonth > 0 ? Math.round(lastMonthPaymentsAmt / uniqueLastMonth) : 0;
+  const avgBasket = uniqueLastMonth > 0 ? Math.round(lastAmt / uniqueLastMonth) : 0;
 
   // Service breakdown: real invoice items + historical summaries
   const summaryBoarding = historicalSummaries.reduce((s, r) => s + r.boardingRevenue, 0);
@@ -248,8 +239,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   };
 
   const monthName = now.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
-  const variationColor = monthVariation > 0 ? 'text-green-600' : monthVariation < 0 ? 'text-red-500' : 'text-gray-400';
-  const variationSign = monthVariation > 0 ? '+' : '';
+  const variationColor = delta > 0 ? 'text-green-600' : delta < 0 ? 'text-red-500' : 'text-gray-400';
 
   const segmentRows = [
     { label: l.active, sub: l.activeSub, value: activeClients, color: 'text-green-600', bar: 'bg-green-400' },
@@ -270,9 +260,9 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         {/* CA with % variation */}
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
           <p className="text-xs text-gray-500 mb-1">{l.monthlyRevenue}</p>
-          <p className="text-2xl font-bold text-charcoal">{formatMAD(thisMonthAmt)}</p>
+          <p className="text-2xl font-bold text-charcoal">{formatMAD(thisAmt)}</p>
           <p className={`text-xs mt-1 font-medium ${variationColor}`}>
-            {variationSign}{monthVariation}% {l.vsPrev}
+            {`${delta > 0 ? '+' : ''}${delta}% vs mois préc.`}
           </p>
         </div>
 
