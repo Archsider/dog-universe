@@ -166,9 +166,9 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   // CA variation vs previous month
   const thisMonthAmt = thisMonthCA._sum.amount ?? 0;
   const lastMonthAmt = lastMonthCA._sum.amount ?? 0;
-  const monthVariation: number | null = lastMonthAmt > 0
-    ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
-    : null; // null = mois précédent sans CA → affiche N/A
+  const monthVariation = lastMonthAmt === 0
+    ? (thisMonthAmt > 0 ? 100 : 0)
+    : Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10;
 
   // Build monthly chart data — last 12 months (source : Payment.paymentDate, aligné sur analytics)
   const chartLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
@@ -296,8 +296,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   const sl = statusLabels[locale] || statusLabels.fr;
 
   const monthName = now.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
-  const variationColor = monthVariation === null ? 'text-gray-400' : monthVariation > 0 ? 'text-green-600' : monthVariation < 0 ? 'text-red-500' : 'text-gray-400';
-  const variationSign = monthVariation !== null && monthVariation > 0 ? '+' : '';
+  const variationColor = monthVariation > 0 ? 'text-green-600' : monthVariation < 0 ? 'text-red-500' : 'text-gray-400';
+  const variationSign = monthVariation > 0 ? '+' : '';
 
   return (
     <div>
@@ -329,9 +329,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <div className="text-xl font-bold text-charcoal">{formatMAD(thisMonthAmt)}</div>
             <div className="text-xs text-gray-500 mt-0.5">{l.caMonthly}</div>
             <div className={`text-xs mt-1 font-medium ${variationColor}`}>
-              {monthVariation === null
-                ? (locale === 'fr' ? 'N/A vs mois préc.' : 'N/A vs prev. month')
-                : `${variationSign}${monthVariation}% vs mois préc.`}
+              {`${variationSign}${monthVariation}% vs mois préc.`}
             </div>
           </div>
         </Link>
