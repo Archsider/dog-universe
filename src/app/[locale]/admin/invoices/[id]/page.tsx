@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
-import InvoiceDetailClient from '@/components/admin/InvoiceDetailClient';
+import InvoiceDetailClient, { type InvoiceData } from '@/components/admin/InvoiceDetailClient';
 
 interface PageProps {
   params: { locale: string; id: string };
@@ -44,8 +44,7 @@ export default async function InvoiceDetailPage({ params: { locale, id } }: Page
           {locale === 'fr' ? 'Retour à la facturation' : 'Back to billing'}
         </Link>
       </div>
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <InvoiceDetailClient invoice={invoice as any} locale={locale} />
+      <InvoiceDetailClient invoice={invoice as unknown as InvoiceData} locale={locale} />
     </div>
   );
 }
