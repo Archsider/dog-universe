@@ -51,18 +51,18 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     prisma.booking.count({ where: { status: 'PENDING' } }),
     prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingNow } }),
     prisma.bookingPet.count({ where: { pet: { species: 'DOG' }, booking: boardingNow } }),
-    // CA mensuel — Invoice.amount où status IN (PAID, PARTIALLY_PAID) et createdAt dans le mois
-    prisma.invoice.aggregate({
+    // CA mensuel — Payment.amount attribué par paymentDate (source unique, aligné avec analytics)
+    prisma.payment.aggregate({
       where: {
-        status: { in: ['PAID', 'PARTIALLY_PAID'] },
-        createdAt: { gte: thisMonthStart, lte: thisMonthEnd },
+        paymentDate: { gte: thisMonthStart, lte: thisMonthEnd },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
       },
       _sum: { amount: true },
     }),
-    prisma.invoice.aggregate({
+    prisma.payment.aggregate({
       where: {
-        status: { in: ['PAID', 'PARTIALLY_PAID'] },
-        createdAt: { gte: lastMonthStart, lte: lastMonthEnd },
+        paymentDate: { gte: lastMonthStart, lte: lastMonthEnd },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
       },
       _sum: { amount: true },
     }),

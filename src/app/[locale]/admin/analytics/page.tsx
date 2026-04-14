@@ -188,9 +188,9 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     : 0;
   const lastMonthAmt = lastMonthPaymentsAmt > 0 ? lastMonthPaymentsAmt : lastMonthSummaryAmt;
 
-  const monthVariation = lastMonthAmt > 0
-    ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
-    : 0;
+  const monthVariation = lastMonthAmt === 0
+    ? (thisMonthAmt > 0 ? 100 : 0)
+    : Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10;
 
   const capacitySettings = await prisma.setting.findMany({
     where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
