@@ -46,6 +46,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     todayCheckIns,
     todayCheckOuts,
     historicalSummaries,
+    thisMonthHistorical,
+    lastMonthHistorical,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'CLIENT' } }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
@@ -143,6 +145,16 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     prisma.monthlyRevenueSummary.findMany({
       select: { year: true, month: true, boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
     }).catch(() => [] as { year: number; month: number; boardingRevenue: number; groomingRevenue: number; taxiRevenue: number; otherRevenue: number }[]),
+    // CA historique mois courant
+    prisma.monthlyRevenueSummary.findFirst({
+      where: { year: thisMonthStart.getFullYear(), month: thisMonthStart.getMonth() + 1 },
+      select: { boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
+    }).catch(() => null),
+    // CA historique mois précédent
+    prisma.monthlyRevenueSummary.findFirst({
+      where: { year: lastMonthStart.getFullYear(), month: lastMonthStart.getMonth() + 1 },
+      select: { boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
+    }).catch(() => null),
   ]);
 
   const capacitySettings = await prisma.setting.findMany({
@@ -163,9 +175,15 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     totalRevenue: r._sum.amount ?? 0,
   }));
 
-  // CA variation vs previous month
-  const thisAmt = thisMonthCA._sum.amount ?? 0;
-  const lastAmt = lastMonthCA._sum.amount ?? 0;
+  // CA variation vs previous month — paiements réels + données historiques manuelles
+  const thisHistAmt = thisMonthHistorical
+    ? thisMonthHistorical.boardingRevenue + thisMonthHistorical.groomingRevenue + thisMonthHistorical.taxiRevenue + thisMonthHistorical.otherRevenue
+    : 0;
+  const lastHistAmt = lastMonthHistorical
+    ? lastMonthHistorical.boardingRevenue + lastMonthHistorical.groomingRevenue + lastMonthHistorical.taxiRevenue + lastMonthHistorical.otherRevenue
+    : 0;
+  const thisAmt = (thisMonthCA._sum.amount ?? 0) + thisHistAmt;
+  const lastAmt = (lastMonthCA._sum.amount ?? 0) + lastHistAmt;
   const delta = lastAmt === 0
     ? (thisAmt > 0 ? 100 : 0)
     : Math.round(((thisAmt - lastAmt) / lastAmt) * 1000) / 10;

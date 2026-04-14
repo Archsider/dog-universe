@@ -47,6 +47,8 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     semiActiveIds,
     lastMonthPayments,
     historicalSummaries,
+    thisMonthHistorical,
+    lastMonthHistorical,
   ] = await Promise.all([
     // Yearly chart — attributed by payment date, covers PAID + PARTIALLY_PAID
     prisma.payment.findMany({
@@ -122,6 +124,16 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       where: { year: currentYear },
       select: { month: true, boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
     }).catch(() => [] as { month: number; boardingRevenue: number; groomingRevenue: number; taxiRevenue: number; otherRevenue: number }[]),
+    // CA historique mois courant
+    prisma.monthlyRevenueSummary.findFirst({
+      where: { year: thisMonthStart.getFullYear(), month: thisMonthStart.getMonth() + 1 },
+      select: { boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
+    }).catch(() => null),
+    // CA historique mois précédent
+    prisma.monthlyRevenueSummary.findFirst({
+      where: { year: lastMonthStart.getFullYear(), month: lastMonthStart.getMonth() + 1 },
+      select: { boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
+    }).catch(() => null),
   ]);
 
   // Build yearly chart — merge real invoices + historical summaries
@@ -176,9 +188,15 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     croquettes: monthly[i].croquettes,
   }));
 
-  // CA KPI
-  const thisAmt = thisMonthRevenue._sum.amount ?? 0;
-  const lastAmt = lastMonthRevenue._sum.amount ?? 0;
+  // CA KPI — paiements réels + données historiques manuelles
+  const thisHistAmt = thisMonthHistorical
+    ? thisMonthHistorical.boardingRevenue + thisMonthHistorical.groomingRevenue + thisMonthHistorical.taxiRevenue + thisMonthHistorical.otherRevenue
+    : 0;
+  const lastHistAmt = lastMonthHistorical
+    ? lastMonthHistorical.boardingRevenue + lastMonthHistorical.groomingRevenue + lastMonthHistorical.taxiRevenue + lastMonthHistorical.otherRevenue
+    : 0;
+  const thisAmt = (thisMonthRevenue._sum.amount ?? 0) + thisHistAmt;
+  const lastAmt = (lastMonthRevenue._sum.amount ?? 0) + lastHistAmt;
   const delta = lastAmt === 0
     ? (thisAmt > 0 ? 100 : 0)
     : Math.round(((thisAmt - lastAmt) / lastAmt) * 1000) / 10;
