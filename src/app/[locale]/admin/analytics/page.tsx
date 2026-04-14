@@ -391,30 +391,37 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const monthName = now.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="-m-4 lg:-m-8 p-4 lg:p-8 pb-12 min-h-full bg-[#0f1117]">
-      <div className="mb-6">
-        <h1 className="text-2xl font-serif font-bold text-white">
-          {locale === 'en' ? 'Analytics' : 'Analytiques'}
-        </h1>
-        <p className="text-sm text-gray-400 mt-0.5 capitalize">
-          {locale === 'en' ? 'Overview' : 'Vue d\'ensemble'} — {monthName}
-        </p>
-      </div>
+    // Wrapper couvre toute la zone main (annule p-4/p-8) + le gap ml-64 de la sidebar desktop
+    <div className="relative -m-4 lg:-m-8 min-h-screen">
+      {/* Fond dark : inset-0 = zone main, lg:-left-64 = couvre le gap sidebar (16rem) */}
+      <div className="absolute inset-0 bg-[#0f1117] lg:-left-64" />
 
-      <AnalyticsCharts
-        serviceKpis={serviceKpis}
-        yearlyData={yearlyData}
-        lastYearData={lastYearData}
-        donutData={byServiceThis}
-        volumeData={volumeData}
-        avgBasket={avgBasket}
-        avgNights={avgNights}
-        newClients={newClientsThisMonth}
-        totalCA={thisAmt}
-        totalDelta={delta}
-        locale={locale}
-        currentYear={currentYear}
-      />
+      {/* Contenu : re-applique le même padding que le layout */}
+      <div className="relative p-4 lg:p-8 pb-12">
+        <div className="mb-6">
+          <h1 className="text-2xl font-serif font-bold text-white">
+            {locale === 'en' ? 'Analytics' : 'Analytiques'}
+          </h1>
+          <p className="text-sm text-gray-400 mt-0.5 capitalize">
+            {locale === 'en' ? 'Overview' : 'Vue d\'ensemble'} — {monthName}
+          </p>
+        </div>
+
+        <AnalyticsCharts
+          serviceKpis={serviceKpis}
+          yearlyData={yearlyData}
+          lastYearData={lastYearData}
+          donutData={byServiceThis}
+          volumeData={volumeData}
+          avgBasket={avgBasket}
+          avgNights={avgNights}
+          newClients={newClientsThisMonth}
+          totalCA={thisAmt}
+          totalDelta={delta}
+          locale={locale}
+          currentYear={currentYear}
+        />
+      </div>
     </div>
   );
 }
