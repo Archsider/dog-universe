@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Car, ChevronDown, ChevronUp, Save, ArrowRight, Loader2 } from 'lucide-react';
+import { Car, ChevronDown, ChevronUp, Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 
 interface BoardingDetailTaxi {
@@ -19,20 +20,13 @@ interface BoardingDetailTaxi {
   taxiReturnStatus: string | null;
 }
 
-const TAXI_NEXT_STATUS: Record<string, string> = {
-  PENDING:     'CONFIRMED',
-  CONFIRMED:   'AT_PICKUP',
-  AT_PICKUP:   'IN_PROGRESS',
-  IN_PROGRESS: 'COMPLETED',
-};
-
-const TAXI_STATUS_LABELS: Record<string, { fr: string; en: string }> = {
-  PENDING:     { fr: 'Transport planifié',               en: 'Transport planned' },
-  CONFIRMED:   { fr: 'En route vers le point de départ', en: 'En route to pickup' },
-  AT_PICKUP:   { fr: 'Sur place',                        en: 'On site' },
-  IN_PROGRESS: { fr: 'Animal à bord',                    en: 'Pet on board' },
-  COMPLETED:   { fr: 'Arrivé à destination',             en: 'Arrived at destination' },
-};
+const TAXI_STATUS_OPTIONS = [
+  { value: 'PENDING',     fr: 'Transport planifié',               en: 'Transport planned' },
+  { value: 'CONFIRMED',   fr: 'En route vers le point de départ', en: 'En route to pickup' },
+  { value: 'AT_PICKUP',   fr: 'Sur place',                        en: 'On site' },
+  { value: 'IN_PROGRESS', fr: 'Animal à bord',                    en: 'Pet on board' },
+  { value: 'COMPLETED',   fr: 'Arrivé à destination',             en: 'Arrived at destination' },
+];
 
 interface EditTaxiAddonSectionProps {
   bookingId: string;
@@ -46,34 +40,30 @@ const l = {
     description: 'Gérer les trajets taxi liés à ce séjour (aller à la pension / retour à domicile).',
     goSection: 'Taxi aller (dépôt à la pension)',
     returnSection: 'Taxi retour (récupération au domicile)',
-    enabled: 'Activé',
-    disabled: 'Désactivé',
     date: 'Date',
     time: 'Heure',
     address: 'Adresse',
     addressPlaceholder: 'Adresse de prise en charge',
     save: 'Enregistrer',
     cancel: 'Annuler',
+    apply: 'Appliquer',
     successMsg: 'Add-ons taxi mis à jour.',
     errorServer: 'Erreur lors de la mise à jour.',
-    timePlaceholder: 'ex: 10:00',
   },
   en: {
     title: 'Pet Taxi Add-ons',
     description: 'Manage taxi trips linked to this stay (drop-off at facility / pick-up at home).',
     goSection: 'Taxi go (drop-off at facility)',
     returnSection: 'Taxi return (pick-up at home)',
-    enabled: 'Enabled',
-    disabled: 'Disabled',
     date: 'Date',
     time: 'Time',
     address: 'Address',
     addressPlaceholder: 'Pick-up address',
     save: 'Save',
     cancel: 'Cancel',
+    apply: 'Apply',
     successMsg: 'Taxi add-ons updated.',
     errorServer: 'Error updating taxi add-ons.',
-    timePlaceholder: 'e.g. 10:00',
   },
 };
 
@@ -86,38 +76,39 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
   const [loading, setLoading] = useState(false);
 
   // Taxi go state
-  const [goEnabled, setGoEnabled] = useState(boardingDetail?.taxiGoEnabled ?? false);
-  const [goDate, setGoDate] = useState(boardingDetail?.taxiGoDate ?? '');
-  const [goTime, setGoTime] = useState(boardingDetail?.taxiGoTime ?? '');
-  const [goAddress, setGoAddress] = useState(boardingDetail?.taxiGoAddress ?? '');
-  const [goStatus, setGoStatus] = useState(boardingDetail?.taxiGoStatus ?? 'PENDING');
+  const [goEnabled, setGoEnabled]         = useState(boardingDetail?.taxiGoEnabled ?? false);
+  const [goDate, setGoDate]               = useState(boardingDetail?.taxiGoDate ?? '');
+  const [goTime, setGoTime]               = useState(boardingDetail?.taxiGoTime ?? '');
+  const [goAddress, setGoAddress]         = useState(boardingDetail?.taxiGoAddress ?? '');
+  const [goStatus, setGoStatus]           = useState(boardingDetail?.taxiGoStatus ?? 'PENDING');
+  const [savedGoStatus, setSavedGoStatus] = useState(boardingDetail?.taxiGoStatus ?? 'PENDING');
   const [loadingGoStatus, setLoadingGoStatus] = useState(false);
 
   // Taxi return state
-  const [returnEnabled, setReturnEnabled] = useState(boardingDetail?.taxiReturnEnabled ?? false);
-  const [returnDate, setReturnDate] = useState(boardingDetail?.taxiReturnDate ?? '');
-  const [returnTime, setReturnTime] = useState(boardingDetail?.taxiReturnTime ?? '');
-  const [returnAddress, setReturnAddress] = useState(boardingDetail?.taxiReturnAddress ?? '');
-  const [returnStatus, setReturnStatus] = useState(boardingDetail?.taxiReturnStatus ?? 'PENDING');
+  const [returnEnabled, setReturnEnabled]             = useState(boardingDetail?.taxiReturnEnabled ?? false);
+  const [returnDate, setReturnDate]                   = useState(boardingDetail?.taxiReturnDate ?? '');
+  const [returnTime, setReturnTime]                   = useState(boardingDetail?.taxiReturnTime ?? '');
+  const [returnAddress, setReturnAddress]             = useState(boardingDetail?.taxiReturnAddress ?? '');
+  const [returnStatus, setReturnStatus]               = useState(boardingDetail?.taxiReturnStatus ?? 'PENDING');
+  const [savedReturnStatus, setSavedReturnStatus]     = useState(boardingDetail?.taxiReturnStatus ?? 'PENDING');
   const [loadingReturnStatus, setLoadingReturnStatus] = useState(false);
 
-  async function advanceTaxiStatus(
+  async function applyTaxiStatus(
     field: 'taxiGoStatus' | 'taxiReturnStatus',
-    currentStatus: string,
+    nextStatus: string,
     setLoadingFn: (v: boolean) => void,
-    setStatusFn: (s: string) => void,
+    setSavedFn: (s: string) => void,
   ) {
-    const next = TAXI_NEXT_STATUS[currentStatus];
-    if (!next) return;
     setLoadingFn(true);
     try {
       const res = await fetch(`/api/reservations/${bookingId}/taxi-status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field, nextStatus: next }),
+        body: JSON.stringify({ field, nextStatus }),
       });
       if (!res.ok) throw new Error();
-      setStatusFn(next);
+      setSavedFn(nextStatus);
+      toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
     } catch {
       toast({ title: t.errorServer, variant: 'destructive' });
     } finally {
@@ -197,21 +188,28 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
               <span className="font-semibold text-orange-700">↗ Aller (dépôt pension)</span>
               {boardingDetail.taxiGoDate && <span>{boardingDetail.taxiGoDate}{boardingDetail.taxiGoTime ? ` — ${boardingDetail.taxiGoTime}` : ''}</span>}
               {boardingDetail.taxiGoAddress && <span className="text-gray-500 italic">{boardingDetail.taxiGoAddress}</span>}
-              <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-orange-100">
-                <span className="font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
-                  {TAXI_STATUS_LABELS[goStatus] ? (isFr ? TAXI_STATUS_LABELS[goStatus].fr : TAXI_STATUS_LABELS[goStatus].en) : goStatus}
-                </span>
-                {TAXI_NEXT_STATUS[goStatus] && (
-                  <button
-                    type="button"
-                    onClick={() => advanceTaxiStatus('taxiGoStatus', goStatus, setLoadingGoStatus, setGoStatus)}
-                    disabled={loadingGoStatus}
-                    className="flex items-center gap-1 font-medium text-charcoal border border-charcoal/20 hover:border-charcoal/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
-                  >
-                    {loadingGoStatus ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
-                    {(() => { const nl = TAXI_STATUS_LABELS[TAXI_NEXT_STATUS[goStatus]]; return nl ? (isFr ? nl.fr : nl.en) : TAXI_NEXT_STATUS[goStatus]; })()}
-                  </button>
-                )}
+              <div className="flex gap-2 mt-2">
+                <Select value={goStatus} onValueChange={setGoStatus}>
+                  <SelectTrigger className="flex-1 text-sm h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TAXI_STATUS_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {isFr ? o.fr : o.en}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyTaxiStatus('taxiGoStatus', goStatus, setLoadingGoStatus, setSavedGoStatus)}
+                  disabled={loadingGoStatus || goStatus === savedGoStatus}
+                  className="h-9 px-3"
+                >
+                  {loadingGoStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : (isFr ? t.apply : t.apply)}
+                </Button>
               </div>
             </div>
           )}
@@ -220,21 +218,28 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
               <span className="font-semibold text-orange-700">↙ Retour (domicile)</span>
               {boardingDetail.taxiReturnDate && <span>{boardingDetail.taxiReturnDate}{boardingDetail.taxiReturnTime ? ` — ${boardingDetail.taxiReturnTime}` : ''}</span>}
               {boardingDetail.taxiReturnAddress && <span className="text-gray-500 italic">{boardingDetail.taxiReturnAddress}</span>}
-              <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-orange-100">
-                <span className="font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
-                  {TAXI_STATUS_LABELS[returnStatus] ? (isFr ? TAXI_STATUS_LABELS[returnStatus].fr : TAXI_STATUS_LABELS[returnStatus].en) : returnStatus}
-                </span>
-                {TAXI_NEXT_STATUS[returnStatus] && (
-                  <button
-                    type="button"
-                    onClick={() => advanceTaxiStatus('taxiReturnStatus', returnStatus, setLoadingReturnStatus, setReturnStatus)}
-                    disabled={loadingReturnStatus}
-                    className="flex items-center gap-1 font-medium text-charcoal border border-charcoal/20 hover:border-charcoal/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
-                  >
-                    {loadingReturnStatus ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
-                    {(() => { const nl = TAXI_STATUS_LABELS[TAXI_NEXT_STATUS[returnStatus]]; return nl ? (isFr ? nl.fr : nl.en) : TAXI_NEXT_STATUS[returnStatus]; })()}
-                  </button>
-                )}
+              <div className="flex gap-2 mt-2">
+                <Select value={returnStatus} onValueChange={setReturnStatus}>
+                  <SelectTrigger className="flex-1 text-sm h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TAXI_STATUS_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {isFr ? o.fr : o.en}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyTaxiStatus('taxiReturnStatus', returnStatus, setLoadingReturnStatus, setSavedReturnStatus)}
+                  disabled={loadingReturnStatus || returnStatus === savedReturnStatus}
+                  className="h-9 px-3"
+                >
+                  {loadingReturnStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : t.apply}
+                </Button>
               </div>
             </div>
           )}
@@ -265,21 +270,28 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
             </div>
             {goEnabled && (
               <>
-                <div className="flex items-center justify-between gap-2 py-2 border-t border-b border-orange-100">
-                  <span className="text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
-                    {TAXI_STATUS_LABELS[goStatus] ? (isFr ? TAXI_STATUS_LABELS[goStatus].fr : TAXI_STATUS_LABELS[goStatus].en) : goStatus}
-                  </span>
-                  {TAXI_NEXT_STATUS[goStatus] && (
-                    <button
-                      type="button"
-                      onClick={() => advanceTaxiStatus('taxiGoStatus', goStatus, setLoadingGoStatus, setGoStatus)}
-                      disabled={loadingGoStatus}
-                      className="flex items-center gap-1 text-xs font-medium text-charcoal border border-charcoal/20 hover:border-charcoal/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
-                    >
-                      {loadingGoStatus ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
-                      {(() => { const nl = TAXI_STATUS_LABELS[TAXI_NEXT_STATUS[goStatus]]; return nl ? (isFr ? nl.fr : nl.en) : TAXI_NEXT_STATUS[goStatus]; })()}
-                    </button>
-                  )}
+                <div className="flex gap-2 mt-2">
+                  <Select value={goStatus} onValueChange={setGoStatus}>
+                    <SelectTrigger className="flex-1 text-sm h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TAXI_STATUS_OPTIONS.map(o => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {isFr ? o.fr : o.en}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyTaxiStatus('taxiGoStatus', goStatus, setLoadingGoStatus, setSavedGoStatus)}
+                    disabled={loadingGoStatus || goStatus === savedGoStatus}
+                    className="h-9 px-3"
+                  >
+                    {loadingGoStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : t.apply}
+                  </Button>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -337,21 +349,28 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
             </div>
             {returnEnabled && (
               <>
-                <div className="flex items-center justify-between gap-2 py-2 border-t border-b border-orange-100">
-                  <span className="text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
-                    {TAXI_STATUS_LABELS[returnStatus] ? (isFr ? TAXI_STATUS_LABELS[returnStatus].fr : TAXI_STATUS_LABELS[returnStatus].en) : returnStatus}
-                  </span>
-                  {TAXI_NEXT_STATUS[returnStatus] && (
-                    <button
-                      type="button"
-                      onClick={() => advanceTaxiStatus('taxiReturnStatus', returnStatus, setLoadingReturnStatus, setReturnStatus)}
-                      disabled={loadingReturnStatus}
-                      className="flex items-center gap-1 text-xs font-medium text-charcoal border border-charcoal/20 hover:border-charcoal/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
-                    >
-                      {loadingReturnStatus ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
-                      {(() => { const nl = TAXI_STATUS_LABELS[TAXI_NEXT_STATUS[returnStatus]]; return nl ? (isFr ? nl.fr : nl.en) : TAXI_NEXT_STATUS[returnStatus]; })()}
-                    </button>
-                  )}
+                <div className="flex gap-2 mt-2">
+                  <Select value={returnStatus} onValueChange={setReturnStatus}>
+                    <SelectTrigger className="flex-1 text-sm h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TAXI_STATUS_OPTIONS.map(o => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {isFr ? o.fr : o.en}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyTaxiStatus('taxiReturnStatus', returnStatus, setLoadingReturnStatus, setSavedReturnStatus)}
+                    disabled={loadingReturnStatus || returnStatus === savedReturnStatus}
+                    className="h-9 px-3"
+                  >
+                    {loadingReturnStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : t.apply}
+                  </Button>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
