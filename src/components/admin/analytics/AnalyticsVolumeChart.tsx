@@ -26,14 +26,16 @@ export default function AnalyticsVolumeChart({ data, locale }: Props) {
     croquettes: { name: 'Croquettes',                       sub: isFr ? 'ventes'   : 'sales'    },
   };
 
-  const chartData = (Object.keys(COLORS) as ServiceKey[]).map(key => ({
-    key,
-    name: serviceLabels[key].name,
-    sub:  serviceLabels[key].sub,
-    value: data[key],
-  }));
+  const chartData = (Object.keys(COLORS) as ServiceKey[])
+    .map(key => ({
+      key,
+      name:  serviceLabels[key].name,
+      sub:   serviceLabels[key].sub,
+      value: data[key],
+    }))
+    .filter(d => d.value > 0);
 
-  if (chartData.every(d => d.value === 0)) {
+  if (chartData.length === 0) {
     return (
       <div className="flex items-center justify-center h-40 text-sm" style={{ color: '#6b7280' }}>
         {isFr ? 'Pas de données ce mois' : 'No data this month'}

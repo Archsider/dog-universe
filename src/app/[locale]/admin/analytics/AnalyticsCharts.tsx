@@ -113,8 +113,7 @@ export default function AnalyticsCharts({
               style={{
                 backgroundColor: CARD_BG,
                 border: `1px solid ${svc.borderColor}`,
-                borderLeftWidth: 3,
-                borderLeftColor: svc.color,
+                borderLeft: `3px solid ${svc.color}`,
               }}
             >
               <div className="flex items-center justify-between mb-3">

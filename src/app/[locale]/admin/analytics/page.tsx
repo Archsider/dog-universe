@@ -391,7 +391,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const monthName = now.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="min-h-screen -mx-4 lg:-mx-8 -mt-4 lg:-mt-8 px-8 pt-8 pb-12 bg-[#0f1117]">
+    <div className="-m-4 lg:-m-8 p-4 lg:p-8 pb-12 min-h-full bg-[#0f1117]">
       <div className="mb-6">
         <h1 className="text-2xl font-serif font-bold text-white">
           {locale === 'en' ? 'Analytics' : 'Analytiques'}
