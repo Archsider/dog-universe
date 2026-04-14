@@ -551,10 +551,12 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                 taxiGoDate: booking.boardingDetail.taxiGoDate,
                 taxiGoTime: booking.boardingDetail.taxiGoTime,
                 taxiGoAddress: booking.boardingDetail.taxiGoAddress,
+                taxiGoStatus: booking.boardingDetail.taxiGoStatus,
                 taxiReturnEnabled: booking.boardingDetail.taxiReturnEnabled,
                 taxiReturnDate: booking.boardingDetail.taxiReturnDate,
                 taxiReturnTime: booking.boardingDetail.taxiReturnTime,
                 taxiReturnAddress: booking.boardingDetail.taxiReturnAddress,
+                taxiReturnStatus: booking.boardingDetail.taxiReturnStatus,
               } : null}
               locale={locale}
             />

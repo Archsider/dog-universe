@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Car, ChevronDown, ChevronUp, Save } from 'lucide-react';
+import { Car, ChevronDown, ChevronUp, Save, ArrowRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 
@@ -11,11 +11,28 @@ interface BoardingDetailTaxi {
   taxiGoDate: string | null;
   taxiGoTime: string | null;
   taxiGoAddress: string | null;
+  taxiGoStatus: string | null;
   taxiReturnEnabled: boolean;
   taxiReturnDate: string | null;
   taxiReturnTime: string | null;
   taxiReturnAddress: string | null;
+  taxiReturnStatus: string | null;
 }
+
+const TAXI_NEXT_STATUS: Record<string, string> = {
+  PENDING:     'CONFIRMED',
+  CONFIRMED:   'AT_PICKUP',
+  AT_PICKUP:   'IN_PROGRESS',
+  IN_PROGRESS: 'COMPLETED',
+};
+
+const TAXI_STATUS_LABELS: Record<string, { fr: string; en: string }> = {
+  PENDING:     { fr: 'Transport planifié',               en: 'Transport planned' },
+  CONFIRMED:   { fr: 'En route vers le point de départ', en: 'En route to pickup' },
+  AT_PICKUP:   { fr: 'Sur place',                        en: 'On site' },
+  IN_PROGRESS: { fr: 'Animal à bord',                    en: 'Pet on board' },
+  COMPLETED:   { fr: 'Arrivé à destination',             en: 'Arrived at destination' },
+};
 
 interface EditTaxiAddonSectionProps {
   bookingId: string;
@@ -63,6 +80,7 @@ const l = {
 export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale }: EditTaxiAddonSectionProps) {
   const router = useRouter();
   const t = l[locale as keyof typeof l] || l.fr;
+  const isFr = locale !== 'en';
   const hasAnyTaxi = !!(boardingDetail?.taxiGoEnabled || boardingDetail?.taxiReturnEnabled);
   const [open, setOpen] = useState(hasAnyTaxi);
   const [loading, setLoading] = useState(false);
@@ -72,12 +90,40 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
   const [goDate, setGoDate] = useState(boardingDetail?.taxiGoDate ?? '');
   const [goTime, setGoTime] = useState(boardingDetail?.taxiGoTime ?? '');
   const [goAddress, setGoAddress] = useState(boardingDetail?.taxiGoAddress ?? '');
+  const [goStatus, setGoStatus] = useState(boardingDetail?.taxiGoStatus ?? 'PENDING');
+  const [loadingGoStatus, setLoadingGoStatus] = useState(false);
 
   // Taxi return state
   const [returnEnabled, setReturnEnabled] = useState(boardingDetail?.taxiReturnEnabled ?? false);
   const [returnDate, setReturnDate] = useState(boardingDetail?.taxiReturnDate ?? '');
   const [returnTime, setReturnTime] = useState(boardingDetail?.taxiReturnTime ?? '');
   const [returnAddress, setReturnAddress] = useState(boardingDetail?.taxiReturnAddress ?? '');
+  const [returnStatus, setReturnStatus] = useState(boardingDetail?.taxiReturnStatus ?? 'PENDING');
+  const [loadingReturnStatus, setLoadingReturnStatus] = useState(false);
+
+  async function advanceTaxiStatus(
+    field: 'taxiGoStatus' | 'taxiReturnStatus',
+    currentStatus: string,
+    setLoadingFn: (v: boolean) => void,
+    setStatusFn: (s: string) => void,
+  ) {
+    const next = TAXI_NEXT_STATUS[currentStatus];
+    if (!next) return;
+    setLoadingFn(true);
+    try {
+      const res = await fetch(`/api/reservations/${bookingId}/taxi-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field, nextStatus: next }),
+      });
+      if (!res.ok) throw new Error();
+      setStatusFn(next);
+    } catch {
+      toast({ title: t.errorServer, variant: 'destructive' });
+    } finally {
+      setLoadingFn(false);
+    }
+  }
 
   async function handleSave() {
     setLoading(true);
@@ -145,12 +191,28 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
 
       {/* Summary visible when collapsed and taxi is active */}
       {!open && hasAnyTaxi && (
-        <div className="space-y-2 text-xs text-gray-600 border-t border-gray-100 pt-2">
+        <div className="space-y-3 text-xs text-gray-600 border-t border-gray-100 pt-2">
           {boardingDetail?.taxiGoEnabled && (
             <div className="flex flex-col gap-0.5">
               <span className="font-semibold text-orange-700">↗ Aller (dépôt pension)</span>
               {boardingDetail.taxiGoDate && <span>{boardingDetail.taxiGoDate}{boardingDetail.taxiGoTime ? ` — ${boardingDetail.taxiGoTime}` : ''}</span>}
               {boardingDetail.taxiGoAddress && <span className="text-gray-500 italic">{boardingDetail.taxiGoAddress}</span>}
+              <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-orange-100">
+                <span className="font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                  {TAXI_STATUS_LABELS[goStatus] ? (isFr ? TAXI_STATUS_LABELS[goStatus].fr : TAXI_STATUS_LABELS[goStatus].en) : goStatus}
+                </span>
+                {TAXI_NEXT_STATUS[goStatus] && (
+                  <button
+                    type="button"
+                    onClick={() => advanceTaxiStatus('taxiGoStatus', goStatus, setLoadingGoStatus, setGoStatus)}
+                    disabled={loadingGoStatus}
+                    className="flex items-center gap-1 font-medium text-charcoal border border-charcoal/20 hover:border-charcoal/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+                  >
+                    {loadingGoStatus ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
+                    {(() => { const nl = TAXI_STATUS_LABELS[TAXI_NEXT_STATUS[goStatus]]; return nl ? (isFr ? nl.fr : nl.en) : TAXI_NEXT_STATUS[goStatus]; })()}
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {boardingDetail?.taxiReturnEnabled && (
@@ -158,6 +220,22 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
               <span className="font-semibold text-orange-700">↙ Retour (domicile)</span>
               {boardingDetail.taxiReturnDate && <span>{boardingDetail.taxiReturnDate}{boardingDetail.taxiReturnTime ? ` — ${boardingDetail.taxiReturnTime}` : ''}</span>}
               {boardingDetail.taxiReturnAddress && <span className="text-gray-500 italic">{boardingDetail.taxiReturnAddress}</span>}
+              <div className="flex items-center justify-between gap-2 mt-1.5 pt-1.5 border-t border-orange-100">
+                <span className="font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                  {TAXI_STATUS_LABELS[returnStatus] ? (isFr ? TAXI_STATUS_LABELS[returnStatus].fr : TAXI_STATUS_LABELS[returnStatus].en) : returnStatus}
+                </span>
+                {TAXI_NEXT_STATUS[returnStatus] && (
+                  <button
+                    type="button"
+                    onClick={() => advanceTaxiStatus('taxiReturnStatus', returnStatus, setLoadingReturnStatus, setReturnStatus)}
+                    disabled={loadingReturnStatus}
+                    className="flex items-center gap-1 font-medium text-charcoal border border-charcoal/20 hover:border-charcoal/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+                  >
+                    {loadingReturnStatus ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
+                    {(() => { const nl = TAXI_STATUS_LABELS[TAXI_NEXT_STATUS[returnStatus]]; return nl ? (isFr ? nl.fr : nl.en) : TAXI_NEXT_STATUS[returnStatus]; })()}
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -186,38 +264,56 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
               </button>
             </div>
             {goEnabled && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">{t.date}</label>
-                  <input
-                    type="date"
-                    value={goDate}
-                    onChange={e => setGoDate(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
+              <>
+                <div className="flex items-center justify-between gap-2 py-2 border-t border-b border-orange-100">
+                  <span className="text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                    {TAXI_STATUS_LABELS[goStatus] ? (isFr ? TAXI_STATUS_LABELS[goStatus].fr : TAXI_STATUS_LABELS[goStatus].en) : goStatus}
+                  </span>
+                  {TAXI_NEXT_STATUS[goStatus] && (
+                    <button
+                      type="button"
+                      onClick={() => advanceTaxiStatus('taxiGoStatus', goStatus, setLoadingGoStatus, setGoStatus)}
+                      disabled={loadingGoStatus}
+                      className="flex items-center gap-1 text-xs font-medium text-charcoal border border-charcoal/20 hover:border-charcoal/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+                    >
+                      {loadingGoStatus ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
+                      {(() => { const nl = TAXI_STATUS_LABELS[TAXI_NEXT_STATUS[goStatus]]; return nl ? (isFr ? nl.fr : nl.en) : TAXI_NEXT_STATUS[goStatus]; })()}
+                    </button>
+                  )}
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">{t.time}</label>
-                  <input
-                    type="time"
-                    value={goTime}
-                    min="10:00"
-                    max="17:00"
-                    onChange={e => setGoTime(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.date}</label>
+                    <input
+                      type="date"
+                      value={goDate}
+                      onChange={e => setGoDate(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.time}</label>
+                    <input
+                      type="time"
+                      value={goTime}
+                      min="10:00"
+                      max="17:00"
+                      onChange={e => setGoTime(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.address}</label>
+                    <input
+                      type="text"
+                      value={goAddress}
+                      onChange={e => setGoAddress(e.target.value)}
+                      placeholder={t.addressPlaceholder}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
                 </div>
-                <div className="col-span-2">
-                  <label className="text-xs font-medium text-gray-600 block mb-1">{t.address}</label>
-                  <input
-                    type="text"
-                    value={goAddress}
-                    onChange={e => setGoAddress(e.target.value)}
-                    placeholder={t.addressPlaceholder}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
-                </div>
-              </div>
+              </>
             )}
           </div>
 
@@ -240,38 +336,56 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
               </button>
             </div>
             {returnEnabled && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">{t.date}</label>
-                  <input
-                    type="date"
-                    value={returnDate}
-                    onChange={e => setReturnDate(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
+              <>
+                <div className="flex items-center justify-between gap-2 py-2 border-t border-b border-orange-100">
+                  <span className="text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                    {TAXI_STATUS_LABELS[returnStatus] ? (isFr ? TAXI_STATUS_LABELS[returnStatus].fr : TAXI_STATUS_LABELS[returnStatus].en) : returnStatus}
+                  </span>
+                  {TAXI_NEXT_STATUS[returnStatus] && (
+                    <button
+                      type="button"
+                      onClick={() => advanceTaxiStatus('taxiReturnStatus', returnStatus, setLoadingReturnStatus, setReturnStatus)}
+                      disabled={loadingReturnStatus}
+                      className="flex items-center gap-1 text-xs font-medium text-charcoal border border-charcoal/20 hover:border-charcoal/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+                    >
+                      {loadingReturnStatus ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
+                      {(() => { const nl = TAXI_STATUS_LABELS[TAXI_NEXT_STATUS[returnStatus]]; return nl ? (isFr ? nl.fr : nl.en) : TAXI_NEXT_STATUS[returnStatus]; })()}
+                    </button>
+                  )}
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">{t.time}</label>
-                  <input
-                    type="time"
-                    value={returnTime}
-                    min="10:00"
-                    max="17:00"
-                    onChange={e => setReturnTime(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.date}</label>
+                    <input
+                      type="date"
+                      value={returnDate}
+                      onChange={e => setReturnDate(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.time}</label>
+                    <input
+                      type="time"
+                      value={returnTime}
+                      min="10:00"
+                      max="17:00"
+                      onChange={e => setReturnTime(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.address}</label>
+                    <input
+                      type="text"
+                      value={returnAddress}
+                      onChange={e => setReturnAddress(e.target.value)}
+                      placeholder={t.addressPlaceholder}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
                 </div>
-                <div className="col-span-2">
-                  <label className="text-xs font-medium text-gray-600 block mb-1">{t.address}</label>
-                  <input
-                    type="text"
-                    value={returnAddress}
-                    onChange={e => setReturnAddress(e.target.value)}
-                    placeholder={t.addressPlaceholder}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
-                </div>
-              </div>
+              </>
             )}
           </div>
 
