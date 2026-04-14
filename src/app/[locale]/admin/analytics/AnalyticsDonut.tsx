@@ -4,15 +4,15 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatMAD } from '@/lib/utils';
 
 interface Props {
-  data: { boarding: number; grooming: number; taxi: number; croquettes: number };
+  data: { BOARDING: number; PET_TAXI: number; GROOMING: number; OTHER: number };
   locale: string;
 }
 
 const SERVICE_COLORS = {
-  boarding:   '#c9a84c',
-  taxi:       '#4a90d9',
-  grooming:   '#8b5cf6',
-  croquettes: '#f59e0b',
+  BOARDING: '#c9a84c',
+  PET_TAXI: '#4a90d9',
+  GROOMING: '#8b5cf6',
+  OTHER:    '#f59e0b',
 } as const;
 
 type ServiceKey = keyof typeof SERVICE_COLORS;
@@ -21,13 +21,13 @@ export default function AnalyticsDonut({ data, locale }: Props) {
   const isFr = locale === 'fr';
 
   const serviceLabels: Record<ServiceKey, string> = {
-    boarding:   isFr ? 'Pension'    : 'Boarding',
-    taxi:       'Taxi',
-    grooming:   isFr ? 'Toilettage' : 'Grooming',
-    croquettes: 'Croquettes',
+    BOARDING: isFr ? 'Pension'         : 'Boarding',
+    PET_TAXI: 'Taxi',
+    GROOMING: isFr ? 'Toilettage'      : 'Grooming',
+    OTHER:    isFr ? 'Boutique/Divers' : 'Shop/Other',
   };
 
-  const total = data.boarding + data.taxi + data.grooming + data.croquettes;
+  const total = data.BOARDING + data.PET_TAXI + data.GROOMING + data.OTHER;
 
   if (total === 0) {
     return (

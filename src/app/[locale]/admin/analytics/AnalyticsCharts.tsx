@@ -44,7 +44,7 @@ export interface Props {
     total: number;
   }[];
   lastYearData: { month: string; total: number }[];
-  donutData: { boarding: number; grooming: number; taxi: number; croquettes: number };
+  donutData: { BOARDING: number; PET_TAXI: number; GROOMING: number; OTHER: number };
   volumeData: { boarding: number; taxi: number; grooming: number; croquettes: number };
   avgBasket: number;
   avgNights: number;

@@ -101,16 +101,13 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     paymentsCurrentYear,
     thisMonthRevenue,
     lastMonthRevenue,
-    // FIX 1 — Nouveaux clients ce mois (sans compte passage@)
     newClientsThisMonth,
-    // FIX 3 — Durée moy. séjour ce mois uniquement
     completedBoardings,
-    // FIX 2 — Panier moyen : clients uniques CE mois
     thisMonthPaymentsForBasket,
-    boardingCountThisMonth,
-    taxiCountThisMonth,
-    groomingCountThisMonth,
-    productCountThisMonth,
+    // FIX 2 — CA par service ce mois : query dédiée, groupe par booking.serviceType
+    thisMonthPaymentsByService,
+    // FIX 4 — Volume mensuel : booking.groupBy (1 query au lieu de 4)
+    volumeGroupBy,
     historicalSummaries,
     thisMonthHistorical,
     lastMonthHistorical,
@@ -153,7 +150,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       _sum: { amount: true },
     }),
 
-    // FIX 1: Nouveaux clients — filtre passage@
+    // Nouveaux clients — filtre passage@
     prisma.user.count({
       where: {
         role: 'CLIENT',
@@ -162,7 +159,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       },
     }),
 
-    // FIX 3: Durée moy. séjour — ce mois uniquement
+    // Durée moy. séjour — ce mois uniquement
     prisma.booking.findMany({
       where: {
         serviceType: 'BOARDING',
@@ -172,7 +169,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       select: { startDate: true, endDate: true },
     }),
 
-    // FIX 2: Panier moyen — clients uniques de ce mois
+    // Panier moyen — clients uniques de ce mois
     prisma.payment.findMany({
       where: {
         paymentDate: { gte: thisMonthStart, lte: thisMonthEnd },
@@ -182,39 +179,30 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       distinct: ['invoiceId'],
     }),
 
-    // Volume Pension ce mois
-    prisma.booking.count({
+    // FIX 2 — CA par service : groupe par booking.serviceType, pas de booking → OTHER
+    prisma.payment.findMany({
       where: {
-        serviceType: 'BOARDING',
-        status: { not: 'CANCELLED' },
-        startDate: { gte: thisMonthStart, lte: thisMonthEnd },
+        paymentDate: { gte: thisMonthStart, lte: thisMonthEnd },
+        invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
       },
-    }),
-    // Volume Taxi ce mois
-    prisma.booking.count({
-      where: {
-        serviceType: 'PET_TAXI',
-        status: { not: 'CANCELLED' },
-        startDate: { gte: thisMonthStart, lte: thisMonthEnd },
-      },
-    }),
-    // Volume Toilettage ce mois
-    prisma.invoiceItem.count({
-      where: {
-        description: { contains: 'Toilettage' },
+      select: {
+        amount: true,
         invoice: {
-          issuedAt: { gte: thisMonthStart, lte: thisMonthEnd },
-          status: { in: ['PAID', 'PARTIALLY_PAID'] },
+          select: {
+            booking: { select: { serviceType: true } },
+          },
         },
       },
     }),
-    // Volume Croquettes ce mois
-    prisma.invoice.count({
+
+    // FIX 4 — Volume mensuel : booking.groupBy (remplace 4 queries séparées)
+    prisma.booking.groupBy({
+      by: ['serviceType'],
       where: {
-        serviceType: 'PRODUCT_SALE',
-        issuedAt: { gte: thisMonthStart, lte: thisMonthEnd },
-        status: { in: ['PAID', 'PARTIALLY_PAID'] },
+        status: { not: 'CANCELLED' },
+        startDate: { gte: thisMonthStart, lte: thisMonthEnd },
       },
+      _count: { id: true },
     }),
 
     // Historical summaries — année courante
@@ -278,7 +266,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     ? (thisAmt > 0 ? 100 : 0)
     : Math.round(((thisAmt - lastAmt) / lastAmt) * 1000) / 10;
 
-  // ── Per-service CA this/last month ────────────────────────────────────────
+  // ── Per-service CA this/last month (pour les KPI cards Row 1) ─────────────
   const thisM = now.getMonth();
   const lastM = lastMonthStart.getMonth();
   const sameYear = lastMonthStart.getFullYear() === currentYear;
@@ -296,33 +284,33 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       thisAmt: thisMonthByService.boarding,
       lastAmt: lastMonthByService.boarding,
       delta: svcDelta(thisMonthByService.boarding, lastMonthByService.boarding),
-      count: boardingCountThisMonth,
+      count: volumeGroupBy.find(r => r.serviceType === 'BOARDING')?._count.id ?? 0,
     },
     taxi: {
       thisAmt: thisMonthByService.taxi,
       lastAmt: lastMonthByService.taxi,
       delta: svcDelta(thisMonthByService.taxi, lastMonthByService.taxi),
-      count: taxiCountThisMonth,
+      count: volumeGroupBy.find(r => r.serviceType === 'PET_TAXI')?._count.id ?? 0,
     },
     grooming: {
       thisAmt: thisMonthByService.grooming,
       lastAmt: lastMonthByService.grooming,
       delta: svcDelta(thisMonthByService.grooming, lastMonthByService.grooming),
-      count: groomingCountThisMonth,
+      count: volumeGroupBy.find(r => r.serviceType === 'GROOMING')?._count.id ?? 0,
     },
     croquettes: {
       thisAmt: thisMonthByService.croquettes,
       lastAmt: lastMonthByService.croquettes,
       delta: svcDelta(thisMonthByService.croquettes, lastMonthByService.croquettes),
-      count: productCountThisMonth,
+      count: 0, // pas de booking type PRODUCT_SALE
     },
   };
 
-  // ── FIX 2: Avg basket — CE mois ───────────────────────────────────────────
+  // ── Avg basket ────────────────────────────────────────────────────────────
   const uniqueThisMonth = new Set(thisMonthPaymentsForBasket.map(p => p.invoice.clientId)).size;
   const avgBasket = uniqueThisMonth > 0 ? Math.round(thisAmt / uniqueThisMonth) : 0;
 
-  // ── FIX 3: Avg nights — CE mois ───────────────────────────────────────────
+  // ── Avg nights ────────────────────────────────────────────────────────────
   const avgNights = completedBoardings.length > 0
     ? completedBoardings.reduce((sum, b) => {
         if (!b.endDate) return sum;
@@ -330,40 +318,30 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       }, 0) / completedBoardings.length
     : 0;
 
-  // ── FIX 4: Répartition services — paiements réels CE mois uniquement ──────
-  const thisMonthRealByService: MonthlyBreakdown = { boarding: 0, grooming: 0, taxi: 0, croquettes: 0 };
-  for (const pmt of paymentsCurrentYear) {
-    const d = new Date(pmt.paymentDate);
-    if (d.getMonth() !== thisM || d.getFullYear() !== currentYear) continue;
-    const svcType = pmt.invoice.booking?.serviceType ?? pmt.invoice.serviceType;
-    if (svcType === 'PRODUCT_SALE') {
-      thisMonthRealByService.croquettes += pmt.amount;
-    } else if (svcType === 'PET_TAXI') {
-      thisMonthRealByService.taxi += pmt.amount;
-    } else if (svcType === 'BOARDING') {
-      const items = pmt.invoice.items;
-      const totalAllocated = items.reduce((s, i) => s + i.allocatedAmount, 0);
-      if (totalAllocated > 0) {
-        for (const item of items) {
-          const ratio = item.allocatedAmount / totalAllocated;
-          const itemAmt = pmt.amount * ratio;
-          if (item.description.includes('Taxi')) thisMonthRealByService.taxi += itemAmt;
-          else if (item.description.includes('Toilettage')) thisMonthRealByService.grooming += itemAmt;
-          else thisMonthRealByService.boarding += itemAmt;
-        }
-      } else {
-        const g = Math.min(pmt.invoice.booking?.boardingDetail?.groomingPrice ?? 0, pmt.amount);
-        thisMonthRealByService.grooming += g;
-        thisMonthRealByService.boarding += pmt.amount - g;
-      }
-    }
+  // ── FIX 2 — Répartition services : groupe par booking.serviceType ─────────
+  // Factures sans booking (clients de passage, produits) → OTHER
+  const byService = { BOARDING: 0, PET_TAXI: 0, GROOMING: 0, OTHER: 0 };
+  for (const p of thisMonthPaymentsByService) {
+    const type = p.invoice.booking?.serviceType ?? 'OTHER';
+    if (type === 'BOARDING')      byService.BOARDING  += p.amount;
+    else if (type === 'PET_TAXI') byService.PET_TAXI  += p.amount;
+    else if (type === 'GROOMING') byService.GROOMING  += p.amount;
+    else                          byService.OTHER      += p.amount;
   }
 
-  // ── Yearly chart data ─────────────────────────────────────────────────────
+  // ── FIX 4 — Volume mensuel : extrait du groupBy ───────────────────────────
+  const volumeData = {
+    boarding:   volumeGroupBy.find(r => r.serviceType === 'BOARDING')?._count.id  ?? 0,
+    taxi:       volumeGroupBy.find(r => r.serviceType === 'PET_TAXI')?._count.id  ?? 0,
+    grooming:   volumeGroupBy.find(r => r.serviceType === 'GROOMING')?._count.id  ?? 0,
+    croquettes: 0, // pas de booking type PRODUCT_SALE
+  };
+
+  // ── FIX 3 — Yearly chart : seulement les mois jusqu'au mois courant ───────
   const frMonths = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
   const yearSuffix = String(currentYear).slice(2);
 
-  const yearlyData = Array.from({ length: 12 }, (_, i) => ({
+  const yearlyData = Array.from({ length: thisM + 1 }, (_, i) => ({
     month: `${frMonths[i]} ${yearSuffix}`,
     boarding: monthly[i].boarding,
     grooming: monthly[i].grooming,
@@ -372,7 +350,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     total: monthly[i].boarding + monthly[i].grooming + monthly[i].taxi + monthly[i].croquettes,
   }));
 
-  const lastYearData = Array.from({ length: 12 }, (_, i) => ({
+  const lastYearData = Array.from({ length: thisM + 1 }, (_, i) => ({
     month: frMonths[i],
     total: monthlyLastYear[i].boarding + monthlyLastYear[i].grooming + monthlyLastYear[i].taxi + monthlyLastYear[i].croquettes,
   }));
@@ -380,6 +358,8 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const monthName = now.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
 
   return (
+    // Fix #1 — wrapper déjà correctement à l'intérieur du slot children (main > {children})
+    // Les marges négatives contrent le padding du layout sans sortir du slot
     <div className="-m-4 lg:-m-8 p-4 lg:p-8 min-h-full" style={{ backgroundColor: '#0f1117' }}>
       <div className="mb-6">
         <h1 className="text-2xl font-serif font-bold text-white">
@@ -394,13 +374,8 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         serviceKpis={serviceKpis}
         yearlyData={yearlyData}
         lastYearData={lastYearData}
-        donutData={thisMonthRealByService}
-        volumeData={{
-          boarding: boardingCountThisMonth,
-          taxi: taxiCountThisMonth,
-          grooming: groomingCountThisMonth,
-          croquettes: productCountThisMonth,
-        }}
+        donutData={byService}
+        volumeData={volumeData}
         avgBasket={avgBasket}
         avgNights={Math.round(avgNights * 10) / 10}
         newClients={newClientsThisMonth}
