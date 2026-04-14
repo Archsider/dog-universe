@@ -382,10 +382,10 @@ function TaxiKanbanCard({
               : b.startDate,
             locale
           )}</span>
-          {b.arrivalTime && (
+          {(b._cardType === 'GO' ? b.taxiGoTime : b._cardType === 'RETURN' ? b.taxiReturnTime : b.arrivalTime) && (
             <span className="flex items-center gap-0.5">
               <Clock className="h-3 w-3" />
-              {b.arrivalTime}
+              {b._cardType === 'GO' ? b.taxiGoTime : b._cardType === 'RETURN' ? b.taxiReturnTime : b.arrivalTime}
             </span>
           )}
           {b.taxiType && (
