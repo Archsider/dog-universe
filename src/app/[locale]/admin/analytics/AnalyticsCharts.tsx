@@ -3,23 +3,41 @@
 import dynamic from 'next/dynamic';
 import { formatMAD } from '@/lib/utils';
 
-const AnalyticsAreaChart = dynamic(() => import('./AnalyticsAreaChart'), {
-  ssr: false,
-  loading: () => (
-    <div className="h-[320px] flex items-center justify-center text-sm" style={{ color: '#6b7280' }}>
-      Chargement...
-    </div>
-  ),
-});
+const AnalyticsPerformanceChart = dynamic(
+  () => import('@/components/admin/analytics/AnalyticsPerformanceChart'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[320px] flex items-center justify-center text-sm" style={{ color: '#6b7280' }}>
+        Chargement...
+      </div>
+    ),
+  },
+);
 
-const AnalyticsDonut = dynamic(() => import('./AnalyticsDonut'), {
-  ssr: false,
-  loading: () => (
-    <div className="h-[200px] flex items-center justify-center text-sm" style={{ color: '#6b7280' }}>
-      Chargement...
-    </div>
-  ),
-});
+const AnalyticsVolumeChart = dynamic(
+  () => import('@/components/admin/analytics/AnalyticsVolumeChart'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[200px] flex items-center justify-center text-sm" style={{ color: '#6b7280' }}>
+        Chargement...
+      </div>
+    ),
+  },
+);
+
+const AnalyticsBreakdownDonut = dynamic(
+  () => import('@/components/admin/analytics/AnalyticsBreakdownDonut'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[200px] flex items-center justify-center text-sm" style={{ color: '#6b7280' }}>
+        Chargement...
+      </div>
+    ),
+  },
+);
 
 export interface ServiceKpi {
   thisAmt: number;
@@ -30,9 +48,9 @@ export interface ServiceKpi {
 
 export interface Props {
   serviceKpis: {
-    boarding: ServiceKpi;
-    taxi: ServiceKpi;
-    grooming: ServiceKpi;
+    boarding:   ServiceKpi;
+    taxi:       ServiceKpi;
+    grooming:   ServiceKpi;
     croquettes: ServiceKpi;
   };
   yearlyData: {
@@ -44,7 +62,7 @@ export interface Props {
     total: number;
   }[];
   lastYearData: { month: string; total: number }[];
-  donutData: { BOARDING: number; PET_TAXI: number; GROOMING: number; OTHER: number };
+  donutData: { BOARDING: number; PET_TAXI: number; GROOMING: number; PRODUCT: number; OTHER: number };
   volumeData: { boarding: number; taxi: number; grooming: number; croquettes: number };
   avgBasket: number;
   avgNights: number;
@@ -56,12 +74,13 @@ export interface Props {
 }
 
 const CARD_BG = '#1a1d27';
+const BORDER  = '1px solid rgba(255,255,255,0.08)';
 
 const SERVICES = [
-  { key: 'boarding' as const, color: '#c9a84c', borderColor: 'rgba(201,168,76,0.3)' },
-  { key: 'taxi'    as const, color: '#4a90d9', borderColor: 'rgba(74,144,217,0.3)' },
-  { key: 'grooming' as const, color: '#8b5cf6', borderColor: 'rgba(139,92,246,0.3)' },
-  { key: 'croquettes' as const, color: '#f59e0b', borderColor: 'rgba(245,158,11,0.3)' },
+  { key: 'boarding'   as const, color: '#c9a84c', borderColor: 'rgba(201,168,76,0.3)'  },
+  { key: 'taxi'       as const, color: '#4a90d9', borderColor: 'rgba(74,144,217,0.3)'  },
+  { key: 'grooming'   as const, color: '#8b5cf6', borderColor: 'rgba(139,92,246,0.3)'  },
+  { key: 'croquettes' as const, color: '#f59e0b', borderColor: 'rgba(245,158,11,0.3)'  },
 ];
 
 export default function AnalyticsCharts({
@@ -72,19 +91,11 @@ export default function AnalyticsCharts({
   const isFr = locale === 'fr';
 
   const serviceLabels = {
-    boarding:   { label: isFr ? 'Pension'     : 'Boarding',  sub: isFr ? 'séjours'  : 'stays'    },
-    taxi:       { label: 'Taxi',                               sub: isFr ? 'courses'  : 'rides'    },
-    grooming:   { label: isFr ? 'Toilettage'  : 'Grooming',  sub: isFr ? 'soins'    : 'sessions' },
-    croquettes: { label: 'Croquettes',                         sub: isFr ? 'ventes'   : 'sales'    },
+    boarding:   { label: isFr ? 'Pension'    : 'Boarding', sub: isFr ? 'séjours'  : 'stays'    },
+    taxi:       { label: 'Taxi',                             sub: isFr ? 'courses'  : 'rides'    },
+    grooming:   { label: isFr ? 'Toilettage' : 'Grooming', sub: isFr ? 'soins'    : 'sessions' },
+    croquettes: { label: 'Croquettes',                       sub: isFr ? 'ventes'   : 'sales'    },
   };
-
-  const maxVolume = Math.max(
-    volumeData.boarding,
-    volumeData.taxi,
-    volumeData.grooming,
-    volumeData.croquettes,
-    1,
-  );
 
   return (
     <div className="space-y-5">
@@ -101,7 +112,6 @@ export default function AnalyticsCharts({
               className="rounded-xl p-5"
               style={{
                 backgroundColor: CARD_BG,
-                borderLeft: `3px solid ${svc.color}`,
                 border: `1px solid ${svc.borderColor}`,
                 borderLeftWidth: 3,
                 borderLeftColor: svc.color,
@@ -125,8 +135,8 @@ export default function AnalyticsCharts({
         })}
       </div>
 
-      {/* ── Ligne 2 — Area chart ── */}
-      <div className="rounded-xl p-6" style={{ backgroundColor: CARD_BG, border: '1px solid rgba(255,255,255,0.08)' }}>
+      {/* ── Ligne 2 — Area chart performance ── */}
+      <div className="rounded-xl p-6" style={{ backgroundColor: CARD_BG, border: BORDER }}>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <h2 className="font-semibold text-white">
             {isFr
@@ -150,55 +160,32 @@ export default function AnalyticsCharts({
             </div>
           </div>
         </div>
-        <AnalyticsAreaChart data={yearlyData} lastYearData={lastYearData} locale={locale} />
+        <AnalyticsPerformanceChart data={yearlyData} lastYearData={lastYearData} locale={locale} />
       </div>
 
       {/* ── Ligne 3 — Volume + Donut ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Volume Mensuel */}
-        <div className="rounded-xl p-6" style={{ backgroundColor: CARD_BG, border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="rounded-xl p-6" style={{ backgroundColor: CARD_BG, border: BORDER }}>
           <h2 className="font-semibold text-white mb-5">
             {isFr ? 'Volume Mensuel' : 'Monthly Volume'}
           </h2>
-          <div className="space-y-5">
-            {SERVICES.map(svc => {
-              const vol = volumeData[svc.key];
-              const { label, sub } = serviceLabels[svc.key];
-              const pct = Math.round((vol / maxVolume) * 100);
-              return (
-                <div key={svc.key}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm" style={{ color: '#d1d5db' }}>{label}</span>
-                    <span className="text-sm font-bold text-white">
-                      {vol}{' '}
-                      <span className="text-xs font-normal" style={{ color: '#6b7280' }}>{sub}</span>
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
-                    <div
-                      className="h-2 rounded-full transition-all"
-                      style={{ width: `${pct}%`, backgroundColor: svc.color }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <AnalyticsVolumeChart data={volumeData} locale={locale} />
         </div>
 
         {/* Répartition Activités */}
-        <div className="rounded-xl p-6" style={{ backgroundColor: CARD_BG, border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="rounded-xl p-6" style={{ backgroundColor: CARD_BG, border: BORDER }}>
           <h2 className="font-semibold text-white mb-5">
             {isFr ? 'Répartition Activités' : 'Activity Breakdown'}
           </h2>
-          <AnalyticsDonut data={donutData} locale={locale} />
+          <AnalyticsBreakdownDonut data={donutData} locale={locale} />
         </div>
       </div>
 
       {/* ── Ligne 4 — KPIs secondaires ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-xl p-5" style={{ backgroundColor: CARD_BG, border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="rounded-xl p-5" style={{ backgroundColor: CARD_BG, border: BORDER }}>
           <p className="text-xs uppercase tracking-wide mb-2" style={{ color: '#6b7280' }}>
             {isFr ? 'Panier Moyen' : 'Avg Basket'}
           </p>
@@ -207,7 +194,7 @@ export default function AnalyticsCharts({
             {isFr ? 'par client ce mois' : 'per client this month'}
           </p>
         </div>
-        <div className="rounded-xl p-5" style={{ backgroundColor: CARD_BG, border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="rounded-xl p-5" style={{ backgroundColor: CARD_BG, border: BORDER }}>
           <p className="text-xs uppercase tracking-wide mb-2" style={{ color: '#6b7280' }}>
             {isFr ? 'Durée Moy. Séjour' : 'Avg Stay'}
           </p>
@@ -216,7 +203,7 @@ export default function AnalyticsCharts({
             {isFr ? 'nuits ce mois' : 'nights this month'}
           </p>
         </div>
-        <div className="rounded-xl p-5" style={{ backgroundColor: CARD_BG, border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="rounded-xl p-5" style={{ backgroundColor: CARD_BG, border: BORDER }}>
           <p className="text-xs uppercase tracking-wide mb-2" style={{ color: '#6b7280' }}>
             {isFr ? 'Nouveaux Clients' : 'New Clients'}
           </p>

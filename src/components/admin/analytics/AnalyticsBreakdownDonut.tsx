@@ -4,7 +4,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatMAD } from '@/lib/utils';
 
 interface Props {
-  data: { BOARDING: number; PET_TAXI: number; GROOMING: number; OTHER: number };
+  data: { BOARDING: number; PET_TAXI: number; GROOMING: number; PRODUCT: number; OTHER: number };
   locale: string;
 }
 
@@ -12,22 +12,24 @@ const SERVICE_COLORS = {
   BOARDING: '#c9a84c',
   PET_TAXI: '#4a90d9',
   GROOMING: '#8b5cf6',
-  OTHER:    '#f59e0b',
+  PRODUCT:  '#f59e0b',
+  OTHER:    '#6b7280',
 } as const;
 
 type ServiceKey = keyof typeof SERVICE_COLORS;
 
-export default function AnalyticsDonut({ data, locale }: Props) {
+export default function AnalyticsBreakdownDonut({ data, locale }: Props) {
   const isFr = locale === 'fr';
 
   const serviceLabels: Record<ServiceKey, string> = {
-    BOARDING: isFr ? 'Pension'         : 'Boarding',
+    BOARDING: isFr ? 'Pension'    : 'Boarding',
     PET_TAXI: 'Taxi',
-    GROOMING: isFr ? 'Toilettage'      : 'Grooming',
-    OTHER:    isFr ? 'Boutique/Divers' : 'Shop/Other',
+    GROOMING: isFr ? 'Toilettage' : 'Grooming',
+    PRODUCT:  'Croquettes',
+    OTHER:    isFr ? 'Divers'     : 'Other',
   };
 
-  const total = data.BOARDING + data.PET_TAXI + data.GROOMING + data.OTHER;
+  const total = data.BOARDING + data.PET_TAXI + data.GROOMING + data.PRODUCT + data.OTHER;
 
   if (total === 0) {
     return (
@@ -59,8 +61,8 @@ export default function AnalyticsDonut({ data, locale }: Props) {
             data={rows}
             cx="50%"
             cy="50%"
-            innerRadius={48}
-            outerRadius={78}
+            innerRadius={60}
+            outerRadius={85}
             dataKey="value"
             paddingAngle={3}
           >

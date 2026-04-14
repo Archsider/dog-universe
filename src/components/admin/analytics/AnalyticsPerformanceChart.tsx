@@ -33,7 +33,7 @@ interface Props {
 
 type MergedPoint = DataPoint & { prevTotal: number };
 
-export default function AnalyticsAreaChart({ data, lastYearData, locale }: Props) {
+export default function AnalyticsPerformanceChart({ data, lastYearData, locale }: Props) {
   const isFr = locale === 'fr';
 
   const merged: MergedPoint[] = data.map((d, i) => ({
@@ -65,24 +65,24 @@ export default function AnalyticsAreaChart({ data, lastYearData, locale }: Props
       <ComposedChart data={merged} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
         <defs>
           <linearGradient id="agBoarding" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#c9a84c" stopOpacity={0.25} />
+            <stop offset="5%"  stopColor="#c9a84c" stopOpacity={0.3} />
             <stop offset="95%" stopColor="#c9a84c" stopOpacity={0} />
           </linearGradient>
           <linearGradient id="agTaxi" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#4a90d9" stopOpacity={0.25} />
+            <stop offset="5%"  stopColor="#4a90d9" stopOpacity={0.3} />
             <stop offset="95%" stopColor="#4a90d9" stopOpacity={0} />
           </linearGradient>
           <linearGradient id="agGrooming" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#8b5cf6" stopOpacity={0.25} />
+            <stop offset="5%"  stopColor="#8b5cf6" stopOpacity={0.3} />
             <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
           </linearGradient>
           <linearGradient id="agCroquettes" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#f59e0b" stopOpacity={0.25} />
+            <stop offset="5%"  stopColor="#f59e0b" stopOpacity={0.3} />
             <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
           </linearGradient>
         </defs>
 
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3a" vertical={false} />
         <XAxis
           dataKey="month"
           tick={{ fontSize: 11, fill: '#6b7280' }}
