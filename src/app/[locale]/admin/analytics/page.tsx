@@ -391,12 +391,12 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const monthName = now.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="-m-4 lg:-m-8 p-4 lg:p-8 pb-12 min-h-screen bg-[#0f1117]">
+    <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-serif font-bold text-white">
+        <h1 className="text-2xl font-serif font-bold text-charcoal">
           {locale === 'en' ? 'Analytics' : 'Analytiques'}
         </h1>
-        <p className="text-sm text-gray-400 mt-0.5 capitalize">
+        <p className="text-sm text-charcoal/50 mt-0.5 capitalize">
           {locale === 'en' ? 'Overview' : 'Vue d\'ensemble'} — {monthName}
         </p>
       </div>

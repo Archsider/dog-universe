@@ -37,18 +37,19 @@ export default function AnalyticsVolumeChart({ data, locale }: Props) {
 
   if (chartData.length === 0) {
     return (
-      <div className="flex items-center justify-center h-40 text-sm" style={{ color: '#6b7280' }}>
+      <div className="flex items-center justify-center h-40 text-sm text-gray-400">
         {isFr ? 'Pas de données ce mois' : 'No data this month'}
       </div>
     );
   }
 
   const tooltipStyle = {
-    backgroundColor: '#1a1d27',
-    border: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: '#ffffff',
+    border: '1px solid rgba(0,0,0,0.08)',
     borderRadius: '8px',
-    color: '#fff',
+    color: '#374151',
     fontSize: 12,
+    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)',
   };
 
   return (
@@ -61,7 +62,7 @@ export default function AnalyticsVolumeChart({ data, locale }: Props) {
       >
         <XAxis
           type="number"
-          tick={{ fontSize: 11, fill: '#6b7280' }}
+          tick={{ fontSize: 11, fill: '#9ca3af' }}
           axisLine={false}
           tickLine={false}
           allowDecimals={false}
@@ -69,7 +70,7 @@ export default function AnalyticsVolumeChart({ data, locale }: Props) {
         <YAxis
           type="category"
           dataKey="name"
-          tick={{ fontSize: 12, fill: '#d1d5db' }}
+          tick={{ fontSize: 12, fill: '#6b7280' }}
           axisLine={false}
           tickLine={false}
           width={82}
@@ -80,7 +81,7 @@ export default function AnalyticsVolumeChart({ data, locale }: Props) {
             `${value} ${props.payload?.sub ?? ''}`,
             '',
           ]}
-          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+          cursor={{ fill: 'rgba(0,0,0,0.03)' }}
         />
         <Bar dataKey="value" radius={[0, 4, 4, 0]}>
           {chartData.map(entry => (

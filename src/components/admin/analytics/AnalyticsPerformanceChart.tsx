@@ -53,11 +53,12 @@ export default function AnalyticsPerformanceChart({ data, lastYearData, locale }
     v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v));
 
   const tooltipStyle = {
-    backgroundColor: '#1a1d27',
-    border: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: '#ffffff',
+    border: '1px solid rgba(0,0,0,0.08)',
     borderRadius: '8px',
-    color: '#fff',
+    color: '#374151',
     fontSize: 12,
+    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)',
   };
 
   return (
@@ -65,32 +66,32 @@ export default function AnalyticsPerformanceChart({ data, lastYearData, locale }
       <ComposedChart data={merged} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
         <defs>
           <linearGradient id="agBoarding" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#c9a84c" stopOpacity={0.3} />
+            <stop offset="5%"  stopColor="#c9a84c" stopOpacity={0.25} />
             <stop offset="95%" stopColor="#c9a84c" stopOpacity={0} />
           </linearGradient>
           <linearGradient id="agTaxi" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#4a90d9" stopOpacity={0.3} />
+            <stop offset="5%"  stopColor="#4a90d9" stopOpacity={0.25} />
             <stop offset="95%" stopColor="#4a90d9" stopOpacity={0} />
           </linearGradient>
           <linearGradient id="agGrooming" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#8b5cf6" stopOpacity={0.3} />
+            <stop offset="5%"  stopColor="#8b5cf6" stopOpacity={0.25} />
             <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
           </linearGradient>
           <linearGradient id="agCroquettes" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#f59e0b" stopOpacity={0.3} />
+            <stop offset="5%"  stopColor="#f59e0b" stopOpacity={0.25} />
             <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
           </linearGradient>
         </defs>
 
-        <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3a" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
         <XAxis
           dataKey="month"
-          tick={{ fontSize: 11, fill: '#6b7280' }}
+          tick={{ fontSize: 11, fill: '#9ca3af' }}
           axisLine={false}
           tickLine={false}
         />
         <YAxis
-          tick={{ fontSize: 11, fill: '#6b7280' }}
+          tick={{ fontSize: 11, fill: '#9ca3af' }}
           tickFormatter={formatK}
           axisLine={false}
           tickLine={false}
@@ -102,7 +103,7 @@ export default function AnalyticsPerformanceChart({ data, lastYearData, locale }
             `${Math.round(value).toLocaleString()} MAD`,
             labels[name] ?? name,
           ]}
-          cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1 }}
+          cursor={{ stroke: 'rgba(0,0,0,0.08)', strokeWidth: 1 }}
         />
 
         <Area
@@ -142,15 +143,14 @@ export default function AnalyticsPerformanceChart({ data, lastYearData, locale }
           activeDot={{ r: 4, fill: '#f59e0b' }}
         />
 
-        {/* Ligne pointillée — Période précédente (total) */}
         <Line
           type="monotone"
           dataKey="prevTotal"
-          stroke="#6b7280"
+          stroke="#9ca3af"
           strokeWidth={1.5}
           strokeDasharray="5 4"
           dot={false}
-          activeDot={{ r: 3, fill: '#6b7280' }}
+          activeDot={{ r: 3, fill: '#9ca3af' }}
         />
       </ComposedChart>
     </ResponsiveContainer>

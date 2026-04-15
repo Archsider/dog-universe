@@ -8,7 +8,7 @@ const AnalyticsPerformanceChart = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[320px] flex items-center justify-center text-sm" style={{ color: '#6b7280' }}>
+      <div className="h-[320px] flex items-center justify-center text-sm text-gray-400">
         Chargement...
       </div>
     ),
@@ -20,7 +20,7 @@ const AnalyticsVolumeChart = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[200px] flex items-center justify-center text-sm" style={{ color: '#6b7280' }}>
+      <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">
         Chargement...
       </div>
     ),
@@ -32,7 +32,7 @@ const AnalyticsBreakdownDonut = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[200px] flex items-center justify-center text-sm" style={{ color: '#6b7280' }}>
+      <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">
         Chargement...
       </div>
     ),
@@ -73,14 +73,48 @@ export interface Props {
   currentYear: number;
 }
 
-const CARD_BG = '#1a1d27';
-const BORDER  = '1px solid rgba(255,255,255,0.08)';
+// Couleurs pour les graphiques Recharts (inchangé)
+const CHART_COLORS = {
+  boarding:   '#c9a84c',
+  taxi:       '#4a90d9',
+  grooming:   '#8b5cf6',
+  croquettes: '#f59e0b',
+} as const;
 
+// Style cards KPI service — même palette que dashboard
 const SERVICES = [
-  { key: 'boarding'   as const, color: '#c9a84c', borderColor: 'rgba(201,168,76,0.3)'  },
-  { key: 'taxi'       as const, color: '#4a90d9', borderColor: 'rgba(74,144,217,0.3)'  },
-  { key: 'grooming'   as const, color: '#8b5cf6', borderColor: 'rgba(139,92,246,0.3)'  },
-  { key: 'croquettes' as const, color: '#f59e0b', borderColor: 'rgba(245,158,11,0.3)'  },
+  {
+    key:        'boarding'   as const,
+    color:      '#c9a84c',
+    cardClass:  'bg-gradient-to-br from-[#FBF5E0] to-[#FDF8EC] border-[#E2C048]/30',
+    labelClass: 'text-gold-700',
+    amtClass:   'text-gold-800',
+    subClass:   'text-gold-600',
+  },
+  {
+    key:        'taxi'       as const,
+    color:      '#4a90d9',
+    cardClass:  'bg-gradient-to-br from-[#EBF4FF] to-[#F0F7FF] border-blue-200/50',
+    labelClass: 'text-blue-700',
+    amtClass:   'text-blue-800',
+    subClass:   'text-blue-600',
+  },
+  {
+    key:        'grooming'   as const,
+    color:      '#8b5cf6',
+    cardClass:  'bg-gradient-to-br from-[#F3EEFF] to-[#F7F2FF] border-purple-200/50',
+    labelClass: 'text-purple-700',
+    amtClass:   'text-purple-800',
+    subClass:   'text-purple-600',
+  },
+  {
+    key:        'croquettes' as const,
+    color:      '#f59e0b',
+    cardClass:  'bg-gradient-to-br from-[#FEF3E2] to-[#FFF8EE] border-orange-200/50',
+    labelClass: 'text-orange-700',
+    amtClass:   'text-orange-800',
+    subClass:   'text-orange-600',
+  },
 ];
 
 export default function AnalyticsCharts({
@@ -105,27 +139,22 @@ export default function AnalyticsCharts({
         {SERVICES.map(svc => {
           const kpi = serviceKpis[svc.key];
           const { label, sub } = serviceLabels[svc.key];
-          const deltaColor = kpi.delta > 0 ? '#22c55e' : kpi.delta < 0 ? '#ef4444' : '#6b7280';
+          const deltaClass = kpi.delta > 0 ? 'text-green-600' : kpi.delta < 0 ? 'text-red-500' : 'text-gray-400';
           return (
             <div
               key={svc.key}
-              className="rounded-xl p-5"
-              style={{
-                backgroundColor: CARD_BG,
-                border: `1px solid ${svc.borderColor}`,
-                borderLeft: `3px solid ${svc.color}`,
-              }}
+              className={`rounded-xl border p-5 shadow-card ${svc.cardClass}`}
             >
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: svc.color }}>
+                <span className={`text-xs font-semibold uppercase tracking-wider ${svc.labelClass}`}>
                   {label}
                 </span>
-                <span className="text-xs" style={{ color: '#6b7280' }}>
+                <span className={`text-xs ${svc.subClass}`}>
                   {kpi.count} {sub}
                 </span>
               </div>
-              <p className="text-xl font-bold text-white mb-1">{formatMAD(kpi.thisAmt)}</p>
-              <p className="text-xs font-medium" style={{ color: deltaColor }}>
+              <p className={`text-xl font-bold mb-1 ${svc.amtClass}`}>{formatMAD(kpi.thisAmt)}</p>
+              <p className={`text-xs font-medium ${deltaClass}`}>
                 {kpi.delta > 0 ? '+' : ''}{kpi.delta}%{' '}
                 {isFr ? 'vs mois préc.' : 'vs prev. month'}
               </p>
@@ -135,9 +164,9 @@ export default function AnalyticsCharts({
       </div>
 
       {/* ── Ligne 2 — Area chart performance ── */}
-      <div className="rounded-xl p-6" style={{ backgroundColor: CARD_BG, border: BORDER }}>
+      <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-          <h2 className="font-semibold text-white">
+          <h2 className="font-semibold text-charcoal">
             {isFr
               ? `Performance par activité — ${currentYear}`
               : `Activity Performance — ${currentYear}`}
@@ -145,17 +174,15 @@ export default function AnalyticsCharts({
           <div className="flex flex-wrap items-center gap-4">
             {SERVICES.map(svc => (
               <div key={svc.key} className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: svc.color }} />
-                <span className="text-xs" style={{ color: '#9ca3af' }}>
-                  {serviceLabels[svc.key].label}
-                </span>
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS[svc.key] }} />
+                <span className="text-xs text-gray-500">{serviceLabels[svc.key].label}</span>
               </div>
             ))}
             <div className="flex items-center gap-1.5">
               <svg width="16" height="4" viewBox="0 0 16 4">
-                <line x1="0" y1="2" x2="16" y2="2" stroke="#6b7280" strokeWidth="1.5" strokeDasharray="4 3" />
+                <line x1="0" y1="2" x2="16" y2="2" stroke="#9ca3af" strokeWidth="1.5" strokeDasharray="4 3" />
               </svg>
-              <span className="text-xs" style={{ color: '#6b7280' }}>{currentYear - 1}</span>
+              <span className="text-xs text-gray-400">{currentYear - 1}</span>
             </div>
           </div>
         </div>
@@ -165,17 +192,15 @@ export default function AnalyticsCharts({
       {/* ── Ligne 3 — Volume + Donut ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-        {/* Volume Mensuel */}
-        <div className="rounded-xl p-6" style={{ backgroundColor: CARD_BG, border: BORDER }}>
-          <h2 className="font-semibold text-white mb-5">
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+          <h2 className="font-semibold text-charcoal mb-5">
             {isFr ? 'Volume Mensuel' : 'Monthly Volume'}
           </h2>
           <AnalyticsVolumeChart data={volumeData} locale={locale} />
         </div>
 
-        {/* Répartition Activités */}
-        <div className="rounded-xl p-6" style={{ backgroundColor: CARD_BG, border: BORDER }}>
-          <h2 className="font-semibold text-white mb-5">
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+          <h2 className="font-semibold text-charcoal mb-5">
             {isFr ? 'Répartition Activités' : 'Activity Breakdown'}
           </h2>
           <AnalyticsBreakdownDonut data={donutData} locale={locale} />
@@ -184,30 +209,30 @@ export default function AnalyticsCharts({
 
       {/* ── Ligne 4 — KPIs secondaires ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-xl p-5" style={{ backgroundColor: CARD_BG, border: BORDER }}>
-          <p className="text-xs uppercase tracking-wide mb-2" style={{ color: '#6b7280' }}>
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
+          <p className="text-xs uppercase tracking-wide mb-2 text-gray-500">
             {isFr ? 'Panier Moyen' : 'Avg Basket'}
           </p>
-          <p className="text-2xl font-bold text-white">{formatMAD(avgBasket)}</p>
-          <p className="text-xs mt-1" style={{ color: '#6b7280' }}>
+          <p className="text-2xl font-bold text-charcoal">{formatMAD(avgBasket)}</p>
+          <p className="text-xs mt-1 text-gray-400">
             {isFr ? 'par client ce mois' : 'per client this month'}
           </p>
         </div>
-        <div className="rounded-xl p-5" style={{ backgroundColor: CARD_BG, border: BORDER }}>
-          <p className="text-xs uppercase tracking-wide mb-2" style={{ color: '#6b7280' }}>
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
+          <p className="text-xs uppercase tracking-wide mb-2 text-gray-500">
             {isFr ? 'Durée Moy. Séjour' : 'Avg Stay'}
           </p>
-          <p className="text-2xl font-bold text-white">{avgNights}</p>
-          <p className="text-xs mt-1" style={{ color: '#6b7280' }}>
+          <p className="text-2xl font-bold text-charcoal">{avgNights}</p>
+          <p className="text-xs mt-1 text-gray-400">
             {isFr ? 'nuits ce mois' : 'nights this month'}
           </p>
         </div>
-        <div className="rounded-xl p-5" style={{ backgroundColor: CARD_BG, border: BORDER }}>
-          <p className="text-xs uppercase tracking-wide mb-2" style={{ color: '#6b7280' }}>
+        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
+          <p className="text-xs uppercase tracking-wide mb-2 text-gray-500">
             {isFr ? 'Nouveaux Clients' : 'New Clients'}
           </p>
-          <p className="text-2xl font-bold" style={{ color: '#4ade80' }}>{newClients}</p>
-          <p className="text-xs mt-1" style={{ color: '#6b7280' }}>
+          <p className="text-2xl font-bold text-green-600">{newClients}</p>
+          <p className="text-xs mt-1 text-gray-400">
             {isFr ? 'ce mois' : 'this month'}
           </p>
         </div>

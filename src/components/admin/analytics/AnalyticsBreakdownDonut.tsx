@@ -13,7 +13,7 @@ const SERVICE_COLORS = {
   PET_TAXI: '#4a90d9',
   GROOMING: '#8b5cf6',
   PRODUCT:  '#f59e0b',
-  OTHER:    '#6b7280',
+  OTHER:    '#9ca3af',
 } as const;
 
 type ServiceKey = keyof typeof SERVICE_COLORS;
@@ -33,7 +33,7 @@ export default function AnalyticsBreakdownDonut({ data, locale }: Props) {
 
   if (total === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-sm" style={{ color: '#6b7280' }}>
+      <div className="flex items-center justify-center h-48 text-sm text-gray-400">
         {isFr ? 'Pas de données ce mois' : 'No data this month'}
       </div>
     );
@@ -46,11 +46,12 @@ export default function AnalyticsBreakdownDonut({ data, locale }: Props) {
     .filter(r => r.value > 0);
 
   const tooltipStyle = {
-    backgroundColor: '#1a1d27',
-    border: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: '#ffffff',
+    border: '1px solid rgba(0,0,0,0.08)',
     borderRadius: '8px',
-    color: '#fff',
+    color: '#374151',
     fontSize: 12,
+    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)',
   };
 
   return (
@@ -85,11 +86,11 @@ export default function AnalyticsBreakdownDonut({ data, locale }: Props) {
                 className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                 style={{ backgroundColor: SERVICE_COLORS[row.key] }}
               />
-              <span style={{ color: '#d1d5db' }}>{row.label}</span>
+              <span className="text-gray-700">{row.label}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="font-medium text-white">{formatMAD(row.value)}</span>
-              <span className="text-xs w-10 text-right" style={{ color: '#6b7280' }}>
+              <span className="font-semibold text-charcoal">{formatMAD(row.value)}</span>
+              <span className="text-xs w-10 text-right text-gray-400">
                 {Math.round((row.value / total) * 100)}%
               </span>
             </div>
