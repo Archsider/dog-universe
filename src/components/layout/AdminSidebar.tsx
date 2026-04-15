@@ -142,7 +142,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, userRol
         />
       )}
 
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-[#F0D98A]/30 min-h-screen flex-shrink-0">
+      <aside className="hidden lg:flex flex-col fixed top-0 left-0 h-screen w-64 bg-white border-r border-[#F0D98A]/30 z-30 overflow-y-auto">
         <SidebarContent />
       </aside>
 
