@@ -82,7 +82,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     paymentsCurrentYear,
     paymentsLastYear,
     completedBoardings,
-    volumeGroupBy,
+    thisMonthInvoiceItems,
     thisMonthClientsForBasket,
   ] = await Promise.all([
 
@@ -200,14 +200,18 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       select: { startDate: true, endDate: true },
     }),
 
-    // Volume mensuel par type de service
-    prisma.booking.groupBy({
-      by: ['serviceType'],
+    // Volume mensuel par catégorie — InvoiceItems des factures payées ce mois
+    // (1 item = 1 course / 1 vente / 1 séjour — cohérent avec categoriseItem)
+    prisma.invoiceItem.findMany({
       where: {
-        status: { not: 'CANCELLED' },
-        startDate: { gte: thisMonthStart, lte: thisMonthEnd },
+        invoice: {
+          status: { in: ['PAID', 'PARTIALLY_PAID'] },
+          payments: {
+            some: { paymentDate: { gte: thisMonthStart, lte: thisMonthEnd } },
+          },
+        },
       },
-      _count: { id: true },
+      select: { description: true },
     }),
 
     // Clients uniques ce mois (pour panier moyen)
@@ -260,10 +264,6 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
   const monthlyGroomingRevenue   = thisMonthBreakdown.grooming;
   const monthlyCroquettesRevenue = thisMonthBreakdown.croquettes;
 
-  // ── KPIs services mois précédent — extraits avant backfill (analytics uniquement)
-  const lastMonthKeyForKpi = new Date(now.getFullYear(), now.getMonth() - 1, 1).toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
-  const lastMonthBreakdown = monthlyData[lastMonthKeyForKpi] ?? { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
-
   // ── Historical summaries — complète les mois pré-production sans paiements réels
   // COPIÉ EXACTEMENT depuis dashboard/page.tsx lignes 226-236
   historicalSummaries.forEach(s => {
@@ -276,6 +276,11 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       monthlyData[key].croquettes += s.otherRevenue;
     }
   });
+
+  // ── KPIs services mois précédent — extraits APRÈS backfill historique
+  // (inclut MonthlyRevenueSummary de mars si présent)
+  const lastMonthKeyForKpi = new Date(now.getFullYear(), now.getMonth() - 1, 1).toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
+  const lastMonthBreakdown = monthlyData[lastMonthKeyForKpi] ?? { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
 
   // ── CA total KPI (paiements réels + historique)
   // COPIÉ EXACTEMENT depuis dashboard/page.tsx lignes 178-189
@@ -307,6 +312,13 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     OTHER:    0,
   };
 
+  // ── Volume mensuel par catégorie — comptage d'InvoiceItems (1 item = 1 unité)
+  // categoriseItem(description) → même logique que le CA
+  const volumeCounts = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
+  for (const item of thisMonthInvoiceItems) {
+    volumeCounts[categoriseItem(item.description)]++;
+  }
+
   // ── KPI par service (deltas mois/mois) ───────────────────────────────────
   function svcDelta(thisV: number, lastV: number) {
     return lastV === 0
@@ -319,25 +331,25 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       thisAmt: byServiceThis.BOARDING,
       lastAmt: byServiceLast.BOARDING,
       delta:   svcDelta(byServiceThis.BOARDING,  byServiceLast.BOARDING),
-      count:   volumeGroupBy.find(r => r.serviceType === 'BOARDING')?._count.id ?? 0,
+      count:   volumeCounts.boarding,
     },
     taxi: {
       thisAmt: byServiceThis.PET_TAXI,
       lastAmt: byServiceLast.PET_TAXI,
       delta:   svcDelta(byServiceThis.PET_TAXI,   byServiceLast.PET_TAXI),
-      count:   volumeGroupBy.find(r => r.serviceType === 'PET_TAXI')?._count.id  ?? 0,
+      count:   volumeCounts.taxi,
     },
     grooming: {
       thisAmt: byServiceThis.GROOMING,
       lastAmt: byServiceLast.GROOMING,
       delta:   svcDelta(byServiceThis.GROOMING,   byServiceLast.GROOMING),
-      count:   volumeGroupBy.find(r => r.serviceType === 'GROOMING')?._count.id  ?? 0,
+      count:   volumeCounts.grooming,
     },
     croquettes: {
       thisAmt: byServiceThis.PRODUCT,
       lastAmt: byServiceLast.PRODUCT,
       delta:   svcDelta(byServiceThis.PRODUCT,    byServiceLast.PRODUCT),
-      count:   0,
+      count:   volumeCounts.croquettes,
     },
   };
 
@@ -355,12 +367,11 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       )
     : 0;
 
-  // ── Volume mensuel ────────────────────────────────────────────────────────
   const volumeData = {
-    boarding:   volumeGroupBy.find(r => r.serviceType === 'BOARDING')?._count.id ?? 0,
-    taxi:       volumeGroupBy.find(r => r.serviceType === 'PET_TAXI')?._count.id  ?? 0,
-    grooming:   volumeGroupBy.find(r => r.serviceType === 'GROOMING')?._count.id  ?? 0,
-    croquettes: 0,
+    boarding:   volumeCounts.boarding,
+    taxi:       volumeCounts.taxi,
+    grooming:   volumeCounts.grooming,
+    croquettes: volumeCounts.croquettes,
   };
 
   // ── Graphe annuel (mois 0 → thisM, année isolée) ─────────────────────────
