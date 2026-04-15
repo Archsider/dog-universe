@@ -234,6 +234,8 @@ model Invoice {
   pdfUrl        String?
   notes                     String?
   supplementaryForBookingId String?  // set on extension-surcharge invoices (bookingId=null) — replaces fragile notes pattern
+  clientDisplayName  String?  // overrides client.name on this invoice (Jordan / passage client)
+  clientDisplayPhone String?  // overrides client.phone on this invoice
   issuedAt      DateTime @default(now())
   paidAt        DateTime?
   createdAt     DateTime @default(now())
