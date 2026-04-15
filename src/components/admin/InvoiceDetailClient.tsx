@@ -120,6 +120,8 @@ export default function InvoiceDetailClient({
   const [editStatus, setEditStatus] = useState('');
   const [editPaidAmount, setEditPaidAmount] = useState('');
   const [editPaymentMethod, setEditPaymentMethod] = useState('CASH');
+  const [editClientName, setEditClientName] = useState('');
+  const [editClientPhone, setEditClientPhone] = useState('');
 
   const enterEdit = () => {
     setEditItems(invoice.items.map(it => ({
@@ -133,6 +135,8 @@ export default function InvoiceDetailClient({
     setEditPaidAmount(invoice.paidAmount.toFixed(2));
     const lastPayment = invoice.payments.at(-1);
     setEditPaymentMethod(lastPayment?.paymentMethod ?? 'CASH');
+    setEditClientName(invoice.client.name);
+    setEditClientPhone(invoice.client.phone ?? '');
     setMode('edit');
   };
 
@@ -160,6 +164,10 @@ export default function InvoiceDetailClient({
       toast({ title: isFr ? 'Le total doit être supérieur à 0' : 'Total must be greater than 0', variant: 'destructive' });
       return;
     }
+    if (!editClientName.trim()) {
+      toast({ title: isFr ? 'Le nom du client est obligatoire' : 'Client name is required', variant: 'destructive' });
+      return;
+    }
 
     setSaving(true);
     try {
@@ -178,6 +186,8 @@ export default function InvoiceDetailClient({
           status: editStatus,
           paidAmount: isNaN(parsedPaid) ? 0 : Math.max(0, parsedPaid),
           paymentMethod: editPaymentMethod,
+          clientName: editClientName.trim(),
+          clientPhone: editClientPhone.trim() || null,
         }),
       });
       if (!res.ok) {
@@ -453,6 +463,37 @@ export default function InvoiceDetailClient({
       {/* ── EDIT mode ──────────────────────────────────────────────────────── */}
       {mode === 'edit' && (
         <div className="space-y-4">
+          {/* Client */}
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card p-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">
+              {isFr ? 'Client' : 'Client'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">
+                  {isFr ? 'Nom *' : 'Name *'}
+                </label>
+                <input
+                  value={editClientName}
+                  onChange={e => setEditClientName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
+                  placeholder={isFr ? 'Nom du client' : 'Client name'}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">
+                  {isFr ? 'Téléphone' : 'Phone'}
+                </label>
+                <input
+                  value={editClientPhone}
+                  onChange={e => setEditClientPhone(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
+                  placeholder="+212..."
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Line items */}
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card p-4">
             <div className="flex items-center justify-between mb-3">

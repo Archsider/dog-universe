@@ -61,7 +61,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   // ── Full edit (items array provided) ──────────────────────────────────────
   if (Array.isArray(body.items)) {
-    const { items, issuedAt, notes, status, paidAmount, paymentMethod } = body;
+    const { items, issuedAt, notes, status, paidAmount, paymentMethod, clientName, clientPhone } = body;
 
     const VALID_STATUSES = ['PENDING', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
     const VALID_PAYMENT_METHODS = ['CASH', 'CARD', 'CHECK', 'TRANSFER'];
@@ -90,6 +90,11 @@ export async function PATCH(request: Request, { params }: Params) {
     // Validate status
     if (status !== undefined && !VALID_STATUSES.includes(status)) {
       return NextResponse.json({ error: 'INVALID_STATUS' }, { status: 400 });
+    }
+
+    // Validate clientName if provided
+    if (clientName !== undefined && (typeof clientName !== 'string' || !clientName.trim())) {
+      return NextResponse.json({ error: 'INVALID_CLIENT_NAME' }, { status: 400 });
     }
 
     // Validate issuedAt
@@ -151,6 +156,19 @@ export async function PATCH(request: Request, { params }: Params) {
             },
           });
         }
+      }
+
+      // 4. Update client name/phone if provided
+      if (typeof clientName === 'string' && clientName.trim()) {
+        await tx.user.update({
+          where: { id: invoice.clientId },
+          data: {
+            name: clientName.trim().slice(0, 100),
+            phone: typeof clientPhone === 'string' && clientPhone.trim()
+              ? clientPhone.trim().slice(0, 30)
+              : null,
+          },
+        });
       }
     });
 
