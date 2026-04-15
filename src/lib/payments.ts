@@ -121,10 +121,11 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
     if (newStatus === 'PAID' && !wasAlreadyPaid) {
       const client = await tx.user.findUnique({
         where: { id: invoice.clientId },
-        select: { language: true, historicalStays: true, historicalSpendMAD: true },
+        select: { language: true, historicalStays: true, historicalSpendMAD: true, isWalkIn: true },
       });
 
-      if (client) {
+      // Walk-in clients: skip loyalty recalc and notifications
+      if (client && !client.isWalkIn) {
         // Aggregate across ALL paid invoices (including this one, now updated)
         const totalPaidAgg = await tx.invoice.aggregate({
           where: { clientId: invoice.clientId, status: 'PAID' },

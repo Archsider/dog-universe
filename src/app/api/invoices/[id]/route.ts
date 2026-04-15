@@ -36,6 +36,7 @@ export async function GET(_req: Request, { params }: Params) {
         },
       },
       items: true,
+      payments: { orderBy: { paymentDate: 'asc' } },
     },
   });
 
@@ -61,10 +62,9 @@ export async function PATCH(request: Request, { params }: Params) {
 
   // ── Full edit (items array provided) ──────────────────────────────────────
   if (Array.isArray(body.items)) {
-    const { items, issuedAt, notes, status, paidAmount, paymentMethod, clientName, clientPhone } = body;
+    const { items, issuedAt, notes, status, clientDisplayName, clientDisplayPhone } = body;
 
     const VALID_STATUSES = ['PENDING', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
-    const VALID_PAYMENT_METHODS = ['CASH', 'CARD', 'CHECK', 'TRANSFER'];
 
     // Validate items
     if (items.length === 0) {
@@ -92,8 +92,8 @@ export async function PATCH(request: Request, { params }: Params) {
       return NextResponse.json({ error: 'INVALID_STATUS' }, { status: 400 });
     }
 
-    // Validate clientName if provided
-    if (clientName !== undefined && (typeof clientName !== 'string' || !clientName.trim())) {
+    // Validate clientDisplayName if provided
+    if (clientDisplayName !== undefined && (typeof clientDisplayName !== 'string' || !clientDisplayName.trim())) {
       return NextResponse.json({ error: 'INVALID_CLIENT_NAME' }, { status: 400 });
     }
 
@@ -106,15 +106,6 @@ export async function PATCH(request: Request, { params }: Params) {
     }
 
     const isCancel = status === 'CANCELLED';
-    const parsedPaid = typeof paidAmount === 'number' ? paidAmount : parseFloat(String(paidAmount ?? '0'));
-    const safePaidAmount = isNaN(parsedPaid) || parsedPaid < 0 ? 0 : parsedPaid;
-
-    // Validate paymentMethod when paid amount > 0 and not cancelling
-    if (!isCancel && safePaidAmount > 0) {
-      if (!paymentMethod || !VALID_PAYMENT_METHODS.includes(paymentMethod)) {
-        return NextResponse.json({ error: 'INVALID_PAYMENT_METHOD' }, { status: 400 });
-      }
-    }
 
     await prisma.$transaction(async (tx) => {
       // 1. Replace items
@@ -132,6 +123,7 @@ export async function PATCH(request: Request, { params }: Params) {
       // 2. Update invoice metadata
       //    status: CANCELLED → set it; otherwise PENDING (allocatePayments derives real status)
       //    paidAt: null → allocatePayments will set it on first PAID transition
+      //    clientDisplayName/clientDisplayPhone: billing snapshot independent of User
       await tx.invoice.update({
         where: { id },
         data: {
@@ -140,39 +132,17 @@ export async function PATCH(request: Request, { params }: Params) {
           notes: typeof notes === 'string' ? notes.trim() || null : invoice.notes,
           status: isCancel ? 'CANCELLED' : 'PENDING',
           paidAt: null,
+          ...(typeof clientDisplayName === 'string' && clientDisplayName.trim() && {
+            clientDisplayName: clientDisplayName.trim().slice(0, 100),
+          }),
+          clientDisplayPhone: typeof clientDisplayPhone === 'string' && clientDisplayPhone.trim()
+            ? clientDisplayPhone.trim().slice(0, 30)
+            : null,
         },
       });
-
-      // 3. Reset payments (only when not cancelling)
-      if (!isCancel) {
-        await tx.payment.deleteMany({ where: { invoiceId: id } });
-        if (safePaidAmount > 0 && paymentMethod && VALID_PAYMENT_METHODS.includes(paymentMethod)) {
-          await tx.payment.create({
-            data: {
-              invoiceId: id,
-              amount: safePaidAmount,
-              paymentMethod,
-              paymentDate: new Date(),
-            },
-          });
-        }
-      }
-
-      // 4. Update client name/phone if provided
-      if (typeof clientName === 'string' && clientName.trim()) {
-        await tx.user.update({
-          where: { id: invoice.clientId },
-          data: {
-            name: clientName.trim().slice(0, 100),
-            phone: typeof clientPhone === 'string' && clientPhone.trim()
-              ? clientPhone.trim().slice(0, 30)
-              : null,
-          },
-        });
-      }
     });
 
-    // 4. Recompute allocation (skipped if CANCELLED — allocatePayments ignores CANCELLED)
+    // Recompute allocation (skipped if CANCELLED — allocatePayments ignores CANCELLED)
     if (!isCancel) {
       await allocatePayments(id);
     }

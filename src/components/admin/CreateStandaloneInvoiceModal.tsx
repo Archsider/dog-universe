@@ -115,17 +115,16 @@ const today = () => new Date().toISOString().split('T')[0];
 export default function CreateStandaloneInvoiceModal({ clients, locale, onCreated, preselectedClientId }: CreateStandaloneInvoiceModalProps) {
   const fr = locale === 'fr';
 
-  // "Client de passage" always first, then alphabetical
-  const sortedClients = [...clients].sort((a, b) => {
-    if (a.email === 'passage@doguniverse.ma') return -1;
-    if (b.email === 'passage@doguniverse.ma') return 1;
-    return a.name.localeCompare(b.name);
-  });
+  const sortedClients = [...clients].sort((a, b) => a.name.localeCompare(b.name));
+
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const [clientId, setClientId] = useState(preselectedClientId ?? '');
+  // Walk-in sub-fields (shown when clientId === 'WALK_IN')
+  const [walkInName, setWalkInName] = useState('');
+  const [walkInPhone, setWalkInPhone] = useState('');
   const [serviceType, setServiceType] = useState('');
   const [issuedAt, setIssuedAt] = useState(today());
   const [notes, setNotes] = useState('');
@@ -161,6 +160,8 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
 
   const reset = () => {
     setClientId(preselectedClientId ?? '');
+    setWalkInName('');
+    setWalkInPhone('');
     setServiceType('');
     setIssuedAt(today());
     setNotes('');
@@ -173,14 +174,31 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
 
   const handleSubmit = async () => {
     if (!clientId) { setError(fr ? 'Sélectionnez un client.' : 'Select a client.'); return; }
+    if (clientId === 'WALK_IN' && !walkInName.trim()) {
+      setError(fr ? 'Le nom du client de passage est obligatoire.' : 'Walk-in client name is required.');
+      return;
+    }
     if (items.some(it => !it.description.trim())) { setError(fr ? 'Tous les articles doivent avoir une description.' : 'All items must have a description.'); return; }
     if (total <= 0) { setError(fr ? 'Le total doit être supérieur à 0.' : 'Total must be greater than 0.'); return; }
 
     setLoading(true);
     setError('');
     try {
+      // Resolve walk-in client first
+      let resolvedClientId = clientId;
+      if (clientId === 'WALK_IN') {
+        const wiRes = await fetch('/api/admin/walkin-clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: walkInName.trim(), phone: walkInPhone.trim() || null }),
+        });
+        if (!wiRes.ok) throw new Error(fr ? 'Erreur création client de passage.' : 'Failed to create walk-in client.');
+        const wiClient = await wiRes.json();
+        resolvedClientId = wiClient.id;
+      }
+
       const body: Record<string, unknown> = {
-        clientId,
+        clientId: resolvedClientId,
         serviceType,
         issuedAt,
         notes: notes.trim() || null,
@@ -247,16 +265,41 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
                     {clients.find(c => c.id === preselectedClientId)?.name ?? preselectedClientId}
                   </div>
                 ) : (
-                  <select
-                    value={clientId}
-                    onChange={e => setClientId(e.target.value)}
-                    className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 focus:outline-none focus:border-gold-400 bg-white"
-                  >
-                    <option value="">{fr ? '— Sélectionner —' : '— Select —'}</option>
-                    {sortedClients.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.email})</option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      value={clientId}
+                      onChange={e => setClientId(e.target.value)}
+                      className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 focus:outline-none focus:border-gold-400 bg-white"
+                    >
+                      <option value="">{fr ? '— Sélectionner —' : '— Select —'}</option>
+                      <option value="WALK_IN">➕ {fr ? 'Nouveau client de passage' : 'New walk-in client'}</option>
+                      {sortedClients.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    {clientId === 'WALK_IN' && (
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">{fr ? 'Nom *' : 'Name *'}</Label>
+                          <Input
+                            value={walkInName}
+                            onChange={e => setWalkInName(e.target.value)}
+                            placeholder={fr ? 'Nom du passager' : 'Walk-in name'}
+                            className="mt-1 text-sm h-8"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">{fr ? 'Téléphone' : 'Phone'}</Label>
+                          <Input
+                            value={walkInPhone}
+                            onChange={e => setWalkInPhone(e.target.value)}
+                            placeholder="+212..."
+                            className="mt-1 text-sm h-8"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 

@@ -49,6 +49,8 @@ export interface InvoiceData {
   notes: string | null;
   serviceType: string | null;
   supplementaryForBookingId: string | null;
+  clientDisplayName: string | null;
+  clientDisplayPhone: string | null;
   client: { id: string; name: string; email: string; phone: string | null };
   booking: BookingData | null;
   items: InvoiceItemData[];
@@ -118,10 +120,15 @@ export default function InvoiceDetailClient({
   const [editIssuedAt, setEditIssuedAt] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editStatus, setEditStatus] = useState('');
-  const [editPaidAmount, setEditPaidAmount] = useState('');
-  const [editPaymentMethod, setEditPaymentMethod] = useState('CASH');
   const [editClientName, setEditClientName] = useState('');
   const [editClientPhone, setEditClientPhone] = useState('');
+
+  // Add payment form state (used in edit mode)
+  const [newPaymentDate, setNewPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newPaymentAmount, setNewPaymentAmount] = useState('');
+  const [newPaymentMethod, setNewPaymentMethod] = useState('CASH');
+  const [addingPayment, setAddingPayment] = useState(false);
+  const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
 
   const enterEdit = () => {
     setEditItems(invoice.items.map(it => ({
@@ -132,11 +139,12 @@ export default function InvoiceDetailClient({
     setEditIssuedAt(toDateStr(invoice.issuedAt));
     setEditNotes(invoice.notes ?? '');
     setEditStatus(invoice.status);
-    setEditPaidAmount(invoice.paidAmount.toFixed(2));
-    const lastPayment = invoice.payments.at(-1);
-    setEditPaymentMethod(lastPayment?.paymentMethod ?? 'CASH');
-    setEditClientName(invoice.client.name);
-    setEditClientPhone(invoice.client.phone ?? '');
+    setEditClientName(invoice.clientDisplayName ?? invoice.client.name);
+    setEditClientPhone((invoice.clientDisplayPhone ?? invoice.client.phone) ?? '');
+    const remaining = Math.max(0, invoice.amount - invoice.paidAmount);
+    setNewPaymentAmount(remaining > 0 ? remaining.toFixed(2) : '');
+    setNewPaymentDate(new Date().toISOString().slice(0, 10));
+    setNewPaymentMethod('CASH');
     setMode('edit');
   };
 
@@ -171,7 +179,6 @@ export default function InvoiceDetailClient({
 
     setSaving(true);
     try {
-      const parsedPaid = parseFloat(editPaidAmount);
       const res = await fetch(`/api/invoices/${invoice.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -184,10 +191,8 @@ export default function InvoiceDetailClient({
           issuedAt: editIssuedAt,
           notes: editNotes,
           status: editStatus,
-          paidAmount: isNaN(parsedPaid) ? 0 : Math.max(0, parsedPaid),
-          paymentMethod: editPaymentMethod,
-          clientName: editClientName.trim(),
-          clientPhone: editClientPhone.trim() || null,
+          clientDisplayName: editClientName.trim(),
+          clientDisplayPhone: editClientPhone.trim() || null,
         }),
       });
       if (!res.ok) {
@@ -205,6 +210,57 @@ export default function InvoiceDetailClient({
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const refetchInvoice = async () => {
+    const res = await fetch(`/api/invoices/${invoice.id}`);
+    if (res.ok) {
+      const data = await res.json();
+      setInvoice(data);
+    }
+  };
+
+  const handleAddPayment = async () => {
+    const amount = parseFloat(newPaymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({ title: isFr ? 'Montant invalide' : 'Invalid amount', variant: 'destructive' });
+      return;
+    }
+    setAddingPayment(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/payments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, paymentMethod: newPaymentMethod, paymentDate: newPaymentDate }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || (isFr ? 'Erreur serveur' : 'Server error'));
+      }
+      await refetchInvoice();
+      const rem = Math.max(0, invoice.amount - invoice.paidAmount);
+      setNewPaymentAmount(rem > 0 ? rem.toFixed(2) : '');
+      setNewPaymentDate(new Date().toISOString().slice(0, 10));
+      toast({ title: isFr ? 'Paiement ajouté' : 'Payment added', variant: 'success' });
+    } catch (e: unknown) {
+      toast({ title: e instanceof Error ? e.message : (isFr ? 'Erreur' : 'Error'), variant: 'destructive' });
+    } finally {
+      setAddingPayment(false);
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: string) => {
+    setDeletingPaymentId(paymentId);
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/payments/${paymentId}`, { method: 'DELETE' });
+      if (!res.ok && res.status !== 204) throw new Error('Failed');
+      await refetchInvoice();
+      toast({ title: isFr ? 'Paiement supprimé' : 'Payment deleted', variant: 'success' });
+    } catch {
+      toast({ title: isFr ? 'Erreur lors de la suppression' : 'Delete failed', variant: 'destructive' });
+    } finally {
+      setDeletingPaymentId(null);
     }
   };
 
@@ -304,18 +360,18 @@ export default function InvoiceDetailClient({
               </p>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gold-100 flex items-center justify-center text-sm font-semibold text-gold-700 flex-shrink-0">
-                  {getInitials(invoice.client.name)}
+                  {getInitials(invoice.clientDisplayName ?? invoice.client.name)}
                 </div>
                 <div>
                   <Link
                     href={`/${locale}/admin/clients/${invoice.client.id}`}
                     className="font-semibold text-charcoal hover:text-gold-600 text-sm"
                   >
-                    {invoice.client.name}
+                    {invoice.clientDisplayName ?? invoice.client.name}
                   </Link>
                   <p className="text-xs text-gray-500">{invoice.client.email}</p>
-                  {invoice.client.phone && (
-                    <p className="text-xs text-gray-400">{invoice.client.phone}</p>
+                  {(invoice.clientDisplayPhone ?? invoice.client.phone) && (
+                    <p className="text-xs text-gray-400">{invoice.clientDisplayPhone ?? invoice.client.phone}</p>
                   )}
                 </div>
               </div>
@@ -415,7 +471,19 @@ export default function InvoiceDetailClient({
                         </span>
                         <span className="text-gray-400 text-xs">{fmtPaymentDate(p.paymentDate, locale)}</span>
                       </div>
-                      <span className="font-semibold text-green-700 text-sm">{p.amount.toFixed(2)} MAD</span>
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-green-700 text-sm">{p.amount.toFixed(2)} MAD</span>
+                        <button
+                          onClick={() => handleDeletePayment(p.id)}
+                          disabled={deletingPaymentId === p.id}
+                          className="text-gray-300 hover:text-red-400 disabled:opacity-50 transition-colors"
+                          title={isFr ? 'Supprimer ce paiement' : 'Delete this payment'}
+                        >
+                          {deletingPaymentId === p.id
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <Trash2 className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -594,43 +662,6 @@ export default function InvoiceDetailClient({
                 </select>
               </div>
 
-              {/* Paid amount + method — hidden when CANCELLED */}
-              {editStatus !== 'CANCELLED' && (
-                <>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">
-                      {isFr ? 'Montant payé (MAD)' : 'Paid amount (MAD)'}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={editPaidAmount}
-                      onChange={e => setEditPaidAmount(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">
-                      {isFr ? 'Remplace tous les paiements existants' : 'Replaces all existing payments'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">
-                      {isFr ? 'Mode de paiement' : 'Payment method'}
-                    </label>
-                    <select
-                      value={editPaymentMethod}
-                      onChange={e => setEditPaymentMethod(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400 bg-white"
-                    >
-                      <option value="CASH">{isFr ? 'Espèces' : 'Cash'}</option>
-                      <option value="CARD">{isFr ? 'Carte / TPE' : 'Card / POS'}</option>
-                      <option value="CHECK">{isFr ? 'Chèque' : 'Check'}</option>
-                      <option value="TRANSFER">{isFr ? 'Virement bancaire' : 'Bank transfer'}</option>
-                    </select>
-                  </div>
-                </>
-              )}
             </div>
           </div>
 
@@ -647,6 +678,103 @@ export default function InvoiceDetailClient({
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400 resize-none"
             />
           </div>
+
+          {/* Add payment */}
+          {invoice.status !== 'CANCELLED' && (
+            <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card p-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">
+                {isFr ? 'Ajouter un paiement' : 'Add a payment'}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">
+                    {isFr ? 'Montant (MAD)' : 'Amount (MAD)'}
+                  </label>
+                  <input
+                    type="number"
+                    min={0.01}
+                    step={0.01}
+                    value={newPaymentAmount}
+                    onChange={e => setNewPaymentAmount(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">
+                    {isFr ? 'Mode' : 'Method'}
+                  </label>
+                  <select
+                    value={newPaymentMethod}
+                    onChange={e => setNewPaymentMethod(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400 bg-white"
+                  >
+                    <option value="CASH">{isFr ? 'Espèces' : 'Cash'}</option>
+                    <option value="CARD">{isFr ? 'Carte / TPE' : 'Card / POS'}</option>
+                    <option value="CHECK">{isFr ? 'Chèque' : 'Check'}</option>
+                    <option value="TRANSFER">{isFr ? 'Virement' : 'Transfer'}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">
+                    {isFr ? 'Date' : 'Date'}
+                  </label>
+                  <input
+                    type="date"
+                    value={newPaymentDate}
+                    onChange={e => setNewPaymentDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleAddPayment}
+                disabled={addingPayment}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60 transition-colors"
+              >
+                {addingPayment
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Plus className="h-4 w-4" />}
+                {isFr ? 'Enregistrer le paiement' : 'Record payment'}
+              </button>
+
+              {/* Existing payments in edit mode */}
+              {invoice.payments.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-ivory-100 space-y-1.5">
+                  <p className="text-xs text-gray-400 mb-2">
+                    {isFr ? 'Paiements existants' : 'Existing payments'}
+                  </p>
+                  {invoice.payments.map(p => {
+                    const Icon = METHOD_ICONS[p.paymentMethod] ?? Banknote;
+                    return (
+                      <div key={p.id} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                          <span className="text-gray-500">
+                            {METHOD_LABELS[p.paymentMethod]?.[isFr ? 'fr' : 'en'] ?? p.paymentMethod}
+                          </span>
+                          <span className="text-gray-400 text-xs">{fmtPaymentDate(p.paymentDate, locale)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-green-700">{p.amount.toFixed(2)} MAD</span>
+                          <button
+                            onClick={() => handleDeletePayment(p.id)}
+                            disabled={deletingPaymentId === p.id}
+                            className="text-gray-300 hover:text-red-400 disabled:opacity-50 transition-colors"
+                            title={isFr ? 'Supprimer' : 'Delete'}
+                          >
+                            {deletingPaymentId === p.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Trash2 className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

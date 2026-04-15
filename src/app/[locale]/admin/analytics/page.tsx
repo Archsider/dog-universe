@@ -172,11 +172,11 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
       },
     }),
 
-    // Nouveaux clients ce mois (hors passage)
+    // Nouveaux clients ce mois (hors walk-in)
     prisma.user.count({
       where: {
-        role:      'CLIENT',
-        email:     { not: 'passage@doguniverse.ma' },
+        role:     'CLIENT',
+        isWalkIn: false,
         createdAt: { gte: thisMonthStart, lte: thisMonthEnd },
       },
     }),

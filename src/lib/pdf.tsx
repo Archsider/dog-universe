@@ -161,6 +161,8 @@ interface InvoiceData {
   issuedAt: Date;
   paidAt?: Date | null;
   notes?: string | null;
+  clientDisplayName?: string | null;
+  clientDisplayPhone?: string | null;
   client: {
     name: string;
     email: string;
@@ -266,9 +268,11 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Client</Text>
           <View style={styles.clientInfo}>
-            <Text style={{ fontFamily: 'Helvetica-Bold' }}>{invoice.client.name}</Text>
+            <Text style={{ fontFamily: 'Helvetica-Bold' }}>{invoice.clientDisplayName ?? invoice.client.name}</Text>
             <Text style={{ color: '#6B7280' }}>{invoice.client.email}</Text>
-            {invoice.client.phone && <Text style={{ color: '#6B7280' }}>{invoice.client.phone}</Text>}
+            {(invoice.clientDisplayPhone ?? invoice.client.phone) && (
+              <Text style={{ color: '#6B7280' }}>{invoice.clientDisplayPhone ?? invoice.client.phone}</Text>
+            )}
           </View>
         </View>
 

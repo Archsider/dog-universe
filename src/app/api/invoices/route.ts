@@ -159,16 +159,18 @@ export async function POST(request: Request) {
       await allocatePayments(invoice.id);
     }
 
-    // Notify client
-    await createInvoiceNotification(clientId, invoiceNumber, formatMAD(amount));
+    // Walk-in clients: skip notification and email (no portal, no inbox)
+    if (!client.isWalkIn) {
+      await createInvoiceNotification(clientId, invoiceNumber, formatMAD(amount));
 
-    const locale = client.language ?? 'fr';
-    const { subject, html } = getEmailTemplate('invoice_available', {
-      clientName: client.name,
-      invoiceNumber,
-      amount: formatMAD(amount),
-    }, locale);
-    await sendEmail({ to: client.email, subject, html });
+      const locale = client.language ?? 'fr';
+      const { subject, html } = getEmailTemplate('invoice_available', {
+        clientName: client.name,
+        invoiceNumber,
+        amount: formatMAD(amount),
+      }, locale);
+      await sendEmail({ to: client.email, subject, html });
+    }
 
     await logAction({
       userId: session.user.id,
