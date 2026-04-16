@@ -31,14 +31,21 @@ function mainCategory(
   return categoriseItem(biggest.description);
 }
 
-// ─── CA par service : sum(unitPrice × quantity) par catégorie ─────────────────
+// ─── CA par service : payment.amount distribué proportionnellement aux items ──
 function computeBreakdown(
-  invoices: { items: { description: string; unitPrice: number; quantity: number }[] }[],
+  invoices: { items: { description: string; unitPrice: number; quantity: number }[]; payments: { amount: number; paymentDate: Date }[] }[],
+  start: Date,
+  end: Date,
 ): Record<'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER', number> {
   const result = { BOARDING: 0, PET_TAXI: 0, GROOMING: 0, PRODUCT: 0, OTHER: 0 };
   for (const inv of invoices) {
-    for (const item of inv.items) {
-      result[categoriseItem(item.description)] += item.unitPrice * item.quantity;
+    const itemsTotal = inv.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+    if (itemsTotal === 0) continue;
+    for (const pmt of inv.payments.filter(p => p.paymentDate >= start && p.paymentDate <= end)) {
+      const frac = pmt.amount / itemsTotal;
+      for (const item of inv.items) {
+        result[categoriseItem(item.description)] += item.unitPrice * item.quantity * frac;
+      }
     }
   }
   return result;
@@ -190,8 +197,8 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     : Math.round(((thisAmt - lastAmt) / lastAmt) * 1000) / 10;
 
   // ─── CA par service (unitPrice × quantity) ────────────────────────────────
-  const byServiceThis = computeBreakdown(invoicesThisMonth);
-  const byServiceLast = computeBreakdown(invoicesLastMonth);
+  const byServiceThis = computeBreakdown(invoicesThisMonth, thisMonthStart, thisMonthEnd);
+  const byServiceLast = computeBreakdown(invoicesLastMonth, lastMonthStart, lastMonthEnd);
 
   // ─── Volume par service (nb factures dont catégorie principale = service) ──
   const volumeCounts: Record<string, number> = {
