@@ -62,7 +62,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   // ── Full edit (items array provided) ──────────────────────────────────────
   if (Array.isArray(body.items)) {
-    const { items, issuedAt, notes, status, clientDisplayName, clientDisplayPhone } = body;
+    const { items, issuedAt, notes, status, clientDisplayName, clientDisplayPhone, clientDisplayEmail } = body;
 
     const VALID_STATUSES = ['PENDING', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
 
@@ -123,7 +123,7 @@ export async function PATCH(request: Request, { params }: Params) {
       // 2. Update invoice metadata
       //    status: CANCELLED → set it; otherwise PENDING (allocatePayments derives real status)
       //    paidAt: null → allocatePayments will set it on first PAID transition
-      //    clientDisplayName/clientDisplayPhone: billing snapshot independent of User
+      //    clientDisplayName/clientDisplayPhone/clientDisplayEmail: billing snapshot independent of User
       await tx.invoice.update({
         where: { id },
         data: {
@@ -137,6 +137,9 @@ export async function PATCH(request: Request, { params }: Params) {
           }),
           clientDisplayPhone: typeof clientDisplayPhone === 'string' && clientDisplayPhone.trim()
             ? clientDisplayPhone.trim().slice(0, 30)
+            : null,
+          clientDisplayEmail: typeof clientDisplayEmail === 'string' && clientDisplayEmail.trim()
+            ? clientDisplayEmail.trim().slice(0, 254)
             : null,
         },
       });
