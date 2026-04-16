@@ -163,6 +163,7 @@ interface InvoiceData {
   notes?: string | null;
   clientDisplayName?: string | null;
   clientDisplayPhone?: string | null;
+  clientDisplayEmail?: string | null;
   client: {
     name: string;
     email: string;
@@ -183,6 +184,12 @@ interface InvoiceData {
     endDate?: Date;
     bookingPets?: { pet: { name: string } }[];
   } | null;
+}
+
+function getDisplayEmail(inv: { clientDisplayEmail?: string | null; client: { email: string } }): string {
+  if (inv.clientDisplayEmail) return inv.clientDisplayEmail;
+  if (inv.client.email === 'passage@doguniverse.ma') return '';
+  return inv.client.email;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -269,7 +276,9 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
           <Text style={styles.sectionTitle}>Client</Text>
           <View style={styles.clientInfo}>
             <Text style={{ fontFamily: 'Helvetica-Bold' }}>{invoice.clientDisplayName ?? invoice.client.name}</Text>
-            <Text style={{ color: '#6B7280' }}>{invoice.client.email}</Text>
+            {!!getDisplayEmail(invoice) && (
+              <Text style={{ color: '#6B7280' }}>{getDisplayEmail(invoice)}</Text>
+            )}
             {(invoice.clientDisplayPhone ?? invoice.client.phone) && (
               <Text style={{ color: '#6B7280' }}>{invoice.clientDisplayPhone ?? invoice.client.phone}</Text>
             )}

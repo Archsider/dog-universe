@@ -51,6 +51,7 @@ export interface InvoiceData {
   supplementaryForBookingId: string | null;
   clientDisplayName: string | null;
   clientDisplayPhone: string | null;
+  clientDisplayEmail: string | null;
   client: { id: string; name: string; email: string; phone: string | null };
   booking: BookingData | null;
   items: InvoiceItemData[];
@@ -97,6 +98,12 @@ function fmtPaymentDate(d: Date | string, locale: string): string {
   });
 }
 
+function getDisplayEmail(inv: { clientDisplayEmail: string | null; client: { email: string } }): string {
+  if (inv.clientDisplayEmail) return inv.clientDisplayEmail;
+  if (inv.client.email === 'passage@doguniverse.ma') return '';
+  return inv.client.email;
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function InvoiceDetailClient({
@@ -122,6 +129,7 @@ export default function InvoiceDetailClient({
   const [editStatus, setEditStatus] = useState('');
   const [editClientName, setEditClientName] = useState('');
   const [editClientPhone, setEditClientPhone] = useState('');
+  const [editClientEmail, setEditClientEmail] = useState('');
 
   // Add payment form state (used in edit mode)
   const [newPaymentDate, setNewPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -141,6 +149,7 @@ export default function InvoiceDetailClient({
     setEditStatus(invoice.status);
     setEditClientName(invoice.clientDisplayName ?? invoice.client.name);
     setEditClientPhone((invoice.clientDisplayPhone ?? invoice.client.phone) ?? '');
+    setEditClientEmail(getDisplayEmail(invoice));
     const remaining = Math.max(0, invoice.amount - invoice.paidAmount);
     setNewPaymentAmount(remaining > 0 ? remaining.toFixed(2) : '');
     setNewPaymentDate(new Date().toISOString().slice(0, 10));
@@ -193,6 +202,7 @@ export default function InvoiceDetailClient({
           status: editStatus,
           clientDisplayName: editClientName.trim(),
           clientDisplayPhone: editClientPhone.trim() || null,
+          clientDisplayEmail: editClientEmail.trim() || null,
         }),
       });
       if (!res.ok) {
@@ -369,7 +379,9 @@ export default function InvoiceDetailClient({
                   >
                     {invoice.clientDisplayName ?? invoice.client.name}
                   </Link>
-                  <p className="text-xs text-gray-500">{invoice.client.email}</p>
+                  {!!getDisplayEmail(invoice) && (
+                    <p className="text-xs text-gray-500">{getDisplayEmail(invoice)}</p>
+                  )}
                   {(invoice.clientDisplayPhone ?? invoice.client.phone) && (
                     <p className="text-xs text-gray-400">{invoice.clientDisplayPhone ?? invoice.client.phone}</p>
                   )}
@@ -557,6 +569,18 @@ export default function InvoiceDetailClient({
                   onChange={e => setEditClientPhone(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
                   placeholder="+212..."
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">
+                  {isFr ? 'Email facture' : 'Invoice email'}
+                </label>
+                <input
+                  type="email"
+                  value={editClientEmail}
+                  onChange={e => setEditClientEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
+                  placeholder="email@example.com"
                 />
               </div>
             </div>
