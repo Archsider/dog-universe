@@ -3,264 +3,120 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import AnalyticsCharts from './AnalyticsCharts';
+import {
+  totalCashCollected,
+  cashByMonth,
+  billedByCategory,
+  volumeByCategory,
+  avgBasket as getAvgBasket,
+  deltaPercent,
+  newClientsCount,
+} from '@/lib/metrics';
 
 interface PageProps { params: { locale: string } }
-
-// ─── Catégorie principale d'une facture (item au plus grand total) ────────────
-function biggestCategory(
-  items: { category: string; unitPrice: number; quantity: number }[],
-): 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' {
-  if (items.length === 0) return 'OTHER';
-  const biggest = items.reduce((best, item) =>
-    item.unitPrice * item.quantity > best.unitPrice * best.quantity ? item : best,
-  );
-  return biggest.category as 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER';
-}
-
-// ─── CA par service : payment.amount distribué proportionnellement aux items ──
-function computeBreakdown(
-  invoices: { items: { category: string; unitPrice: number; quantity: number }[]; payments: { amount: number; paymentDate: Date }[] }[],
-  start: Date,
-  end: Date,
-): Record<'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER', number> {
-  const result = { BOARDING: 0, PET_TAXI: 0, GROOMING: 0, PRODUCT: 0, OTHER: 0 };
-  for (const inv of invoices) {
-    const itemsTotal = inv.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-    if (itemsTotal === 0) continue;
-    for (const pmt of inv.payments.filter(p => p.paymentDate >= start && p.paymentDate <= end)) {
-      const frac = pmt.amount / itemsTotal;
-      for (const item of inv.items) {
-        const cat = item.category as 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER';
-        result[cat] += item.unitPrice * item.quantity * frac;
-      }
-    }
-  }
-  return result;
-}
-
-// ─── CA total : sum(payment.amount) filtré sur la plage de dates ─────────────
-function computeCA(
-  invoices: { payments: { amount: number; paymentDate: Date }[] }[],
-  start: Date,
-  end: Date,
-): number {
-  return invoices.reduce((sum, inv) => {
-    return sum + inv.payments
-      .filter(p => p.paymentDate >= start && p.paymentDate <= end)
-      .reduce((s, p) => s + p.amount, 0);
-  }, 0);
-}
-
-// ─── Graphe annuel : attribution proportionnelle par paiement ────────────────
-// Pour chaque paiement d'une facture : fraction = payment.amount / itemsTotal
-// → chaque item voit itemAmt × fraction attribué au mois du paiement
-function buildYearlyData(
-  invoices: {
-    items:    { category: string; unitPrice: number; quantity: number }[];
-    payments: { amount: number; paymentDate: Date }[];
-  }[],
-  start: Date,
-  end: Date,
-): Record<number, { boarding: number; taxi: number; grooming: number; croquettes: number }> {
-  const monthly: Record<number, { boarding: number; taxi: number; grooming: number; croquettes: number }> = {};
-  for (let m = 0; m < 12; m++) monthly[m] = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
-
-  for (const inv of invoices) {
-    const itemsTotal = inv.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-    if (itemsTotal === 0) continue;
-
-    const paymentsInRange = inv.payments.filter(p => p.paymentDate >= start && p.paymentDate <= end);
-    for (const pmt of paymentsInRange) {
-      const m    = new Date(pmt.paymentDate).getMonth();
-      const frac = pmt.amount / itemsTotal;
-
-      for (const item of inv.items) {
-        const amt = item.unitPrice * item.quantity * frac;
-        if      (item.category === 'BOARDING') monthly[m].boarding   += amt;
-        else if (item.category === 'PET_TAXI') monthly[m].taxi        += amt;
-        else if (item.category === 'GROOMING') monthly[m].grooming    += amt;
-        else if (item.category === 'PRODUCT')  monthly[m].croquettes  += amt;
-        // OTHER ignoré dans le graphe
-      }
-    }
-  }
-  return monthly;
-}
 
 export default async function AdminAnalyticsPage({ params: { locale } }: PageProps) {
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN'))
     redirect(`/${locale}/auth/login`);
 
-  const now          = new Date();
-  const currentYear  = now.getFullYear();
-  const lastYear     = currentYear - 1;
-  const thisM        = now.getMonth(); // 0-indexed
+  const now         = new Date();
+  const currentYear = now.getFullYear();
+  const lastYear    = currentYear - 1;
+  const thisM       = now.getMonth(); // 0-indexed
 
-  const thisMonthStart  = startOfMonth(now);
-  const thisMonthEnd    = endOfMonth(now);
-  const lastMonthStart  = startOfMonth(subMonths(now, 1));
-  const lastMonthEnd    = endOfMonth(subMonths(now, 1));
-  const startCurrentYear = new Date(currentYear, 0, 1);
-  const startLastYear    = new Date(lastYear, 0, 1);
-  const endLastYear      = new Date(lastYear, 11, 31, 23, 59, 59, 999);
+  const thisMonthStart = startOfMonth(now);
+  const thisMonthEnd   = endOfMonth(now);
+  const lastMonthStart = startOfMonth(subMonths(now, 1));
+  const lastMonthEnd   = endOfMonth(subMonths(now, 1));
 
-  // ─── Source unique de vérité : Invoice PAID/PARTIALLY_PAID ─────────────────
-  // Zéro MonthlyRevenueSummary · Zéro booking · Zéro logique inventée.
   const [
-    invoicesThisMonth,
-    invoicesLastMonth,
-    invoicesCurrentYear,
-    invoicesLastYear,
+    thisAmt,
+    lastAmt,
+    thisBilled,
+    lastBilled,
+    volume,
+    basket,
+    currentYearMonthly,
+    lastYearMonthly,
     newClientsThisMonth,
+    avgNightsData,
   ] = await Promise.all([
-
-    // Ce mois — CA, répartition services, volume, panier moyen, durée séjour
+    totalCashCollected(thisMonthStart, thisMonthEnd),
+    totalCashCollected(lastMonthStart, lastMonthEnd),
+    billedByCategory(thisMonthStart, thisMonthEnd),
+    billedByCategory(lastMonthStart, lastMonthEnd),
+    volumeByCategory(thisMonthStart, thisMonthEnd),
+    getAvgBasket(thisMonthStart, thisMonthEnd),
+    cashByMonth(currentYear),
+    cashByMonth(lastYear),
+    newClientsCount(thisMonthStart, thisMonthEnd, true),
+    // Standalone query for avg stay duration — boarding-dominant invoices only
     prisma.invoice.findMany({
       where: {
+        issuedAt: { gte: thisMonthStart, lte: thisMonthEnd },
         status: { in: ['PAID', 'PARTIALLY_PAID'] },
-        payments: { some: { paymentDate: { gte: thisMonthStart, lte: thisMonthEnd } } },
       },
-      include: {
-        items:    { select: { category: true, unitPrice: true, quantity: true } },
-        payments: { select: { amount: true, paymentDate: true } },
-        client:   { select: { id: true } },
-      },
-    }),
-
-    // Mois précédent — deltas par service
-    prisma.invoice.findMany({
-      where: {
-        status: { in: ['PAID', 'PARTIALLY_PAID'] },
-        payments: { some: { paymentDate: { gte: lastMonthStart, lte: lastMonthEnd } } },
-      },
-      include: {
-        items:    { select: { category: true, unitPrice: true, quantity: true } },
-        payments: { select: { amount: true, paymentDate: true } },
-        client:   { select: { id: true } },
-      },
-    }),
-
-    // Année courante — graphe annuel (jan → mois courant)
-    prisma.invoice.findMany({
-      where: {
-        status: { in: ['PAID', 'PARTIALLY_PAID'] },
-        payments: { some: { paymentDate: { gte: startCurrentYear, lte: thisMonthEnd } } },
-      },
-      include: {
-        items:    { select: { category: true, unitPrice: true, quantity: true } },
-        payments: { select: { amount: true, paymentDate: true } },
-      },
-    }),
-
-    // Année précédente — courbe comparaison graphe
-    prisma.invoice.findMany({
-      where: {
-        status: { in: ['PAID', 'PARTIALLY_PAID'] },
-        payments: { some: { paymentDate: { gte: startLastYear, lte: endLastYear } } },
-      },
-      include: {
-        items:    { select: { category: true, unitPrice: true, quantity: true } },
-        payments: { select: { amount: true, paymentDate: true } },
-      },
-    }),
-
-    // Nouveaux clients ce mois (hors walk-in)
-    prisma.user.count({
-      where: {
-        role:     'CLIENT',
-        isWalkIn: false,
-        createdAt: { gte: thisMonthStart, lte: thisMonthEnd },
-      },
+      select: { items: { select: { category: true, total: true, quantity: true } } },
     }),
   ]);
 
-  // ─── CA total (paiements encaissés dans la plage) ─────────────────────────
-  const thisAmt = computeCA(invoicesThisMonth, thisMonthStart, thisMonthEnd);
-  const lastAmt = computeCA(invoicesLastMonth, lastMonthStart, lastMonthEnd);
-  const delta   = lastAmt === 0
-    ? (thisAmt > 0 ? 100 : 0)
-    : Math.round(((thisAmt - lastAmt) / lastAmt) * 1000) / 10;
+  const delta = deltaPercent(thisAmt, lastAmt);
 
-  // ─── CA par service (unitPrice × quantity) ────────────────────────────────
-  const byServiceThis = computeBreakdown(invoicesThisMonth, thisMonthStart, thisMonthEnd);
-  const byServiceLast = computeBreakdown(invoicesLastMonth, lastMonthStart, lastMonthEnd);
-
-  // ─── Volume par service (nb factures dont catégorie principale = service) ──
-  const volumeCounts: Record<string, number> = {
-    BOARDING: 0, PET_TAXI: 0, GROOMING: 0, PRODUCT: 0, OTHER: 0,
-  };
-  for (const inv of invoicesThisMonth) {
-    volumeCounts[biggestCategory(inv.items)]++;
-  }
-
-  // ─── Panier moyen ─────────────────────────────────────────────────────────
-  const uniqueClients = new Set(invoicesThisMonth.map(inv => inv.client.id)).size;
-  const avgBasket     = uniqueClients > 0 ? Math.round(thisAmt / uniqueClients) : 0;
-
-  // ─── Durée moy. séjour (quantity de l'item "nuit/pension" sur factures BOARDING)
-  const boardingInvoices = invoicesThisMonth.filter(
-    inv => biggestCategory(inv.items) === 'BOARDING',
-  );
-  const nightItems = boardingInvoices.flatMap(inv =>
+  // Avg stay duration — boarding-dominant invoices (item with highest total = BOARDING)
+  const boardingDominant = avgNightsData.filter(inv => {
+    if (inv.items.length === 0) return false;
+    const dom = inv.items.reduce((best, item) => item.total > best.total ? item : best);
+    return dom.category === 'BOARDING';
+  });
+  const nightItems = boardingDominant.flatMap(inv =>
     inv.items.filter(item => item.category === 'BOARDING'),
   );
   const avgNights = nightItems.length > 0
     ? Math.round(nightItems.reduce((s, i) => s + i.quantity, 0) / nightItems.length)
     : 0;
 
-  // ─── KPI par service (deltas mois/mois) ───────────────────────────────────
-  function svcDelta(thisV: number, lastV: number): number {
-    return lastV === 0
-      ? (thisV > 0 ? 100 : 0)
-      : Math.round(((thisV - lastV) / lastV) * 1000) / 10;
-  }
-
   const serviceKpis = {
     boarding: {
-      thisAmt: byServiceThis.BOARDING,
-      lastAmt: byServiceLast.BOARDING,
-      delta:   svcDelta(byServiceThis.BOARDING, byServiceLast.BOARDING),
-      count:   volumeCounts.BOARDING,
+      thisAmt: thisBilled.boarding,
+      lastAmt: lastBilled.boarding,
+      delta:   deltaPercent(thisBilled.boarding, lastBilled.boarding),
+      count:   volume.boarding,
     },
     taxi: {
-      thisAmt: byServiceThis.PET_TAXI,
-      lastAmt: byServiceLast.PET_TAXI,
-      delta:   svcDelta(byServiceThis.PET_TAXI, byServiceLast.PET_TAXI),
-      count:   volumeCounts.PET_TAXI,
+      thisAmt: thisBilled.taxi,
+      lastAmt: lastBilled.taxi,
+      delta:   deltaPercent(thisBilled.taxi, lastBilled.taxi),
+      count:   volume.taxi,
     },
     grooming: {
-      thisAmt: byServiceThis.GROOMING,
-      lastAmt: byServiceLast.GROOMING,
-      delta:   svcDelta(byServiceThis.GROOMING, byServiceLast.GROOMING),
-      count:   volumeCounts.GROOMING,
+      thisAmt: thisBilled.grooming,
+      lastAmt: lastBilled.grooming,
+      delta:   deltaPercent(thisBilled.grooming, lastBilled.grooming),
+      count:   volume.grooming,
     },
     croquettes: {
-      thisAmt: byServiceThis.PRODUCT,
-      lastAmt: byServiceLast.PRODUCT,
-      delta:   svcDelta(byServiceThis.PRODUCT, byServiceLast.PRODUCT),
-      count:   volumeCounts.PRODUCT,
+      thisAmt: thisBilled.croquettes,
+      lastAmt: lastBilled.croquettes,
+      delta:   deltaPercent(thisBilled.croquettes, lastBilled.croquettes),
+      count:   volume.croquettes,
     },
   };
 
   const volumeData = {
-    boarding:   volumeCounts.BOARDING,
-    taxi:       volumeCounts.PET_TAXI,
-    grooming:   volumeCounts.GROOMING,
-    croquettes: volumeCounts.PRODUCT,
+    boarding:   volume.boarding,
+    taxi:       volume.taxi,
+    grooming:   volume.grooming,
+    croquettes: volume.croquettes,
   };
 
   const donutData = {
-    BOARDING: byServiceThis.BOARDING,
-    PET_TAXI: byServiceThis.PET_TAXI,
-    GROOMING: byServiceThis.GROOMING,
-    PRODUCT:  byServiceThis.PRODUCT,
-    OTHER:    byServiceThis.OTHER,
+    BOARDING: thisBilled.boarding,
+    PET_TAXI: thisBilled.taxi,
+    GROOMING: thisBilled.grooming,
+    PRODUCT:  thisBilled.croquettes,
+    OTHER:    thisBilled.other,
   };
-
-  // ─── Graphe annuel (mois 0 → thisM, s'arrête au mois courant) ─────────────
-  const monthlyCurrentYear = buildYearlyData(invoicesCurrentYear, startCurrentYear, thisMonthEnd);
-  const monthlyLastYear    = buildYearlyData(invoicesLastYear,    startLastYear,    endLastYear);
 
   const frMonths = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
                     'juil.', 'août',  'sept.', 'oct.', 'nov.', 'déc.'];
@@ -268,18 +124,16 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
 
   const yearlyData = Array.from({ length: thisM + 1 }, (_, i) => ({
     month:      `${frMonths[i]} ${yearSuffix}`,
-    boarding:   monthlyCurrentYear[i].boarding,
-    grooming:   monthlyCurrentYear[i].grooming,
-    taxi:       monthlyCurrentYear[i].taxi,
-    croquettes: monthlyCurrentYear[i].croquettes,
-    total:      monthlyCurrentYear[i].boarding + monthlyCurrentYear[i].grooming +
-                monthlyCurrentYear[i].taxi     + monthlyCurrentYear[i].croquettes,
+    boarding:   currentYearMonthly[i].boarding,
+    grooming:   currentYearMonthly[i].grooming,
+    taxi:       currentYearMonthly[i].taxi,
+    croquettes: currentYearMonthly[i].croquettes,
+    total:      currentYearMonthly[i].total,
   }));
 
   const lastYearData = Array.from({ length: thisM + 1 }, (_, i) => ({
     month: frMonths[i],
-    total: monthlyLastYear[i].boarding + monthlyLastYear[i].grooming +
-           monthlyLastYear[i].taxi     + monthlyLastYear[i].croquettes,
+    total: lastYearMonthly[i].total,
   }));
 
   const monthName = now.toLocaleDateString(
@@ -304,7 +158,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         lastYearData={lastYearData}
         donutData={donutData}
         volumeData={volumeData}
-        avgBasket={avgBasket}
+        avgBasket={basket}
         avgNights={avgNights}
         newClients={newClientsThisMonth}
         totalCA={thisAmt}

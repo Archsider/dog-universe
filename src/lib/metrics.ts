@@ -1,0 +1,221 @@
+import { prisma } from '@/lib/prisma';
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+
+export function deltaPercent(cur: number, prev: number): number {
+  return prev === 0 ? 0 : Math.round(((cur - prev) / prev) * 1000) / 10;
+}
+
+// ItemCategory → display key. Returns null for OTHER (never silently absorbed).
+export function categoryKey(
+  cat: string,
+): 'boarding' | 'taxi' | 'grooming' | 'croquettes' | null {
+  if (cat === 'BOARDING') return 'boarding';
+  if (cat === 'PET_TAXI') return 'taxi';
+  if (cat === 'GROOMING') return 'grooming';
+  if (cat === 'PRODUCT') return 'croquettes';
+  return null;
+}
+
+// ── Cash family ───────────────────────────────────────────────────────────────
+// Base = Payment.amount. Use for cash KPIs and cash-over-time charts only.
+
+export async function totalCashCollected(start: Date, end: Date): Promise<number> {
+  const result = await prisma.payment.aggregate({
+    where: {
+      paymentDate: { gte: start, lte: end },
+      invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+    },
+    _sum: { amount: true },
+  });
+  return result._sum.amount ?? 0;
+}
+
+export type MonthlyEntry = {
+  month: number; // 0–11
+  total: number; // real cash = Payment.amount
+  boarding: number;
+  taxi: number;
+  grooming: number;
+  croquettes: number;
+};
+
+// Cash collected per calendar month, split by category proportionally to item.total.
+// total = real Payment.amount (includes OTHER). Category split = weighted approximation.
+// Use for yearly revenue charts only — not for activity/billed widgets.
+export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
+  const start = new Date(year, 0, 1);
+  const end = new Date(year, 11, 31, 23, 59, 59, 999);
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      paymentDate: { gte: start, lte: end },
+      invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+    },
+    select: {
+      amount: true,
+      paymentDate: true,
+      invoice: { select: { items: { select: { category: true, total: true } } } },
+    },
+  });
+
+  const monthly: MonthlyEntry[] = Array.from({ length: 12 }, (_, i) => ({
+    month: i,
+    total: 0,
+    boarding: 0,
+    taxi: 0,
+    grooming: 0,
+    croquettes: 0,
+  }));
+
+  for (const pmt of payments) {
+    const m = new Date(pmt.paymentDate).getMonth();
+    const itemsTotal = pmt.invoice.items.reduce((s, i) => s + i.total, 0);
+    monthly[m].total += pmt.amount;
+    if (itemsTotal === 0) continue;
+    const frac = pmt.amount / itemsTotal;
+    for (const item of pmt.invoice.items) {
+      const k = categoryKey(item.category);
+      if (k) monthly[m][k] += item.total * frac;
+    }
+  }
+
+  return monthly;
+}
+
+// ── Billed family ─────────────────────────────────────────────────────────────
+// Base = InvoiceItem.total. Statuses: PAID + PARTIALLY_PAID. Period: Invoice.issuedAt.
+// Use for service cards, activity breakdown, panier moyen.
+
+export type CategoryBreakdown = {
+  boarding: number;
+  taxi: number;
+  grooming: number;
+  croquettes: number;
+  other: number;
+};
+
+// Billed amount by category for PAID+PARTIALLY_PAID invoices issued in [start, end].
+export async function billedByCategory(
+  start: Date,
+  end: Date,
+): Promise<CategoryBreakdown> {
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      issuedAt: { gte: start, lte: end },
+      status: { in: ['PAID', 'PARTIALLY_PAID'] },
+    },
+    select: { items: { select: { category: true, total: true } } },
+  });
+
+  const result: CategoryBreakdown = {
+    boarding: 0,
+    taxi: 0,
+    grooming: 0,
+    croquettes: 0,
+    other: 0,
+  };
+  for (const inv of invoices) {
+    for (const item of inv.items) {
+      const k = categoryKey(item.category);
+      if (k) result[k] += item.total;
+      else result.other += item.total;
+    }
+  }
+  return result;
+}
+
+// Invoice count by dominant category (item with highest total) for PAID+PARTIALLY_PAID
+// invoices issued in [start, end].
+export async function volumeByCategory(
+  start: Date,
+  end: Date,
+): Promise<CategoryBreakdown> {
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      issuedAt: { gte: start, lte: end },
+      status: { in: ['PAID', 'PARTIALLY_PAID'] },
+    },
+    select: { items: { select: { category: true, total: true } } },
+  });
+
+  const result: CategoryBreakdown = {
+    boarding: 0,
+    taxi: 0,
+    grooming: 0,
+    croquettes: 0,
+    other: 0,
+  };
+  for (const inv of invoices) {
+    if (inv.items.length === 0) {
+      result.other++;
+      continue;
+    }
+    const dom = inv.items.reduce((best, item) =>
+      item.total > best.total ? item : best,
+    );
+    const k = categoryKey(dom.category);
+    if (k) result[k]++;
+    else result.other++;
+  }
+  return result;
+}
+
+// Average basket = sum(InvoiceItem.total) / count(invoices) for PAID+PARTIALLY_PAID
+// invoices issued in [start, end].
+export async function avgBasket(start: Date, end: Date): Promise<number> {
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      issuedAt: { gte: start, lte: end },
+      status: { in: ['PAID', 'PARTIALLY_PAID'] },
+    },
+    select: { items: { select: { total: true } } },
+  });
+
+  if (invoices.length === 0) return 0;
+  const total = invoices.reduce(
+    (sum, inv) => sum + inv.items.reduce((s, i) => s + i.total, 0),
+    0,
+  );
+  return Math.round(total / invoices.length);
+}
+
+// ── Shared queries ────────────────────────────────────────────────────────────
+
+export async function currentBoarders(): Promise<{
+  cat: number;
+  dog: number;
+  total: number;
+}> {
+  const now = new Date();
+  const boardingFilter = {
+    serviceType: 'BOARDING' as const,
+    status: 'IN_PROGRESS' as const,
+    startDate: { lte: now },
+    endDate: { gte: now },
+  };
+  const [cat, dog] = await Promise.all([
+    prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingFilter } }),
+    prisma.bookingPet.count({ where: { pet: { species: 'DOG' }, booking: boardingFilter } }),
+  ]);
+  return { cat, dog, total: cat + dog };
+}
+
+export async function pendingBookingsCount(): Promise<number> {
+  return prisma.booking.count({ where: { status: 'PENDING' } });
+}
+
+// excludeWalkIn is required — callers must be explicit about walk-in filtering.
+export async function newClientsCount(
+  start: Date,
+  end: Date,
+  excludeWalkIn: boolean,
+): Promise<number> {
+  return prisma.user.count({
+    where: {
+      role: 'CLIENT',
+      createdAt: { gte: start, lte: end },
+      ...(excludeWalkIn ? { isWalkIn: false } : {}),
+    },
+  });
+}
