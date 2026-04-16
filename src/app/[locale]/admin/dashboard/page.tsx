@@ -87,7 +87,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
         paymentDate: true,
         invoice: {
           select: {
-            items: { select: { description: true, total: true, allocatedAmount: true } },
+            items: { select: { description: true, total: true } },
           },
         },
       },
@@ -102,9 +102,9 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     }),
     prisma.invoice.groupBy({
       by: ['clientId'],
-      where: { status: 'PAID' },
-      _sum: { amount: true },
-      orderBy: { _sum: { amount: 'desc' } },
+      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      _sum: { paidAmount: true },
+      orderBy: { _sum: { paidAmount: 'desc' } },
       take: 5,
     }),
     prisma.invoice.aggregate({
@@ -172,7 +172,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     id: r.clientId,
     name: top5Users.find(u => u.id === r.clientId)?.name ?? r.clientId,
     email: top5Users.find(u => u.id === r.clientId)?.email ?? '',
-    totalRevenue: r._sum.amount ?? 0,
+    totalRevenue: r._sum.paidAmount ?? 0,
   }));
 
   // CA variation vs previous month — paiements réels + données historiques manuelles
@@ -210,8 +210,11 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   for (const pmt of last12MonthsPayments) {
     const key = new Date(pmt.paymentDate).toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
     if (!monthlyData[key]) continue;
+    const itemsTotal = pmt.invoice.items.reduce((s, i) => s + i.total, 0);
+    if (itemsTotal === 0) continue;
+    const frac = pmt.amount / itemsTotal;
     for (const item of pmt.invoice.items) {
-      monthlyData[key][categoriseItem(item.description)] += item.allocatedAmount;
+      monthlyData[key][categoriseItem(item.description)] += item.total * frac;
     }
   }
 
