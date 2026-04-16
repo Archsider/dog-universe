@@ -73,7 +73,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       _count: { clientId: true },
       having: { clientId: { _count: { gt: 1 } } },
     }),
-    newClientsCount(thisMonthStart, thisMonthEnd, false),
+    newClientsCount(thisMonthStart, thisMonthEnd, true),
     prisma.invoice.groupBy({
       by: ['clientId'],
       where: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
