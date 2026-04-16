@@ -95,15 +95,15 @@ export type CategoryBreakdown = {
   other: number;
 };
 
-// Billed amount by category for PAID+PARTIALLY_PAID invoices issued in [start, end].
+// Billed amount by category for PAID+PARTIALLY_PAID invoices with a payment in [start, end].
 export async function billedByCategory(
   start: Date,
   end: Date,
 ): Promise<CategoryBreakdown> {
   const invoices = await prisma.invoice.findMany({
     where: {
-      issuedAt: { gte: start, lte: end },
       status: { in: ['PAID', 'PARTIALLY_PAID'] },
+      payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
     select: { items: { select: { category: true, total: true } } },
   });
@@ -126,15 +126,15 @@ export async function billedByCategory(
 }
 
 // Invoice count by dominant category (item with highest total) for PAID+PARTIALLY_PAID
-// invoices issued in [start, end].
+// invoices with a payment in [start, end].
 export async function volumeByCategory(
   start: Date,
   end: Date,
 ): Promise<CategoryBreakdown> {
   const invoices = await prisma.invoice.findMany({
     where: {
-      issuedAt: { gte: start, lte: end },
       status: { in: ['PAID', 'PARTIALLY_PAID'] },
+      payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
     select: { items: { select: { category: true, total: true } } },
   });
@@ -161,23 +161,20 @@ export async function volumeByCategory(
   return result;
 }
 
-// Average basket = sum(InvoiceItem.total) / count(invoices) for PAID+PARTIALLY_PAID
+// Average basket = SUM(invoice.amount) / count(invoices) for PAID+PARTIALLY_PAID
 // invoices issued in [start, end].
 export async function avgBasket(start: Date, end: Date): Promise<number> {
-  const invoices = await prisma.invoice.findMany({
+  const result = await prisma.invoice.aggregate({
     where: {
       issuedAt: { gte: start, lte: end },
       status: { in: ['PAID', 'PARTIALLY_PAID'] },
     },
-    select: { items: { select: { total: true } } },
+    _sum: { amount: true },
+    _count: { id: true },
   });
-
-  if (invoices.length === 0) return 0;
-  const total = invoices.reduce(
-    (sum, inv) => sum + inv.items.reduce((s, i) => s + i.total, 0),
-    0,
-  );
-  return Math.round(total / invoices.length);
+  const count = result._count.id ?? 0;
+  if (count === 0) return 0;
+  return Math.round((result._sum.amount ?? 0) / count);
 }
 
 // ── Shared queries ────────────────────────────────────────────────────────────
