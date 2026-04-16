@@ -48,6 +48,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     historicalSummaries,
     thisMonthHistorical,
     lastMonthHistorical,
+    invoicesThisMonthBilled,
+    invoicesLastMonthBilled,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'CLIENT' } }),
     prisma.booking.count({ where: { status: 'PENDING' } }),
@@ -155,6 +157,16 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       where: { year: lastMonthStart.getFullYear(), month: lastMonthStart.getMonth() + 1 },
       select: { boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
     }).catch(() => null),
+    // Factures émises ce mois (items) — source cartes service "facturé"
+    prisma.invoice.findMany({
+      where: { issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, status: { not: 'CANCELLED' } },
+      select: { items: { select: { description: true, total: true } } },
+    }),
+    // Factures émises le mois précédent — deltas cartes service
+    prisma.invoice.findMany({
+      where: { issuedAt: { gte: lastMonthStart, lte: lastMonthEnd }, status: { not: 'CANCELLED' } },
+      select: { items: { select: { description: true, total: true } } },
+    }),
   ]);
 
   const capacitySettings = await prisma.setting.findMany({
@@ -206,7 +218,27 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     return 'boarding'; // pension / nuit / boarding / tout le reste
   };
 
-  // Chaque paiement est ventilé par allocatedAmount (montant exact alloué à chaque item)
+  // Cartes service — facturé du mois (item.total, indépendant des paiements)
+  const thisMonthItemBreakdown = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
+  for (const inv of invoicesThisMonthBilled) {
+    for (const item of inv.items) {
+      thisMonthItemBreakdown[categoriseItem(item.description)] += item.total;
+    }
+  }
+  const lastMonthItemBreakdown = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
+  for (const inv of invoicesLastMonthBilled) {
+    for (const item of inv.items) {
+      lastMonthItemBreakdown[categoriseItem(item.description)] += item.total;
+    }
+  }
+  const svcPct = (cur: number, prev: number): number =>
+    prev === 0 ? (cur > 0 ? 100 : 0) : Math.round(((cur - prev) / prev) * 1000) / 10;
+  const boardingDelta   = svcPct(thisMonthItemBreakdown.boarding,   lastMonthItemBreakdown.boarding);
+  const taxiDelta       = svcPct(thisMonthItemBreakdown.taxi,       lastMonthItemBreakdown.taxi);
+  const groomingDelta   = svcPct(thisMonthItemBreakdown.grooming,   lastMonthItemBreakdown.grooming);
+  const croquettesDelta = svcPct(thisMonthItemBreakdown.croquettes, lastMonthItemBreakdown.croquettes);
+
+  // Graphe 12 mois — ventilation proportionnelle par paiement (encaissé réel)
   for (const pmt of last12MonthsPayments) {
     const key = new Date(pmt.paymentDate).toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
     if (!monthlyData[key]) continue;
@@ -218,13 +250,11 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     }
   }
 
-  // KPIs services ce mois — extraits avant le backfill historique (données réelles uniquement)
-  const thisMonthKey = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
-  const thisMonthBreakdown = monthlyData[thisMonthKey] ?? { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
-  const monthlyBoardingRevenue = thisMonthBreakdown.boarding;
-  const monthlyTaxiRevenue = thisMonthBreakdown.taxi;
-  const monthlyGroomingRevenue = thisMonthBreakdown.grooming;
-  const monthlyCroquettesRevenue = thisMonthBreakdown.croquettes;
+  // KPIs services ce mois — source : facturé (item.total), pas prorata encaissé
+  const monthlyBoardingRevenue   = thisMonthItemBreakdown.boarding;
+  const monthlyTaxiRevenue       = thisMonthItemBreakdown.taxi;
+  const monthlyGroomingRevenue   = thisMonthItemBreakdown.grooming;
+  const monthlyCroquettesRevenue = thisMonthItemBreakdown.croquettes;
 
   // Historical summaries — complète les mois pré-production sans paiements réels
   historicalSummaries.forEach(s => {
@@ -245,7 +275,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   const labels = {
     fr: {
       title: 'Tableau de bord',
-      caMonthly: 'CA mensuel',
+      caMonthly: 'CA mensuel · encaissé',
       animauxHeberges: 'Pension actuelle',
       pending: 'En attente',
       totalClients: 'Total clients',
@@ -258,7 +288,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       recentBookings: 'Réservations récentes',
       viewAll: 'Voir tout',
       revenueTitle: 'CA mensuel — 12 derniers mois',
-      thisMth: 'ce mois',
+      thisMth: 'ce mois · facturé',
       top5: 'Top 5 clients',
       cats: 'Chats',
       dogs: 'Chiens',
@@ -272,7 +302,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     },
     en: {
       title: 'Dashboard',
-      caMonthly: 'Monthly revenue',
+      caMonthly: 'Monthly revenue · collected',
       animauxHeberges: 'Current boarders',
       pending: 'Pending',
       totalClients: 'Total clients',
@@ -285,7 +315,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       recentBookings: 'Recent bookings',
       viewAll: 'View all',
       revenueTitle: 'Monthly revenue — last 12 months',
-      thisMth: 'this month',
+      thisMth: 'this month · billed',
       top5: 'Top 5 clients',
       cats: 'Cats',
       dogs: 'Dogs',
@@ -408,7 +438,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <Calendar className="h-4 w-4 text-gold-500" />
           </div>
           <div className="text-2xl font-bold text-gold-800">{formatMAD(monthlyBoardingRevenue)}</div>
-          <div className="text-xs text-gold-600 mt-1">{l.thisMth}</div>
+          <div className="text-xs text-gold-600 mt-1 flex items-center gap-1.5">
+            {l.thisMth}
+            {lastMonthItemBreakdown.boarding > 0 && <span className={boardingDelta >= 0 ? 'text-green-600' : 'text-red-400'}>{boardingDelta > 0 ? '+' : ''}{boardingDelta}%</span>}
+          </div>
         </div>
 
         <div className="bg-gradient-to-br from-[#EBF4FF] to-[#F0F7FF] rounded-xl border border-blue-200/50 p-4 shadow-card">
@@ -417,7 +450,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <Car className="h-4 w-4 text-blue-500" />
           </div>
           <div className="text-2xl font-bold text-blue-800">{formatMAD(monthlyTaxiRevenue)}</div>
-          <div className="text-xs text-blue-600 mt-1">{l.thisMth}</div>
+          <div className="text-xs text-blue-600 mt-1 flex items-center gap-1.5">
+            {l.thisMth}
+            {lastMonthItemBreakdown.taxi > 0 && <span className={taxiDelta >= 0 ? 'text-green-600' : 'text-red-400'}>{taxiDelta > 0 ? '+' : ''}{taxiDelta}%</span>}
+          </div>
         </div>
 
         <div className="bg-gradient-to-br from-[#F3EEFF] to-[#F7F2FF] rounded-xl border border-purple-200/50 p-4 shadow-card">
@@ -426,7 +462,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <Scissors className="h-4 w-4 text-purple-500" />
           </div>
           <div className="text-2xl font-bold text-purple-800">{formatMAD(monthlyGroomingRevenue)}</div>
-          <div className="text-xs text-purple-600 mt-1">{l.thisMth}</div>
+          <div className="text-xs text-purple-600 mt-1 flex items-center gap-1.5">
+            {l.thisMth}
+            {lastMonthItemBreakdown.grooming > 0 && <span className={groomingDelta >= 0 ? 'text-green-600' : 'text-red-400'}>{groomingDelta > 0 ? '+' : ''}{groomingDelta}%</span>}
+          </div>
         </div>
 
         <div className="bg-gradient-to-br from-[#FEF3E2] to-[#FFF8EE] rounded-xl border border-orange-200/50 p-4 shadow-card">
@@ -435,7 +474,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <Package className="h-4 w-4 text-orange-500" />
           </div>
           <div className="text-2xl font-bold text-orange-800">{formatMAD(monthlyCroquettesRevenue)}</div>
-          <div className="text-xs text-orange-600 mt-1">{l.thisMth}</div>
+          <div className="text-xs text-orange-600 mt-1 flex items-center gap-1.5">
+            {l.thisMth}
+            {lastMonthItemBreakdown.croquettes > 0 && <span className={croquettesDelta >= 0 ? 'text-green-600' : 'text-red-400'}>{croquettesDelta > 0 ? '+' : ''}{croquettesDelta}%</span>}
+          </div>
         </div>
       </div>
 
