@@ -27,15 +27,29 @@ export async function POST(request: Request) {
   const trimmedPhone =
     typeof phone === 'string' && phone.trim() ? phone.trim().slice(0, 30) : null;
 
-  // Anti-doublon par téléphone : compare les 8 derniers chiffres
+  // Anti-doublon par téléphone
+  // Normalisation : garde uniquement les chiffres, retire le préfixe pays 212 (Maroc)
+  // Ex : "+212 6 12 34 56 78" → "612345678"  /  "0612345678" → "612345678"
   if (trimmedPhone) {
     const digits = trimmedPhone.replace(/\D/g, '');
-    const tail = digits.slice(-8);
-    if (tail.length >= 8) {
-      const existing = await prisma.user.findFirst({
-        where: { isWalkIn: true, phone: { endsWith: tail } },
+    const normalized = digits.startsWith('212') ? digits.slice(3) : digits.replace(/^0/, '');
+
+    if (normalized.length >= 8) {
+      // 1. Correspondance exacte sur le numéro normalisé (évite toute collision)
+      const exactMatch = await prisma.user.findFirst({
+        where: { isWalkIn: true, phone: { endsWith: normalized } },
       });
-      if (existing) return NextResponse.json(existing);
+      if (exactMatch) return NextResponse.json(exactMatch);
+
+      // 2. Fallback : 8 derniers chiffres — absorbe variantes de formatage historiques
+      //    Seulement si le numéro normalisé fait plus de 8 chiffres (sinon redondant avec l'étape 1)
+      const tail = normalized.slice(-8);
+      if (normalized.length > 8) {
+        const fuzzyMatch = await prisma.user.findFirst({
+          where: { isWalkIn: true, phone: { endsWith: tail } },
+        });
+        if (fuzzyMatch) return NextResponse.json(fuzzyMatch);
+      }
     }
   }
 
