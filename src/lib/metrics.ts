@@ -95,7 +95,8 @@ export type CategoryBreakdown = {
   other: number;
 };
 
-// Billed amount by category for PAID+PARTIALLY_PAID invoices with a payment in [start, end].
+// Billed amount by category — payments in [start, end] distributed proportionally across items.
+// frac = pmt.amount / sum(item.total) per invoice. Matches partial-payment semantics.
 export async function billedByCategory(
   start: Date,
   end: Date,
@@ -105,21 +106,29 @@ export async function billedByCategory(
       status: { in: ['PAID', 'PARTIALLY_PAID'] },
       payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
-    select: { items: { select: { category: true, total: true } } },
+    select: {
+      items:    { select: { category: true, total: true } },
+      payments: { select: { amount: true, paymentDate: true } },
+    },
   });
 
   const result: CategoryBreakdown = {
-    boarding: 0,
-    taxi: 0,
-    grooming: 0,
-    croquettes: 0,
-    other: 0,
+    boarding: 0, taxi: 0, grooming: 0, croquettes: 0, other: 0,
   };
+
   for (const inv of invoices) {
-    for (const item of inv.items) {
-      const k = categoryKey(item.category);
-      if (k) result[k] += item.total;
-      else result.other += item.total;
+    const itemsTotal = inv.items.reduce((s, i) => s + i.total, 0);
+    if (itemsTotal === 0) continue;
+    const periodPayments = inv.payments.filter(
+      p => p.paymentDate >= start && p.paymentDate <= end,
+    );
+    for (const pmt of periodPayments) {
+      const frac = pmt.amount / itemsTotal;
+      for (const item of inv.items) {
+        const k = categoryKey(item.category);
+        if (k) result[k] += item.total * frac;
+        else    result.other += item.total * frac;
+      }
     }
   }
   return result;
