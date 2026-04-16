@@ -107,7 +107,7 @@ export async function billedByCategory(
       payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
     select: {
-      items:    { select: { category: true, total: true } },
+      items:    { select: { category: true, unitPrice: true, quantity: true } },
       payments: { select: { amount: true, paymentDate: true } },
     },
   });
@@ -117,7 +117,7 @@ export async function billedByCategory(
   };
 
   for (const inv of invoices) {
-    const itemsTotal = inv.items.reduce((s, i) => s + i.total, 0);
+    const itemsTotal = inv.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
     if (itemsTotal === 0) continue;
     const periodPayments = inv.payments.filter(
       p => p.paymentDate >= start && p.paymentDate <= end,
@@ -126,8 +126,9 @@ export async function billedByCategory(
       const frac = pmt.amount / itemsTotal;
       for (const item of inv.items) {
         const k = categoryKey(item.category);
-        if (k) result[k] += item.total * frac;
-        else    result.other += item.total * frac;
+        const val = item.unitPrice * item.quantity;
+        if (k) result[k] += val * frac;
+        else    result.other += val * frac;
       }
     }
   }
@@ -145,7 +146,7 @@ export async function volumeByCategory(
       status: { in: ['PAID', 'PARTIALLY_PAID'] },
       payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
-    select: { items: { select: { category: true, total: true } } },
+    select: { items: { select: { category: true, unitPrice: true, quantity: true } } },
   });
 
   const result: CategoryBreakdown = {
@@ -161,7 +162,7 @@ export async function volumeByCategory(
       continue;
     }
     const dom = inv.items.reduce((best, item) =>
-      item.total > best.total ? item : best,
+      item.unitPrice * item.quantity > best.unitPrice * best.quantity ? item : best,
     );
     const k = categoryKey(dom.category);
     if (k) result[k]++;
