@@ -30,17 +30,11 @@ export async function GET(request: Request) {
       paymentDate: true,
       invoice: {
         select: {
-          serviceType: true,
-          booking: {
-            select: {
-              serviceType: true,
-              boardingDetail: { select: { groomingPrice: true } },
-            },
-          },
           items: {
             select: {
-              description: true,
+              category: true,
               allocatedAmount: true,
+              total: true,
             },
           },
         },
@@ -53,35 +47,17 @@ export async function GET(request: Request) {
 
   for (const pmt of paymentsCurrentYear) {
     const m = new Date(pmt.paymentDate).getMonth();
-    const svcType = pmt.invoice.booking?.serviceType ?? pmt.invoice.serviceType;
-
-    if (svcType === 'PRODUCT_SALE') {
-      monthly[m].croquettes += pmt.amount;
-    } else if (svcType === 'PET_TAXI') {
-      monthly[m].taxi += pmt.amount;
-    } else if (svcType === 'BOARDING') {
-      const items = pmt.invoice.items;
-      const totalAllocated = items.reduce((s, i) => s + i.allocatedAmount, 0);
-
-      if (totalAllocated > 0) {
-        // Distribute payment proportionally based on each item's allocated share
-        for (const item of items) {
-          const ratio = item.allocatedAmount / totalAllocated;
-          const itemAmt = pmt.amount * ratio;
-          if (item.description.includes('Taxi')) {
-            monthly[m].taxi += itemAmt;
-          } else if (item.description.includes('Toilettage')) {
-            monthly[m].grooming += itemAmt;
-          } else {
-            monthly[m].boarding += itemAmt;
-          }
-        }
-      } else {
-        // Fallback: no allocatedAmount data, use grooming price heuristic
-        const g = Math.min(pmt.invoice.booking?.boardingDetail?.groomingPrice ?? 0, pmt.amount);
-        monthly[m].grooming += g;
-        monthly[m].boarding += pmt.amount - g;
-      }
+    const items = pmt.invoice.items;
+    const base = items.reduce((s, i) => s + (i.allocatedAmount || i.total), 0);
+    if (base === 0) continue;
+    for (const item of items) {
+      const ratio = (item.allocatedAmount || item.total) / base;
+      const amt = pmt.amount * ratio;
+      if      (item.category === 'BOARDING') monthly[m].boarding   += amt;
+      else if (item.category === 'PET_TAXI') monthly[m].taxi        += amt;
+      else if (item.category === 'GROOMING') monthly[m].grooming    += amt;
+      else if (item.category === 'PRODUCT')  monthly[m].croquettes  += amt;
+      // OTHER ignoré dans le graphe
     }
   }
 
@@ -153,21 +129,21 @@ export async function GET(request: Request) {
   const [boardingTotal, taxiTotal, groomingTotal] = await Promise.all([
     prisma.invoiceItem.aggregate({
       where: {
-        description: { contains: 'Pension' },
+        category: 'BOARDING',
         invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
       },
       _sum: { allocatedAmount: true },
     }),
     prisma.invoiceItem.aggregate({
       where: {
-        description: { contains: 'Taxi' },
+        category: 'PET_TAXI',
         invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
       },
       _sum: { allocatedAmount: true },
     }),
     prisma.invoiceItem.aggregate({
       where: {
-        description: { contains: 'Toilettage' },
+        category: 'GROOMING',
         invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
       },
       _sum: { allocatedAmount: true },

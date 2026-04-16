@@ -89,7 +89,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
         paymentDate: true,
         invoice: {
           select: {
-            items: { select: { description: true, total: true } },
+            items: { select: { category: true, total: true } },
           },
         },
       },
@@ -160,12 +160,12 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     // Factures émises ce mois (items) — source cartes service "facturé"
     prisma.invoice.findMany({
       where: { issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, status: { in: ['PAID', 'PARTIALLY_PAID'] } },
-      select: { items: { select: { description: true, total: true } } },
+      select: { items: { select: { category: true, total: true } } },
     }),
     // Factures émises le mois précédent — deltas cartes service
     prisma.invoice.findMany({
       where: { issuedAt: { gte: lastMonthStart, lte: lastMonthEnd }, status: { in: ['PAID', 'PARTIALLY_PAID'] } },
-      select: { items: { select: { description: true, total: true } } },
+      select: { items: { select: { category: true, total: true } } },
     }),
   ]);
 
@@ -209,26 +209,24 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     monthlyData[key] = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
   }
 
-  // Catégorisation par description d'InvoiceItem
-  const categoriseItem = (description: string): 'boarding' | 'taxi' | 'grooming' | 'croquettes' => {
-    const desc = description.toLowerCase();
-    if (desc.includes('taxi')) return 'taxi';
-    if (desc.includes('toilettage') || desc.includes('grooming')) return 'grooming';
-    if (desc.includes('croquette') || desc.includes('kibble')) return 'croquettes';
-    return 'boarding'; // pension / nuit / boarding / tout le reste
+  const CAT_KEY: Partial<Record<string, 'boarding' | 'taxi' | 'grooming' | 'croquettes'>> = {
+    BOARDING: 'boarding', PET_TAXI: 'taxi', GROOMING: 'grooming', PRODUCT: 'croquettes',
+    // OTHER → undefined : ignoré, pas absorbé silencieusement dans boarding
   };
 
   // Cartes service — facturé du mois (item.total, indépendant des paiements)
   const thisMonthItemBreakdown = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
   for (const inv of invoicesThisMonthBilled) {
     for (const item of inv.items) {
-      thisMonthItemBreakdown[categoriseItem(item.description)] += item.total;
+      const k = CAT_KEY[item.category];
+      if (k) thisMonthItemBreakdown[k] += item.total;
     }
   }
   const lastMonthItemBreakdown = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
   for (const inv of invoicesLastMonthBilled) {
     for (const item of inv.items) {
-      lastMonthItemBreakdown[categoriseItem(item.description)] += item.total;
+      const k = CAT_KEY[item.category];
+      if (k) lastMonthItemBreakdown[k] += item.total;
     }
   }
   const svcPct = (cur: number, prev: number): number =>
@@ -246,7 +244,8 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     if (itemsTotal === 0) continue;
     const frac = pmt.amount / itemsTotal;
     for (const item of pmt.invoice.items) {
-      monthlyData[key][categoriseItem(item.description)] += item.total * frac;
+      const k = CAT_KEY[item.category];
+      if (k) monthlyData[key][k] += item.total * frac;
     }
   }
 

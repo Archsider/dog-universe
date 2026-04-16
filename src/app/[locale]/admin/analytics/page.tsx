@@ -6,34 +6,20 @@ import AnalyticsCharts from './AnalyticsCharts';
 
 interface PageProps { params: { locale: string } }
 
-// ─── Catégorisation par description d'InvoiceItem ────────────────────────────
-// Source de vérité absolue. Ordre obligatoire (transport/taxi AVANT pension).
-function categoriseItem(desc: string): 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' {
-  const d = desc.toLowerCase();
-  if (d.includes('transport') || d.includes('taxi') || d.includes('animalier')) return 'PET_TAXI';
-  if (d.includes('croquette') || d.includes('kibble'))                           return 'PRODUCT';
-  if (d.includes('toilettage') || d.includes('bain') || d.includes('coupe'))     return 'GROOMING';
-  if (
-    d.includes('pension') || d.includes('nuit') || d.includes('séjour') ||
-    d.includes('chat')    || d.includes('chien')
-  ) return 'BOARDING';
-  return 'OTHER';
-}
-
 // ─── Catégorie principale d'une facture (item au plus grand total) ────────────
-function mainCategory(
-  items: { description: string; unitPrice: number; quantity: number }[],
+function biggestCategory(
+  items: { category: string; unitPrice: number; quantity: number }[],
 ): 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' {
   if (items.length === 0) return 'OTHER';
   const biggest = items.reduce((best, item) =>
     item.unitPrice * item.quantity > best.unitPrice * best.quantity ? item : best,
   );
-  return categoriseItem(biggest.description);
+  return biggest.category as 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER';
 }
 
 // ─── CA par service : payment.amount distribué proportionnellement aux items ──
 function computeBreakdown(
-  invoices: { items: { description: string; unitPrice: number; quantity: number }[]; payments: { amount: number; paymentDate: Date }[] }[],
+  invoices: { items: { category: string; unitPrice: number; quantity: number }[]; payments: { amount: number; paymentDate: Date }[] }[],
   start: Date,
   end: Date,
 ): Record<'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER', number> {
@@ -44,7 +30,8 @@ function computeBreakdown(
     for (const pmt of inv.payments.filter(p => p.paymentDate >= start && p.paymentDate <= end)) {
       const frac = pmt.amount / itemsTotal;
       for (const item of inv.items) {
-        result[categoriseItem(item.description)] += item.unitPrice * item.quantity * frac;
+        const cat = item.category as 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER';
+        result[cat] += item.unitPrice * item.quantity * frac;
       }
     }
   }
@@ -69,7 +56,7 @@ function computeCA(
 // → chaque item voit itemAmt × fraction attribué au mois du paiement
 function buildYearlyData(
   invoices: {
-    items:    { description: string; unitPrice: number; quantity: number }[];
+    items:    { category: string; unitPrice: number; quantity: number }[];
     payments: { amount: number; paymentDate: Date }[];
   }[],
   start: Date,
@@ -89,11 +76,10 @@ function buildYearlyData(
 
       for (const item of inv.items) {
         const amt = item.unitPrice * item.quantity * frac;
-        const cat = categoriseItem(item.description);
-        if      (cat === 'BOARDING') monthly[m].boarding   += amt;
-        else if (cat === 'PET_TAXI') monthly[m].taxi        += amt;
-        else if (cat === 'GROOMING') monthly[m].grooming    += amt;
-        else if (cat === 'PRODUCT')  monthly[m].croquettes  += amt;
+        if      (item.category === 'BOARDING') monthly[m].boarding   += amt;
+        else if (item.category === 'PET_TAXI') monthly[m].taxi        += amt;
+        else if (item.category === 'GROOMING') monthly[m].grooming    += amt;
+        else if (item.category === 'PRODUCT')  monthly[m].croquettes  += amt;
         // OTHER ignoré dans le graphe
       }
     }
@@ -136,7 +122,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         payments: { some: { paymentDate: { gte: thisMonthStart, lte: thisMonthEnd } } },
       },
       include: {
-        items:    { select: { description: true, unitPrice: true, quantity: true } },
+        items:    { select: { category: true, unitPrice: true, quantity: true } },
         payments: { select: { amount: true, paymentDate: true } },
         client:   { select: { id: true } },
       },
@@ -149,7 +135,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         payments: { some: { paymentDate: { gte: lastMonthStart, lte: lastMonthEnd } } },
       },
       include: {
-        items:    { select: { description: true, unitPrice: true, quantity: true } },
+        items:    { select: { category: true, unitPrice: true, quantity: true } },
         payments: { select: { amount: true, paymentDate: true } },
         client:   { select: { id: true } },
       },
@@ -162,7 +148,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         payments: { some: { paymentDate: { gte: startCurrentYear, lte: thisMonthEnd } } },
       },
       include: {
-        items:    { select: { description: true, unitPrice: true, quantity: true } },
+        items:    { select: { category: true, unitPrice: true, quantity: true } },
         payments: { select: { amount: true, paymentDate: true } },
       },
     }),
@@ -174,7 +160,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         payments: { some: { paymentDate: { gte: startLastYear, lte: endLastYear } } },
       },
       include: {
-        items:    { select: { description: true, unitPrice: true, quantity: true } },
+        items:    { select: { category: true, unitPrice: true, quantity: true } },
         payments: { select: { amount: true, paymentDate: true } },
       },
     }),
@@ -205,7 +191,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     BOARDING: 0, PET_TAXI: 0, GROOMING: 0, PRODUCT: 0, OTHER: 0,
   };
   for (const inv of invoicesThisMonth) {
-    volumeCounts[mainCategory(inv.items)]++;
+    volumeCounts[biggestCategory(inv.items)]++;
   }
 
   // ─── Panier moyen ─────────────────────────────────────────────────────────
@@ -214,13 +200,10 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
 
   // ─── Durée moy. séjour (quantity de l'item "nuit/pension" sur factures BOARDING)
   const boardingInvoices = invoicesThisMonth.filter(
-    inv => mainCategory(inv.items) === 'BOARDING',
+    inv => biggestCategory(inv.items) === 'BOARDING',
   );
   const nightItems = boardingInvoices.flatMap(inv =>
-    inv.items.filter(item => {
-      const d = item.description.toLowerCase();
-      return d.includes('nuit') || d.includes('pension') || d.includes('séjour');
-    }),
+    inv.items.filter(item => item.category === 'BOARDING'),
   );
   const avgNights = nightItems.length > 0
     ? Math.round(nightItems.reduce((s, i) => s + i.quantity, 0) / nightItems.length)
