@@ -180,12 +180,13 @@ model BookingPet {
 
 // Extra billable lines added manually by admin at booking time (products, custom services)
 model BookingItem {
-  id          String @id @default(cuid())
+  id          String       @id @default(cuid())
   bookingId   String
   description String
-  quantity    Int    @default(1)
+  quantity    Int          @default(1)
   unitPrice   Float
   total       Float
+  category    ItemCategory @default(OTHER)
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
@@ -255,15 +256,24 @@ model Invoice {
   @@index([supplementaryForBookingId])
 }
 
+enum ItemCategory {
+  BOARDING
+  PET_TAXI
+  GROOMING
+  PRODUCT
+  OTHER
+}
+
 model InvoiceItem {
-  id              String @id @default(cuid())
+  id              String       @id @default(cuid())
   invoiceId       String
   description     String
-  quantity        Int    @default(1)
+  quantity        Int          @default(1)
   unitPrice       Float
   total           Float
-  allocatedAmount Float  @default(0)   // Montant alloué par allocatePayments()
-  status          String @default("PENDING") // "PENDING" | "PARTIAL" | "PAID"
+  allocatedAmount Float        @default(0)   // Montant alloué par allocatePayments()
+  status          String       @default("PENDING") // "PENDING" | "PARTIAL" | "PAID"
+  category        ItemCategory @default(OTHER)
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
