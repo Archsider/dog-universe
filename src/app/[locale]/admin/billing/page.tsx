@@ -41,7 +41,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
       // We need paymentMethod and paymentDate for display
     }),
     prisma.invoice.count({ where }),
-    prisma.invoice.aggregate({ where: { status: 'PAID' }, _sum: { amount: true } }),
+    prisma.payment.aggregate({ _sum: { amount: true } }),
     prisma.user.findMany({ where: { role: 'CLIENT' }, select: { id: true, name: true, email: true }, orderBy: { name: 'asc' } }),
     prisma.payment.groupBy({
       by: ['paymentMethod'],
