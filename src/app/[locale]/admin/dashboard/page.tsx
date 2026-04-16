@@ -159,12 +159,12 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     }).catch(() => null),
     // Factures émises ce mois (items) — source cartes service "facturé"
     prisma.invoice.findMany({
-      where: { issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, status: { not: 'CANCELLED' } },
+      where: { issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, status: { in: ['PAID', 'PARTIALLY_PAID'] } },
       select: { items: { select: { description: true, total: true } } },
     }),
     // Factures émises le mois précédent — deltas cartes service
     prisma.invoice.findMany({
-      where: { issuedAt: { gte: lastMonthStart, lte: lastMonthEnd }, status: { not: 'CANCELLED' } },
+      where: { issuedAt: { gte: lastMonthStart, lte: lastMonthEnd }, status: { in: ['PAID', 'PARTIALLY_PAID'] } },
       select: { items: { select: { description: true, total: true } } },
     }),
   ]);
