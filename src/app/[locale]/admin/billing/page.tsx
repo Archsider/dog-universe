@@ -221,7 +221,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
                         <Link href={`/${locale}/admin/clients/${inv.client.id}`} className="text-sm text-charcoal hover:text-gold-600">
-                          {inv.client.name || inv.client.email}
+                          {inv.clientDisplayName ?? inv.client.name}
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{formatDate(inv.issuedAt, locale)}</td>
