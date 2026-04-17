@@ -4,33 +4,25 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Car, ChevronDown, ChevronUp, Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
+import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 
 interface BoardingDetailTaxi {
   taxiGoEnabled: boolean;
   taxiGoDate: string | null;
   taxiGoTime: string | null;
   taxiGoAddress: string | null;
-  taxiGoStatus: string | null;
   taxiReturnEnabled: boolean;
   taxiReturnDate: string | null;
   taxiReturnTime: string | null;
   taxiReturnAddress: string | null;
-  taxiReturnStatus: string | null;
 }
-
-const TAXI_STATUS_OPTIONS = [
-  { value: 'PENDING',     fr: 'Transport planifié',               en: 'Transport planned' },
-  { value: 'CONFIRMED',   fr: 'En route vers le point de départ', en: 'En route to pickup' },
-  { value: 'AT_PICKUP',   fr: 'Sur place',                        en: 'On site' },
-  { value: 'IN_PROGRESS', fr: 'Animal à bord',                    en: 'Pet on board' },
-  { value: 'COMPLETED',   fr: 'Arrivé à destination',             en: 'Arrived at destination' },
-];
 
 interface EditTaxiAddonSectionProps {
   bookingId: string;
   boardingDetail: BoardingDetailTaxi | null;
+  goTrip: TaxiTripData | null;
+  returnTrip: TaxiTripData | null;
   locale: string;
 }
 
@@ -46,9 +38,9 @@ const l = {
     addressPlaceholder: 'Adresse de prise en charge',
     save: 'Enregistrer',
     cancel: 'Annuler',
-    apply: 'Appliquer',
     successMsg: 'Add-ons taxi mis à jour.',
     errorServer: 'Erreur lors de la mise à jour.',
+    noTrip: 'Enregistrez d\'abord pour activer le suivi.',
   },
   en: {
     title: 'Pet Taxi Add-ons',
@@ -61,60 +53,30 @@ const l = {
     addressPlaceholder: 'Pick-up address',
     save: 'Save',
     cancel: 'Cancel',
-    apply: 'Apply',
     successMsg: 'Taxi add-ons updated.',
     errorServer: 'Error updating taxi add-ons.',
+    noTrip: 'Save first to activate tracking.',
   },
 };
 
-export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale }: EditTaxiAddonSectionProps) {
+export default function EditTaxiAddonSection({
+  bookingId, boardingDetail, goTrip, returnTrip, locale,
+}: EditTaxiAddonSectionProps) {
   const router = useRouter();
   const t = l[locale as keyof typeof l] || l.fr;
-  const isFr = locale !== 'en';
   const hasAnyTaxi = !!(boardingDetail?.taxiGoEnabled || boardingDetail?.taxiReturnEnabled);
   const [open, setOpen] = useState(hasAnyTaxi);
   const [loading, setLoading] = useState(false);
 
-  // Taxi go state
   const [goEnabled, setGoEnabled]         = useState(boardingDetail?.taxiGoEnabled ?? false);
   const [goDate, setGoDate]               = useState(boardingDetail?.taxiGoDate ?? '');
   const [goTime, setGoTime]               = useState(boardingDetail?.taxiGoTime ?? '');
   const [goAddress, setGoAddress]         = useState(boardingDetail?.taxiGoAddress ?? '');
-  const [goStatus, setGoStatus]           = useState(boardingDetail?.taxiGoStatus ?? 'PENDING');
-  const [savedGoStatus, setSavedGoStatus] = useState(boardingDetail?.taxiGoStatus ?? 'PENDING');
-  const [loadingGoStatus, setLoadingGoStatus] = useState(false);
 
-  // Taxi return state
-  const [returnEnabled, setReturnEnabled]             = useState(boardingDetail?.taxiReturnEnabled ?? false);
-  const [returnDate, setReturnDate]                   = useState(boardingDetail?.taxiReturnDate ?? '');
-  const [returnTime, setReturnTime]                   = useState(boardingDetail?.taxiReturnTime ?? '');
-  const [returnAddress, setReturnAddress]             = useState(boardingDetail?.taxiReturnAddress ?? '');
-  const [returnStatus, setReturnStatus]               = useState(boardingDetail?.taxiReturnStatus ?? 'PENDING');
-  const [savedReturnStatus, setSavedReturnStatus]     = useState(boardingDetail?.taxiReturnStatus ?? 'PENDING');
-  const [loadingReturnStatus, setLoadingReturnStatus] = useState(false);
-
-  async function applyTaxiStatus(
-    field: 'taxiGoStatus' | 'taxiReturnStatus',
-    nextStatus: string,
-    setLoadingFn: (v: boolean) => void,
-    setSavedFn: (s: string) => void,
-  ) {
-    setLoadingFn(true);
-    try {
-      const res = await fetch(`/api/reservations/${bookingId}/taxi-status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field, nextStatus }),
-      });
-      if (!res.ok) throw new Error();
-      setSavedFn(nextStatus);
-      toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
-    } catch {
-      toast({ title: t.errorServer, variant: 'destructive' });
-    } finally {
-      setLoadingFn(false);
-    }
-  }
+  const [returnEnabled, setReturnEnabled]   = useState(boardingDetail?.taxiReturnEnabled ?? false);
+  const [returnDate, setReturnDate]         = useState(boardingDetail?.taxiReturnDate ?? '');
+  const [returnTime, setReturnTime]         = useState(boardingDetail?.taxiReturnTime ?? '');
+  const [returnAddress, setReturnAddress]   = useState(boardingDetail?.taxiReturnAddress ?? '');
 
   async function handleSave() {
     setLoading(true);
@@ -125,12 +87,12 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
         body: JSON.stringify({
           patchBoardingDetail: {
             taxiGoEnabled: goEnabled,
-            taxiGoDate: goEnabled && goDate ? goDate : null,
-            taxiGoTime: goEnabled && goTime ? goTime : null,
+            taxiGoDate:    goEnabled && goDate    ? goDate    : null,
+            taxiGoTime:    goEnabled && goTime    ? goTime    : null,
             taxiGoAddress: goEnabled && goAddress ? goAddress : null,
             taxiReturnEnabled: returnEnabled,
-            taxiReturnDate: returnEnabled && returnDate ? returnDate : null,
-            taxiReturnTime: returnEnabled && returnTime ? returnTime : null,
+            taxiReturnDate:    returnEnabled && returnDate    ? returnDate    : null,
+            taxiReturnTime:    returnEnabled && returnTime    ? returnTime    : null,
             taxiReturnAddress: returnEnabled && returnAddress ? returnAddress : null,
           },
         }),
@@ -180,67 +142,23 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
         {open ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
       </button>
 
-      {/* Summary visible when collapsed and taxi is active */}
+      {/* Collapsed summary — show timelines */}
       {!open && hasAnyTaxi && (
-        <div className="space-y-3 text-xs text-gray-600 border-t border-gray-100 pt-2">
+        <div className="space-y-4 border-t border-gray-100 pt-3">
           {boardingDetail?.taxiGoEnabled && (
-            <div className="flex flex-col gap-0.5">
-              <span className="font-semibold text-orange-700">↗ Aller (dépôt pension)</span>
-              {boardingDetail.taxiGoDate && <span>{boardingDetail.taxiGoDate}{boardingDetail.taxiGoTime ? ` — ${boardingDetail.taxiGoTime}` : ''}</span>}
-              {boardingDetail.taxiGoAddress && <span className="text-gray-500 italic">{boardingDetail.taxiGoAddress}</span>}
-              <div className="flex gap-2 mt-2">
-                <Select value={goStatus} onValueChange={setGoStatus}>
-                  <SelectTrigger className="flex-1 text-sm h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TAXI_STATUS_OPTIONS.map(o => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {isFr ? o.fr : o.en}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => applyTaxiStatus('taxiGoStatus', goStatus, setLoadingGoStatus, setSavedGoStatus)}
-                  disabled={loadingGoStatus || goStatus === savedGoStatus}
-                  className="h-9 px-3"
-                >
-                  {loadingGoStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : (isFr ? t.apply : t.apply)}
-                </Button>
-              </div>
+            <div>
+              <p className="text-xs font-semibold text-orange-700 mb-2">↗ Aller (dépôt pension)</p>
+              {goTrip
+                ? <TaxiTimeline trip={goTrip} locale={locale} />
+                : <p className="text-xs text-gray-400 italic">{t.noTrip}</p>}
             </div>
           )}
           {boardingDetail?.taxiReturnEnabled && (
-            <div className="flex flex-col gap-0.5">
-              <span className="font-semibold text-orange-700">↙ Retour (domicile)</span>
-              {boardingDetail.taxiReturnDate && <span>{boardingDetail.taxiReturnDate}{boardingDetail.taxiReturnTime ? ` — ${boardingDetail.taxiReturnTime}` : ''}</span>}
-              {boardingDetail.taxiReturnAddress && <span className="text-gray-500 italic">{boardingDetail.taxiReturnAddress}</span>}
-              <div className="flex gap-2 mt-2">
-                <Select value={returnStatus} onValueChange={setReturnStatus}>
-                  <SelectTrigger className="flex-1 text-sm h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TAXI_STATUS_OPTIONS.map(o => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {isFr ? o.fr : o.en}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => applyTaxiStatus('taxiReturnStatus', returnStatus, setLoadingReturnStatus, setSavedReturnStatus)}
-                  disabled={loadingReturnStatus || returnStatus === savedReturnStatus}
-                  className="h-9 px-3"
-                >
-                  {loadingReturnStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : t.apply}
-                </Button>
-              </div>
+            <div>
+              <p className="text-xs font-semibold text-orange-700 mb-2">↙ Retour (domicile)</p>
+              {returnTrip
+                ? <TaxiTimeline trip={returnTrip} locale={locale} />
+                : <p className="text-xs text-gray-400 italic">{t.noTrip}</p>}
             </div>
           )}
         </div>
@@ -261,68 +179,36 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
                   goEnabled ? 'bg-orange-500' : 'bg-gray-200'
                 }`}
               >
-                <span
-                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                    goEnabled ? 'translate-x-4' : 'translate-x-0.5'
-                  }`}
-                />
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                  goEnabled ? 'translate-x-4' : 'translate-x-0.5'
+                }`} />
               </button>
             </div>
+
             {goEnabled && (
               <>
-                <div className="flex gap-2 mt-2">
-                  <Select value={goStatus} onValueChange={setGoStatus}>
-                    <SelectTrigger className="flex-1 text-sm h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TAXI_STATUS_OPTIONS.map(o => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {isFr ? o.fr : o.en}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => applyTaxiStatus('taxiGoStatus', goStatus, setLoadingGoStatus, setSavedGoStatus)}
-                    disabled={loadingGoStatus || goStatus === savedGoStatus}
-                    className="h-9 px-3"
-                  >
-                    {loadingGoStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : t.apply}
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+                {/* Timeline (if trip exists) */}
+                {goTrip && (
+                  <div className="border-t border-gray-100 pt-3">
+                    <TaxiTimeline trip={goTrip} locale={locale} />
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3 mt-2">
                   <div>
                     <label className="text-xs font-medium text-gray-600 block mb-1">{t.date}</label>
-                    <input
-                      type="date"
-                      value={goDate}
-                      onChange={e => setGoDate(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    />
+                    <input type="date" value={goDate} onChange={e => setGoDate(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-gray-600 block mb-1">{t.time}</label>
-                    <input
-                      type="time"
-                      value={goTime}
-                      min="10:00"
-                      max="17:00"
-                      onChange={e => setGoTime(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    />
+                    <input type="time" value={goTime} min="10:00" max="17:00" onChange={e => setGoTime(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                   <div className="col-span-2">
                     <label className="text-xs font-medium text-gray-600 block mb-1">{t.address}</label>
-                    <input
-                      type="text"
-                      value={goAddress}
-                      onChange={e => setGoAddress(e.target.value)}
+                    <input type="text" value={goAddress} onChange={e => setGoAddress(e.target.value)}
                       placeholder={t.addressPlaceholder}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    />
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                 </div>
               </>
@@ -340,68 +226,35 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
                   returnEnabled ? 'bg-orange-500' : 'bg-gray-200'
                 }`}
               >
-                <span
-                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                    returnEnabled ? 'translate-x-4' : 'translate-x-0.5'
-                  }`}
-                />
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                  returnEnabled ? 'translate-x-4' : 'translate-x-0.5'
+                }`} />
               </button>
             </div>
+
             {returnEnabled && (
               <>
-                <div className="flex gap-2 mt-2">
-                  <Select value={returnStatus} onValueChange={setReturnStatus}>
-                    <SelectTrigger className="flex-1 text-sm h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TAXI_STATUS_OPTIONS.map(o => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {isFr ? o.fr : o.en}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => applyTaxiStatus('taxiReturnStatus', returnStatus, setLoadingReturnStatus, setSavedReturnStatus)}
-                    disabled={loadingReturnStatus || returnStatus === savedReturnStatus}
-                    className="h-9 px-3"
-                  >
-                    {loadingReturnStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : t.apply}
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+                {returnTrip && (
+                  <div className="border-t border-gray-100 pt-3">
+                    <TaxiTimeline trip={returnTrip} locale={locale} />
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3 mt-2">
                   <div>
                     <label className="text-xs font-medium text-gray-600 block mb-1">{t.date}</label>
-                    <input
-                      type="date"
-                      value={returnDate}
-                      onChange={e => setReturnDate(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    />
+                    <input type="date" value={returnDate} onChange={e => setReturnDate(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-gray-600 block mb-1">{t.time}</label>
-                    <input
-                      type="time"
-                      value={returnTime}
-                      min="10:00"
-                      max="17:00"
-                      onChange={e => setReturnTime(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    />
+                    <input type="time" value={returnTime} min="10:00" max="17:00" onChange={e => setReturnTime(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                   <div className="col-span-2">
                     <label className="text-xs font-medium text-gray-600 block mb-1">{t.address}</label>
-                    <input
-                      type="text"
-                      value={returnAddress}
-                      onChange={e => setReturnAddress(e.target.value)}
+                    <input type="text" value={returnAddress} onChange={e => setReturnAddress(e.target.value)}
                       placeholder={t.addressPlaceholder}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    />
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                 </div>
               </>
@@ -409,21 +262,11 @@ export default function EditTaxiAddonSection({ bookingId, boardingDetail, locale
           </div>
 
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              className="bg-charcoal hover:bg-charcoal/90 text-white"
-              disabled={loading}
-              onClick={handleSave}
-            >
+            <Button size="sm" className="bg-charcoal hover:bg-charcoal/90 text-white" disabled={loading} onClick={handleSave}>
               <Save className="h-3.5 w-3.5 mr-1.5" />
               {t.save}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={loading}
-              onClick={handleCancel}
-            >
+            <Button size="sm" variant="outline" disabled={loading} onClick={handleCancel}>
               {t.cancel}
             </Button>
           </div>

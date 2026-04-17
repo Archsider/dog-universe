@@ -14,6 +14,7 @@ import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import CancelBookingButton from '../../history/CancelBookingButton';
 import AutoRefresh from '@/components/shared/AutoRefresh';
 import RequestExtensionButton from './RequestExtensionButton';
+import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 
 interface PageProps { params: { locale: string; id: string } }
 
@@ -132,6 +133,10 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
       bookingPets: { include: { pet: true } },
       boardingDetail: true,
       taxiDetail: true,
+      taxiTrips: {
+        include: { history: { orderBy: { timestamp: 'asc' } } },
+        orderBy: { createdAt: 'asc' },
+      },
       invoice: { include: { items: true } },
       stayPhotos: { orderBy: { createdAt: 'asc' } },
     },
@@ -261,6 +266,25 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
 
   const isActive = ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'].includes(booking.status);
   const isBoarding = booking.serviceType === 'BOARDING';
+
+  // Serialize TaxiTrip data for client component
+  const serializedTrips: TaxiTripData[] = booking.taxiTrips.map(t => ({
+    id: t.id,
+    tripType: t.tripType,
+    status: t.status,
+    date: t.date,
+    time: t.time,
+    address: t.address,
+    history: t.history.map(h => ({
+      id: h.id,
+      status: h.status,
+      timestamp: h.timestamp.toISOString(),
+      updatedBy: h.updatedBy,
+    })),
+  }));
+  const standaloneTrip = serializedTrips.find(t => t.tripType === 'STANDALONE') ?? null;
+  const goTrip         = serializedTrips.find(t => t.tripType === 'OUTBOUND')   ?? null;
+  const returnTrip     = serializedTrips.find(t => t.tripType === 'RETURN')     ?? null;
   const nights = booking.endDate
     ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
@@ -307,11 +331,9 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
               <p className="text-xs text-gray-400">{t.progression}</p>
             </div>
           </div>
-          <BookingStepper
-            status={booking.status}
-            serviceType={booking.serviceType}
-            locale={locale}
-          />
+          {isBoarding || !standaloneTrip
+            ? <BookingStepper status={booking.status} serviceType={booking.serviceType} locale={locale} />
+            : <TaxiTimeline trip={standaloneTrip} readOnly locale={locale} />}
         </div>
 
         {/* Service + Dates */}
@@ -377,6 +399,24 @@ export default async function ClientBookingDetailPage({ params: { locale, id } }
                     )}
                   </>
                 )}
+                {/* Taxi addon timelines — read-only */}
+                {goTrip && (
+                  <div className="mt-3 pt-3 border-t border-ivory-100">
+                    <p className="text-xs font-semibold text-orange-700 mb-2">
+                      {locale === 'fr' ? '↗ Taxi aller' : '↗ Taxi go'}
+                    </p>
+                    <TaxiTimeline trip={goTrip} readOnly locale={locale} />
+                  </div>
+                )}
+                {returnTrip && (
+                  <div className="mt-3 pt-3 border-t border-ivory-100">
+                    <p className="text-xs font-semibold text-orange-700 mb-2">
+                      {locale === 'fr' ? '↙ Taxi retour' : '↙ Taxi return'}
+                    </p>
+                    <TaxiTimeline trip={returnTrip} readOnly locale={locale} />
+                  </div>
+                )}
+
                 {['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && booking.endDate && (
                   <div className="mt-3 pt-3 border-t border-ivory-100">
                     <RequestExtensionButton

@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import ReservationActions from './ReservationActions';
+import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 import DeleteBookingButton from './DeleteBookingButton';
 import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import StayPhotosSection from './StayPhotosSection';
@@ -31,6 +32,10 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       bookingPets: { include: { pet: true } },
       boardingDetail: true,
       taxiDetail: true,
+      taxiTrips: {
+        include: { history: { orderBy: { timestamp: 'asc' } } },
+        orderBy: { createdAt: 'asc' },
+      },
       invoice: true,
       bookingItems: { orderBy: { id: 'asc' } },
     },
@@ -234,6 +239,25 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
   const statusLbls = sl[locale] || sl.fr;
   const isBoarding = booking.serviceType === 'BOARDING';
   const isPendingExtension = booking.status === 'PENDING_EXTENSION';
+
+  // Serialize TaxiTrip data for client components (Date → ISO string)
+  const serializedTrips: TaxiTripData[] = booking.taxiTrips.map(t => ({
+    id: t.id,
+    tripType: t.tripType,
+    status: t.status,
+    date: t.date,
+    time: t.time,
+    address: t.address,
+    history: t.history.map(h => ({
+      id: h.id,
+      status: h.status,
+      timestamp: h.timestamp.toISOString(),
+      updatedBy: h.updatedBy,
+    })),
+  }));
+  const goTrip    = serializedTrips.find(t => t.tripType === 'OUTBOUND') ?? null;
+  const returnTrip = serializedTrips.find(t => t.tripType === 'RETURN') ?? null;
+  const standaloneTrip = serializedTrips.find(t => t.tripType === 'STANDALONE') ?? null;
   const nights = booking.endDate
     ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
@@ -534,6 +558,17 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
 
           <ReservationActions booking={{ id: booking.id, status: booking.status, serviceType: booking.serviceType }} locale={locale} />
 
+          {/* Standalone PET_TAXI timeline */}
+          {!isBoarding && standaloneTrip && (
+            <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-3">
+              <h3 className="font-semibold text-charcoal text-sm flex items-center gap-2">
+                <span className="text-base">🚗</span>
+                {locale === 'fr' ? 'Suivi du transport' : 'Transport tracking'}
+              </h3>
+              <TaxiTimeline trip={standaloneTrip} locale={locale} />
+            </div>
+          )}
+
           {/* Edit dates (available on all BOARDING bookings) */}
           {isBoarding && (
             <EditDatesSection
@@ -551,13 +586,13 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                 taxiGoDate: booking.boardingDetail.taxiGoDate,
                 taxiGoTime: booking.boardingDetail.taxiGoTime,
                 taxiGoAddress: booking.boardingDetail.taxiGoAddress,
-                taxiGoStatus: booking.boardingDetail.taxiGoStatus,
                 taxiReturnEnabled: booking.boardingDetail.taxiReturnEnabled,
                 taxiReturnDate: booking.boardingDetail.taxiReturnDate,
                 taxiReturnTime: booking.boardingDetail.taxiReturnTime,
                 taxiReturnAddress: booking.boardingDetail.taxiReturnAddress,
-                taxiReturnStatus: booking.boardingDetail.taxiReturnStatus,
               } : null}
+              goTrip={goTrip}
+              returnTrip={returnTrip}
               locale={locale}
             />
           )}

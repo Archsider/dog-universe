@@ -46,6 +46,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       client: true,
       bookingPets: { include: { pet: true } },
       boardingDetail: true,
+      taxiDetail: true,
       invoice: true,
     },
   });
@@ -78,6 +79,42 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       entityId: params.id,
       details: { patch },
     });
+
+    // Create TaxiTrip for each enabled taxi leg (idempotent — skip if already exists)
+    const bd = await prisma.boardingDetail.findUnique({ where: { bookingId: params.id } });
+    if (bd?.taxiGoEnabled) {
+      const exists = await prisma.taxiTrip.findFirst({ where: { bookingId: params.id, tripType: 'OUTBOUND' } });
+      if (!exists) {
+        const t = await prisma.taxiTrip.create({
+          data: { bookingId: params.id, tripType: 'OUTBOUND', status: 'PLANNED',
+                  date: bd.taxiGoDate ?? undefined, time: bd.taxiGoTime ?? undefined,
+                  address: bd.taxiGoAddress ?? undefined },
+        });
+        await prisma.taxiStatusHistory.create({ data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: session.user.id } });
+      } else {
+        await prisma.taxiTrip.update({
+          where: { id: exists.id },
+          data: { date: bd.taxiGoDate ?? undefined, time: bd.taxiGoTime ?? undefined, address: bd.taxiGoAddress ?? undefined },
+        });
+      }
+    }
+    if (bd?.taxiReturnEnabled) {
+      const exists = await prisma.taxiTrip.findFirst({ where: { bookingId: params.id, tripType: 'RETURN' } });
+      if (!exists) {
+        const t = await prisma.taxiTrip.create({
+          data: { bookingId: params.id, tripType: 'RETURN', status: 'PLANNED',
+                  date: bd.taxiReturnDate ?? undefined, time: bd.taxiReturnTime ?? undefined,
+                  address: bd.taxiReturnAddress ?? undefined },
+        });
+        await prisma.taxiStatusHistory.create({ data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: session.user.id } });
+      } else {
+        await prisma.taxiTrip.update({
+          where: { id: exists.id },
+          data: { date: bd.taxiReturnDate ?? undefined, time: bd.taxiReturnTime ?? undefined, address: bd.taxiReturnAddress ?? undefined },
+        });
+      }
+    }
+
     const updated = await prisma.boardingDetail.findUnique({ where: { bookingId: params.id } });
     return NextResponse.json({ message: 'boarding_detail_patched', boardingDetail: updated });
   }
@@ -461,6 +498,26 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         dates,
       }, userLang);
       await sendEmail({ to: booking.client.email, subject, html });
+
+      // For PET_TAXI: ensure a STANDALONE TaxiTrip exists
+      if (booking.serviceType === 'PET_TAXI') {
+        const existingTrip = await prisma.taxiTrip.findFirst({ where: { bookingId: params.id } });
+        if (!existingTrip) {
+          const dateStr = booking.startDate.toISOString().slice(0, 10);
+          const t = await prisma.taxiTrip.create({
+            data: {
+              bookingId: params.id,
+              tripType: 'STANDALONE',
+              status: 'PLANNED',
+              date: dateStr,
+              time: booking.arrivalTime ?? undefined,
+              taxiType: booking.taxiDetail?.taxiType ?? undefined,
+              price: booking.taxiDetail?.price ?? 0,
+            },
+          });
+          await prisma.taxiStatusHistory.create({ data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: session.user.id } });
+        }
+      }
 
       await logAction({
         userId: session.user.id,

@@ -158,6 +158,7 @@ model Booking {
   bookingItems   BookingItem[]
   boardingDetail BoardingDetail?
   taxiDetail     TaxiDetail?
+  taxiTrips      TaxiTrip[]
   invoice        Invoice?
   stayPhotos     StayPhoto[]
 
@@ -206,12 +207,10 @@ model BoardingDetail {
   taxiGoDate        String?
   taxiGoTime        String?
   taxiGoAddress     String?
-  taxiGoStatus      String? // "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "COMPLETED"
   taxiReturnEnabled Boolean @default(false)
   taxiReturnDate    String?
   taxiReturnTime    String?
   taxiReturnAddress String?
-  taxiReturnStatus  String? // "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "COMPLETED"
   taxiAddonPrice    Float   @default(0)
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -224,6 +223,42 @@ model TaxiDetail {
   price     Float
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+// Unified taxi trip — one row per trajet (OUTBOUND / RETURN / STANDALONE)
+// Replaces the flat taxiGoStatus/taxiReturnStatus columns on BoardingDetail
+// and provides the TaxiStatusHistory log.
+model TaxiTrip {
+  id        String   @id @default(cuid())
+  bookingId String
+  tripType  String   // "OUTBOUND" | "RETURN" | "STANDALONE"
+  status    String   @default("PLANNED")
+  // Scheduling metadata (mirrors BoardingDetail for addons; from TaxiDetail for standalone)
+  date      String?
+  time      String?
+  address   String?
+  taxiType  String?  // "STANDARD" | "VET" | "AIRPORT" — STANDALONE only
+  price     Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  history TaxiStatusHistory[]
+
+  @@index([bookingId])
+}
+
+model TaxiStatusHistory {
+  id         String   @id @default(cuid())
+  taxiTripId String
+  status     String
+  timestamp  DateTime @default(now())
+  updatedBy  String   // userId admin or "MIGRATION"
+  createdAt  DateTime @default(now())
+
+  taxiTrip TaxiTrip @relation(fields: [taxiTripId], references: [id], onDelete: Cascade)
+
+  @@index([taxiTripId])
 }
 
 model Invoice {

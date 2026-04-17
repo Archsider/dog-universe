@@ -12,32 +12,26 @@ interface Props {
   locale: string;
 }
 
-// Transitions linéaires par pipeline
-const NEXT_STATUS: Record<string, string> = {
-  PENDING:     'CONFIRMED',
-  CONFIRMED:   'AT_PICKUP',
-  AT_PICKUP:   'IN_PROGRESS',
-  IN_PROGRESS: 'COMPLETED',
-};
-
-// Pour le boarding, CONFIRMED → IN_PROGRESS directement (pas d'AT_PICKUP)
+// BOARDING linear transitions
 const BOARDING_NEXT_STATUS: Record<string, string> = {
   PENDING:     'CONFIRMED',
   CONFIRMED:   'IN_PROGRESS',
   IN_PROGRESS: 'COMPLETED',
 };
 
+// PET_TAXI: only PENDING → CONFIRMED here; TaxiTimeline handles the rest
+const PET_TAXI_NEXT_STATUS: Record<string, string> = {
+  PENDING: 'CONFIRMED',
+};
+
 const ACTION_LABELS: Record<string, Record<string, { fr: string; en: string }>> = {
   BOARDING: {
-    PENDING:     { fr: 'Confirmer le séjour',           en: 'Confirm stay' },
-    CONFIRMED:   { fr: 'Marquer "Dans nos murs"',        en: 'Mark as currently staying' },
-    IN_PROGRESS: { fr: 'Clôturer le séjour',             en: 'Close stay' },
+    PENDING:     { fr: 'Confirmer le séjour',        en: 'Confirm stay' },
+    CONFIRMED:   { fr: 'Marquer "Dans nos murs"',    en: 'Mark as currently staying' },
+    IN_PROGRESS: { fr: 'Clôturer le séjour',         en: 'Close stay' },
   },
   PET_TAXI: {
-    PENDING:     { fr: 'Mettre le véhicule en route',     en: 'Vehicle en route to pickup' },
-    CONFIRMED:   { fr: 'Véhicule sur place',             en: 'Vehicle on site' },
-    AT_PICKUP:   { fr: 'Marquer animal à bord',          en: 'Mark pet on board' },
-    IN_PROGRESS: { fr: 'Marquer arrivé à destination',   en: 'Mark arrived' },
+    PENDING: { fr: 'Confirmer le transport',         en: 'Confirm transport' },
   },
 };
 
@@ -64,7 +58,7 @@ export default function ReservationActions({ booking, locale }: Props) {
   const isFr = locale === 'fr';
 
   const pipeline = booking.serviceType === 'PET_TAXI' ? 'PET_TAXI' : 'BOARDING';
-  const nextStatusMap = pipeline === 'PET_TAXI' ? NEXT_STATUS : BOARDING_NEXT_STATUS;
+  const nextStatusMap = pipeline === 'PET_TAXI' ? PET_TAXI_NEXT_STATUS : BOARDING_NEXT_STATUS;
   const nextStatus = nextStatusMap[currentStatus];
   const actionLabel = nextStatus ? ACTION_LABELS[pipeline]?.[currentStatus] : null;
   const isPendingExtension = currentStatus === 'PENDING_EXTENSION';
@@ -207,12 +201,16 @@ export default function ReservationActions({ booking, locale }: Props) {
           )}
           {isFr ? actionLabel.fr : actionLabel.en}
         </Button>
+      ) : pipeline === 'PET_TAXI' && currentStatus !== 'COMPLETED' && currentStatus !== 'CANCELLED' && currentStatus !== 'REJECTED' ? (
+        <p className="text-xs text-gray-400 text-center py-1">
+          {isFr ? 'Transport confirmé — gérer via la timeline ci-dessous' : 'Transport confirmed — manage via timeline below'}
+        </p>
       ) : (
         <p className="text-xs text-gray-400 text-center py-1">
           {currentStatus === 'COMPLETED'
             ? (isFr
-                ? (pipeline === 'PET_TAXI' ? 'Transport terminé — aucune action disponible' : 'Séjour terminé — aucune action disponible')
-                : (pipeline === 'PET_TAXI' ? 'Transport completed — no further action' : 'Stay completed — no further action'))
+                ? (pipeline === 'PET_TAXI' ? 'Transport terminé' : 'Séjour terminé — aucune action disponible')
+                : (pipeline === 'PET_TAXI' ? 'Transport completed' : 'Stay completed — no further action'))
             : (isFr ? 'Statut final atteint' : 'Final status reached')}
         </p>
       )}
