@@ -152,16 +152,16 @@ function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href:
   return (
     <Link
       href={href}
-      className={`block bg-white border border-[rgba(196,151,74,0.12)] rounded-xl p-3 transition-all hover:shadow-[0_4px_12px_rgba(42,37,32,0.05)] hover:-translate-y-px ${isCompleted ? 'opacity-60' : ''}`}
+      className={`block bg-white border border-[rgba(196,151,74,0.12)] rounded-xl p-2 sm:p-3 lg:p-4 transition-all hover:shadow-[0_4px_12px_rgba(42,37,32,0.05)] hover:-translate-y-px ${isCompleted ? 'opacity-60' : ''}`}
     >
       {/* Header: photo + client + pets */}
-      <div className="flex items-start gap-2.5">
-        <div className="relative w-12 h-12 rounded-[10px] overflow-hidden bg-[#F5E6CC] flex items-center justify-center flex-shrink-0">
+      <div className="flex items-start gap-2 sm:gap-3 lg:gap-4">
+        <div className="relative w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-[10px] overflow-hidden bg-[#F5E6CC] flex items-center justify-center flex-shrink-0">
           {firstPet?.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={firstPet.photoUrl} alt={firstPet.name} className="w-full h-full object-cover" />
           ) : (
-            <span className="text-xs font-bold text-[#8B6A2F]">{getInitials(b.clientName)}</span>
+            <span className="text-[10px] sm:text-xs font-bold text-[#8B6A2F]">{getInitials(b.clientName)}</span>
           )}
           {extraCount > 0 && (
             <span className="absolute -bottom-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#C4974A] text-white text-[9px] font-bold leading-none">
@@ -170,8 +170,8 @@ function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href:
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-[#2A2520] truncate leading-tight">{b.clientName}</p>
-          <p className="text-[11px] text-[#8B6A2F] mt-1 flex items-center gap-1 truncate">
+          <p className="text-xs sm:text-sm lg:text-base font-bold text-[#2A2520] truncate leading-tight">{b.clientName}</p>
+          <p className="text-[8px] sm:text-[9px] lg:text-[10px] text-[#8B6A2F] mt-1 flex items-center gap-1 truncate">
             <PawPrint className="h-3 w-3 flex-shrink-0" />
             <span className="truncate">{petLine}</span>
           </p>
@@ -179,7 +179,7 @@ function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href:
       </div>
 
       {/* Meta */}
-      <div className="mt-2.5 flex items-center gap-3 text-[11px] text-[#8A7E75]">
+      <div className="mt-2 sm:mt-2.5 flex items-center gap-2 sm:gap-3 text-[7px] sm:text-[8px] lg:text-[9px] text-[#8A7E75]">
         <span className="inline-flex items-center gap-1 truncate">
           <Calendar className="h-3 w-3 flex-shrink-0" />
           <span className="truncate">
@@ -204,23 +204,23 @@ function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href:
       {/* Footer: badges + price */}
       <div className="mt-2 flex items-center gap-1.5 flex-wrap">
         {b.includeGrooming && (
-          <span className="inline-flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 font-medium">
+          <span className="inline-flex items-center gap-0.5 text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 font-medium">
             <Scissors className="h-2.5 w-2.5" />
             {isFr ? 'Toilettage' : 'Grooming'}
           </span>
         )}
         {hasTaxi && (
-          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 font-medium">
+          <span className="inline-flex items-center gap-1 text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-700 font-medium">
             <Car className="h-2.5 w-2.5" />
             {taxiBadgeLabel}
           </span>
         )}
         {b.taxiType && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
+          <span className="text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
             {TAXI_LABELS[b.taxiType]?.[locale] ?? b.taxiType}
           </span>
         )}
-        <span className="ml-auto text-xs font-semibold text-[#C4974A]">{formatMAD(b.totalPrice)}</span>
+        <span className="ml-auto text-xs sm:text-sm lg:text-base font-bold text-[#C4974A]">{formatMAD(b.totalPrice)}</span>
       </div>
     </Link>
   );
@@ -237,24 +237,24 @@ function Column({ col, cards, locale }: ColumnProps) {
   const label = locale === 'fr' ? col.label.fr : col.label.en;
   const sublabel = locale === 'fr' ? col.sublabel.fr : col.sublabel.en;
   return (
-    <div className="flex flex-col min-w-[240px] w-[240px] flex-shrink-0">
-      <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-t-lg ${col.color} border-b`}>
-        <div className="w-8 h-8 rounded-lg bg-white/70 flex items-center justify-center flex-shrink-0">
-          <Icon className="h-4 w-4 text-charcoal/75" />
+    <div className="flex flex-col min-w-0">
+      <div className={`flex items-center gap-2 sm:gap-2.5 px-3 py-2 sm:px-4 sm:py-3 lg:px-5 lg:py-4 rounded-t-lg ${col.color} border-b`}>
+        <div className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 rounded-lg bg-white/70 flex items-center justify-center flex-shrink-0">
+          <Icon className="h-3 w-3 text-charcoal/75" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-charcoal leading-tight truncate">{label}</p>
-          <p className="text-[10px] text-charcoal/55 leading-tight mt-0.5 truncate">{sublabel}</p>
+          <p className="text-xs sm:text-sm lg:text-base font-bold text-charcoal leading-tight truncate">{label}</p>
+          <p className="text-[7px] sm:text-[8px] lg:text-[9px] text-charcoal/55 leading-tight mt-0.5 truncate">{sublabel}</p>
         </div>
-        <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-white/70 text-xs font-bold text-charcoal/70 flex-shrink-0">
+        <span className="inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 px-1 rounded-full bg-white/70 text-[7px] sm:text-[8px] font-bold text-charcoal/70 flex-shrink-0">
           {cards.length}
         </span>
       </div>
       <div className="flex-1 bg-[#FEFCF9] rounded-b-lg p-2 space-y-2 min-h-[120px]">
         {cards.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-24 text-gray-300 gap-1.5">
-            <Inbox className="h-5 w-5" />
-            <span className="text-[11px]">{locale === 'fr' ? 'Aucune réservation' : 'No bookings'}</span>
+            <Inbox className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12" />
+            <span className="text-[7px] sm:text-[8px] lg:text-[9px]">{locale === 'fr' ? 'Aucune réservation' : 'No bookings'}</span>
           </div>
         ) : (
           cards.map((b) => (
@@ -528,16 +528,16 @@ function TaxiKanbanCard({
   };
 
   return (
-    <div className={`bg-white border border-[rgba(196,151,74,0.12)] rounded-xl p-3 transition-all hover:shadow-[0_4px_12px_rgba(42,37,32,0.05)] hover:-translate-y-px ${isTerminal ? 'opacity-60' : ''}`}>
+    <div className={`bg-white border border-[rgba(196,151,74,0.12)] rounded-xl p-2 sm:p-3 lg:p-4 transition-all hover:shadow-[0_4px_12px_rgba(42,37,32,0.05)] hover:-translate-y-px ${isTerminal ? 'opacity-60' : ''}`}>
       <Link href={`/${locale}/admin/reservations/${b.id}`} className="block">
         {/* Header: photo + client + pets */}
-        <div className="flex items-start gap-2.5">
-          <div className="relative w-12 h-12 rounded-[10px] overflow-hidden bg-[#F5E6CC] flex items-center justify-center flex-shrink-0">
+        <div className="flex items-start gap-2 sm:gap-3 lg:gap-4">
+          <div className="relative w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-[10px] overflow-hidden bg-[#F5E6CC] flex items-center justify-center flex-shrink-0">
             {firstPet?.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={firstPet.photoUrl} alt={firstPet.name} className="w-full h-full object-cover" />
             ) : (
-              <span className="text-xs font-bold text-[#8B6A2F]">{getInitials(b.clientName)}</span>
+              <span className="text-[10px] sm:text-xs font-bold text-[#8B6A2F]">{getInitials(b.clientName)}</span>
             )}
             {extraCount > 0 && (
               <span className="absolute -bottom-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#C4974A] text-white text-[9px] font-bold leading-none">
@@ -546,8 +546,8 @@ function TaxiKanbanCard({
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-[#2A2520] truncate leading-tight">{b.clientName}</p>
-            <p className="text-[11px] text-[#8B6A2F] mt-1 flex items-center gap-1 truncate">
+            <p className="text-xs sm:text-sm lg:text-base font-bold text-[#2A2520] truncate leading-tight">{b.clientName}</p>
+            <p className="text-[8px] sm:text-[9px] lg:text-[10px] text-[#8B6A2F] mt-1 flex items-center gap-1 truncate">
               <PawPrint className="h-3 w-3 flex-shrink-0" />
               <span className="truncate">{petLine}</span>
             </p>
@@ -558,13 +558,13 @@ function TaxiKanbanCard({
         {(departure || arrival) && (
           <div className="mt-2 space-y-0.5">
             {departure && (
-              <div className="flex items-start gap-1 text-[11px] text-[#8A7E75]">
+              <div className="flex items-start gap-1 text-[7px] sm:text-[8px] lg:text-[9px] text-[#8A7E75]">
                 <MapPin className="h-3 w-3 flex-shrink-0 text-green-500 mt-px" />
                 <span className="truncate">{departure}</span>
               </div>
             )}
             {arrival && (
-              <div className="flex items-start gap-1 text-[11px] text-[#8A7E75]">
+              <div className="flex items-start gap-1 text-[7px] sm:text-[8px] lg:text-[9px] text-[#8A7E75]">
                 <MapPin className="h-3 w-3 flex-shrink-0 text-red-400 mt-px" />
                 <span className="truncate">{arrival}</span>
               </div>
@@ -573,7 +573,7 @@ function TaxiKanbanCard({
         )}
 
         {/* Meta */}
-        <div className="mt-2 flex items-center gap-3 text-[11px] text-[#8A7E75]">
+        <div className="mt-2 flex items-center gap-2 sm:gap-3 text-[7px] sm:text-[8px] lg:text-[9px] text-[#8A7E75]">
           <span className="inline-flex items-center gap-1">
             <Calendar className="h-3 w-3 flex-shrink-0" />
             {formatDateShortLocal(taxiDate, locale)}
@@ -589,12 +589,12 @@ function TaxiKanbanCard({
         {/* Badges */}
         <div className="mt-2 flex items-center gap-1.5 flex-wrap">
           {b.taxiType && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
+            <span className="text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
               {TAXI_LABELS[b.taxiType]?.[locale] ?? b.taxiType}
             </span>
           )}
           {b._cardType && (
-            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 font-medium">
+            <span className="inline-flex items-center gap-1 text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-700 font-medium">
               <Car className="h-2.5 w-2.5" />
               {b._cardType === 'GO' ? (isFr ? 'Aller' : 'Go') : (isFr ? 'Retour' : 'Return')}
             </span>
@@ -605,7 +605,7 @@ function TaxiKanbanCard({
         <button
           onClick={handleAction}
           disabled={loading}
-          className="mt-2.5 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold bg-[#FEFCF9] text-[#C4974A] border border-[#C4974A]/50 hover:bg-[#C4974A] hover:text-white hover:border-[#C4974A] transition-all disabled:opacity-50"
+          className="mt-2.5 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] sm:text-xs lg:text-sm font-semibold bg-[#FEFCF9] text-[#C4974A] border border-[#C4974A]/50 hover:bg-[#C4974A] hover:text-white hover:border-[#C4974A] transition-all disabled:opacity-50"
         >
           {loading ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -634,24 +634,24 @@ function TaxiKanbanColumn({
   const label = locale === 'fr' ? col.label.fr : col.label.en;
   const sublabel = locale === 'fr' ? col.sublabel.fr : col.sublabel.en;
   return (
-    <div className="flex flex-col min-w-[220px] w-[220px] flex-shrink-0">
-      <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-t-lg ${col.color} border-b`}>
-        <div className="w-8 h-8 rounded-lg bg-white/70 flex items-center justify-center flex-shrink-0">
-          <Icon className="h-4 w-4 text-charcoal/75" />
+    <div className="flex flex-col min-w-0">
+      <div className={`flex items-center gap-2 sm:gap-2.5 px-3 py-2 sm:px-4 sm:py-3 lg:px-5 lg:py-4 rounded-t-lg ${col.color} border-b`}>
+        <div className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 rounded-lg bg-white/70 flex items-center justify-center flex-shrink-0">
+          <Icon className="h-3 w-3 text-charcoal/75" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-charcoal leading-tight truncate">{label}</p>
-          <p className="text-[10px] text-charcoal/55 leading-tight mt-0.5 truncate">{sublabel}</p>
+          <p className="text-xs sm:text-sm lg:text-base font-bold text-charcoal leading-tight truncate">{label}</p>
+          <p className="text-[7px] sm:text-[8px] lg:text-[9px] text-charcoal/55 leading-tight mt-0.5 truncate">{sublabel}</p>
         </div>
-        <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-white/70 text-xs font-bold text-charcoal/70 flex-shrink-0">
+        <span className="inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 px-1 rounded-full bg-white/70 text-[7px] sm:text-[8px] font-bold text-charcoal/70 flex-shrink-0">
           {cards.length}
         </span>
       </div>
       <div className="flex-1 bg-[#FEFCF9] rounded-b-lg p-2 space-y-2 min-h-[120px]">
         {cards.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-24 text-gray-300 gap-1.5">
-            <Inbox className="h-5 w-5" />
-            <span className="text-[11px]">{locale === 'fr' ? 'Aucun trajet' : 'No rides'}</span>
+            <Inbox className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12" />
+            <span className="text-[7px] sm:text-[8px] lg:text-[9px]">{locale === 'fr' ? 'Aucun trajet' : 'No rides'}</span>
           </div>
         ) : (
           cards.map((c) => (
@@ -969,13 +969,11 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
 
       {/* BOARDING Kanban */}
       {tab === 'BOARDING' && (
-        <div className="overflow-x-auto pb-4">
-          <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
             <Column col={PENSION_KANBAN_COLS[0]} cards={pending}    locale={locale} />
             <Column col={PENSION_KANBAN_COLS[1]} cards={confirmed}  locale={locale} />
             <Column col={PENSION_KANBAN_COLS[2]} cards={inProgress} locale={locale} />
             <Column col={PENSION_KANBAN_COLS[3]} cards={completed}  locale={locale} />
-          </div>
         </div>
       )}
 
@@ -985,24 +983,22 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
           {/* Section Aller (OUTBOUND + STANDALONE) */}
           <div className="space-y-3">
             <div className="flex items-center gap-2.5">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-100 text-sky-700 text-sm font-semibold">
-                <ArrowRight className="h-3.5 w-3.5" />
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-100 text-sky-700 text-xs sm:text-sm lg:text-base font-bold">
+                <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6" />
                 {isFr ? 'Aller' : 'Outbound'}
               </span>
-              <span className="text-xs text-gray-400">{allerCards.length} trajet{allerCards.length > 1 ? 's' : ''}</span>
+              <span className="text-[7px] sm:text-[8px] lg:text-[9px] text-gray-400">{allerCards.length} trajet{allerCards.length > 1 ? 's' : ''}</span>
             </div>
-            <div className="overflow-x-auto pb-2">
-              <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
-                {ALLER_COLS.map((col) => (
-                  <TaxiKanbanColumn
-                    key={col.status}
-                    col={col}
-                    cards={allerCards.filter((c) => c._colStatus === col.status)}
-                    locale={locale}
-                    onStatusChange={handleTaxiStatusChange}
-                  />
-                ))}
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
+              {ALLER_COLS.map((col) => (
+                <TaxiKanbanColumn
+                  key={col.status}
+                  col={col}
+                  cards={allerCards.filter((c) => c._colStatus === col.status)}
+                  locale={locale}
+                  onStatusChange={handleTaxiStatusChange}
+                />
+              ))}
             </div>
           </div>
 
@@ -1011,24 +1007,22 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
           {/* Section Retour (RETURN) */}
           <div className="space-y-3">
             <div className="flex items-center gap-2.5">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-sm font-semibold">
-                <ArrowLeft className="h-3.5 w-3.5" />
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-xs sm:text-sm lg:text-base font-bold">
+                <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6" />
                 {isFr ? 'Retour' : 'Return'}
               </span>
-              <span className="text-xs text-gray-400">{retourCards.length} trajet{retourCards.length > 1 ? 's' : ''}</span>
+              <span className="text-[7px] sm:text-[8px] lg:text-[9px] text-gray-400">{retourCards.length} trajet{retourCards.length > 1 ? 's' : ''}</span>
             </div>
-            <div className="overflow-x-auto pb-2">
-              <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
-                {RETOUR_COLS.map((col) => (
-                  <TaxiKanbanColumn
-                    key={col.status}
-                    col={col}
-                    cards={retourCards.filter((c) => c._colStatus === col.status)}
-                    locale={locale}
-                    onStatusChange={handleTaxiStatusChange}
-                  />
-                ))}
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
+              {RETOUR_COLS.map((col) => (
+                <TaxiKanbanColumn
+                  key={col.status}
+                  col={col}
+                  cards={retourCards.filter((c) => c._colStatus === col.status)}
+                  locale={locale}
+                  onStatusChange={handleTaxiStatusChange}
+                />
+              ))}
             </div>
           </div>
         </div>
