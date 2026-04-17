@@ -29,6 +29,13 @@ interface BookingCard {
   taxiReturnStatus: string | null;
   taxiReturnDate: string | null;
   taxiReturnTime: string | null;
+  taxiGoTripId: string | null;
+  taxiReturnTripId: string | null;
+  standaloneTripId: string | null;
+  standaloneTripStatus: string | null;
+  taxiGoAddress: string | null;
+  taxiReturnAddress: string | null;
+  standaloneTripAddress: string | null;
   notes: string | null;
   updatedAt: string;
 }
@@ -265,26 +272,47 @@ function BoardingTaxiCard({ t, locale }: { t: AllBoardingTaxi; locale: string })
 
 // ─── PET TAXI Kanban ───────────────────────────────────────────────────────
 
-const TAXI_KANBAN_COLS = [
-  { status: 'PENDING',     label: { fr: 'Transport planifié',               en: 'Transport planned' },   color: 'bg-amber-50 border-amber-100',  dot: 'bg-amber-400' },
-  { status: 'CONFIRMED',   label: { fr: 'En route vers le point de départ',  en: 'En route to pickup' },  color: 'bg-blue-50 border-blue-100',    dot: 'bg-blue-400' },
-  { status: 'AT_PICKUP',   label: { fr: 'Sur place',                         en: 'At pickup point' },     color: 'bg-teal-50 border-teal-100',    dot: 'bg-teal-400' },
-  { status: 'IN_PROGRESS', label: { fr: 'Animal à bord',                     en: 'Pet on board' },        color: 'bg-green-50 border-green-100',  dot: 'bg-green-400' },
-  { status: 'COMPLETED',   label: { fr: 'Arrivé à destination',              en: 'Arrived' },             color: 'bg-gray-50 border-gray-100',    dot: 'bg-gray-300' },
+// ALLER = OUTBOUND + STANDALONE
+const ALLER_COLS = [
+  { status: 'PLANNED',            label: { fr: 'Planifié',             en: 'Planned' },            color: 'bg-amber-50 border-amber-200',   dot: 'bg-amber-400' },
+  { status: 'EN_ROUTE_TO_CLIENT', label: { fr: 'En route vers client', en: 'En route to client' }, color: 'bg-sky-50 border-sky-200',       dot: 'bg-sky-500' },
+  { status: 'ON_SITE_CLIENT',     label: { fr: 'Sur place',            en: 'On site' },             color: 'bg-teal-50 border-teal-200',     dot: 'bg-teal-500' },
+  { status: 'ANIMAL_ON_BOARD',    label: { fr: 'Animal à bord',        en: 'Pet on board' },        color: 'bg-cyan-50 border-cyan-200',     dot: 'bg-cyan-600' },
+  { status: 'ARRIVED_AT_PENSION', label: { fr: 'Arrivé à la pension',  en: 'At pension' },          color: 'bg-green-50 border-green-200',   dot: 'bg-green-500' },
 ];
 
-const TAXI_NEXT_STATUS: Record<string, string> = {
-  PENDING:     'CONFIRMED',
-  CONFIRMED:   'AT_PICKUP',
-  AT_PICKUP:   'IN_PROGRESS',
-  IN_PROGRESS: 'COMPLETED',
+// RETOUR = RETURN uniquement
+const RETOUR_COLS = [
+  { status: 'PLANNED',            label: { fr: 'Planifié',              en: 'Planned' },             color: 'bg-amber-50 border-amber-200',   dot: 'bg-amber-400' },
+  { status: 'ANIMAL_ON_BOARD',    label: { fr: 'Animal à bord',         en: 'Pet on board' },        color: 'bg-orange-50 border-orange-200', dot: 'bg-orange-500' },
+  { status: 'EN_ROUTE_TO_CLIENT', label: { fr: 'En route vers client',  en: 'En route to client' },  color: 'bg-amber-100 border-amber-300',  dot: 'bg-amber-600' },
+  { status: 'ARRIVED_AT_CLIENT',  label: { fr: 'Arrivé chez le client', en: 'At client' },           color: 'bg-green-50 border-green-200',   dot: 'bg-green-500' },
+];
+
+const ALLER_NEXT: Record<string, string> = {
+  PLANNED:            'EN_ROUTE_TO_CLIENT',
+  EN_ROUTE_TO_CLIENT: 'ON_SITE_CLIENT',
+  ON_SITE_CLIENT:     'ANIMAL_ON_BOARD',
+  ANIMAL_ON_BOARD:    'ARRIVED_AT_PENSION',
 };
 
-const TAXI_ACTION_LABELS: Record<string, { fr: string; en: string }> = {
-  PENDING:     { fr: 'Véhicule en route vers le point de départ', en: 'Vehicle en route to pickup' },
-  CONFIRMED:   { fr: 'Véhicule sur place',   en: 'Vehicle on site' },
-  AT_PICKUP:   { fr: 'Animal à bord',        en: 'Pet on board' },
-  IN_PROGRESS: { fr: 'Arrivé à destination', en: 'Mark arrived' },
+const RETOUR_NEXT: Record<string, string> = {
+  PLANNED:            'ANIMAL_ON_BOARD',
+  ANIMAL_ON_BOARD:    'EN_ROUTE_TO_CLIENT',
+  EN_ROUTE_TO_CLIENT: 'ARRIVED_AT_CLIENT',
+};
+
+const ALLER_ACTION_LABELS: Record<string, { fr: string; en: string }> = {
+  PLANNED:            { fr: 'Véhicule en route vers le client', en: 'Vehicle en route to client' },
+  EN_ROUTE_TO_CLIENT: { fr: 'Véhicule sur place',              en: 'Vehicle on site' },
+  ON_SITE_CLIENT:     { fr: 'Animal à bord',                   en: 'Pet on board' },
+  ANIMAL_ON_BOARD:    { fr: 'Arrivé à la pension',             en: 'Arrived at pension' },
+};
+
+const RETOUR_ACTION_LABELS: Record<string, { fr: string; en: string }> = {
+  PLANNED:            { fr: 'Animal à bord',           en: 'Pet on board' },
+  ANIMAL_ON_BOARD:    { fr: 'En route vers le client', en: 'En route to client' },
+  EN_ROUTE_TO_CLIENT: { fr: 'Arrivé chez le client',  en: 'Arrived at client' },
 };
 
 function parseAddresses(notes: string | null): { departure: string | null; arrival: string | null } {
@@ -308,8 +336,9 @@ function TaxiKanbanCard({
 }) {
   const isFr = locale === 'fr';
   const [loading, setLoading] = useState(false);
-  const nextStatus = TAXI_NEXT_STATUS[b._colStatus];
-  const actionLabel = nextStatus ? TAXI_ACTION_LABELS[b._colStatus] : null;
+  const isRetour = b._cardType === 'RETURN';
+  const nextStatus = (isRetour ? RETOUR_NEXT : ALLER_NEXT)[b._colStatus];
+  const actionLabel = nextStatus ? (isRetour ? RETOUR_ACTION_LABELS : ALLER_ACTION_LABELS)[b._colStatus] : null;
   const { departure, arrival } = parseAddresses(b.notes);
   const petLine = b.pets.map((p) => `${SPECIES_EMOJI[p.species] ?? '🐾'} ${p.name}`).join(' · ');
 
@@ -319,23 +348,17 @@ function TaxiKanbanCard({
     if (!nextStatus) return;
     setLoading(true);
     try {
-      let res: Response;
-      if (b._cardType === null) {
-        // Standalone PET_TAXI: update booking status
-        res = await fetch(`/api/admin/bookings/${b.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: nextStatus }),
-        });
-      } else {
-        // Boarding taxi add-on: update taxiGoStatus or taxiReturnStatus
-        const field = b._cardType === 'GO' ? 'taxiGoStatus' : 'taxiReturnStatus';
-        res = await fetch(`/api/reservations/${b.id}/taxi-status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ field, nextStatus }),
-        });
-      }
+      const tripId = b._cardType === 'GO'
+        ? b.taxiGoTripId
+        : b._cardType === 'RETURN'
+        ? b.taxiReturnTripId
+        : b.standaloneTripId;
+      if (!tripId) throw new Error('No tripId');
+      const res = await fetch(`/api/admin/taxi-trips/${tripId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nextStatus }),
+      });
       if (!res.ok) throw new Error('Failed');
       const field = b._cardType === 'GO' ? 'taxiGoStatus' : b._cardType === 'RETURN' ? 'taxiReturnStatus' : undefined;
       onStatusChange(b.id, nextStatus, field);
@@ -424,7 +447,7 @@ function TaxiKanbanColumn({
   locale,
   onStatusChange,
 }: {
-  col: typeof TAXI_KANBAN_COLS[number];
+  col: { status: string; label: { fr: string; en: string }; color: string; dot: string };
   cards: TaxiCard[];
   locale: string;
   onStatusChange: (id: string, newStatus: string, field?: 'taxiGoStatus' | 'taxiReturnStatus') => void;
@@ -472,16 +495,19 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
   for (const b of bookings) {
     if (b.serviceType === 'BOARDING') {
       if (b.taxiGoEnabled) {
-        taxiCards.push({ ...b, _cardType: 'GO', _colStatus: b.taxiGoStatus ?? 'PENDING', _taxiCardKey: `${b.id}-GO` });
+        taxiCards.push({ ...b, _cardType: 'GO', _colStatus: b.taxiGoStatus ?? 'PLANNED', _taxiCardKey: `${b.id}-GO` });
       }
       if (b.taxiReturnEnabled) {
-        taxiCards.push({ ...b, _cardType: 'RETURN', _colStatus: b.taxiReturnStatus ?? 'PENDING', _taxiCardKey: `${b.id}-RETURN` });
+        taxiCards.push({ ...b, _cardType: 'RETURN', _colStatus: b.taxiReturnStatus ?? 'PLANNED', _taxiCardKey: `${b.id}-RETURN` });
       }
     } else if (b.serviceType === 'PET_TAXI') {
-      taxiCards.push({ ...b, _cardType: null, _colStatus: b.status, _taxiCardKey: b.id });
+      taxiCards.push({ ...b, _cardType: null, _colStatus: b.standaloneTripStatus ?? 'PLANNED', _taxiCardKey: b.id });
     }
   }
-  const taxiTabCount = taxiCards.filter((c) => c._colStatus !== 'COMPLETED').length;
+  const TERMINAL = new Set(['ARRIVED_AT_PENSION', 'ARRIVED_AT_CLIENT']);
+  const taxiTabCount = taxiCards.filter((c) => !TERMINAL.has(c._colStatus)).length;
+  const allerCards = taxiCards.filter((c) => c._cardType === 'GO' || c._cardType === null);
+  const retourCards = taxiCards.filter((c) => c._cardType === 'RETURN');
 
   // Compute date buckets for boarding taxi add-on sections
   const todayTs = new Date();
@@ -795,19 +821,57 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
         </div>
       )}
 
-      {/* PET TAXI — Kanban 5 colonnes */}
+      {/* PET TAXI — Aller + Retour */}
       {tab === 'PET_TAXI' && (
-        <div className="overflow-x-auto pb-4">
-          <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
-            {TAXI_KANBAN_COLS.map((col) => (
-              <TaxiKanbanColumn
-                key={col.status}
-                col={col}
-                cards={taxiCards.filter((c) => c._colStatus === col.status)}
-                locale={locale}
-                onStatusChange={handleTaxiStatusChange}
-              />
-            ))}
+        <div className="space-y-6">
+          {/* Section Aller (OUTBOUND + STANDALONE) */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2.5">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-100 text-sky-700 text-sm font-semibold">
+                <ArrowRight className="h-3.5 w-3.5" />
+                {isFr ? 'Aller' : 'Outbound'}
+              </span>
+              <span className="text-xs text-gray-400">{allerCards.length} trajet{allerCards.length > 1 ? 's' : ''}</span>
+            </div>
+            <div className="overflow-x-auto pb-2">
+              <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
+                {ALLER_COLS.map((col) => (
+                  <TaxiKanbanColumn
+                    key={col.status}
+                    col={col}
+                    cards={allerCards.filter((c) => c._colStatus === col.status)}
+                    locale={locale}
+                    onStatusChange={handleTaxiStatusChange}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-dashed border-gray-200" />
+
+          {/* Section Retour (RETURN) */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2.5">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-sm font-semibold">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                {isFr ? 'Retour' : 'Return'}
+              </span>
+              <span className="text-xs text-gray-400">{retourCards.length} trajet{retourCards.length > 1 ? 's' : ''}</span>
+            </div>
+            <div className="overflow-x-auto pb-2">
+              <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
+                {RETOUR_COLS.map((col) => (
+                  <TaxiKanbanColumn
+                    key={col.status}
+                    col={col}
+                    cards={retourCards.filter((c) => c._colStatus === col.status)}
+                    locale={locale}
+                    onStatusChange={handleTaxiStatusChange}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
