@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { SidebarSkyline } from './SidebarSkyline';
 
 interface NavItem {
   href: string;
@@ -112,6 +113,9 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, userRol
           );
         })}
       </nav>
+
+      {/* Skyline décorative marocaine */}
+      <SidebarSkyline />
 
       {/* Logout */}
       <div className="px-3 pb-4 pt-2 border-t border-[#F0D98A]/20">
