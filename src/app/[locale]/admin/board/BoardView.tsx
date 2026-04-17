@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   PawPrint, Car, Home, ArrowRight, ArrowLeft, Scissors, Loader2, MapPin, Clock,
+  CalendarCheck, CheckCheck, Calendar, Inbox,
 } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -18,7 +19,7 @@ interface BookingCard {
   totalPrice: number;
   clientName: string;
   clientId: string;
-  pets: { name: string; species: string }[];
+  pets: { name: string; species: string; photoUrl: string | null }[];
   taxiType: string | null;
   includeGrooming: boolean;
   taxiGoEnabled: boolean;
@@ -76,8 +77,6 @@ interface Props {
   bookings: BookingCard[];
   stats: Stats;
 }
-
-const SPECIES_EMOJI: Record<string, string> = { DOG: '🐕', CAT: '🐈' };
 
 const TAXI_LABELS: Record<string, Record<string, string>> = {
   STANDARD: { fr: 'Standard', en: 'Standard' },
@@ -139,93 +138,124 @@ function categorize(bookings: BookingCard[], serviceType: 'BOARDING' | 'PET_TAXI
 function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href: string }) {
   const isFr = locale === 'fr';
   const nights = nightCount(b.startDate, b.endDate);
-  const petLine = b.pets.map((p) => `${SPECIES_EMOJI[p.species] ?? '🐾'} ${p.name}`).join(' · ');
+  const petLine = b.pets.map((p) => p.name).join(' · ');
+  const firstPet = b.pets[0];
+  const extraCount = Math.max(0, b.pets.length - 1);
   const hasTaxi = b.taxiGoEnabled || b.taxiReturnEnabled;
   const taxiBadgeLabel = b.taxiGoEnabled && b.taxiReturnEnabled
-    ? 'Aller + Retour'
+    ? (isFr ? 'Aller + Retour' : 'Go + Return')
     : b.taxiGoEnabled
-    ? 'Aller'
-    : 'Retour';
+    ? (isFr ? 'Aller' : 'Go')
+    : (isFr ? 'Retour' : 'Return');
+  const isCompleted = b.status === 'COMPLETED';
 
   return (
     <Link
       href={href}
-      className="block bg-white border border-ivory-200 rounded-xl p-3.5 hover:border-gold-300 hover:shadow-md transition-all group"
+      className={`block bg-white border border-[rgba(196,151,74,0.12)] rounded-xl p-3 transition-all hover:shadow-[0_4px_12px_rgba(42,37,32,0.05)] hover:-translate-y-px ${isCompleted ? 'opacity-60' : ''}`}
     >
-      {/* Client */}
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-7 h-7 rounded-full bg-gold-100 flex items-center justify-center text-[10px] font-bold text-gold-700 flex-shrink-0">
-          {getInitials(b.clientName)}
+      {/* Header: photo + client + pets */}
+      <div className="flex items-start gap-2.5">
+        <div className="relative w-12 h-12 rounded-[10px] overflow-hidden bg-[#F5E6CC] flex items-center justify-center flex-shrink-0">
+          {firstPet?.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={firstPet.photoUrl} alt={firstPet.name} className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-xs font-bold text-[#8B6A2F]">{getInitials(b.clientName)}</span>
+          )}
+          {extraCount > 0 && (
+            <span className="absolute -bottom-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#C4974A] text-white text-[9px] font-bold leading-none">
+              +{extraCount}
+            </span>
+          )}
         </div>
-        <span className="text-sm font-semibold text-charcoal truncate">{b.clientName}</span>
-        <ArrowRight className="h-3 w-3 text-gray-300 group-hover:text-gold-500 ml-auto flex-shrink-0 transition-colors" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-semibold text-[#2A2520] truncate leading-tight">{b.clientName}</p>
+          <p className="text-[11px] text-[#8B6A2F] mt-1 flex items-center gap-1 truncate">
+            <PawPrint className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">{petLine}</span>
+          </p>
+        </div>
       </div>
 
-      {/* Pets */}
-      <p className="text-xs text-gray-500 mb-2 truncate">{petLine}</p>
-
-      {/* Dates */}
-      <div className="text-xs text-charcoal/70 mb-2">
-        {b.serviceType === 'BOARDING' ? (
-          <span>
+      {/* Meta */}
+      <div className="mt-2.5 flex items-center gap-3 text-[11px] text-[#8A7E75]">
+        <span className="inline-flex items-center gap-1 truncate">
+          <Calendar className="h-3 w-3 flex-shrink-0" />
+          <span className="truncate">
             {formatDateShortLocal(b.startDate, locale)}
-            {b.endDate && ` → ${formatDateShortLocal(b.endDate, locale)}`}
-            {nights > 0 && (
-              <span className="ml-1 text-gray-400">({nights} {isFr ? `nuit${nights > 1 ? 's' : ''}` : `night${nights > 1 ? 's' : ''}`})</span>
-            )}
+            {b.serviceType === 'BOARDING' && b.endDate && ` → ${formatDateShortLocal(b.endDate, locale)}`}
           </span>
-        ) : (
-          <span>
-            {formatDateShortLocal(b.startDate, locale)}
-            {b.arrivalTime && <span className="ml-1 text-gray-400">à {b.arrivalTime}</span>}
+        </span>
+        {b.serviceType === 'BOARDING' && nights > 0 && (
+          <span className="inline-flex items-center gap-1 flex-shrink-0">
+            <Clock className="h-3 w-3" />
+            {nights} {isFr ? `nuit${nights > 1 ? 's' : ''}` : `night${nights > 1 ? 's' : ''}`}
+          </span>
+        )}
+        {b.serviceType === 'PET_TAXI' && b.arrivalTime && (
+          <span className="inline-flex items-center gap-1 flex-shrink-0">
+            <Clock className="h-3 w-3" />
+            {b.arrivalTime}
           </span>
         )}
       </div>
 
       {/* Footer: badges + price */}
-      <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
         {b.includeGrooming && (
-          <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 font-medium">
+          <span className="inline-flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 font-medium">
             <Scissors className="h-2.5 w-2.5" />
             {isFr ? 'Toilettage' : 'Grooming'}
           </span>
         )}
         {hasTaxi && (
-          <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 font-medium">
-            🚗 {taxiBadgeLabel}
+          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 font-medium">
+            <Car className="h-2.5 w-2.5" />
+            {taxiBadgeLabel}
           </span>
         )}
         {b.taxiType && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
             {TAXI_LABELS[b.taxiType]?.[locale] ?? b.taxiType}
           </span>
         )}
-        <span className="ml-auto text-xs font-semibold text-gold-700">{formatMAD(b.totalPrice)}</span>
+        <span className="ml-auto text-xs font-semibold text-[#C4974A]">{formatMAD(b.totalPrice)}</span>
       </div>
     </Link>
   );
 }
 
 interface ColumnProps {
-  title: string;
-  count: number;
+  col: typeof PENSION_KANBAN_COLS[number];
   cards: BookingCard[];
-  color: string;
-  dotColor: string;
   locale: string;
 }
 
-function Column({ title, count, cards, color, dotColor, locale }: ColumnProps) {
+function Column({ col, cards, locale }: ColumnProps) {
+  const Icon = col.icon;
+  const label = locale === 'fr' ? col.label.fr : col.label.en;
+  const sublabel = locale === 'fr' ? col.sublabel.fr : col.sublabel.en;
   return (
     <div className="flex flex-col min-w-[240px] w-[240px] flex-shrink-0">
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-t-lg ${color} border-b`}>
-        <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-        <span className="text-xs font-semibold text-charcoal flex-1">{title}</span>
-        <span className="text-xs font-bold text-charcoal/50">{count}</span>
+      <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-t-lg ${col.color} border-b`}>
+        <div className="w-8 h-8 rounded-lg bg-white/70 flex items-center justify-center flex-shrink-0">
+          <Icon className="h-4 w-4 text-charcoal/75" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-charcoal leading-tight truncate">{label}</p>
+          <p className="text-[10px] text-charcoal/55 leading-tight mt-0.5 truncate">{sublabel}</p>
+        </div>
+        <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-white/70 text-xs font-bold text-charcoal/70 flex-shrink-0">
+          {cards.length}
+        </span>
       </div>
-      <div className="flex-1 bg-ivory-50/80 rounded-b-lg p-2 space-y-2 min-h-[120px]">
+      <div className="flex-1 bg-[#FEFCF9] rounded-b-lg p-2 space-y-2 min-h-[120px]">
         {cards.length === 0 ? (
-          <div className="flex items-center justify-center h-20 text-xs text-gray-300">—</div>
+          <div className="flex flex-col items-center justify-center h-24 text-gray-300 gap-1.5">
+            <Inbox className="h-5 w-5" />
+            <span className="text-[11px]">{locale === 'fr' ? 'Aucune réservation' : 'No bookings'}</span>
+          </div>
         ) : (
           cards.map((b) => (
             <KanbanCard
@@ -270,23 +300,141 @@ function BoardingTaxiCard({ t, locale }: { t: AllBoardingTaxi; locale: string })
   );
 }
 
+// ─── PENSION Kanban config ─────────────────────────────────────────────────
+
+type PensionColKey = 'pending' | 'confirmed' | 'inProgress' | 'completed';
+
+const PENSION_KANBAN_COLS: {
+  key: PensionColKey;
+  label: { fr: string; en: string };
+  sublabel: { fr: string; en: string };
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  dot: string;
+}[] = [
+  {
+    key: 'pending',
+    label:    { fr: 'En attente',                en: 'Pending' },
+    sublabel: { fr: 'Réservations à confirmer',  en: 'Awaiting confirmation' },
+    icon: Clock,
+    color: 'bg-amber-50 border-amber-100',
+    dot:   'bg-amber-400',
+  },
+  {
+    key: 'confirmed',
+    label:    { fr: 'Confirmé',          en: 'Confirmed' },
+    sublabel: { fr: 'Séjours confirmés', en: 'Confirmed stays' },
+    icon: CalendarCheck,
+    color: 'bg-blue-50 border-blue-100',
+    dot:   'bg-blue-400',
+  },
+  {
+    key: 'inProgress',
+    label:    { fr: 'En cours',                  en: 'In progress' },
+    sublabel: { fr: 'Actuellement en pension',   en: 'Currently boarding' },
+    icon: Home,
+    color: 'bg-green-50 border-green-100',
+    dot:   'bg-green-400',
+  },
+  {
+    key: 'completed',
+    label:    { fr: 'Terminé (7j)',      en: 'Completed (7d)' },
+    sublabel: { fr: 'Séjours terminés',  en: 'Finished stays' },
+    icon: CheckCheck,
+    color: 'bg-gray-50 border-gray-100',
+    dot:   'bg-gray-300',
+  },
+];
+
 // ─── PET TAXI Kanban ───────────────────────────────────────────────────────
 
+type TaxiColConfig = {
+  status: string;
+  label: { fr: string; en: string };
+  sublabel: { fr: string; en: string };
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  dot: string;
+};
+
 // ALLER = OUTBOUND + STANDALONE
-const ALLER_COLS = [
-  { status: 'PLANNED',            label: { fr: 'Planifié',             en: 'Planned' },            color: 'bg-amber-50 border-amber-200',   dot: 'bg-amber-400' },
-  { status: 'EN_ROUTE_TO_CLIENT', label: { fr: 'En route vers client', en: 'En route to client' }, color: 'bg-sky-50 border-sky-200',       dot: 'bg-sky-500' },
-  { status: 'ON_SITE_CLIENT',     label: { fr: 'Sur place',            en: 'On site' },             color: 'bg-teal-50 border-teal-200',     dot: 'bg-teal-500' },
-  { status: 'ANIMAL_ON_BOARD',    label: { fr: 'Animal à bord',        en: 'Pet on board' },        color: 'bg-cyan-50 border-cyan-200',     dot: 'bg-cyan-600' },
-  { status: 'ARRIVED_AT_PENSION', label: { fr: 'Arrivé à la pension',  en: 'At pension' },          color: 'bg-green-50 border-green-200',   dot: 'bg-green-500' },
+const ALLER_COLS: TaxiColConfig[] = [
+  {
+    status: 'PLANNED',
+    label:    { fr: 'Planifié',        en: 'Planned' },
+    sublabel: { fr: 'Trajets à venir', en: 'Upcoming rides' },
+    icon: Clock,
+    color: 'bg-amber-50 border-amber-200',
+    dot:   'bg-amber-400',
+  },
+  {
+    status: 'EN_ROUTE_TO_CLIENT',
+    label:    { fr: 'En route vers le client', en: 'En route to client' },
+    sublabel: { fr: 'Véhicule en approche',    en: 'Vehicle approaching' },
+    icon: Car,
+    color: 'bg-sky-50 border-sky-200',
+    dot:   'bg-sky-500',
+  },
+  {
+    status: 'ON_SITE_CLIENT',
+    label:    { fr: 'Sur place',    en: 'On site' },
+    sublabel: { fr: 'Chez le client', en: 'At client location' },
+    icon: MapPin,
+    color: 'bg-teal-50 border-teal-200',
+    dot:   'bg-teal-500',
+  },
+  {
+    status: 'ANIMAL_ON_BOARD',
+    label:    { fr: 'Animal à bord',  en: 'Pet on board' },
+    sublabel: { fr: 'Trajet en cours', en: 'Ride in progress' },
+    icon: PawPrint,
+    color: 'bg-cyan-50 border-cyan-200',
+    dot:   'bg-cyan-600',
+  },
+  {
+    status: 'ARRIVED_AT_PENSION',
+    label:    { fr: 'Arrivé à la pension', en: 'At pension' },
+    sublabel: { fr: 'Déposé avec succès',  en: 'Successfully dropped off' },
+    icon: Home,
+    color: 'bg-green-50 border-green-200',
+    dot:   'bg-green-500',
+  },
 ];
 
 // RETOUR = RETURN uniquement
-const RETOUR_COLS = [
-  { status: 'PLANNED',            label: { fr: 'Planifié',              en: 'Planned' },             color: 'bg-amber-50 border-amber-200',   dot: 'bg-amber-400' },
-  { status: 'ANIMAL_ON_BOARD',    label: { fr: 'Animal à bord',         en: 'Pet on board' },        color: 'bg-orange-50 border-orange-200', dot: 'bg-orange-500' },
-  { status: 'EN_ROUTE_TO_CLIENT', label: { fr: 'En route vers client',  en: 'En route to client' },  color: 'bg-amber-100 border-amber-300',  dot: 'bg-amber-600' },
-  { status: 'ARRIVED_AT_CLIENT',  label: { fr: 'Arrivé chez le client', en: 'At client' },           color: 'bg-green-50 border-green-200',   dot: 'bg-green-500' },
+const RETOUR_COLS: TaxiColConfig[] = [
+  {
+    status: 'PLANNED',
+    label:    { fr: 'Planifié',        en: 'Planned' },
+    sublabel: { fr: 'Retours à venir', en: 'Upcoming returns' },
+    icon: Clock,
+    color: 'bg-amber-50 border-amber-200',
+    dot:   'bg-amber-400',
+  },
+  {
+    status: 'ANIMAL_ON_BOARD',
+    label:    { fr: 'Animal à bord',        en: 'Pet on board' },
+    sublabel: { fr: 'Départ de la pension', en: 'Departing pension' },
+    icon: PawPrint,
+    color: 'bg-orange-50 border-orange-200',
+    dot:   'bg-orange-500',
+  },
+  {
+    status: 'EN_ROUTE_TO_CLIENT',
+    label:    { fr: 'En route vers le client', en: 'En route to client' },
+    sublabel: { fr: 'Trajet retour en cours',  en: 'Return ride in progress' },
+    icon: Car,
+    color: 'bg-amber-100 border-amber-300',
+    dot:   'bg-amber-600',
+  },
+  {
+    status: 'ARRIVED_AT_CLIENT',
+    label:    { fr: 'Arrivé chez le client', en: 'At client' },
+    sublabel: { fr: 'Retour terminé',        en: 'Return completed' },
+    icon: Home,
+    color: 'bg-green-50 border-green-200',
+    dot:   'bg-green-500',
+  },
 ];
 
 const ALLER_NEXT: Record<string, string> = {
@@ -340,7 +488,16 @@ function TaxiKanbanCard({
   const nextStatus = (isRetour ? RETOUR_NEXT : ALLER_NEXT)[b._colStatus];
   const actionLabel = nextStatus ? (isRetour ? RETOUR_ACTION_LABELS : ALLER_ACTION_LABELS)[b._colStatus] : null;
   const { departure, arrival } = parseAddresses(b.notes);
-  const petLine = b.pets.map((p) => `${SPECIES_EMOJI[p.species] ?? '🐾'} ${p.name}`).join(' · ');
+  const petLine = b.pets.map((p) => p.name).join(' · ');
+  const firstPet = b.pets[0];
+  const extraCount = Math.max(0, b.pets.length - 1);
+  const isTerminal = b._colStatus === 'ARRIVED_AT_PENSION' || b._colStatus === 'ARRIVED_AT_CLIENT';
+  const taxiDate = b._cardType === 'GO'
+    ? (b.taxiGoDate ?? b.startDate)
+    : b._cardType === 'RETURN'
+    ? (b.taxiReturnDate ?? b.startDate)
+    : b.startDate;
+  const taxiTime = b._cardType === 'GO' ? b.taxiGoTime : b._cardType === 'RETURN' ? b.taxiReturnTime : b.arrivalTime;
 
   const handleAction = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -371,54 +528,75 @@ function TaxiKanbanCard({
   };
 
   return (
-    <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group">
+    <div className={`bg-white border border-[rgba(196,151,74,0.12)] rounded-xl p-3 transition-all hover:shadow-[0_4px_12px_rgba(42,37,32,0.05)] hover:-translate-y-px ${isTerminal ? 'opacity-60' : ''}`}>
       <Link href={`/${locale}/admin/reservations/${b.id}`} className="block">
-        <div className="flex items-start justify-between gap-1 mb-1.5">
-          <div>
-            <p className="text-sm font-semibold text-charcoal leading-tight">{b.clientName}</p>
-            <p className="text-xs text-gray-500 mt-0.5 truncate">{petLine}</p>
+        {/* Header: photo + client + pets */}
+        <div className="flex items-start gap-2.5">
+          <div className="relative w-12 h-12 rounded-[10px] overflow-hidden bg-[#F5E6CC] flex items-center justify-center flex-shrink-0">
+            {firstPet?.photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={firstPet.photoUrl} alt={firstPet.name} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-xs font-bold text-[#8B6A2F]">{getInitials(b.clientName)}</span>
+            )}
+            {extraCount > 0 && (
+              <span className="absolute -bottom-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#C4974A] text-white text-[9px] font-bold leading-none">
+                +{extraCount}
+              </span>
+            )}
           </div>
-          <ArrowRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-[#2A2520] truncate leading-tight">{b.clientName}</p>
+            <p className="text-[11px] text-[#8B6A2F] mt-1 flex items-center gap-1 truncate">
+              <PawPrint className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{petLine}</span>
+            </p>
+          </div>
         </div>
+
+        {/* Addresses */}
         {(departure || arrival) && (
-          <div className="space-y-0.5 mb-1.5">
+          <div className="mt-2 space-y-0.5">
             {departure && (
-              <div className="flex items-start gap-1 text-xs text-gray-500">
+              <div className="flex items-start gap-1 text-[11px] text-[#8A7E75]">
                 <MapPin className="h-3 w-3 flex-shrink-0 text-green-500 mt-px" />
                 <span className="truncate">{departure}</span>
               </div>
             )}
             {arrival && (
-              <div className="flex items-start gap-1 text-xs text-gray-500">
+              <div className="flex items-start gap-1 text-[11px] text-[#8A7E75]">
                 <MapPin className="h-3 w-3 flex-shrink-0 text-red-400 mt-px" />
                 <span className="truncate">{arrival}</span>
               </div>
             )}
           </div>
         )}
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <span>{formatDateShortLocal(
-            b._cardType === 'GO'
-              ? (b.taxiGoDate ?? b.startDate)
-              : b._cardType === 'RETURN'
-              ? (b.taxiReturnDate ?? b.startDate)
-              : b.startDate,
-            locale
-          )}</span>
-          {(b._cardType === 'GO' ? b.taxiGoTime : b._cardType === 'RETURN' ? b.taxiReturnTime : b.arrivalTime) && (
-            <span className="flex items-center gap-0.5">
+
+        {/* Meta */}
+        <div className="mt-2 flex items-center gap-3 text-[11px] text-[#8A7E75]">
+          <span className="inline-flex items-center gap-1">
+            <Calendar className="h-3 w-3 flex-shrink-0" />
+            {formatDateShortLocal(taxiDate, locale)}
+          </span>
+          {taxiTime && (
+            <span className="inline-flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {b._cardType === 'GO' ? b.taxiGoTime : b._cardType === 'RETURN' ? b.taxiReturnTime : b.arrivalTime}
+              {taxiTime}
             </span>
           )}
+        </div>
+
+        {/* Badges */}
+        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
           {b.taxiType && (
-            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
               {TAXI_LABELS[b.taxiType]?.[locale] ?? b.taxiType}
             </span>
           )}
           {b._cardType && (
-            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 font-medium">
-              🚗 {b._cardType === 'GO' ? (isFr ? 'Aller' : 'Go') : (isFr ? 'Retour' : 'Return')}
+            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 font-medium">
+              <Car className="h-2.5 w-2.5" />
+              {b._cardType === 'GO' ? (isFr ? 'Aller' : 'Go') : (isFr ? 'Retour' : 'Return')}
             </span>
           )}
         </div>
@@ -427,7 +605,7 @@ function TaxiKanbanCard({
         <button
           onClick={handleAction}
           disabled={loading}
-          className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium bg-charcoal/5 hover:bg-charcoal/10 text-charcoal border border-charcoal/10 hover:border-charcoal/20 transition-all disabled:opacity-50"
+          className="mt-2.5 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold bg-[#FEFCF9] text-[#C4974A] border border-[#C4974A]/50 hover:bg-[#C4974A] hover:text-white hover:border-[#C4974A] transition-all disabled:opacity-50"
         >
           {loading ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -447,22 +625,34 @@ function TaxiKanbanColumn({
   locale,
   onStatusChange,
 }: {
-  col: { status: string; label: { fr: string; en: string }; color: string; dot: string };
+  col: TaxiColConfig;
   cards: TaxiCard[];
   locale: string;
   onStatusChange: (id: string, newStatus: string, field?: 'taxiGoStatus' | 'taxiReturnStatus') => void;
 }) {
+  const Icon = col.icon;
   const label = locale === 'fr' ? col.label.fr : col.label.en;
+  const sublabel = locale === 'fr' ? col.sublabel.fr : col.sublabel.en;
   return (
     <div className="flex flex-col min-w-[220px] w-[220px] flex-shrink-0">
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-t-lg ${col.color} border-b`}>
-        <span className={`w-2 h-2 rounded-full ${col.dot}`} />
-        <span className="text-xs font-semibold text-charcoal flex-1 leading-tight">{label}</span>
-        <span className="text-xs font-bold text-charcoal/50">{cards.length}</span>
+      <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-t-lg ${col.color} border-b`}>
+        <div className="w-8 h-8 rounded-lg bg-white/70 flex items-center justify-center flex-shrink-0">
+          <Icon className="h-4 w-4 text-charcoal/75" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-charcoal leading-tight truncate">{label}</p>
+          <p className="text-[10px] text-charcoal/55 leading-tight mt-0.5 truncate">{sublabel}</p>
+        </div>
+        <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-white/70 text-xs font-bold text-charcoal/70 flex-shrink-0">
+          {cards.length}
+        </span>
       </div>
-      <div className="flex-1 bg-ivory-50/80 rounded-b-lg p-2 space-y-2 min-h-[120px]">
+      <div className="flex-1 bg-[#FEFCF9] rounded-b-lg p-2 space-y-2 min-h-[120px]">
         {cards.length === 0 ? (
-          <div className="flex items-center justify-center h-20 text-xs text-gray-300">—</div>
+          <div className="flex flex-col items-center justify-center h-24 text-gray-300 gap-1.5">
+            <Inbox className="h-5 w-5" />
+            <span className="text-[11px]">{locale === 'fr' ? 'Aucun trajet' : 'No rides'}</span>
+          </div>
         ) : (
           cards.map((c) => (
             <TaxiKanbanCard key={c._taxiCardKey} b={c} locale={locale} onStatusChange={onStatusChange} />
@@ -539,10 +729,6 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
     taxis: isFr ? "Taxis aujourd'hui" : "Today's taxis",
     pension: isFr ? 'Pension' : 'Boarding',
     petTaxi: 'Pet Taxi',
-    colPending: isFr ? 'En attente' : 'Pending',
-    colConfirmed: isFr ? 'Confirmé' : 'Confirmed',
-    colInProgress: isFr ? 'En cours' : 'In progress',
-    colCompleted: isFr ? 'Terminé (7j)' : 'Completed (7d)',
     at: isFr ? 'à' : 'at',
     taxiToday: isFr ? "Aujourd'hui" : 'Today',
     taxiSoon: isFr ? 'À venir — 7 prochains jours' : 'Upcoming — next 7 days',
@@ -785,38 +971,10 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
       {tab === 'BOARDING' && (
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
-            <Column
-              title={l.colPending}
-              count={pending.length}
-              cards={pending}
-              locale={locale}
-              color="bg-amber-50 border-amber-100"
-              dotColor="bg-amber-400"
-            />
-            <Column
-              title={l.colConfirmed}
-              count={confirmed.length}
-              cards={confirmed}
-              locale={locale}
-              color="bg-blue-50 border-blue-100"
-              dotColor="bg-blue-400"
-            />
-            <Column
-              title={l.colInProgress}
-              count={inProgress.length}
-              cards={inProgress}
-              locale={locale}
-              color="bg-green-50 border-green-100"
-              dotColor="bg-green-400"
-            />
-            <Column
-              title={l.colCompleted}
-              count={completed.length}
-              cards={completed}
-              locale={locale}
-              color="bg-gray-50 border-gray-100"
-              dotColor="bg-gray-300"
-            />
+            <Column col={PENSION_KANBAN_COLS[0]} cards={pending}    locale={locale} />
+            <Column col={PENSION_KANBAN_COLS[1]} cards={confirmed}  locale={locale} />
+            <Column col={PENSION_KANBAN_COLS[2]} cards={inProgress} locale={locale} />
+            <Column col={PENSION_KANBAN_COLS[3]} cards={completed}  locale={locale} />
           </div>
         </div>
       )}

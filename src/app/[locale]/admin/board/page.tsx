@@ -30,7 +30,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
     include: {
       client: { select: { id: true, name: true, email: true } },
       bookingPets: {
-        include: { pet: { select: { name: true, species: true } } },
+        include: { pet: { select: { name: true, species: true, photoUrl: true } } },
       },
       boardingDetail: { select: { includeGrooming: true, taxiGoEnabled: true, taxiGoDate: true, taxiGoTime: true, taxiGoAddress: true, taxiReturnEnabled: true, taxiReturnDate: true, taxiReturnTime: true, taxiReturnAddress: true } },
       taxiDetail: { select: { taxiType: true } },
@@ -50,7 +50,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
     totalPrice: b.totalPrice,
     clientName: b.client?.name ?? b.client?.email ?? '',
     clientId: b.client?.id ?? '',
-    pets: b.bookingPets?.map((bp) => ({ name: bp.pet.name, species: bp.pet.species })) ?? [],
+    pets: b.bookingPets?.map((bp) => ({ name: bp.pet.name, species: bp.pet.species, photoUrl: bp.pet.photoUrl ?? null })) ?? [],
     taxiType: b.taxiDetail?.taxiType ?? null,
     includeGrooming: b.boardingDetail?.includeGrooming ?? false,
     taxiGoEnabled: b.boardingDetail?.taxiGoEnabled ?? false,
