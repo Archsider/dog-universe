@@ -2,10 +2,16 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { Users, ChevronRight } from 'lucide-react';
+import { Users, ChevronRight, Search, Wine } from 'lucide-react';
 import { formatMAD, getInitials } from '@/lib/utils';
-import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
 import CreateClientModal from './CreateClientModal';
+
+const TIER_STYLES: Record<string, { bg: string; text: string }> = {
+  BRONZE:   { bg: '#E8D4B8', text: '#7A4A28' },
+  SILVER:   { bg: '#EBEBEF', text: '#5A5A70' },
+  GOLD:     { bg: '#FBF3D0', text: '#8A6800' },
+  PLATINUM: { bg: '#E8E8F4', text: '#3A3A5A' },
+};
 
 interface PageProps {
   params: { locale: string };
@@ -52,71 +58,133 @@ export default async function AdminClientsPage({ params: { locale }, searchParam
   const l = labels[locale as keyof typeof labels] || labels.fr;
   const grades = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];
 
+  const isFr = locale === 'fr';
+  const detailsLabel = isFr ? 'Détails' : 'Details';
+  const subtitle = isFr
+    ? 'Liste de vos clients et de leurs séjours passés'
+    : 'List of your clients and their past stays';
+  const totalLabel = isFr ? 'clients au total' : 'clients total';
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500">{total} {l.clients}</span>
-          <CreateClientModal locale={locale} />
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-serif font-bold text-[#2A2520]">{l.title}</h1>
+          <p className="text-sm text-[#8A7E75] mt-1">{subtitle}</p>
         </div>
+        <CreateClientModal locale={locale} />
       </div>
 
-      <div className="flex gap-3 mb-6 flex-wrap">
-        <form className="relative flex-1 min-w-[200px]">
-          <input name="q" defaultValue={q} placeholder={l.search} className="w-full pl-4 pr-4 py-2 border border-ivory-200 rounded-lg text-sm focus:outline-none focus:border-gold-400 bg-white" />
+      {/* Search + Filter pills */}
+      <div className="flex gap-3 mb-5 flex-wrap items-center">
+        <form className="relative flex-1 min-w-[240px]">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A7E75] pointer-events-none" />
+          <input
+            name="q"
+            defaultValue={q}
+            placeholder={l.search}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-[rgba(196,151,74,0.3)] rounded-lg text-sm text-[#2A2520] placeholder:text-[#8A7E75] focus:outline-none focus:border-[#C4974A] focus:ring-2 focus:ring-[#C4974A]/15 transition"
+          />
           <input type="hidden" name="grade" value={gradeFilter} />
         </form>
         <div className="flex gap-2 flex-wrap">
-          {['', ...grades].map(g => (
-            <Link key={g || 'all'} href={`?grade=${g}&q=${q}`}>
-              <button className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${gradeFilter === g ? 'bg-charcoal text-white' : 'bg-white border border-ivory-200 text-gray-600 hover:border-gold-300'}`}>{g || l.all}</button>
-            </Link>
-          ))}
+          {['', ...grades].map(g => {
+            const active = gradeFilter === g;
+            return (
+              <Link key={g || 'all'} href={`?grade=${g}&q=${q}`}>
+                <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${
+                    active
+                      ? 'bg-[#C4974A] text-white shadow-sm'
+                      : 'bg-white text-[#8A7E75] border border-[rgba(196,151,74,0.3)] hover:border-[#C4974A] hover:text-[#C4974A]'
+                  }`}
+                >
+                  {g || l.all}
+                </button>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card overflow-hidden">
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-[rgba(196,151,74,0.12)] overflow-hidden shadow-[0_1px_3px_rgba(42,37,32,0.04)]">
         {filteredClients.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            <Users className="h-10 w-10 mx-auto mb-3 opacity-30" /><p>{l.noClients}</p>
+          <div className="text-center py-16 text-[#8A7E75]">
+            <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">{l.noClients}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-ivory-200 bg-ivory-50">
-                  {[l.name, l.email, l.pets, l.stays, l.revenue, l.grade, ''].map((h, i) => (
-                    <th key={i} className={`text-left text-xs font-semibold text-gray-500 px-4 py-3 ${i === 2 || i === 3 ? 'text-center hidden sm:table-cell' : i === 4 ? 'text-right hidden lg:table-cell' : i === 5 ? 'text-center' : i === 1 ? 'hidden md:table-cell' : i === 6 ? 'w-8' : ''}`}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredClients.map(client => {
-                  const totalRevenue = client.invoices.reduce((sum, inv) => sum + inv.amount, 0);
-                  const grade = client.loyaltyGrade?.grade || 'BRONZE';
-                  return (
-                    <tr key={client.id} className="border-b border-ivory-100 last:border-0 hover:bg-ivory-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-gold-100 flex items-center justify-center text-xs font-semibold text-gold-700 flex-shrink-0">{getInitials(client.name)}</div>
-                          <span className="font-medium text-sm text-charcoal">{client.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">{client.email}</td>
-                      <td className="px-4 py-3 text-center text-sm text-charcoal hidden sm:table-cell">{client._count.pets}</td>
-                      <td className="px-4 py-3 text-center text-sm text-charcoal hidden sm:table-cell">{client._count.bookings}</td>
-                      <td className="px-4 py-3 text-right text-sm font-medium text-charcoal hidden lg:table-cell">{formatMAD(totalRevenue)}</td>
-                      <td className="px-4 py-3 text-center"><LoyaltyBadge grade={grade} locale={locale} size="sm" /></td>
-                      <td className="px-4 py-3">
-                        <Link href={`/${locale}/admin/clients/${client.id}`}><ChevronRight className="h-4 w-4 text-gray-400 hover:text-gold-500" /></Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead>
+                  <tr className="bg-[#FEFCF9] border-b border-[rgba(196,151,74,0.12)]">
+                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-5 py-3.5 uppercase tracking-wider">{l.name}</th>
+                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-5 py-3.5 uppercase tracking-wider">{l.email}</th>
+                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-5 py-3.5 uppercase tracking-wider">{l.pets}</th>
+                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-5 py-3.5 uppercase tracking-wider">{l.stays}</th>
+                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-5 py-3.5 uppercase tracking-wider">{l.revenue}</th>
+                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-5 py-3.5 uppercase tracking-wider">{l.grade}</th>
+                    <th className="px-5 py-3.5"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredClients.map(client => {
+                    const totalRevenue = client.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+                    const grade = (client.loyaltyGrade?.grade || 'BRONZE') as keyof typeof TIER_STYLES;
+                    const tier = TIER_STYLES[grade];
+                    const gradeDisplay = grade.charAt(0) + grade.slice(1).toLowerCase();
+                    return (
+                      <tr
+                        key={client.id}
+                        className="border-b border-[rgba(196,151,74,0.08)] last:border-0 hover:bg-[rgba(196,151,74,0.04)] transition-colors"
+                      >
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                              style={{ backgroundColor: tier.bg, color: tier.text }}
+                            >
+                              {getInitials(client.name)}
+                            </div>
+                            <span className="text-sm font-semibold text-[#2A2520]">{client.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-sm text-[#8A7E75]">{client.email}</td>
+                        <td className="px-5 py-3 text-sm text-[#2A2520]">{client._count.pets}</td>
+                        <td className="px-5 py-3 text-sm text-[#2A2520]">{client._count.bookings}</td>
+                        <td className="px-5 py-3 text-sm font-semibold text-[#2A2520]">{formatMAD(totalRevenue)}</td>
+                        <td className="px-5 py-3">
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                            style={{ backgroundColor: tier.bg, color: tier.text }}
+                          >
+                            <Wine className="h-3 w-3" />
+                            {gradeDisplay}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <Link
+                            href={`/${locale}/admin/clients/${client.id}`}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#C4974A] border border-[#C4974A] hover:bg-[#C4974A] hover:text-white transition-colors"
+                          >
+                            {detailsLabel}
+                            <ChevronRight className="h-3 w-3" />
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-5 py-3 border-t border-[rgba(196,151,74,0.12)] text-xs text-[#8A7E75]">
+              {total} {totalLabel}
+            </div>
+          </>
         )}
       </div>
     </div>
