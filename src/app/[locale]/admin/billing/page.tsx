@@ -2,9 +2,8 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { FileText, Download, FileDown, Eye, Pencil, Banknote, CreditCard, Receipt, Building2 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { formatDate, formatMAD, getInvoiceStatusColor } from '@/lib/utils';
+import { FileText, Download, FileDown, Eye, Pencil } from 'lucide-react';
+import { formatDate, formatMAD } from '@/lib/utils';
 import PaymentModal from './PaymentModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
@@ -102,20 +101,26 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <div className="text-xs text-gray-400">{l.totalRevenue}</div>
-            <div className="font-bold text-gold-600">{formatMAD(totalRevenue._sum.amount || 0)}</div>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-serif font-bold text-[#2A2520]">{l.title}</h1>
+          <p className="text-sm text-[#8A7E75] mt-1">
+            {locale === 'fr' ? 'Répartition des encaissements' : 'Payment breakdown'}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="text-right">
+            <div className="text-[10px] uppercase tracking-wider text-[#8A7E75] font-semibold">{l.totalRevenue}</div>
+            <div className="text-lg font-bold text-[#C4974A]">{formatMAD(totalRevenue._sum.amount || 0)}</div>
           </div>
           <a
             href={`/api/admin/invoices/export?status=${status}&year=${new Date().getFullYear()}`}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white border border-ivory-200 hover:border-gold-300 text-gray-600 hover:text-gold-700 rounded-lg font-medium transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-white border border-[#C4974A] text-[#C4974A] hover:bg-[#C4974A] hover:text-white rounded-lg transition-all duration-300"
             title={locale === 'fr' ? 'Exporter en CSV' : 'Export CSV'}
           >
             <FileDown className="h-3.5 w-3.5" />
-            {locale === 'fr' ? 'Export CSV' : 'Export CSV'}
+            Export CSV
           </a>
           <RecomputeAllocationsButton locale={locale} />
           <CreateStandaloneInvoiceModal clients={allClients} locale={locale} />
@@ -124,19 +129,53 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
 
       {/* Payment method breakdown */}
       {paymentMethodStats.length > 0 && (() => {
-        const METHOD_CONFIG: Record<string, { Icon: typeof Banknote; color: string; bg: string; bar: string; labelFr: string; labelEn: string }> = {
-          CASH:     { Icon: Banknote,   color: 'text-green-700',  bg: 'bg-green-50',   bar: 'bg-green-400',   labelFr: 'Espèces',     labelEn: 'Cash' },
-          CARD:     { Icon: CreditCard, color: 'text-blue-700',   bg: 'bg-blue-50',    bar: 'bg-blue-400',    labelFr: 'TPE / Carte', labelEn: 'Card / POS' },
-          CHECK:    { Icon: Receipt,    color: 'text-purple-700', bg: 'bg-purple-50',  bar: 'bg-purple-400',  labelFr: 'Chèque',      labelEn: 'Check' },
-          TRANSFER: { Icon: Building2,  color: 'text-indigo-700', bg: 'bg-indigo-50',  bar: 'bg-indigo-400',  labelFr: 'Virement',    labelEn: 'Transfer' },
+        const METHOD_CONFIG: Record<string, { labelFr: string; labelEn: string; svg: React.ReactNode }> = {
+          CASH: {
+            labelFr: 'Espèces', labelEn: 'Cash',
+            svg: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <rect x="2" y="6" width="20" height="12" rx="1.5" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M 4.5 8.5 L 4.5 9.2 M 19.5 14.8 L 19.5 15.5" />
+              </svg>
+            ),
+          },
+          CARD: {
+            labelFr: 'TPE / Carte', labelEn: 'Card / POS',
+            svg: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <rect x="2" y="5" width="20" height="14" rx="2" />
+                <line x1="2" y1="9.5" x2="22" y2="9.5" />
+                <rect x="5" y="13" width="4" height="3" rx="0.5" />
+              </svg>
+            ),
+          },
+          CHECK: {
+            labelFr: 'Chèque', labelEn: 'Check',
+            svg: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <rect x="3" y="4" width="18" height="16" rx="1.5" />
+                <line x1="6" y1="9" x2="18" y2="9" />
+                <line x1="6" y1="12" x2="14" y2="12" />
+                <path d="M 6 16.5 Q 9 14.5, 12 16.5 T 18 16.5" />
+              </svg>
+            ),
+          },
+          TRANSFER: {
+            labelFr: 'Virement', labelEn: 'Transfer',
+            svg: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <rect x="3" y="4" width="18" height="16" rx="1.5" />
+                <path d="M 7 10 L 15 10 M 13 8 L 15 10 L 13 12" />
+                <path d="M 17 14 L 9 14 M 11 12 L 9 14 L 11 16" />
+              </svg>
+            ),
+          },
         };
         const totalPaid = paymentMethodStats.reduce((s, r) => s + (r._sum.amount ?? 0), 0) || 1;
         return (
-          <div className="mb-5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-              {locale === 'fr' ? 'Répartition des encaissements' : 'Payment breakdown'}
-            </p>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="mb-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {(['CASH', 'CARD', 'CHECK', 'TRANSFER'] as const).map(method => {
                 const stat = paymentMethodStats.find(s => s.paymentMethod === method);
                 const amount = stat?._sum.amount ?? 0;
@@ -144,22 +183,25 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
                 const pct = Math.round((amount / totalPaid) * 100);
                 const cfg = METHOD_CONFIG[method];
                 return (
-                  <div key={method} className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${cfg.bg}`}>
-                        <cfg.Icon className={`h-4 w-4 ${cfg.color}`} />
+                  <div
+                    key={method}
+                    className="bg-white rounded-xl border-[1.5px] border-[#C4974A] p-5 transition-all duration-300 hover:shadow-md hover:shadow-[#C4974A]/20"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-lg border-[1.5px] border-[#C4974A] text-[#C4974A] flex items-center justify-center flex-shrink-0">
+                        {cfg.svg}
                       </div>
-                      <span className="text-sm font-semibold text-charcoal">
+                      <span className="text-sm font-semibold text-[#2A2520]">
                         {locale === 'fr' ? cfg.labelFr : cfg.labelEn}
                       </span>
                     </div>
-                    <p className="text-lg font-bold text-charcoal">{formatMAD(amount)}</p>
+                    <p className="text-2xl font-serif font-bold text-[#2A2520]">{formatMAD(amount)}</p>
                     <div className="flex items-center justify-between mt-1">
-                      <p className="text-xs text-gray-400">{count} {locale === 'fr' ? 'paiement(s)' : 'payment(s)'}</p>
-                      <span className={`text-xs font-semibold ${cfg.color}`}>{pct}%</span>
+                      <p className="text-xs text-[#8A7E75]">{count} {locale === 'fr' ? 'paiement(s)' : 'payment(s)'}</p>
+                      <span className="text-xs font-bold text-[#C4974A]">{pct}%</span>
                     </div>
-                    <div className="h-1.5 bg-gray-100 rounded-full mt-2">
-                      <div className={`h-1.5 rounded-full transition-all ${cfg.bar}`} style={{ width: `${pct}%` }} />
+                    <div className="h-1.5 bg-[#C4974A]/10 rounded-full mt-3 overflow-hidden">
+                      <div className="h-1.5 rounded-full bg-[#C4974A] transition-all" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
@@ -169,111 +211,145 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
         );
       })()}
 
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {statusFilters.map(f => (
-          <Link key={f.value} href={`?status=${f.value}`}>
-            <button className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              status === f.value ? 'bg-charcoal text-white' : 'bg-white border border-ivory-200 text-gray-600 hover:border-gold-300'
-            }`}>{f.label}</button>
-          </Link>
-        ))}
+      {/* Filter pills */}
+      <div className="flex gap-2 mb-5 flex-wrap">
+        {statusFilters.map(f => {
+          const active = status === f.value;
+          return (
+            <Link key={f.value} href={`?status=${f.value}`}>
+              <button
+                type="button"
+                className={`px-5 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all duration-300 ${
+                  active
+                    ? 'bg-[#C4974A] text-white border-2 border-[#C4974A] shadow-sm'
+                    : 'bg-white text-[#8A7E75] border border-[#C4974A] hover:bg-[#C4974A]/5 hover:text-[#C4974A]'
+                }`}
+              >
+                {f.label}
+              </button>
+            </Link>
+          );
+        })}
       </div>
 
-      <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card overflow-hidden">
+      {/* Table */}
+      <div className="bg-white rounded-xl border-[1.5px] border-[#C4974A] overflow-hidden">
         {invoices.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
+          <div className="text-center py-16 text-[#8A7E75]">
             <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p>{l.noInvoices}</p>
+            <p className="text-sm">{l.noInvoices}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-ivory-200 bg-ivory-50">
-                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">{l.ref}</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden md:table-cell">{l.client}</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden sm:table-cell">{l.date}</th>
-                  <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3">{l.total}</th>
-                  <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3 hidden lg:table-cell">{l.paid_col}</th>
-                  <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3 hidden lg:table-cell">{l.remaining}</th>
-                  <th className="text-center text-xs font-semibold text-gray-500 px-4 py-3">{l.status}</th>
-                  <th className="px-4 py-3 w-16" />
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map(inv => {
-                  const remaining = Math.max(0, inv.amount - inv.paidAmount);
-                  return (
-                    <tr key={inv.id} className="border-b border-ivory-100 last:border-0 hover:bg-ivory-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-sm font-semibold text-charcoal">{inv.invoiceNumber}</span>
-                        {(inv.booking || inv.serviceType) && (
-                          <p className="text-xs text-gray-400">
-                            {inv.serviceType === 'PRODUCT_SALE'
-                              ? (locale === 'fr' ? 'Croquettes / Produits' : 'Croquettes / Products')
-                              : inv.booking?.serviceType === 'BOARDING'
-                                ? (locale === 'fr' ? 'Pension' : 'Boarding')
-                                : inv.booking?.serviceType === 'PET_TAXI'
-                                  ? (locale === 'fr' ? 'Taxi animalier' : 'Pet Taxi')
-                                  : inv.booking?.serviceType ?? ''}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <Link href={`/${locale}/admin/clients/${inv.client.id}`} className="text-sm text-charcoal hover:text-gold-600">
-                          {inv.clientDisplayName ?? inv.client.name}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{formatDate(inv.issuedAt, locale)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-charcoal">{formatMAD(inv.amount)}</td>
-                      <td className="px-4 py-3 text-right text-sm hidden lg:table-cell">
-                        {inv.paidAmount > 0 ? (
-                          <span className="text-green-700 font-medium">{formatMAD(inv.paidAmount)}</span>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm hidden lg:table-cell">
-                        {remaining > 0 ? (
-                          <span className="text-orange-600 font-medium">{formatMAD(remaining)}</span>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge className={`text-xs ${getInvoiceStatusColor(inv.status)}`}>{statusLbls[inv.status] || inv.status}</Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <Link href={`/${locale}/admin/invoices/${inv.id}`} title={locale === 'fr' ? 'Fiche facture' : 'Invoice details'} className="p-1.5 text-gray-400 hover:text-gold-600 rounded">
-                            <Pencil className="h-4 w-4" />
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[800px]">
+                <thead>
+                  <tr className="bg-[#FEFCF9] border-b border-[rgba(196,151,74,0.12)]">
+                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.ref}</th>
+                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.client}</th>
+                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.date}</th>
+                    <th className="text-right text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.total}</th>
+                    <th className="text-right text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.paid_col}</th>
+                    <th className="text-right text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.remaining}</th>
+                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.status}</th>
+                    <th className="px-6 py-4" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.map(inv => {
+                    const remaining = Math.max(0, inv.amount - inv.paidAmount);
+                    const category = inv.serviceType === 'PRODUCT_SALE'
+                      ? (locale === 'fr' ? 'Croquettes / Produits' : 'Croquettes / Products')
+                      : inv.booking?.serviceType === 'BOARDING'
+                        ? (locale === 'fr' ? 'Pension' : 'Boarding')
+                        : inv.booking?.serviceType === 'PET_TAXI'
+                          ? (locale === 'fr' ? 'Taxi animalier' : 'Pet Taxi')
+                          : inv.booking?.serviceType ?? '';
+                    const statusStyle =
+                      inv.status === 'PAID'
+                        ? { bg: '#EAF7EF', color: '#1A7A45', border: 'rgba(26,122,69,0.2)' }
+                        : inv.status === 'PARTIALLY_PAID'
+                          ? { bg: '#FEF3E2', color: '#B45309', border: 'rgba(180,83,9,0.2)' }
+                          : inv.status === 'PENDING'
+                            ? { bg: '#F0EFFE', color: '#5B4FCF', border: 'rgba(91,79,207,0.2)' }
+                            : { bg: '#F5F5F5', color: '#6B6B6B', border: 'rgba(0,0,0,0.08)' };
+                    const remainingColor =
+                      inv.status === 'PARTIALLY_PAID' ? '#B45309'
+                      : inv.status === 'PENDING' ? '#5B4FCF'
+                      : '#8A7E75';
+                    return (
+                      <tr
+                        key={inv.id}
+                        className="border-b border-[rgba(196,151,74,0.08)] last:border-0 transition-all duration-300 hover:shadow-[inset_3px_0_0_#C4974A]"
+                      >
+                        <td className="px-6 py-4">
+                          <span className="font-mono text-sm font-bold text-[#9A7235]">{inv.invoiceNumber}</span>
+                          {category && (
+                            <p className="text-xs text-[#8A7E75] mt-0.5">{category}</p>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <Link href={`/${locale}/admin/clients/${inv.client.id}`} className="text-sm text-[#2A2520] hover:text-[#C4974A] transition-colors">
+                            {inv.clientDisplayName ?? inv.client.name}
                           </Link>
-                          <a href={`/api/invoices/${inv.id}/pdf?view=1`} target="_blank" rel="noopener noreferrer" title={locale === 'fr' ? 'Aperçu' : 'Preview'} className="p-1.5 text-gray-400 hover:text-gold-600 rounded">
-                            <Eye className="h-4 w-4" />
-                          </a>
-                          <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener noreferrer" title={locale === 'fr' ? 'Télécharger' : 'Download'} className="p-1.5 text-gray-400 hover:text-gold-600 rounded">
-                            <Download className="h-4 w-4" />
-                          </a>
-                          <ResendInvoiceButton invoiceId={inv.id} locale={locale} />
-                          <PaymentModal
-                            invoiceId={inv.id}
-                            currentStatus={inv.status}
-                            locale={locale}
-                            invoiceAmount={inv.amount}
-                            paidAmount={inv.paidAmount}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-[#8A7E75]">{formatDate(inv.issuedAt, locale)}</td>
+                        <td className="px-6 py-4 text-right text-[15px] font-bold text-[#2A2520]">{formatMAD(inv.amount)}</td>
+                        <td className="px-6 py-4 text-right text-sm">
+                          {inv.paidAmount > 0 ? (
+                            <span className="text-[#1A7A45] font-semibold">{formatMAD(inv.paidAmount)}</span>
+                          ) : (
+                            <span className="text-[#8A7E75]/40">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm">
+                          {remaining > 0 ? (
+                            <span className="font-semibold" style={{ color: remainingColor }}>{formatMAD(remaining)}</span>
+                          ) : (
+                            <span className="text-[#8A7E75]/40">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border"
+                            style={{ backgroundColor: statusStyle.bg, color: statusStyle.color, borderColor: statusStyle.border }}
+                          >
+                            {statusLbls[inv.status] || inv.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1">
+                            <Link href={`/${locale}/admin/invoices/${inv.id}`} title={locale === 'fr' ? 'Fiche facture' : 'Invoice details'} className="p-1.5 text-[#8A7E75] hover:text-[#C4974A] rounded transition-colors">
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                            <a href={`/api/invoices/${inv.id}/pdf?view=1`} target="_blank" rel="noopener noreferrer" title={locale === 'fr' ? 'Aperçu' : 'Preview'} className="p-1.5 text-[#8A7E75] hover:text-[#C4974A] rounded transition-colors">
+                              <Eye className="h-4 w-4" />
+                            </a>
+                            <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener noreferrer" title={locale === 'fr' ? 'Télécharger' : 'Download'} className="p-1.5 text-[#8A7E75] hover:text-[#C4974A] rounded transition-colors">
+                              <Download className="h-4 w-4" />
+                            </a>
+                            <ResendInvoiceButton invoiceId={inv.id} locale={locale} />
+                            <PaymentModal
+                              invoiceId={inv.id}
+                              currentStatus={inv.status}
+                              locale={locale}
+                              invoiceAmount={inv.amount}
+                              paidAmount={inv.paidAmount}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-6 py-4 border-t border-[rgba(196,151,74,0.12)] text-xs text-[#8A7E75]">
+              {total} {locale === 'fr' ? 'encaissements récents' : 'recent entries'}
+            </div>
+          </>
         )}
       </div>
-
-      <div className="text-sm text-gray-400 text-center mt-4">{total} {locale === 'fr' ? 'facture(s)' : 'invoice(s)'}</div>
     </div>
   );
 }
