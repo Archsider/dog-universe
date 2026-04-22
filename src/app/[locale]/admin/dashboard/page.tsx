@@ -53,7 +53,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     thisBilled,
     lastBilled,
   ] = await Promise.all([
-    prisma.user.count({ where: { role: 'CLIENT' } }),
+    prisma.user.count({ where: { role: 'CLIENT', isWalkIn: false } }),
     pendingBookingsCount(),
     currentBoarders(),
     totalCashCollected(thisMonthStart, thisMonthEnd),
