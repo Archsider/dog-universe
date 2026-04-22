@@ -10,7 +10,7 @@ interface CategoryItem {
   description: string;
   quantity: number;
   unitPrice: number;
-  category: DrillCategory;
+  category: string;
   invoice: {
     invoiceNumber: string;
     issuedAt: Date | string;
