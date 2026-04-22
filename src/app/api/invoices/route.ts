@@ -80,7 +80,8 @@ export async function POST(request: Request) {
     }
 
     // Validate each item: amounts must be positive numbers
-    for (const item of items as { description: string; quantity: number; unitPrice: number; total: number }[]) {
+    const VALID_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER'];
+    for (const item of items as { description: string; quantity: number; unitPrice: number; total: number; category?: string }[]) {
       if (!item.description || typeof item.description !== 'string') {
         return NextResponse.json({ error: 'INVALID_ITEM_DESCRIPTION' }, { status: 400 });
       }
@@ -92,6 +93,9 @@ export async function POST(request: Request) {
       }
       if (typeof item.total !== 'number' || item.total < 0) {
         return NextResponse.json({ error: 'INVALID_ITEM_TOTAL' }, { status: 400 });
+      }
+      if (item.category !== undefined && !VALID_CATEGORIES.includes(item.category)) {
+        return NextResponse.json({ error: 'INVALID_ITEM_CATEGORY' }, { status: 400 });
       }
     }
 
@@ -135,11 +139,12 @@ export async function POST(request: Request) {
         notes: notes?.trim() || null,
         ...(resolvedIssuedAt && { issuedAt: resolvedIssuedAt }),
         items: {
-          create: items.map((item: { description: string; quantity: number; unitPrice: number; total: number }) => ({
+          create: items.map((item: { description: string; quantity: number; unitPrice: number; total: number; category?: string }) => ({
             description: item.description,
             quantity: item.quantity ?? 1,
             unitPrice: item.unitPrice,
             total: item.total,
+            category: (item.category ?? 'OTHER') as 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER',
           })),
         },
       },

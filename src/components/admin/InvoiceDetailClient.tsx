@@ -13,6 +13,25 @@ import { Badge } from '@/components/ui/badge';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
+type ItemCategory = 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER';
+
+const CATEGORY_OPTIONS: { value: ItemCategory; label: string }[] = [
+  { value: 'BOARDING', label: '🏠 Pension' },
+  { value: 'PET_TAXI', label: '🚗 Pet Taxi' },
+  { value: 'GROOMING', label: '✂️ Toilettage / Soins' },
+  { value: 'PRODUCT',  label: '🐾 Croquettes / Produits' },
+  { value: 'OTHER',    label: '➕ Autre' },
+];
+
+const autoCategory = (desc: string): ItemCategory => {
+  const d = desc.toLowerCase();
+  if (d.includes('pension') || d.includes('nuit') || d.includes('hébergement')) return 'BOARDING';
+  if (d.includes('taxi') || d.includes('transport') || d.includes('aller') || d.includes('retour')) return 'PET_TAXI';
+  if (d.includes('toilettage') || d.includes('soin') || d.includes('médic') || d.includes('bain') || d.includes('coupe')) return 'GROOMING';
+  if (d.includes('croquette') || d.includes('kibble') || d.includes('royal') || d.includes('grain') || d.includes('lamb') || d.includes('nourriture')) return 'PRODUCT';
+  return 'OTHER';
+};
+
 interface InvoiceItemData {
   id: string;
   description: string;
@@ -21,6 +40,7 @@ interface InvoiceItemData {
   total: number;
   allocatedAmount: number;
   status: string;
+  category?: ItemCategory;
 }
 
 interface PaymentData {
@@ -62,6 +82,7 @@ interface EditItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  category: ItemCategory;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -143,6 +164,7 @@ export default function InvoiceDetailClient({
       description: it.description,
       quantity: it.quantity,
       unitPrice: it.unitPrice,
+      category: (it.category ?? 'OTHER') as ItemCategory,
     })));
     setEditIssuedAt(toDateStr(invoice.issuedAt));
     setEditNotes(invoice.notes ?? '');
@@ -158,13 +180,21 @@ export default function InvoiceDetailClient({
   };
 
   const addItem = () =>
-    setEditItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0 }]);
+    setEditItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
 
   const removeItem = (i: number) =>
     setEditItems(prev => prev.filter((_, idx) => idx !== i));
 
   const updateItem = (i: number, field: keyof EditItem, value: string | number) =>
-    setEditItems(prev => prev.map((it, idx) => idx === i ? { ...it, [field]: value } : it));
+    setEditItems(prev => prev.map((it, idx) => {
+      if (idx !== i) return it;
+      const next = { ...it, [field]: value } as EditItem;
+      // Auto-detect category on description change — only if current category is OTHER
+      if (field === 'description' && it.category === 'OTHER') {
+        next.category = autoCategory(String(value));
+      }
+      return next;
+    }));
 
   const editTotal = editItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
 
@@ -186,6 +216,15 @@ export default function InvoiceDetailClient({
       return;
     }
 
+    // Non-blocking warning for lines classified as OTHER
+    const otherCount = editItems.filter(it => it.category === 'OTHER').length;
+    if (otherCount > 0) {
+      const msg = isFr
+        ? `⚠️ ${otherCount} ligne(s) classée(s) dans « Autre » — les analytics seront imprécis. Continuer ?`
+        : `⚠️ ${otherCount} line(s) classified as “Other” — analytics will be imprecise. Continue?`;
+      if (!window.confirm(msg)) return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch(`/api/invoices/${invoice.id}`, {
@@ -196,6 +235,7 @@ export default function InvoiceDetailClient({
             description: it.description.trim(),
             quantity: it.quantity,
             unitPrice: it.unitPrice,
+            category: it.category,
           })),
           issuedAt: editIssuedAt,
           notes: editNotes,
@@ -603,8 +643,9 @@ export default function InvoiceDetailClient({
 
             <div className="space-y-2">
               <div className="grid grid-cols-12 gap-2 text-xs text-gray-400 px-1">
-                <span className="col-span-6">{isFr ? 'Description' : 'Description'}</span>
-                <span className="col-span-2 text-center">{isFr ? 'Qté' : 'Qty'}</span>
+                <span className="col-span-4">{isFr ? 'Description' : 'Description'}</span>
+                <span className="col-span-3">{isFr ? 'Catégorie' : 'Category'}</span>
+                <span className="col-span-1 text-center">{isFr ? 'Qté' : 'Qty'}</span>
                 <span className="col-span-3 text-right">{isFr ? 'Prix unit.' : 'Unit price'}</span>
                 <span className="col-span-1" />
               </div>
@@ -612,15 +653,24 @@ export default function InvoiceDetailClient({
               {editItems.map((it, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-center">
                   <input
-                    className="col-span-6 text-sm h-8 px-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gold-400"
+                    className="col-span-4 text-sm h-8 px-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gold-400"
                     value={it.description}
                     onChange={e => updateItem(i, 'description', e.target.value)}
                     placeholder={isFr ? 'Description' : 'Description'}
                   />
+                  <select
+                    value={it.category}
+                    onChange={e => updateItem(i, 'category', e.target.value)}
+                    className={`col-span-3 text-sm h-8 px-2 rounded-lg border border-[#C4974A] bg-white focus:outline-none focus:ring-2 focus:ring-[#C4974A]/20 min-w-0 ${it.category === 'OTHER' ? 'border-l-4 border-l-amber-400' : ''}`}
+                  >
+                    {CATEGORY_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                   <input
                     type="number"
                     min={1}
-                    className="col-span-2 text-sm h-8 px-2 border border-gray-200 rounded-lg text-center focus:outline-none focus:border-gold-400"
+                    className="col-span-1 text-sm h-8 px-2 border border-gray-200 rounded-lg text-center focus:outline-none focus:border-gold-400"
                     value={it.quantity}
                     onChange={e => updateItem(i, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
                   />

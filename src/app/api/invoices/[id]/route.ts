@@ -70,7 +70,8 @@ export async function PATCH(request: Request, { params }: Params) {
     if (items.length === 0) {
       return NextResponse.json({ error: 'INVALID_ITEMS' }, { status: 400 });
     }
-    for (const item of items as { description: unknown; quantity: unknown; unitPrice: unknown }[]) {
+    const VALID_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER'] as const;
+    for (const item of items as { description: unknown; quantity: unknown; unitPrice: unknown; category?: unknown }[]) {
       if (typeof item.description !== 'string' || !item.description.trim()) {
         return NextResponse.json({ error: 'INVALID_ITEM_DESCRIPTION' }, { status: 400 });
       }
@@ -80,9 +81,13 @@ export async function PATCH(request: Request, { params }: Params) {
       if (typeof item.unitPrice !== 'number' || item.unitPrice < 0) {
         return NextResponse.json({ error: 'INVALID_ITEM_PRICE' }, { status: 400 });
       }
+      if (item.category !== undefined && (typeof item.category !== 'string' || !VALID_CATEGORIES.includes(item.category as typeof VALID_CATEGORIES[number]))) {
+        return NextResponse.json({ error: 'INVALID_ITEM_CATEGORY' }, { status: 400 });
+      }
     }
 
-    interface ValidItem { description: string; quantity: number; unitPrice: number }
+    type ItemCategory = typeof VALID_CATEGORIES[number];
+    interface ValidItem { description: string; quantity: number; unitPrice: number; category?: ItemCategory }
     const validItems = items as ValidItem[];
     const newAmount = validItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
     if (newAmount <= 0) return NextResponse.json({ error: 'INVALID_AMOUNT' }, { status: 400 });
@@ -117,6 +122,7 @@ export async function PATCH(request: Request, { params }: Params) {
           quantity: it.quantity,
           unitPrice: it.unitPrice,
           total: it.quantity * it.unitPrice,
+          category: (it.category ?? 'OTHER') as ItemCategory,
         })),
       });
 

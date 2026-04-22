@@ -14,11 +14,31 @@ interface Client {
   email: string;
 }
 
+type ItemCategory = 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER';
+
 interface LineItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  category: ItemCategory;
 }
+
+const CATEGORY_OPTIONS: { value: ItemCategory; label: string }[] = [
+  { value: 'BOARDING', label: '🏠 Pension' },
+  { value: 'PET_TAXI', label: '🚗 Pet Taxi' },
+  { value: 'GROOMING', label: '✂️ Toilettage / Soins' },
+  { value: 'PRODUCT',  label: '🐾 Croquettes / Produits' },
+  { value: 'OTHER',    label: '➕ Autre' },
+];
+
+const autoCategory = (desc: string): ItemCategory => {
+  const d = desc.toLowerCase();
+  if (d.includes('pension') || d.includes('nuit') || d.includes('hébergement')) return 'BOARDING';
+  if (d.includes('taxi') || d.includes('transport') || d.includes('aller') || d.includes('retour')) return 'PET_TAXI';
+  if (d.includes('toilettage') || d.includes('soin') || d.includes('médic') || d.includes('bain') || d.includes('coupe')) return 'GROOMING';
+  if (d.includes('croquette') || d.includes('kibble') || d.includes('royal') || d.includes('grain') || d.includes('lamb') || d.includes('nourriture')) return 'PRODUCT';
+  return 'OTHER';
+};
 
 interface CreateStandaloneInvoiceModalProps {
   clients: Client[];
@@ -42,6 +62,7 @@ interface QuickAddPreset {
   descriptionFr: string;
   descriptionEn: string;
   serviceType: string;
+  category: ItemCategory;
   defaultPrice: number;
   color: string;
 }
@@ -53,16 +74,18 @@ const QUICK_ADD_PRESETS: QuickAddPreset[] = [
     descriptionFr: 'Pension (nuit)',
     descriptionEn: 'Boarding (night)',
     serviceType: 'BOARDING',
-    defaultPrice: 0,
+    category: 'BOARDING',
+    defaultPrice: 120,
     color: 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
   },
   {
     labelFr: 'Pet Taxi',
     labelEn: 'Pet Taxi',
-    descriptionFr: 'Transport animalier',
-    descriptionEn: 'Pet taxi transport',
+    descriptionFr: 'Pet Taxi',
+    descriptionEn: 'Pet Taxi',
     serviceType: 'PET_TAXI',
-    defaultPrice: 0,
+    category: 'PET_TAXI',
+    defaultPrice: 150,
     color: 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100',
   },
   {
@@ -71,6 +94,7 @@ const QUICK_ADD_PRESETS: QuickAddPreset[] = [
     descriptionFr: 'Toilettage',
     descriptionEn: 'Grooming',
     serviceType: 'GROOMING',
+    category: 'GROOMING',
     defaultPrice: 0,
     color: 'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
   },
@@ -80,6 +104,7 @@ const QUICK_ADD_PRESETS: QuickAddPreset[] = [
     descriptionFr: 'Croquettes',
     descriptionEn: 'Kibbles',
     serviceType: 'PRODUCT_SALE',
+    category: 'PRODUCT',
     defaultPrice: 0,
     color: 'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
   },
@@ -89,15 +114,17 @@ const QUICK_ADD_PRESETS: QuickAddPreset[] = [
     descriptionFr: 'Médicaments / soins',
     descriptionEn: 'Medication / care',
     serviceType: '',
+    category: 'GROOMING',
     defaultPrice: 0,
     color: 'bg-red-50 border-red-200 text-red-800 hover:bg-red-100',
   },
   {
     labelFr: 'Autre',
     labelEn: 'Other',
-    descriptionFr: 'Prestation diverse',
-    descriptionEn: 'Miscellaneous service',
+    descriptionFr: '',
+    descriptionEn: '',
     serviceType: '',
+    category: 'OTHER',
     defaultPrice: 0,
     color: 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100',
   },
@@ -128,27 +155,36 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
   const [serviceType, setServiceType] = useState('');
   const [issuedAt, setIssuedAt] = useState(today());
   const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<LineItem[]>([{ description: '', quantity: 1, unitPrice: 0 }]);
+  const [items, setItems] = useState<LineItem[]>([{ description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
   const [markPaid, setMarkPaid] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [paidAt, setPaidAt] = useState(today());
 
   const total = items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
 
-  const addItem = () => setItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0 }]);
+  const addItem = () => setItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
   const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
   const updateItem = (i: number, field: keyof LineItem, value: string | number) => {
-    setItems(prev => prev.map((it, idx) => idx === i ? { ...it, [field]: value } : it));
+    setItems(prev => prev.map((it, idx) => {
+      if (idx !== i) return it;
+      const next = { ...it, [field]: value } as LineItem;
+      // Auto-detect category on description change — only if current category is OTHER
+      if (field === 'description' && it.category === 'OTHER') {
+        next.category = autoCategory(String(value));
+      }
+      return next;
+    }));
   };
 
   const addPreset = (preset: QuickAddPreset) => {
     // If first item is blank, replace it; otherwise append
     setItems(prev => {
       const isEmpty = prev.length === 1 && !prev[0].description && prev[0].unitPrice === 0;
-      const newItem = {
+      const newItem: LineItem = {
         description: fr ? preset.descriptionFr : preset.descriptionEn,
         quantity: 1,
         unitPrice: preset.defaultPrice,
+        category: preset.category,
       };
       return isEmpty ? [newItem] : [...prev, newItem];
     });
@@ -165,7 +201,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
     setServiceType('');
     setIssuedAt(today());
     setNotes('');
-    setItems([{ description: '', quantity: 1, unitPrice: 0 }]);
+    setItems([{ description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
     setMarkPaid(false);
     setPaymentMethod('CASH');
     setPaidAt(today());
@@ -180,6 +216,15 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
     }
     if (items.some(it => !it.description.trim())) { setError(fr ? 'Tous les articles doivent avoir une description.' : 'All items must have a description.'); return; }
     if (total <= 0) { setError(fr ? 'Le total doit être supérieur à 0.' : 'Total must be greater than 0.'); return; }
+
+    // Non-blocking warning for lines classified as OTHER
+    const otherCount = items.filter(it => it.category === 'OTHER').length;
+    if (otherCount > 0) {
+      const msg = fr
+        ? `⚠️ ${otherCount} ligne(s) classée(s) dans « Autre » — les analytics seront imprécis. Continuer ?`
+        : `⚠️ ${otherCount} line(s) classified as “Other” — analytics will be imprecise. Continue?`;
+      if (!window.confirm(msg)) return;
+    }
 
     setLoading(true);
     setError('');
@@ -207,6 +252,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
           quantity: it.quantity,
           unitPrice: it.unitPrice,
           total: it.quantity * it.unitPrice,
+          category: it.category,
         })),
       };
       if (markPaid) {
@@ -358,24 +404,34 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
               <div className="space-y-2">
                 {/* Header */}
                 <div className="grid grid-cols-12 gap-2 text-xs text-gray-400 px-1">
-                  <span className="col-span-6">{fr ? 'Description' : 'Description'}</span>
-                  <span className="col-span-2 text-center">{fr ? 'Qté' : 'Qty'}</span>
-                  <span className="col-span-3 text-right">{fr ? 'Prix unitaire' : 'Unit price'}</span>
+                  <span className="col-span-4">{fr ? 'Description' : 'Description'}</span>
+                  <span className="col-span-3">{fr ? 'Catégorie' : 'Category'}</span>
+                  <span className="col-span-1 text-center">{fr ? 'Qté' : 'Qty'}</span>
+                  <span className="col-span-3 text-right">{fr ? 'Prix unit.' : 'Unit price'}</span>
                   <span className="col-span-1" />
                 </div>
 
                 {items.map((it, i) => (
                   <div key={i} className="grid grid-cols-12 gap-2 items-center">
                     <Input
-                      className="col-span-6 text-sm h-8"
+                      className="col-span-4 text-sm h-8"
                       value={it.description}
                       onChange={e => updateItem(i, 'description', e.target.value)}
                       placeholder={fr ? 'ex: Croquettes Royal Canin 10kg' : 'e.g. Royal Canin 10kg kibbles'}
                     />
+                    <select
+                      value={it.category}
+                      onChange={e => updateItem(i, 'category', e.target.value)}
+                      className={`col-span-3 text-sm h-8 px-2 rounded-lg border border-[#C4974A] bg-white focus:outline-none focus:ring-2 focus:ring-[#C4974A]/20 min-w-0 ${it.category === 'OTHER' ? 'border-l-4 border-l-amber-400' : ''}`}
+                    >
+                      {CATEGORY_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
                     <Input
                       type="number"
                       min={1}
-                      className="col-span-2 text-sm h-8 text-center"
+                      className="col-span-1 text-sm h-8 text-center"
                       value={it.quantity}
                       onChange={e => updateItem(i, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
                     />
