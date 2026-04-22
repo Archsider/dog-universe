@@ -158,6 +158,34 @@ export async function billedByCategory(
       }
     }
   }
+
+  // Fallback MonthlyRevenueSummary : si aucun payment réel sur la période,
+  // utiliser les données historiques saisies manuellement (jan/fév/mars pré-prod).
+  // Détection : la période start..end couvre un mois entier → lookup unique sur (year, month).
+  // MonthlyRevenueSummary.month = 1-12, Date.getMonth() = 0-11 → offset +1.
+  const total =
+    result.boarding + result.taxi + result.grooming + result.croquettes + result.other;
+  if (total === 0) {
+    const year = start.getFullYear();
+    const month = start.getMonth() + 1;
+    const summary = await prisma.monthlyRevenueSummary.findFirst({
+      where: { year, month },
+      select: {
+        boardingRevenue: true,
+        groomingRevenue: true,
+        taxiRevenue: true,
+        otherRevenue: true,
+      },
+    });
+    if (summary) {
+      result.boarding = summary.boardingRevenue;
+      result.grooming = summary.groomingRevenue;
+      result.taxi = summary.taxiRevenue;
+      result.other = summary.otherRevenue;
+      // Pas de champ PRODUCT dans le modèle historique → croquettes reste 0
+    }
+  }
+
   return result;
 }
 
