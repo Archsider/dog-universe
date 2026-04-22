@@ -41,6 +41,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
     lastYearMonthly,
     newClientsThisMonth,
     avgNightsData,
+    categoryItems,
   ] = await Promise.all([
     totalCashCollected(thisMonthStart, thisMonthEnd),
     totalCashCollected(lastMonthStart, lastMonthEnd),
@@ -58,6 +59,31 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         status: { in: ['PAID', 'PARTIALLY_PAID'] },
       },
       select: { items: { select: { category: true, total: true, quantity: true } } },
+    }),
+    // Drill-down items for category cards on Analytics
+    prisma.invoiceItem.findMany({
+      where: {
+        invoice: {
+          status: { in: ['PAID', 'PARTIALLY_PAID'] },
+          payments: { some: { paymentDate: { gte: thisMonthStart, lte: thisMonthEnd } } },
+        },
+        category: { in: ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT'] },
+      },
+      select: {
+        description: true,
+        quantity: true,
+        unitPrice: true,
+        category: true,
+        invoice: {
+          select: {
+            invoiceNumber: true,
+            issuedAt: true,
+            clientDisplayName: true,
+            client: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { invoice: { issuedAt: 'desc' } },
     }),
   ]);
 
@@ -163,6 +189,7 @@ export default async function AdminAnalyticsPage({ params: { locale } }: PagePro
         newClients={newClientsThisMonth}
         totalCA={thisAmt}
         totalDelta={delta}
+        categoryItems={categoryItems}
         locale={locale}
         currentYear={currentYear}
       />

@@ -1,7 +1,30 @@
 'use client';
 
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { formatMAD } from '@/lib/utils';
+
+type DrillCategory = 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT';
+
+interface CategoryItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  category: DrillCategory;
+  invoice: {
+    invoiceNumber: string;
+    issuedAt: Date | string;
+    clientDisplayName: string | null;
+    client: { name: string } | null;
+  };
+}
+
+const DRILL_CATS: { key: DrillCategory; labelFr: string; labelEn: string; icon: string; unitFr: string; unitEn: string }[] = [
+  { key: 'BOARDING', labelFr: 'Pension',    labelEn: 'Boarding', icon: '🏠', unitFr: 'séjours', unitEn: 'stays'    },
+  { key: 'PET_TAXI', labelFr: 'Pet Taxi',   labelEn: 'Pet Taxi', icon: '🚗', unitFr: 'courses', unitEn: 'rides'    },
+  { key: 'GROOMING', labelFr: 'Toilettage', labelEn: 'Grooming', icon: '✂️', unitFr: 'soins',   unitEn: 'sessions' },
+  { key: 'PRODUCT',  labelFr: 'Croquettes', labelEn: 'Kibbles',  icon: '🐾', unitFr: 'ventes',  unitEn: 'sales'    },
+];
 
 const AnalyticsPerformanceChart = dynamic(
   () => import('@/components/admin/analytics/AnalyticsPerformanceChart'),
@@ -69,6 +92,7 @@ export interface Props {
   newClients: number;
   totalCA: number;
   totalDelta: number;
+  categoryItems: CategoryItem[];
   locale: string;
   currentYear: number;
 }
@@ -120,9 +144,36 @@ const SERVICES = [
 export default function AnalyticsCharts({
   serviceKpis, yearlyData, lastYearData, donutData, volumeData,
   avgBasket, avgNights, newClients, totalCA: _totalCA, totalDelta: _totalDelta,
-  locale, currentYear,
+  categoryItems, locale, currentYear,
 }: Props) {
   const isFr = locale === 'fr';
+  const [activeCategory, setActiveCategory] = useState<DrillCategory | null>(null);
+
+  // Aggregated stats per drill category
+  const drillStats = DRILL_CATS.map(cat => {
+    const items = categoryItems.filter(i => i.category === cat.key);
+    const count = cat.key === 'BOARDING'
+      ? new Set(items.map(i => i.invoice.invoiceNumber)).size
+      : items.reduce((s, i) => s + i.quantity, 0);
+    const total = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+    return { ...cat, count, total };
+  });
+
+  const activeItems = activeCategory
+    ? categoryItems.filter(i => i.category === activeCategory)
+    : [];
+  const activeLabel = activeCategory
+    ? (isFr
+        ? DRILL_CATS.find(c => c.key === activeCategory)!.labelFr
+        : DRILL_CATS.find(c => c.key === activeCategory)!.labelEn)
+    : '';
+  const fmtDate = (d: Date | string) => {
+    const date = new Date(d);
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
 
   const serviceLabels = {
     boarding:   { label: isFr ? 'Pension'    : 'Boarding', sub: isFr ? 'séjours'  : 'stays'    },
@@ -133,6 +184,39 @@ export default function AnalyticsCharts({
 
   return (
     <div className="space-y-5">
+
+      {/* ── Drill-down — 4 cards cliquables par catégorie ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {drillStats.map(cat => {
+          const active = activeCategory === cat.key;
+          const unit = isFr ? cat.unitFr : cat.unitEn;
+          const label = isFr ? cat.labelFr : cat.labelEn;
+          return (
+            <button
+              key={cat.key}
+              type="button"
+              onClick={() => setActiveCategory(prev => (prev === cat.key ? null : cat.key))}
+              className={`text-left rounded-xl border-[1.5px] border-[#C4974A] p-5 cursor-pointer transition-all duration-200 ${
+                active
+                  ? 'bg-[#C4974A] text-white shadow-md shadow-[#C4974A]/30'
+                  : 'bg-white text-[#2A2520] hover:shadow-md hover:shadow-[#C4974A]/20'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xl leading-none">{cat.icon}</span>
+                <span className="text-[15px] font-bold">{label}</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="font-serif text-[28px] leading-none">{cat.count}</span>
+                <span className={`text-xs ${active ? 'text-white/80' : 'text-[#8A7E75]'}`}>{unit}</span>
+              </div>
+              <div className={`mt-2 text-sm font-semibold ${active ? 'text-white' : 'text-[#C4974A]'}`}>
+                {formatMAD(cat.total)}
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
       {/* ── Ligne 1 — 4 KPI cards par service ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -162,6 +246,73 @@ export default function AnalyticsCharts({
           );
         })}
       </div>
+
+      {/* ── Drill-down table — visible uniquement si une catégorie est active ── */}
+      {activeCategory && (
+        <div className="bg-white rounded-xl border-[1.5px] border-[#C4974A] overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-[rgba(196,151,74,0.15)]">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-[#2A2520]">
+                {isFr ? 'Détail' : 'Details'} — {activeLabel}
+              </h3>
+              <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#C4974A]/10 text-[#C4974A] text-xs font-bold">
+                {activeItems.length}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveCategory(null)}
+              className="text-xs text-[#8A7E75] hover:text-[#C4974A] transition-colors"
+            >
+              {isFr ? 'Fermer' : 'Close'} ✕
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr className="bg-[#FEFCF9] border-b border-[rgba(196,151,74,0.12)]">
+                  <th className="text-left text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Facture' : 'Invoice'}</th>
+                  <th className="text-left text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Client' : 'Client'}</th>
+                  <th className="text-left text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Date' : 'Date'}</th>
+                  <th className="text-left text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Description' : 'Description'}</th>
+                  <th className="text-right text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Qté' : 'Qty'}</th>
+                  <th className="text-right text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'P.U.' : 'Unit'}</th>
+                  <th className="text-right text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Total' : 'Total'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeItems.map((it, i) => {
+                  const clientName = it.invoice.clientDisplayName
+                    ?? it.invoice.client?.name
+                    ?? (isFr ? 'Client de passage' : 'Walk-in client');
+                  const lineTotal = it.quantity * it.unitPrice;
+                  return (
+                    <tr
+                      key={`${it.invoice.invoiceNumber}-${i}`}
+                      className="border-b border-[rgba(196,151,74,0.08)] last:border-0 transition-all duration-200 hover:shadow-[inset_3px_0_0_#C4974A]"
+                    >
+                      <td className="px-5 py-3 font-mono text-sm font-bold text-[#9A7235]">{it.invoice.invoiceNumber}</td>
+                      <td className="px-5 py-3 text-sm text-[#2A2520]">{clientName}</td>
+                      <td className="px-5 py-3 text-sm text-[#8A7E75]">{fmtDate(it.invoice.issuedAt)}</td>
+                      <td className="px-5 py-3 text-sm text-[#2A2520]">{it.description}</td>
+                      <td className="px-5 py-3 text-sm text-right text-[#2A2520]">{it.quantity}</td>
+                      <td className="px-5 py-3 text-sm text-right text-[#2A2520]">{formatMAD(it.unitPrice)}</td>
+                      <td className="px-5 py-3 text-sm text-right font-bold text-[#2A2520]">{formatMAD(lineTotal)}</td>
+                    </tr>
+                  );
+                })}
+                {activeItems.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-8 text-center text-sm text-[#8A7E75]">
+                      {isFr ? 'Aucun item pour cette catégorie ce mois' : 'No items for this category this month'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ── Ligne 2 — Area chart performance ── */}
       <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
