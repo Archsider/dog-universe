@@ -80,6 +80,32 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
     }
   }
 
+  // Fusionner avec MonthlyRevenueSummary pour les mois sans payments réels
+  // (données historiques saisies manuellement : jan/fév/mars avant mise en prod)
+  // MonthlyRevenueSummary.month = 1–12, monthly[].month = 0–11
+  const summaries = await prisma.monthlyRevenueSummary.findMany({
+    where: { year },
+  });
+
+  for (const summary of summaries) {
+    const m = summary.month - 1;
+    if (m < 0 || m > 11) continue;
+
+    // Utiliser le summary UNIQUEMENT si aucun payment réel ce mois
+    if (monthly[m].total === 0) {
+      monthly[m].total =
+        summary.boardingRevenue +
+        summary.groomingRevenue +
+        summary.taxiRevenue +
+        summary.otherRevenue;
+      monthly[m].boarding = summary.boardingRevenue;
+      monthly[m].grooming = summary.groomingRevenue;
+      monthly[m].taxi = summary.taxiRevenue;
+      // otherRevenue → croquettes (pas de champ PRODUCT dans le modèle historique)
+      monthly[m].croquettes = summary.otherRevenue;
+    }
+  }
+
   return monthly;
 }
 
@@ -161,12 +187,16 @@ export async function volumeByCategory(
       result.other++;
       continue;
     }
-    const dom = inv.items.reduce((best, item) =>
-      item.unitPrice * item.quantity > best.unitPrice * best.quantity ? item : best,
-    );
-    const k = categoryKey(dom.category);
-    if (k) result[k]++;
-    else result.other++;
+    // Compter chaque item avec montant > 0 (pas seulement le dominant)
+    let counted = false;
+    for (const item of inv.items) {
+      if (item.unitPrice * item.quantity === 0) continue;
+      const k = categoryKey(item.category);
+      if (k) result[k]++;
+      else result.other++;
+      counted = true;
+    }
+    if (!counted) result.other++;
   }
   return result;
 }
