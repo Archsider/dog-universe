@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { sendSMS } from '@/lib/sms';
 
 // GET /api/cron/birthday-notifications
 // Called daily by Vercel Cron (see vercel.json) or any cron scheduler.
@@ -65,6 +66,19 @@ export async function GET(req: NextRequest) {
         metadata: JSON.stringify({ petId: pet.id, age }),
       },
     });
+
+    // SMS anniversaire au propriétaire
+    const owner = await prisma.user.findUnique({
+      where: { id: pet.ownerId },
+      select: { phone: true, name: true },
+    });
+    if (owner?.phone) {
+      await sendSMS(
+        owner.phone,
+        `Bonjour ${owner.name} ! 🎂 Toute l'équipe Dog Universe souhaite un joyeux anniversaire à ${pet.name} qui fête ses ${age} an(s) aujourd'hui ! — Dog Universe ❤️`,
+      );
+    }
+
     created.push(pet.id);
   }
 

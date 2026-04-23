@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
+import { sendSMS, sendAdminSMS } from '@/lib/sms';
 
 /**
  * POST /api/cron/reminders
@@ -49,7 +50,7 @@ export async function GET(request: Request) {
       startDate: { gte: rangeStart, lte: rangeEnd },
     },
     include: {
-      client: { select: { name: true, email: true, language: true } },
+      client: { select: { name: true, email: true, language: true, phone: true } },
       bookingPets: { include: { pet: { select: { name: true } } } },
     },
   });
@@ -114,6 +115,14 @@ export async function GET(request: Request) {
         await sendEmail({ to: admin.email, subject: aSubject, html: aHtml });
       }
 
+      // SMS J-1 arrivée
+      const clientName = booking.client.name ?? booking.client.email;
+      await sendSMS(
+        booking.client.phone,
+        `Bonjour ${clientName} ! 🐕 Rappel : ${petNames} nous rejoint demain chez Dog Universe. N'oubliez pas ses affaires. À demain ! — Dog Universe 🏠`,
+      );
+      await sendAdminSMS(`📋 J-1 arrivée : ${petNames} de ${clientName} demain.`);
+
       sent++;
     } catch (err) {
       errors.push(`start:${booking.id}: ${String(err)}`);
@@ -128,7 +137,7 @@ export async function GET(request: Request) {
       endDate: { gte: rangeStart, lte: rangeEnd },
     },
     include: {
-      client: { select: { name: true, email: true, language: true } },
+      client: { select: { name: true, email: true, language: true, phone: true } },
       bookingPets: { include: { pet: { select: { name: true } } } },
     },
   });
@@ -191,6 +200,14 @@ export async function GET(request: Request) {
         );
         await sendEmail({ to: admin.email, subject: aSubject, html: aHtml });
       }
+
+      // SMS J-1 départ
+      const clientName = booking.client.name ?? booking.client.email;
+      await sendSMS(
+        booking.client.phone,
+        `Bonjour ${clientName} ! 🏡 Rappel : le séjour de ${petNames} se termine demain. Merci de prévoir sa récupération. — Dog Universe`,
+      );
+      await sendAdminSMS(`📋 J-1 départ : ${petNames} de ${clientName} demain.`);
 
       sent++;
     } catch (err) {

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingValidationNotification, createBookingRefusalNotification, createBookingInProgressNotification, createBookingCompletedNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { sendSMS, sendAdminSMS, formatDateFR, petEmoji } from '@/lib/sms';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth();
@@ -499,6 +500,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }, userLang);
       await sendEmail({ to: booking.client.email, subject, html });
 
+      // SMS client confirmation
+      const dateRange = booking.serviceType === 'BOARDING' && booking.endDate
+        ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
+        : `le ${formatDateFR(booking.startDate)}`;
+      const venueLine = booking.serviceType === 'BOARDING'
+        ? `${petNames} sera chez Dog Universe ${dateRange}.`
+        : `Transport prévu pour ${petNames} ${dateRange}.`;
+      await sendSMS(
+        booking.client.phone,
+        `Bonjour ${booking.client.name} ! ✅ Votre réservation est confirmée. ${venueLine} À très bientôt ! — Dog Universe`,
+      );
+
       // For PET_TAXI: ensure a STANDALONE TaxiTrip exists
       if (booking.serviceType === 'PET_TAXI') {
         const existingTrip = await prisma.taxiTrip.findFirst({ where: { bookingId: params.id } });
@@ -535,6 +548,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }, userLang);
       await sendEmail({ to: booking.client.email, subject, html });
 
+      // SMS client annulation + SMS admin alerte
+      await sendSMS(
+        booking.client.phone,
+        `Bonjour ${booking.client.name}. Votre réservation pour ${petNames} a été annulée. Contactez-nous si besoin. — Dog Universe`,
+      );
+      const adminDateRange = booking.serviceType === 'BOARDING' && booking.endDate
+        ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
+        : ` le ${formatDateFR(booking.startDate)}`;
+      await sendAdminSMS(
+        `⚠️ Annulation : ${booking.client.name} pour ${petNames}${adminDateRange}.`,
+      );
+
       await logAction({
         userId: session.user.id,
         action: status === 'REJECTED' ? LOG_ACTIONS.BOOKING_REJECTED : LOG_ACTIONS.BOOKING_CANCELLED,
@@ -550,6 +575,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         petNames,
         booking.serviceType as 'BOARDING' | 'PET_TAXI',
         hasGrooming
+      );
+
+      // SMS client séjour terminé
+      await sendSMS(
+        booking.client.phone,
+        `Bonjour ${booking.client.name} ! Le séjour de ${petNames} chez Dog Universe est terminé. Ce fut un plaisir de l'accueillir. À très bientôt ! — Dog Universe 🐾`,
       );
 
       await logAction({
@@ -584,6 +615,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         bookingRef,
         petNames,
         booking.serviceType as 'BOARDING' | 'PET_TAXI'
+      );
+
+      // SMS client : animal arrivé
+      const mainSpecies = booking.bookingPets[0]?.pet.species ?? 'DOG';
+      await sendSMS(
+        booking.client.phone,
+        `Bonjour ${booking.client.name} ! ${petNames} est bien arrivé(e) chez Dog Universe. Tout est en ordre. — Dog Universe ${petEmoji(mainSpecies)}`,
       );
 
       await logAction({

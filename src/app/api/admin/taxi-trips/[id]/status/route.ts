@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { sendSMS, sendAdminSMS } from '@/lib/sms';
 
 const FLOWS: Record<string, string[]> = {
   OUTBOUND:   ['PLANNED', 'EN_ROUTE_TO_CLIENT', 'ON_SITE_CLIENT', 'ANIMAL_ON_BOARD', 'ARRIVED_AT_PENSION'],
@@ -19,7 +20,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const body = await request.json() as { nextStatus?: string };
   const { nextStatus } = body;
 
-  const trip = await prisma.taxiTrip.findUnique({ where: { id: params.id } });
+  const trip = await prisma.taxiTrip.findUnique({
+    where: { id: params.id },
+    include: {
+      booking: {
+        select: {
+          client: { select: { name: true, phone: true } },
+          bookingPets: { select: { pet: { select: { name: true, species: true } } } },
+        },
+      },
+    },
+  });
   if (!trip) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const flow = FLOWS[trip.tripType];
@@ -52,6 +63,33 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         data: { status: 'IN_PROGRESS' },
       });
     }
+  }
+
+  // ── SMS contextuels ─────────────────────────────────────────────────────
+  const clientName = trip.booking?.client?.name ?? '';
+  const clientPhone = trip.booking?.client?.phone ?? null;
+  const petName = trip.booking?.bookingPets.map(bp => bp.pet.name).join(', ') || 'votre animal';
+
+  if (nextStatus === 'PLANNED') {
+    // Cas défensif (le flow validation rend cette transition presque
+    // impossible — PLANNED est l'état initial). Conservé par cohérence
+    // si un trip est replanifié depuis un état non-flow.
+    await sendSMS(
+      clientPhone,
+      `Bonjour ${clientName} ! 🚗 Le transport de ${petName} est bien programmé. Dog Universe sera là à l'heure. — Dog Universe`,
+    );
+    await sendAdminSMS(`🚗 Taxi planifié : ${petName} de ${clientName}.`);
+  } else if (nextStatus === 'ON_SITE_CLIENT') {
+    await sendSMS(
+      clientPhone,
+      `Bonjour ${clientName} ! 🚗 Dog Universe est arrivé à l'adresse prévue pour ${petName}. — Dog Universe`,
+    );
+  } else if (nextStatus === 'ARRIVED_AT_CLIENT') {
+    await sendSMS(
+      clientPhone,
+      `Bonjour ${clientName} ! 🏡 ${petName} est bien arrivé(e) à destination. Merci de votre confiance. — Dog Universe 🐾`,
+    );
+    await sendAdminSMS(`✅ Taxi terminé : ${petName} de ${clientName} livré(e).`);
   }
 
   return NextResponse.json({ ok: true });

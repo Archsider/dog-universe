@@ -3,6 +3,7 @@ import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { sendSMS, sendAdminSMS, formatMAD } from '@/lib/sms';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -46,7 +47,10 @@ export async function POST(request: Request, { params }: Params) {
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },
-    include: { payments: true },
+    include: {
+      payments: true,
+      client: { select: { name: true, email: true, phone: true, isWalkIn: true } },
+    },
   });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   if (invoice.status === 'CANCELLED') {
@@ -90,6 +94,17 @@ export async function POST(request: Request, { params }: Params) {
 
   // --- Reallocate & derive status ---
   await allocatePayments(id);
+
+  // --- SMS confirmation paiement ---
+  if (!invoice.client.isWalkIn) {
+    await sendSMS(
+      invoice.client.phone,
+      `Bonjour ${invoice.client.name} ! Nous confirmons la réception de votre paiement de ${formatMAD(parsedAmount)}. Merci ! — Dog Universe`,
+    );
+  }
+  await sendAdminSMS(
+    `💰 Paiement reçu : ${formatMAD(parsedAmount)} de ${invoice.clientDisplayName ?? invoice.client.name} — ${invoice.invoiceNumber}.`,
+  );
 
   // --- Log ---
   await logAction({
