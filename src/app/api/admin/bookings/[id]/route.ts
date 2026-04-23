@@ -512,6 +512,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         `Bonjour ${booking.client.name} ! ✅ Votre réservation est confirmée. ${venueLine} À très bientôt ! — Dog Universe`,
       );
 
+      // SMS admin — réservation confirmée
+      const confirmRangeAdmin = booking.serviceType === 'BOARDING' && booking.endDate
+        ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
+        : ` le ${formatDateFR(booking.startDate)}`;
+      await sendAdminSMS(
+        `✅ Réservation confirmée : ${booking.client.name} pour ${petNames}${confirmRangeAdmin}.`
+      );
+
       // For PET_TAXI: ensure a STANDALONE TaxiTrip exists
       if (booking.serviceType === 'PET_TAXI') {
         const existingTrip = await prisma.taxiTrip.findFirst({ where: { bookingId: params.id } });
@@ -583,6 +591,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         `Bonjour ${booking.client.name} ! Le séjour de ${petNames} chez Dog Universe est terminé. Ce fut un plaisir de l'accueillir. À très bientôt ! — Dog Universe 🐾`,
       );
 
+      // SMS admin — séjour terminé
+      await sendAdminSMS(
+        `✅ Séjour terminé : ${petNames} de ${booking.client.name} a quitté la pension.`
+      );
+
       await logAction({
         userId: session.user.id,
         action: LOG_ACTIONS.BOOKING_COMPLETED,
@@ -622,6 +635,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       await sendSMS(
         booking.client.phone,
         `Bonjour ${booking.client.name} ! ${petNames} est bien arrivé(e) chez Dog Universe. Tout est en ordre. — Dog Universe ${petEmoji(mainSpecies)}`,
+      );
+
+      // SMS admin — arrivée confirmée
+      await sendAdminSMS(
+        `🏠 Arrivée confirmée : ${petNames} de ${booking.client.name} est en pension.`
       );
 
       await logAction({

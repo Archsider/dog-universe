@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingConfirmationNotification, notifyAdminsNewBooking } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { formatDate } from '@/lib/utils';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
 
@@ -438,6 +439,68 @@ export async function POST(request: Request) {
         bookingRef,
         booking.id
       ).catch(() => {});
+
+      // SMS admin — nouvelle réservation
+      const clientLabel = booking.client.name ?? booking.client.email;
+      const dateRangeSMS = booking.serviceType === 'BOARDING' && booking.endDate
+        ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
+        : `le ${formatDateFR(booking.startDate)}`;
+      sendAdminSMS(
+        `🔔 Nouvelle réservation : ${clientLabel} pour ${petNames} ${dateRangeSMS}.`
+      ).catch(() => {});
+
+      // Email admin — loop tous les admins en DB (multi-admin scalable)
+      (async () => {
+        try {
+          const esc = (s: string) => s
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
+          const admins = await prisma.user.findMany({
+            where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+            select: { email: true, language: true },
+          });
+          const serviceLabelFr = booking.serviceType === 'BOARDING' ? 'Pension' : 'Taxi animalier';
+          const serviceLabelEn = booking.serviceType === 'BOARDING' ? 'Boarding' : 'Pet Taxi';
+          const dateRangeHtml = booking.serviceType === 'BOARDING' && booking.endDate
+            ? `du <strong>${formatDateFR(booking.startDate)}</strong> au <strong>${formatDateFR(booking.endDate)}</strong>`
+            : `le <strong>${formatDateFR(booking.startDate)}</strong>`;
+          const dateRangeHtmlEn = booking.serviceType === 'BOARDING' && booking.endDate
+            ? `from <strong>${formatDateFR(booking.startDate)}</strong> to <strong>${formatDateFR(booking.endDate)}</strong>`
+            : `on <strong>${formatDateFR(booking.startDate)}</strong>`;
+          await Promise.all(admins.map(admin => {
+            const isFr = (admin.language ?? 'fr') === 'fr';
+            const subject = isFr
+              ? `🔔 Nouvelle réservation — ${clientLabel}`
+              : `🔔 New booking — ${clientLabel}`;
+            const html = isFr
+              ? `<p>Bonjour,</p>
+                 <p>Nouvelle demande de réservation (${esc(serviceLabelFr)}) :</p>
+                 <ul>
+                   <li>Client : <strong>${esc(clientLabel)}</strong></li>
+                   <li>Animal(aux) : <strong>${esc(petNames)}</strong></li>
+                   <li>Dates : ${dateRangeHtml}</li>
+                   <li>Réf. : <code>${esc(bookingRef)}</code></li>
+                 </ul>
+                 <p><a href="${appUrl}/fr/admin/reservations/${booking.id}">Voir et valider la réservation</a></p>
+                 <p>— Dog Universe CRM</p>`
+              : `<p>Hello,</p>
+                 <p>New booking request (${esc(serviceLabelEn)}):</p>
+                 <ul>
+                   <li>Client: <strong>${esc(clientLabel)}</strong></li>
+                   <li>Pet(s): <strong>${esc(petNames)}</strong></li>
+                   <li>Dates: ${dateRangeHtmlEn}</li>
+                   <li>Ref.: <code>${esc(bookingRef)}</code></li>
+                 </ul>
+                 <p><a href="${appUrl}/en/admin/reservations/${booking.id}">Review and confirm</a></p>
+                 <p>— Dog Universe CRM</p>`;
+            return sendEmail({ to: admin.email, subject, html })
+              .catch(err => console.error('[Email] Admin new booking failed:', err));
+          }));
+        } catch (err) {
+          console.error('[Email] Admin new booking loop failed:', err);
+        }
+      })();
     }
 
     const serviceName = serviceType === 'BOARDING'
