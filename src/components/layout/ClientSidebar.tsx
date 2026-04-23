@@ -97,6 +97,28 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
         })}
       </nav>
 
+      {/* Skyline décoratif Marrakech — signature visuelle */}
+      <div className="px-3 pb-2 mt-2">
+        <div
+          className="relative h-16 rounded-xl overflow-hidden"
+          style={{ background: 'linear-gradient(180deg, #F5ECD8 0%, #EDD9A3 100%)' }}
+        >
+          <p className="absolute top-2 left-3 text-[8px] tracking-[2px] uppercase text-[#9A7235]/50 z-10">
+            Marrakech
+          </p>
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: "url('/images/marrakech-skyline.svg')",
+              backgroundSize: 'contain',
+              backgroundPosition: 'bottom center',
+              backgroundRepeat: 'no-repeat',
+              opacity: 0.7,
+            }}
+          />
+        </div>
+      </div>
+
       {/* Logout */}
       <div className="px-3 pb-4 pt-2 border-t border-[rgba(196,151,74,0.12)]">
         <button
