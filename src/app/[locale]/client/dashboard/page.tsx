@@ -156,19 +156,6 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         </div>
       )}
 
-      {/* Skyline banner — Marrakech signature */}
-      <div className="relative rounded-2xl overflow-hidden h-24 bg-gradient-to-r from-[#F5ECD8] to-[#EDD9A3] border border-[rgba(196,151,74,0.2)]">
-        <p className="absolute top-3 left-4 text-[9px] tracking-[3px] uppercase text-[#9A7235]/60 z-10">
-          Marrakech · Dog Universe
-        </p>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/images/marrakech-skyline.svg"
-          alt="Skyline Marrakech"
-          className="absolute bottom-0 left-0 w-full h-full object-contain object-bottom opacity-60"
-        />
-      </div>
-
       {/* Stats — premium cards */}
       <div className="grid grid-cols-3 gap-4">
         {[

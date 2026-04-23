@@ -58,7 +58,7 @@ export default async function ClientLayout({
 
           {/* Page content — zellige pattern in background @ 4% opacity */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in relative">
-            <div aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden opacity-[0.06]">
+            <div aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden opacity-[0.10]">
               <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <pattern id="zellige" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
