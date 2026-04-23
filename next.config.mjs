@@ -66,7 +66,11 @@ export default withSentryConfig(withNextIntl(nextConfig), {
   hideSourceMaps: true,
 
   // Disable the Sentry logger to keep build output clean
-  disableLogger: true,
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
 
   // Proxy Sentry requests through /monitoring to bypass ad-blockers
   tunnelRoute: '/monitoring',
