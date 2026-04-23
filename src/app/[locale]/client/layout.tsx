@@ -58,14 +58,21 @@ export default async function ClientLayout({
 
           {/* Page content — zellige pattern in background @ 4% opacity */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in relative">
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 opacity-[0.04] pointer-events-none"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpolygon points='30,5 35,22 48,12 42,28 58,25 45,33 52,48 38,41 33,58 28,41 14,48 21,33 8,25 24,28 18,12 31,22' fill='none' stroke='%23C4974A' stroke-width='0.8'/%3E%3C/svg%3E")`,
-                backgroundSize: '60px 60px',
-              }}
-            />
+            <div aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden opacity-[0.06]">
+              <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <pattern id="zellige" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
+                    <polygon
+                      points="30,5 35,22 48,12 42,28 58,25 45,33 52,48 38,41 33,58 28,41 14,48 21,33 8,25 24,28 18,12 31,22"
+                      fill="none"
+                      stroke="#C4974A"
+                      strokeWidth="0.8"
+                    />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#zellige)" />
+              </svg>
+            </div>
             <div className="relative z-10">{children}</div>
           </main>
         </div>

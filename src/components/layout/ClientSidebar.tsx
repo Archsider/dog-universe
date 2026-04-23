@@ -106,16 +106,42 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
           <p className="absolute top-2 left-3 text-[8px] tracking-[2px] uppercase text-[#9A7235]/50 z-10">
             Marrakech
           </p>
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: "url('/images/marrakech-skyline.svg')",
-              backgroundSize: 'contain',
-              backgroundPosition: 'bottom center',
-              backgroundRepeat: 'no-repeat',
-              opacity: 0.7,
-            }}
-          />
+          <svg
+            className="absolute bottom-0 left-0 w-full"
+            viewBox="0 0 260 50"
+            preserveAspectRatio="xMidYMax meet"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <g fill="#9A7235" opacity="0.4">
+              {/* Base / sol */}
+              <rect x="0" y="30" width="260" height="20" />
+              {/* Remparts crénelés gauche */}
+              <rect x="3" y="24" width="7" height="7" />
+              <rect x="13" y="24" width="7" height="7" />
+              <rect x="23" y="24" width="7" height="7" />
+              {/* Palmier gauche */}
+              <rect x="40" y="14" width="3" height="18" />
+              <ellipse cx="41" cy="13" rx="9" ry="4" transform="rotate(-15 41 13)" />
+              {/* Petit bâtiment à coupole */}
+              <rect x="70" y="22" width="25" height="10" />
+              <ellipse cx="82" cy="22" rx="10" ry="6" />
+              {/* Bâtiment principal + dôme + flèche */}
+              <rect x="105" y="10" width="35" height="22" />
+              <ellipse cx="122" cy="9" rx="13" ry="8" />
+              <rect x="120" y="2" width="3" height="9" />
+              <circle cx="121" cy="2" r="2" />
+              {/* Bâtiment droit */}
+              <rect x="150" y="18" width="22" height="14" />
+              {/* Palmier droite */}
+              <rect x="185" y="14" width="3" height="18" />
+              <ellipse cx="186" cy="13" rx="9" ry="4" transform="rotate(15 186 13)" />
+              {/* Remparts crénelés droite */}
+              <rect x="215" y="24" width="7" height="7" />
+              <rect x="225" y="24" width="7" height="7" />
+              <rect x="235" y="24" width="7" height="7" />
+            </g>
+          </svg>
         </div>
       </div>
 
