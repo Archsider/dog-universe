@@ -111,7 +111,7 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
             <h3 className="font-semibold text-charcoal text-sm mb-3">{l.loyalty}</h3>
             <div className="mb-3"><LoyaltyBadge grade={grade} locale={locale} /></div>
-            <ClientDetailActions clientId={id} currentGrade={grade} locale={locale} />
+            <ClientDetailActions clientId={id} currentGrade={grade} locale={locale} phone={client.phone} isWalkIn={client.isWalkIn} />
             <HistoricalDataForm
               clientId={id}
               initialStays={client.historicalStays ?? 0}

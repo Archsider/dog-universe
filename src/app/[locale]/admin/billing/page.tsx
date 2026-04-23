@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { FileText, Download, FileDown, Eye, Pencil } from 'lucide-react';
+import { FileText, Download, FileDown, Eye, Pencil, Search, X } from 'lucide-react';
 import { formatDate, formatMAD } from '@/lib/utils';
 import PaymentModal from './PaymentModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
@@ -11,7 +11,17 @@ import RecomputeAllocationsButton from '@/components/admin/RecomputeAllocationsB
 
 interface PageProps {
   params: { locale: string };
-  searchParams: { status?: string; page?: string };
+  searchParams: {
+    status?: string;
+    page?: string;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    paymentMethod?: string;
+    sort?: string;
+    order?: string;
+    clientId?: string;
+  };
 }
 
 export default async function AdminBillingPage({ params: { locale }, searchParams }: PageProps) {
@@ -19,35 +29,101 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const VALID_STATUS_FILTERS = ['', 'PAID', 'PARTIALLY_PAID', 'PENDING', 'CANCELLED'];
+  const VALID_PAYMENT_METHODS = ['CASH', 'CARD', 'CHECK', 'TRANSFER'];
+  const VALID_SORTS = ['reference', 'client', 'date', 'total', 'paid', 'remaining'];
+  const VALID_ORDERS = ['asc', 'desc'];
+
   const rawStatus = searchParams.status || '';
   const status = VALID_STATUS_FILTERS.includes(rawStatus) ? rawStatus : '';
   const page = parseInt(searchParams.page || '1');
   const limit = 20;
   const skip = (page - 1) * limit;
 
-  const where: Record<string, unknown> = { ...(status && { status }) };
+  const search = (searchParams.search || '').trim();
+  const dateFrom = searchParams.dateFrom || '';
+  const dateTo = searchParams.dateTo || '';
+  const rawPaymentMethod = searchParams.paymentMethod || '';
+  const paymentMethod = VALID_PAYMENT_METHODS.includes(rawPaymentMethod) ? rawPaymentMethod : '';
+  const rawSort = searchParams.sort || '';
+  const sort = VALID_SORTS.includes(rawSort) ? rawSort : '';
+  const rawOrder = searchParams.order || '';
+  const order = (VALID_ORDERS.includes(rawOrder) ? rawOrder : 'desc') as 'asc' | 'desc';
+  const clientId = (searchParams.clientId || '').trim();
 
-  const [invoices, total, totalRevenue, allClients, paymentMethodStats] = await Promise.all([
+  // Parse date filters safely — invalid dates are ignored
+  const dateFromParsed = dateFrom ? new Date(dateFrom) : null;
+  const dateToParsed = dateTo ? new Date(dateTo + 'T23:59:59.999Z') : null;
+  const dateFromValid = dateFromParsed && !isNaN(dateFromParsed.getTime()) ? dateFromParsed : null;
+  const dateToValid = dateToParsed && !isNaN(dateToParsed.getTime()) ? dateToParsed : null;
+
+  const issuedAtFilter: Record<string, Date> = {};
+  if (dateFromValid) issuedAtFilter.gte = dateFromValid;
+  if (dateToValid) issuedAtFilter.lte = dateToValid;
+
+  const where: Record<string, unknown> = {
+    ...(status ? { status } : {}),
+    ...(clientId ? { clientId } : {}),
+    ...(search
+      ? {
+          OR: [
+            { invoiceNumber: { contains: search, mode: 'insensitive' } },
+            { clientDisplayName: { contains: search, mode: 'insensitive' } },
+            { client: { name: { contains: search, mode: 'insensitive' } } },
+          ],
+        }
+      : {}),
+    ...(Object.keys(issuedAtFilter).length ? { issuedAt: issuedAtFilter } : {}),
+    ...(paymentMethod ? { payments: { some: { paymentMethod } } } : {}),
+  };
+
+  // Dynamic orderBy — remaining uses `amount` as approximation (Prisma can't order by computed field)
+  const orderByMap: Record<string, Record<string, 'asc' | 'desc'>> = {
+    reference: { invoiceNumber: order },
+    client:    { clientDisplayName: order },
+    date:      { issuedAt: order },
+    total:     { amount: order },
+    paid:      { paidAmount: order },
+    remaining: { amount: order },
+  };
+  const orderBy = sort ? orderByMap[sort] : { issuedAt: 'desc' as const };
+
+  // Stat cards respect date range when applied
+  const paymentDateFilter: Record<string, Date> = {};
+  if (dateFromValid) paymentDateFilter.gte = dateFromValid;
+  if (dateToValid) paymentDateFilter.lte = dateToValid;
+  const paymentStatsWhere = Object.keys(paymentDateFilter).length
+    ? { paymentDate: paymentDateFilter }
+    : undefined;
+
+  const [invoices, total, totalRevenue, allClients, paymentMethodStats, totalUnfiltered] = await Promise.all([
     prisma.invoice.findMany({
       where,
       include: {
         client: { select: { id: true, name: true, email: true } },
         booking: { select: { serviceType: true } },
       },
-      orderBy: { issuedAt: 'desc' },
+      orderBy,
       skip,
       take: limit,
-      // We need paymentMethod and paymentDate for display
     }),
     prisma.invoice.count({ where }),
-    prisma.payment.aggregate({ _sum: { amount: true } }),
+    prisma.payment.aggregate({ _sum: { amount: true }, where: paymentStatsWhere }),
     prisma.user.findMany({ where: { role: 'CLIENT' }, select: { id: true, name: true, email: true }, orderBy: { name: 'asc' } }),
     prisma.payment.groupBy({
       by: ['paymentMethod'],
       _sum: { amount: true },
       _count: { id: true },
+      where: paymentStatsWhere,
     }),
+    prisma.invoice.count(),
   ]);
+
+  const activeFiltersCount =
+    (search ? 1 : 0) +
+    (dateFromValid ? 1 : 0) +
+    (dateToValid ? 1 : 0) +
+    (paymentMethod ? 1 : 0) +
+    (clientId ? 1 : 0);
 
   const labels = {
     fr: {
@@ -97,6 +173,44 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
     { value: 'PAID', label: l.paid },
     { value: 'PARTIALLY_PAID', label: l.partial },
     { value: 'PENDING', label: l.pending },
+  ];
+
+  const methodOptions = [
+    { value: '',         fr: 'Tous les moyens',  en: 'All methods' },
+    { value: 'CASH',     fr: 'Espèces',          en: 'Cash' },
+    { value: 'CARD',     fr: 'TPE / Carte',      en: 'Card / POS' },
+    { value: 'CHECK',    fr: 'Chèque',           en: 'Check' },
+    { value: 'TRANSFER', fr: 'Virement',         en: 'Transfer' },
+  ];
+
+  // Query-string builder preserving all active filters; overrides are merged last.
+  const buildQS = (overrides: Record<string, string | null | undefined>): string => {
+    const base: Record<string, string> = {};
+    if (status) base.status = status;
+    if (search) base.search = search;
+    if (dateFrom) base.dateFrom = dateFrom;
+    if (dateTo) base.dateTo = dateTo;
+    if (paymentMethod) base.paymentMethod = paymentMethod;
+    if (sort) base.sort = sort;
+    if (order && order !== 'desc') base.order = order;
+    if (clientId) base.clientId = clientId;
+    const merged = { ...base, ...overrides };
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(merged)) {
+      if (v === '' || v === null || v === undefined) continue;
+      params.set(k, v);
+    }
+    const qs = params.toString();
+    return qs ? '?' + qs : '';
+  };
+
+  const SORT_COLS: { key: string; label: string; align: 'left' | 'right' }[] = [
+    { key: 'reference', label: l.ref,       align: 'left'  },
+    { key: 'client',    label: l.client,    align: 'left'  },
+    { key: 'date',      label: l.date,      align: 'left'  },
+    { key: 'total',     label: l.total,     align: 'right' },
+    { key: 'paid',      label: l.paid_col,  align: 'right' },
+    { key: 'remaining', label: l.remaining, align: 'right' },
   ];
 
   return (
@@ -211,12 +325,85 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
         );
       })()}
 
+      {/* Filtres CRM : search + date + méthode */}
+      <form action="" method="GET" className="mb-5 space-y-3">
+        {/* Preserve other params on submit */}
+        {status && <input type="hidden" name="status" value={status} />}
+        {sort && <input type="hidden" name="sort" value={sort} />}
+        {order && order !== 'desc' && <input type="hidden" name="order" value={order} />}
+        {clientId && <input type="hidden" name="clientId" value={clientId} />}
+
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A7E75] pointer-events-none" />
+          <input
+            name="search"
+            defaultValue={search}
+            placeholder={locale === 'fr' ? 'Rechercher par référence, client...' : 'Search by reference, client...'}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#C4974A] rounded-lg text-sm text-[#2A2520] placeholder:text-[#8A7E75] focus:outline-none focus:border-[#C4974A] focus:ring-2 focus:ring-[#C4974A]/15 transition"
+          />
+        </div>
+
+        <div className="flex gap-2 flex-wrap items-center">
+          <label className="text-xs text-[#8A7E75]">
+            {locale === 'fr' ? 'Du' : 'From'}
+            <input
+              type="date"
+              name="dateFrom"
+              defaultValue={dateFrom}
+              className="ml-2 px-3 py-1.5 bg-white border border-[#C4974A] rounded-lg text-sm text-[#2A2520] focus:outline-none focus:ring-2 focus:ring-[#C4974A]/15"
+            />
+          </label>
+          <label className="text-xs text-[#8A7E75]">
+            {locale === 'fr' ? 'Au' : 'To'}
+            <input
+              type="date"
+              name="dateTo"
+              defaultValue={dateTo}
+              className="ml-2 px-3 py-1.5 bg-white border border-[#C4974A] rounded-lg text-sm text-[#2A2520] focus:outline-none focus:ring-2 focus:ring-[#C4974A]/15"
+            />
+          </label>
+          <select
+            name="paymentMethod"
+            defaultValue={paymentMethod}
+            className="px-3 py-1.5 bg-white border border-[#C4974A] rounded-lg text-sm text-[#2A2520] focus:outline-none focus:ring-2 focus:ring-[#C4974A]/15"
+          >
+            {methodOptions.map(m => (
+              <option key={m.value} value={m.value}>
+                {locale === 'fr' ? m.fr : m.en}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-[#C4974A] text-white border border-[#C4974A] hover:bg-[#A67F38] transition-colors"
+          >
+            {locale === 'fr' ? 'Appliquer' : 'Apply'}
+          </button>
+          {activeFiltersCount > 0 && (
+            <Link
+              href="?"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#8A7E75] border border-[rgba(196,151,74,0.3)] hover:border-[#C4974A] hover:text-[#C4974A] transition-colors"
+            >
+              <X className="h-3 w-3" />
+              {locale === 'fr' ? 'Réinitialiser' : 'Reset'}
+            </Link>
+          )}
+          {activeFiltersCount > 0 && (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#C4974A]/10 text-[#C4974A] border border-[#C4974A]/30">
+              {activeFiltersCount} {locale === 'fr'
+                ? (activeFiltersCount > 1 ? 'filtres actifs' : 'filtre actif')
+                : (activeFiltersCount > 1 ? 'active filters' : 'active filter')}
+            </span>
+          )}
+        </div>
+      </form>
+
       {/* Filter pills */}
       <div className="flex gap-2 mb-5 flex-wrap">
         {statusFilters.map(f => {
           const active = status === f.value;
           return (
-            <Link key={f.value} href={`?status=${f.value}`}>
+            <Link key={f.value} href={buildQS({ status: f.value || null, page: null })}>
               <button
                 type="button"
                 className={`px-5 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all duration-300 ${
@@ -245,12 +432,25 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
               <table className="w-full min-w-[800px]">
                 <thead>
                   <tr className="bg-[#FEFCF9] border-b border-[rgba(196,151,74,0.12)]">
-                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.ref}</th>
-                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.client}</th>
-                    <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.date}</th>
-                    <th className="text-right text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.total}</th>
-                    <th className="text-right text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.paid_col}</th>
-                    <th className="text-right text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.remaining}</th>
+                    {SORT_COLS.map(col => {
+                      const isActive = sort === col.key;
+                      const nextOrder = isActive && order === 'desc' ? 'asc' : 'desc';
+                      const arrow = isActive ? (order === 'asc' ? '↑' : '↓') : '↕';
+                      return (
+                        <th
+                          key={col.key}
+                          className={`text-${col.align} text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider`}
+                        >
+                          <Link
+                            href={buildQS({ sort: col.key, order: nextOrder, page: null })}
+                            className={`inline-flex items-center gap-1 hover:text-[#C4974A] transition-colors ${isActive ? 'text-[#C4974A]' : ''}`}
+                          >
+                            {col.label}
+                            <span className="text-[10px] opacity-60">{arrow}</span>
+                          </Link>
+                        </th>
+                      );
+                    })}
                     <th className="text-left text-[11px] font-semibold text-[#8A7E75] px-6 py-4 uppercase tracking-wider">{l.status}</th>
                     <th className="px-6 py-4" />
                   </tr>
@@ -345,7 +545,13 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
               </table>
             </div>
             <div className="px-6 py-4 border-t border-[rgba(196,151,74,0.12)] text-xs text-[#8A7E75]">
-              {total} {locale === 'fr' ? 'encaissements récents' : 'recent entries'}
+              {activeFiltersCount > 0 || status
+                ? (locale === 'fr'
+                    ? `${total} facture(s) trouvée(s) sur ${totalUnfiltered} au total`
+                    : `${total} invoice(s) found out of ${totalUnfiltered} total`)
+                : (locale === 'fr'
+                    ? `${total} facture(s) trouvée(s)`
+                    : `${total} invoice(s) found`)}
             </div>
           </>
         )}
