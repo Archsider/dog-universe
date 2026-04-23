@@ -50,12 +50,12 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo — typographique premium + image en-dessous */}
-      <div className="px-6 py-5 border-b border-[rgba(196,151,74,0.15)]">
+      <div className="px-6 py-5 border-b border-[rgba(196,151,74,0.15)] text-center">
         <Link href={`/${locale}/client/dashboard`} className="block">
           <div className="font-serif text-lg font-semibold text-[#1C1612] leading-tight">
             Dog <span className="text-[#C4974A]">Universe</span>
           </div>
-          <Image src="/logo.png" alt="Dog Universe" width={140} height={50} className="object-contain mt-2" priority />
+          <Image src="/logo.png" alt="Dog Universe" width={140} height={50} className="object-contain mt-2 mx-auto" priority />
         </Link>
       </div>
 

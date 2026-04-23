@@ -93,7 +93,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       {/* Greeting — premium label + nom + ligne dorée */}
-      <div>
+      <div className="text-center">
         <p className="text-[10px] uppercase tracking-[2px] text-[#8A7E75]">
           {locale === 'fr' ? 'Bonjour' : 'Hello'}
         </p>
@@ -101,7 +101,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           {firstName}
           {lastName && <> <span className="italic text-[#C4974A]">{lastName}</span></>}
         </h1>
-        <div className="w-10 h-[2px] bg-[#C4974A] mt-3" />
+        <div className="w-10 h-[2px] bg-[#C4974A] mt-3 mx-auto" />
         <p className="text-sm text-[#7A6E65] mt-3">{t('subtitle')}</p>
       </div>
 
