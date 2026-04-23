@@ -18,6 +18,9 @@ interface PageProps {
     dateFrom?: string;
     dateTo?: string;
     paymentMethod?: string;
+    category?: string;
+    amountMin?: string;
+    amountMax?: string;
     sort?: string;
     order?: string;
     clientId?: string;
@@ -30,6 +33,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
 
   const VALID_STATUS_FILTERS = ['', 'PAID', 'PARTIALLY_PAID', 'PENDING', 'CANCELLED'];
   const VALID_PAYMENT_METHODS = ['CASH', 'CARD', 'CHECK', 'TRANSFER'];
+  const VALID_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER'];
   const VALID_SORTS = ['reference', 'client', 'date', 'total', 'paid', 'remaining'];
   const VALID_ORDERS = ['asc', 'desc'];
 
@@ -44,6 +48,14 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
   const dateTo = searchParams.dateTo || '';
   const rawPaymentMethod = searchParams.paymentMethod || '';
   const paymentMethod = VALID_PAYMENT_METHODS.includes(rawPaymentMethod) ? rawPaymentMethod : '';
+  const rawCategory = searchParams.category || '';
+  const category = VALID_CATEGORIES.includes(rawCategory) ? rawCategory : '';
+  const amountMin = (searchParams.amountMin || '').trim();
+  const amountMax = (searchParams.amountMax || '').trim();
+  const amountMinParsed = amountMin !== '' ? parseFloat(amountMin) : NaN;
+  const amountMaxParsed = amountMax !== '' ? parseFloat(amountMax) : NaN;
+  const amountMinValid = !isNaN(amountMinParsed) && amountMinParsed >= 0 ? amountMinParsed : null;
+  const amountMaxValid = !isNaN(amountMaxParsed) && amountMaxParsed >= 0 ? amountMaxParsed : null;
   const rawSort = searchParams.sort || '';
   const sort = VALID_SORTS.includes(rawSort) ? rawSort : '';
   const rawOrder = searchParams.order || '';
@@ -60,6 +72,10 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
   if (dateFromValid) issuedAtFilter.gte = dateFromValid;
   if (dateToValid) issuedAtFilter.lte = dateToValid;
 
+  const amountFilter: Record<string, number> = {};
+  if (amountMinValid !== null) amountFilter.gte = amountMinValid;
+  if (amountMaxValid !== null) amountFilter.lte = amountMaxValid;
+
   const where: Record<string, unknown> = {
     ...(status ? { status } : {}),
     ...(clientId ? { clientId } : {}),
@@ -74,6 +90,8 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
       : {}),
     ...(Object.keys(issuedAtFilter).length ? { issuedAt: issuedAtFilter } : {}),
     ...(paymentMethod ? { payments: { some: { paymentMethod } } } : {}),
+    ...(category ? { items: { some: { category } } } : {}),
+    ...(Object.keys(amountFilter).length ? { amount: amountFilter } : {}),
   };
 
   // Dynamic orderBy — remaining uses `amount` as approximation (Prisma can't order by computed field)
@@ -87,12 +105,20 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
   };
   const orderBy = sort ? orderByMap[sort] : { issuedAt: 'desc' as const };
 
-  // Stat cards respect date range when applied
+  // Stat cards respect the same filters as the table (date range + invoice filters)
   const paymentDateFilter: Record<string, Date> = {};
   if (dateFromValid) paymentDateFilter.gte = dateFromValid;
   if (dateToValid) paymentDateFilter.lte = dateToValid;
   const paymentStatsWhere = Object.keys(paymentDateFilter).length
     ? { paymentDate: paymentDateFilter }
+    : undefined;
+
+  // Extended stats where — includes invoice filters via relation
+  const paymentStatsWhereFull: Record<string, unknown> = {};
+  if (Object.keys(paymentDateFilter).length) paymentStatsWhereFull.paymentDate = paymentDateFilter;
+  if (Object.keys(where).length) paymentStatsWhereFull.invoice = where;
+  const paymentStatsWhereOrUndef = Object.keys(paymentStatsWhereFull).length
+    ? paymentStatsWhereFull
     : undefined;
 
   const [invoices, total, totalRevenue, allClients, paymentMethodStats, totalUnfiltered] = await Promise.all([
@@ -113,7 +139,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
       by: ['paymentMethod'],
       _sum: { amount: true },
       _count: { id: true },
-      where: paymentStatsWhere,
+      where: paymentStatsWhereOrUndef,
     }),
     prisma.invoice.count(),
   ]);
@@ -123,6 +149,9 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
     (dateFromValid ? 1 : 0) +
     (dateToValid ? 1 : 0) +
     (paymentMethod ? 1 : 0) +
+    (category ? 1 : 0) +
+    (amountMinValid !== null ? 1 : 0) +
+    (amountMaxValid !== null ? 1 : 0) +
     (clientId ? 1 : 0);
 
   const labels = {
@@ -173,6 +202,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
     { value: 'PAID', label: l.paid },
     { value: 'PARTIALLY_PAID', label: l.partial },
     { value: 'PENDING', label: l.pending },
+    { value: 'CANCELLED', label: locale === 'fr' ? 'Annulées' : 'Cancelled' },
   ];
 
   const methodOptions = [
@@ -183,6 +213,15 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
     { value: 'TRANSFER', fr: 'Virement',         en: 'Transfer' },
   ];
 
+  const categoryOptions = [
+    { value: '',         fr: 'Toutes catégories', en: 'All categories' },
+    { value: 'BOARDING', fr: '🏠 Pension',        en: '🏠 Boarding' },
+    { value: 'PET_TAXI', fr: '🚗 Pet Taxi',       en: '🚗 Pet Taxi' },
+    { value: 'GROOMING', fr: '✂️ Toilettage',     en: '✂️ Grooming' },
+    { value: 'PRODUCT',  fr: '🐾 Croquettes',     en: '🐾 Kibbles' },
+    { value: 'OTHER',    fr: '➕ Autre',          en: '➕ Other' },
+  ];
+
   // Query-string builder preserving all active filters; overrides are merged last.
   const buildQS = (overrides: Record<string, string | null | undefined>): string => {
     const base: Record<string, string> = {};
@@ -191,6 +230,9 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
     if (dateFrom) base.dateFrom = dateFrom;
     if (dateTo) base.dateTo = dateTo;
     if (paymentMethod) base.paymentMethod = paymentMethod;
+    if (category) base.category = category;
+    if (amountMin) base.amountMin = amountMin;
+    if (amountMax) base.amountMax = amountMax;
     if (sort) base.sort = sort;
     if (order && order !== 'desc') base.order = order;
     if (clientId) base.clientId = clientId;
@@ -229,7 +271,20 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
             <div className="text-lg font-bold text-[#C4974A]">{formatMAD(totalRevenue._sum.amount || 0)}</div>
           </div>
           <a
-            href={`/api/admin/invoices/export?status=${status}&year=${new Date().getFullYear()}`}
+            href={(() => {
+              const exportParams = new URLSearchParams();
+              if (status) exportParams.set('status', status);
+              if (search) exportParams.set('search', search);
+              if (dateFrom) exportParams.set('dateFrom', dateFrom);
+              if (dateTo) exportParams.set('dateTo', dateTo);
+              if (paymentMethod) exportParams.set('paymentMethod', paymentMethod);
+              if (category) exportParams.set('category', category);
+              if (amountMin) exportParams.set('amountMin', amountMin);
+              if (amountMax) exportParams.set('amountMax', amountMax);
+              if (clientId) exportParams.set('clientId', clientId);
+              const qs = exportParams.toString();
+              return `/api/admin/invoices/export${qs ? '?' + qs : ''}`;
+            })()}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-white border border-[#C4974A] text-[#C4974A] hover:bg-[#C4974A] hover:text-white rounded-lg transition-all duration-300"
             title={locale === 'fr' ? 'Exporter en CSV' : 'Export CSV'}
           >
@@ -325,7 +380,7 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
         );
       })()}
 
-      {/* Filtres CRM : search + date + méthode */}
+      {/* Filtres CRM : search + date + méthode + catégorie + montant */}
       <form action="" method="GET" className="mb-5 space-y-3">
         {/* Preserve other params on submit */}
         {status && <input type="hidden" name="status" value={status} />}
@@ -373,6 +428,17 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
               </option>
             ))}
           </select>
+          <select
+            name="category"
+            defaultValue={category}
+            className="px-3 py-1.5 bg-white border border-[#C4974A] rounded-lg text-sm text-[#2A2520] focus:outline-none focus:ring-2 focus:ring-[#C4974A]/15"
+          >
+            {categoryOptions.map(c => (
+              <option key={c.value} value={c.value}>
+                {locale === 'fr' ? c.fr : c.en}
+              </option>
+            ))}
+          </select>
           <button
             type="submit"
             className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-[#C4974A] text-white border border-[#C4974A] hover:bg-[#A67F38] transition-colors"
@@ -395,6 +461,32 @@ export default async function AdminBillingPage({ params: { locale }, searchParam
                 : (activeFiltersCount > 1 ? 'active filters' : 'active filter')}
             </span>
           )}
+        </div>
+
+        {/* Row montant min/max */}
+        <div className="flex gap-2 flex-wrap items-center">
+          <label className="text-sm text-[#8A7E75]">
+            {locale === 'fr' ? 'Montant' : 'Amount'}
+          </label>
+          <input
+            type="number"
+            name="amountMin"
+            defaultValue={amountMin}
+            placeholder={locale === 'fr' ? 'Min MAD' : 'Min MAD'}
+            min="0"
+            step="0.01"
+            className="w-28 px-3 py-1.5 bg-white border border-[#C4974A] rounded-lg text-sm text-[#2A2520] focus:outline-none focus:ring-2 focus:ring-[#C4974A]/15"
+          />
+          <span className="text-[#8A7E75] text-sm">—</span>
+          <input
+            type="number"
+            name="amountMax"
+            defaultValue={amountMax}
+            placeholder={locale === 'fr' ? 'Max MAD' : 'Max MAD'}
+            min="0"
+            step="0.01"
+            className="w-28 px-3 py-1.5 bg-white border border-[#C4974A] rounded-lg text-sm text-[#2A2520] focus:outline-none focus:ring-2 focus:ring-[#C4974A]/15"
+          />
         </div>
       </form>
 
