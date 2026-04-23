@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { auth } from '../../../../auth';
 import { ClientSidebar } from '@/components/layout/ClientSidebar';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
@@ -39,20 +40,30 @@ export default async function ClientLayout({
 
   return (
     <ContractGate hasContract={hasContract} clientName={session.user.name ?? ''}>
-      <div className="flex min-h-screen bg-[#FAF6F0]">
+      <div className="flex min-h-screen bg-[#FEFCF9]">
         <ClientSidebar userName={session.user.name} unreadCount={unreadCount} />
 
         {/* Main content */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Top bar */}
-          <header className="bg-white border-b border-[#F0D98A]/30 h-14 flex items-center justify-end px-4 sm:px-6 gap-3 flex-shrink-0 lg:sticky lg:top-0 lg:z-30">
-            <NotificationBell />
-            <LanguageSwitcher />
+          <header className="bg-[#FEFCF9]/95 backdrop-blur-sm border-b border-[rgba(196,151,74,0.15)] h-14 flex items-center justify-between px-4 sm:px-6 gap-3 flex-shrink-0 lg:sticky lg:top-0 lg:z-30">
+            <Link href={`/${locale}/client/dashboard`} className="font-serif text-lg font-semibold text-[#1C1612] hidden lg:block">
+              Dog <span className="text-[#C4974A]">Universe</span>
+            </Link>
+            <div className="flex items-center gap-3 ml-auto">
+              <NotificationBell />
+              <LanguageSwitcher />
+            </div>
           </header>
 
-          {/* Page content */}
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in">
-            {children}
+          {/* Page content — zellige pattern in background @ 4% opacity */}
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in relative">
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 bg-repeat opacity-[0.04] pointer-events-none"
+              style={{ backgroundImage: "url('/images/zellige-pattern.svg')", backgroundSize: '80px 80px' }}
+            />
+            <div className="relative z-10">{children}</div>
           </main>
         </div>
       </div>
