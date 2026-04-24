@@ -73,3 +73,57 @@ export function petEmoji(species: string): string {
   if (species === 'CAT') return '🐱'
   return '🐾'
 }
+
+// ─── Helpers genre / pluriel ─────────────────────────────────────────────────
+// Tous prennent `pets: { gender?: string | null }[]` et retournent la forme
+// française accordée. Si la liste est vide, fallback masculin singulier.
+
+type PetForGender = { gender?: string | null }
+
+function isAllFemale(pets: PetForGender[]): boolean {
+  if (pets.length === 0) return false
+  return pets.every(p => p.gender === 'FEMALE')
+}
+
+export function petCompanion(pets: PetForGender[]): string {
+  const allFemale = isAllFemale(pets)
+  if (pets.length > 1) return allFemale ? 'vos compagnes' : 'vos compagnons'
+  return allFemale ? 'votre compagne' : 'votre compagnon'
+}
+
+export function petVerb(
+  pets: PetForGender[],
+  tense: 'present' | 'future' = 'future',
+): string {
+  return pets.length > 1
+    ? (tense === 'future' ? 'seront' : 'sont')
+    : (tense === 'future' ? 'sera' : 'est')
+}
+
+export function petArrived(pets: PetForGender[]): string {
+  const allFemale = isAllFemale(pets)
+  if (pets.length > 1) return allFemale ? 'arrivées' : 'arrivés'
+  return allFemale ? 'arrivée' : 'arrivé'
+}
+
+export function petReturned(pets: PetForGender[]): string {
+  const allFemale = isAllFemale(pets)
+  if (pets.length > 1) return allFemale ? 'rentrées' : 'rentrés'
+  return allFemale ? 'rentrée' : 'rentré'
+}
+
+export function petPossessive(pets: PetForGender[]): string {
+  return pets.length > 1 ? 'leurs' : 'ses'
+}
+
+export function petPronoun(pets: PetForGender[]): string {
+  const allFemale = isAllFemale(pets)
+  if (pets.length > 1) return allFemale ? 'elles' : 'ils'
+  return allFemale ? 'elle' : 'il'
+}
+
+export function petChouchoute(pets: PetForGender[]): string {
+  const allFemale = isAllFemale(pets)
+  if (pets.length > 1) return allFemale ? 'chouchoutées' : 'chouchoutés'
+  return allFemale ? 'chouchoutée' : 'chouchouté'
+}

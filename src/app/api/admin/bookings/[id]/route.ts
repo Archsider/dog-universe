@@ -4,7 +4,10 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingValidationNotification, createBookingRefusalNotification, createBookingInProgressNotification, createBookingCompletedNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
-import { sendSMS, sendAdminSMS, formatDateFR, petEmoji } from '@/lib/sms';
+import {
+  sendSMS, sendAdminSMS, formatDateFR,
+  petVerb, petArrived, petChouchoute,
+} from '@/lib/sms';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth();
@@ -485,7 +488,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   // Send notifications on status change
   if (status && status !== booking.status) {
     const userLang = booking.client.language || 'fr';
-    const petNames = booking.bookingPets.map(bp => bp.pet.name).join(', ');
+    const pets = booking.bookingPets.map(bp => bp.pet);
+    const petNames = pets.map(p => p.name).join(' et ');
+    const firstName = (booking.client.name ?? booking.client.email).split(' ')[0];
     const bookingRef = booking.id.slice(0, 8).toUpperCase();
 
     if (status === 'CONFIRMED') {
@@ -497,19 +502,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         service: booking.serviceType === 'BOARDING' ? (userLang === 'fr' ? 'Pension' : 'Boarding') : 'Pet Taxi',
         petName: petNames,
         dates,
-      }, userLang);
+      }, userLang, pets);
       await sendEmail({ to: booking.client.email, subject, html });
 
-      // SMS client confirmation
+      // SMS client confirmation — accord genre/pluriel
       const dateRange = booking.serviceType === 'BOARDING' && booking.endDate
         ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
         : `le ${formatDateFR(booking.startDate)}`;
       const venueLine = booking.serviceType === 'BOARDING'
-        ? `${petNames} sera chez Dog Universe ${dateRange}.`
+        ? `${petNames} ${petVerb(pets)} chez Dog Universe ${dateRange}. Nous ${pets.length > 1 ? 'les' : "l'"} attendons avec impatience !`
         : `Transport prévu pour ${petNames} ${dateRange}.`;
       await sendSMS(
         booking.client.phone,
-        `Bonjour ${booking.client.name} ! ✅ Votre réservation est confirmée. ${venueLine} À très bientôt ! — Dog Universe`,
+        `Bonjour ${firstName} ! ${venueLine} — Dog Universe 🐾`,
       );
 
       // SMS admin — réservation confirmée
@@ -517,7 +522,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
         : ` le ${formatDateFR(booking.startDate)}`;
       await sendAdminSMS(
-        `✅ Réservation confirmée : ${booking.client.name} pour ${petNames}${confirmRangeAdmin}.`
+        `✅ Résa confirmée : ${petNames} de ${booking.client.name}${confirmRangeAdmin}.`
       );
 
       // For PET_TAXI: ensure a STANDALONE TaxiTrip exists
@@ -553,19 +558,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         clientName: booking.client.name ?? booking.client.email,
         bookingRef,
         petName: petNames,
-      }, userLang);
+      }, userLang, pets);
       await sendEmail({ to: booking.client.email, subject, html });
 
       // SMS client annulation + SMS admin alerte
       await sendSMS(
         booking.client.phone,
-        `Bonjour ${booking.client.name}. Votre réservation pour ${petNames} a été annulée. Contactez-nous si besoin. — Dog Universe`,
+        `Bonjour ${firstName}, votre réservation pour ${petNames} a été annulée. Nous restons disponibles. — Dog Universe`,
       );
       const adminDateRange = booking.serviceType === 'BOARDING' && booking.endDate
         ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
         : ` le ${formatDateFR(booking.startDate)}`;
       await sendAdminSMS(
-        `⚠️ Annulation : ${booking.client.name} pour ${petNames}${adminDateRange}.`,
+        `⚠️ Annulation : ${petNames} de ${booking.client.name}${adminDateRange}.`,
       );
 
       await logAction({
@@ -588,12 +593,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       // SMS client séjour terminé
       await sendSMS(
         booking.client.phone,
-        `Bonjour ${booking.client.name} ! Le séjour de ${petNames} chez Dog Universe est terminé. Ce fut un plaisir de l'accueillir. À très bientôt ! — Dog Universe 🐾`,
+        `Bonjour ${firstName} ! Le séjour de ${petNames} est terminé. Ce fut un plaisir de ${pets.length > 1 ? 'les' : "l'"} accueillir. À très bientôt ! — Dog Universe 🐾`,
       );
 
       // SMS admin — séjour terminé
       await sendAdminSMS(
-        `✅ Séjour terminé : ${petNames} de ${booking.client.name} a quitté la pension.`
+        `✅ Départ : ${petNames} de ${booking.client.name} a quitté la pension.`
       );
 
       await logAction({
@@ -630,16 +635,26 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         booking.serviceType as 'BOARDING' | 'PET_TAXI'
       );
 
-      // SMS client : animal arrivé
-      const mainSpecies = booking.bookingPets[0]?.pet.species ?? 'DOG';
-      await sendSMS(
-        booking.client.phone,
-        `Bonjour ${booking.client.name} ! ${petNames} est bien arrivé(e) chez Dog Universe. Tout est en ordre. — Dog Universe ${petEmoji(mainSpecies)}`,
-      );
+      // SMS client : animal arrivé — skip si livraison taxi STANDALONE déjà
+      // confirmée (le taxi-trip route a déjà envoyé son propre SMS d'arrivée).
+      const hasTaxiDelivered = await prisma.taxiTrip.findFirst({
+        where: {
+          bookingId: booking.id,
+          tripType: 'STANDALONE',
+          status: 'ARRIVED_AT_PENSION',
+        },
+        select: { id: true },
+      });
+      if (!hasTaxiDelivered) {
+        await sendSMS(
+          booking.client.phone,
+          `Bonjour ${firstName} ! ${petNames} ${petVerb(pets, 'present')} bien ${petArrived(pets)} et déjà ${petChouchoute(pets)}. Nous en prenons soin. — Dog Universe 🐾`,
+        );
+      }
 
-      // SMS admin — arrivée confirmée
+      // SMS admin — arrivée confirmée (toujours)
       await sendAdminSMS(
-        `🏠 Arrivée confirmée : ${petNames} de ${booking.client.name} est en pension.`
+        `🏠 Arrivée : ${petNames} de ${booking.client.name} est en pension.`
       );
 
       await logAction({

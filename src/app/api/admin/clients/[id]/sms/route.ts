@@ -36,16 +36,24 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   const cleanNote = typeof note === 'string' ? note.trim().slice(0, 200) : '';
+  const firstName = (client.name ?? '').split(' ')[0] || (client.name ?? '');
   let message = '';
 
   if (type === 'INCOMPLETE_FILE') {
-    const suffix = cleanNote ? ' : ' + cleanNote : '';
-    message = `Bonjour ${client.name} ! Votre dossier chez Dog Universe nécessite votre attention${suffix}. Merci de nous contacter. — Dog Universe`;
+    // Récupère le premier animal du client pour personnaliser le message
+    const pet = await prisma.pet.findFirst({
+      where: { ownerId: params.id },
+      select: { name: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const petName = pet?.name ?? 'votre animal';
+    const suffix = cleanNote ? ` : ${cleanNote}` : '';
+    message = `Bonjour ${firstName}, le dossier de ${petName} est incomplet. Merci de régulariser${suffix}. — Dog Universe`;
   } else if (type === 'MISSING_VACCINES') {
     const petLabel = cleanNote || 'votre animal';
-    message = `Bonjour ${client.name} ! Le dossier de ${petLabel} est incomplet : justificatifs vaccinaux manquants. Merci de régulariser rapidement. — Dog Universe`;
+    message = `Bonjour ${firstName}, le dossier de ${petLabel} est incomplet : justificatifs vaccinaux manquants. Merci de régulariser rapidement. — Dog Universe`;
   } else {
-    message = `Bonjour ${client.name} ! Il vous reste à signer votre contrat Dog Universe. Connectez-vous sur votre espace client pour le finaliser. Des questions ? Appelez-nous. — Dog Universe`;
+    message = `Bonjour ${firstName}, votre contrat Dog Universe est en attente de signature. Connectez-vous sur votre espace client pour finaliser votre dossier. — Dog Universe`;
   }
 
   const ok = await sendSMS(client.phone, message);

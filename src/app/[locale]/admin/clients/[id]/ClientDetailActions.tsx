@@ -28,6 +28,15 @@ export default function ClientDetailActions({ clientId, currentGrade, locale, ph
   const [smsNote, setSmsNote] = useState('');
   const [sendingSms, setSendingSms] = useState<SmsType | null>(null);
 
+  // Dossier incomplet — checkboxes + champ "Autre"
+  const [incFile, setIncFile] = useState({
+    vaccines: false,
+    antiparasite: false,
+    contract: false,
+    other: false,
+  });
+  const [incFileOtherText, setIncFileOtherText] = useState('');
+
   const labels = {
     fr: {
       override: 'Modifier le grade', save: 'Enregistrer',
@@ -44,6 +53,14 @@ export default function ClientDetailActions({ clientId, currentGrade, locale, ph
       smsPetPlaceholder: 'Nom de l\'animal (optionnel)',
       smsConfirm: 'Envoyer',
       smsCancel: 'Annuler',
+      // Checkboxes dossier incomplet
+      incVaccines: 'Vaccins à jour',
+      incAntiparasite: 'Traitement antiparasitaire (Nexgard)',
+      incContract: 'Contrat non signé',
+      incOther: 'Autre',
+      incOtherPlaceholder: 'Précisez le motif…',
+      incPreviewLabel: 'Aperçu :',
+      incSendBtn: 'Envoyer le SMS',
     },
     en: {
       override: 'Override grade', save: 'Save',
@@ -60,6 +77,14 @@ export default function ClientDetailActions({ clientId, currentGrade, locale, ph
       smsPetPlaceholder: 'Pet name (optional)',
       smsConfirm: 'Send',
       smsCancel: 'Cancel',
+      // Checkboxes incomplete file
+      incVaccines: 'Vaccines up to date',
+      incAntiparasite: 'Anti-parasitic treatment (Nexgard)',
+      incContract: 'Contract not signed',
+      incOther: 'Other',
+      incOtherPlaceholder: 'Specify reason…',
+      incPreviewLabel: 'Preview:',
+      incSendBtn: 'Send SMS',
     },
   };
   const l = labels[locale as keyof typeof labels] || labels.fr;
@@ -118,6 +143,10 @@ export default function ClientDetailActions({ clientId, currentGrade, locale, ph
       toast({ title: l.smsSent, variant: 'success' });
       setSmsType(null);
       setSmsNote('');
+      if (type === 'INCOMPLETE_FILE') {
+        setIncFile({ vaccines: false, antiparasite: false, contract: false, other: false });
+        setIncFileOtherText('');
+      }
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : l.error, variant: 'destructive' });
     } finally {
@@ -125,8 +154,23 @@ export default function ClientDetailActions({ clientId, currentGrade, locale, ph
     }
   };
 
+  // Construit la chaîne de motifs cochés pour INCOMPLETE_FILE
+  const buildIncompleteMotifs = (): string => {
+    const parts: string[] = [];
+    if (incFile.vaccines) parts.push(l.incVaccines.toLowerCase());
+    if (incFile.antiparasite) parts.push(l.incAntiparasite.toLowerCase());
+    if (incFile.contract) parts.push(l.incContract.toLowerCase());
+    if (incFile.other && incFileOtherText.trim()) parts.push(incFileOtherText.trim());
+    return parts.join(', ');
+  };
+  const incompleteMotifs = buildIncompleteMotifs();
+  const incompleteAnyChecked = incFile.vaccines || incFile.antiparasite || incFile.contract || (incFile.other && incFileOtherText.trim().length > 0);
+  const incompletePreview = incompleteMotifs
+    ? `Bonjour [Prénom], le dossier de [Animal] est incomplet. Merci de régulariser : ${incompleteMotifs}. — Dog Universe`
+    : '';
+
   const SmsButton = ({ type, label }: { type: SmsType; label: string }) => {
-    const needsInput = type !== 'CONTRACT_REMINDER';
+    const needsInput = type === 'MISSING_VACCINES'; // INCOMPLETE_FILE désormais via checkboxes ; CONTRACT_REMINDER 1-clic
     const isActive = smsType === type;
     const isSending = sendingSms === type;
 
@@ -136,7 +180,7 @@ export default function ClientDetailActions({ clientId, currentGrade, locale, ph
           <Textarea
             value={smsNote}
             onChange={e => setSmsNote(e.target.value)}
-            placeholder={type === 'MISSING_VACCINES' ? l.smsPetPlaceholder : l.smsNotePlaceholder}
+            placeholder={l.smsPetPlaceholder}
             rows={2}
             className="text-sm"
             maxLength={200}
@@ -186,6 +230,89 @@ export default function ClientDetailActions({ clientId, currentGrade, locale, ph
     );
   };
 
+  // ─── Bloc dossier incomplet — checkboxes + aperçu + envoi ─────────────────
+  const incompleteSending = sendingSms === 'INCOMPLETE_FILE';
+  const handleSendIncomplete = () => {
+    if (smsDisabled || incompleteSending || !incompleteAnyChecked) return;
+    sendSmsNow('INCOMPLETE_FILE', incompleteMotifs);
+  };
+
+  const IncompleteFileBlock = (
+    <div className="rounded-lg border border-[rgba(196,151,74,0.3)] bg-[#FEFCF9] p-3 space-y-2">
+      <p className="text-xs font-semibold text-[#8A7E75] flex items-center gap-1">
+        <span>{l.smsIncomplete}</span>
+      </p>
+      <div className="space-y-1.5">
+        <label className="flex items-center gap-2 text-sm text-[#2A2520] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={incFile.vaccines}
+            onChange={e => setIncFile(s => ({ ...s, vaccines: e.target.checked }))}
+            disabled={smsDisabled || incompleteSending}
+            className="h-4 w-4 accent-[#C4974A]"
+          />
+          <span>{l.incVaccines}</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-[#2A2520] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={incFile.antiparasite}
+            onChange={e => setIncFile(s => ({ ...s, antiparasite: e.target.checked }))}
+            disabled={smsDisabled || incompleteSending}
+            className="h-4 w-4 accent-[#C4974A]"
+          />
+          <span>{l.incAntiparasite}</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-[#2A2520] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={incFile.contract}
+            onChange={e => setIncFile(s => ({ ...s, contract: e.target.checked }))}
+            disabled={smsDisabled || incompleteSending}
+            className="h-4 w-4 accent-[#C4974A]"
+          />
+          <span>{l.incContract}</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-[#2A2520] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={incFile.other}
+            onChange={e => setIncFile(s => ({ ...s, other: e.target.checked }))}
+            disabled={smsDisabled || incompleteSending}
+            className="h-4 w-4 accent-[#C4974A]"
+          />
+          <span>{l.incOther}</span>
+        </label>
+        {incFile.other && (
+          <input
+            type="text"
+            value={incFileOtherText}
+            onChange={e => setIncFileOtherText(e.target.value)}
+            placeholder={l.incOtherPlaceholder}
+            maxLength={120}
+            disabled={smsDisabled || incompleteSending}
+            className="ml-6 mt-1 w-[calc(100%-1.5rem)] text-sm rounded-md border border-[rgba(196,151,74,0.3)] px-2 py-1 focus:outline-none focus:border-[#C4974A]"
+          />
+        )}
+      </div>
+      {incompletePreview && (
+        <p className="text-xs italic text-gray-500 leading-snug pt-1 border-t border-[rgba(196,151,74,0.15)]">
+          <span className="font-medium not-italic">{l.incPreviewLabel} </span>
+          {incompletePreview}
+        </p>
+      )}
+      <Button
+        size="sm"
+        onClick={handleSendIncomplete}
+        disabled={smsDisabled || incompleteSending || !incompleteAnyChecked}
+        className="w-full"
+      >
+        {incompleteSending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+        {l.incSendBtn}
+      </Button>
+    </div>
+  );
+
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
@@ -221,7 +348,7 @@ export default function ClientDetailActions({ clientId, currentGrade, locale, ph
       <div className="border-t border-ivory-200 pt-3">
         <p className="text-xs font-semibold text-[#8A7E75] uppercase tracking-wider mb-2">{l.smsTitle}</p>
         <div className="space-y-2">
-          <SmsButton type="INCOMPLETE_FILE" label={l.smsIncomplete} />
+          {IncompleteFileBlock}
           <SmsButton type="MISSING_VACCINES" label={l.smsVaccines} />
           <SmsButton type="CONTRACT_REMINDER" label={l.smsContract} />
         </div>

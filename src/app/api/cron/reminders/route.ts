@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
-import { sendSMS, sendAdminSMS } from '@/lib/sms';
+import { sendSMS, sendAdminSMS, petPossessive } from '@/lib/sms';
 
 /**
  * POST /api/cron/reminders
@@ -51,14 +51,15 @@ export async function GET(request: Request) {
     },
     include: {
       client: { select: { name: true, email: true, language: true, phone: true } },
-      bookingPets: { include: { pet: { select: { name: true } } } },
+      bookingPets: { include: { pet: { select: { name: true, gender: true } } } },
     },
   });
 
   for (const booking of startBookings) {
     try {
       const locale = booking.client.language ?? 'fr';
-      const petNames = booking.bookingPets.map(bp => bp.pet.name).join(', ');
+      const pets = booking.bookingPets.map(bp => bp.pet);
+      const petNames = pets.map(p => p.name).join(' et ');
       const startDateFr = booking.startDate.toLocaleDateString('fr-FR', dateFormatOpts);
       const startDateEn = booking.startDate.toLocaleDateString('en-US', dateFormatOpts);
       const startDate = locale === 'fr' ? startDateFr : startDateEn;
@@ -75,6 +76,7 @@ export async function GET(request: Request) {
           service: locale === 'fr' ? 'Pension' : 'Boarding',
         },
         locale,
+        pets,
       );
       await sendEmail({ to: booking.client.email, subject, html });
 
@@ -115,13 +117,14 @@ export async function GET(request: Request) {
         await sendEmail({ to: admin.email, subject: aSubject, html: aHtml });
       }
 
-      // SMS J-1 arrivée
+      // SMS J-1 arrivée — accord genre/pluriel
       const clientName = booking.client.name ?? booking.client.email;
+      const firstName = clientName.split(' ')[0] || clientName;
       await sendSMS(
         booking.client.phone,
-        `Bonjour ${clientName} ! 🐕 Rappel : ${petNames} nous rejoint demain chez Dog Universe. N'oubliez pas ses affaires. À demain ! — Dog Universe 🏠`,
+        `Bonjour ${firstName} ! Nous avons hâte d'accueillir ${petNames} demain. N'oubliez pas ${petPossessive(pets)} affaires. À demain ! — Dog Universe 🐾`,
       );
-      await sendAdminSMS(`📋 J-1 arrivée : ${petNames} de ${clientName} demain.`);
+      await sendAdminSMS(`📋 J-1 arrivée demain : ${petNames} de ${clientName}.`);
 
       sent++;
     } catch (err) {
@@ -138,14 +141,15 @@ export async function GET(request: Request) {
     },
     include: {
       client: { select: { name: true, email: true, language: true, phone: true } },
-      bookingPets: { include: { pet: { select: { name: true } } } },
+      bookingPets: { include: { pet: { select: { name: true, gender: true } } } },
     },
   });
 
   for (const booking of endBookings) {
     try {
       const locale = booking.client.language ?? 'fr';
-      const petNames = booking.bookingPets.map(bp => bp.pet.name).join(', ');
+      const pets = booking.bookingPets.map(bp => bp.pet);
+      const petNames = pets.map(p => p.name).join(' et ');
       const endDateFr = booking.endDate!.toLocaleDateString('fr-FR', dateFormatOpts);
       const endDateEn = booking.endDate!.toLocaleDateString('en-US', dateFormatOpts);
       const endDate = locale === 'fr' ? endDateFr : endDateEn;
@@ -161,6 +165,7 @@ export async function GET(request: Request) {
           endDate,
         },
         locale,
+        pets,
       );
       await sendEmail({ to: booking.client.email, subject, html });
 
@@ -201,13 +206,15 @@ export async function GET(request: Request) {
         await sendEmail({ to: admin.email, subject: aSubject, html: aHtml });
       }
 
-      // SMS J-1 départ
+      // SMS J-1 départ — accord genre/pluriel
       const clientName = booking.client.name ?? booking.client.email;
+      const firstName = clientName.split(' ')[0] || clientName;
+      const isPlural = pets.length > 1;
       await sendSMS(
         booking.client.phone,
-        `Bonjour ${clientName} ! 🏡 Rappel : le séjour de ${petNames} se termine demain. Merci de prévoir sa récupération. — Dog Universe`,
+        `Bonjour ${firstName} ! ${petNames} rentre${isPlural ? 'nt' : ''} demain à la maison. Ce fut un bonheur de ${isPlural ? 'les' : "l'"} avoir. À très bientôt ! — Dog Universe 🐾`,
       );
-      await sendAdminSMS(`📋 J-1 départ : ${petNames} de ${clientName} demain.`);
+      await sendAdminSMS(`📋 J-1 départ demain : ${petNames} de ${clientName}.`);
 
       sent++;
     } catch (err) {

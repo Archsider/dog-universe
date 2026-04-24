@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   PawPrint, Car, Home, ArrowRight, ArrowLeft, Scissors, Loader2, MapPin, Clock,
   CalendarCheck, CheckCheck, Calendar, Inbox,
@@ -135,8 +136,17 @@ function categorize(bookings: BookingCard[], serviceType: 'BOARDING' | 'PET_TAXI
   return { pending, confirmed, inProgress, completed };
 }
 
+// Mapping statut → bouton d'action BOARDING
+const BOARDING_NEXT: Record<string, { next: string; labelFr: string; labelEn: string }> = {
+  PENDING:     { next: 'CONFIRMED',   labelFr: '✅ Confirmer',       labelEn: '✅ Confirm' },
+  CONFIRMED:   { next: 'IN_PROGRESS', labelFr: '🏠 Marquer arrivée', labelEn: '🏠 Mark arrival' },
+  IN_PROGRESS: { next: 'COMPLETED',   labelFr: '✅ Terminer séjour', labelEn: '✅ End stay' },
+};
+
 function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href: string }) {
   const isFr = locale === 'fr';
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
   const nights = nightCount(b.startDate, b.endDate);
   const petLine = b.pets.map((p) => p.name).join(' · ');
   const firstPet = b.pets[0];
@@ -148,81 +158,115 @@ function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href:
     ? (isFr ? 'Aller' : 'Go')
     : (isFr ? 'Retour' : 'Return');
   const isCompleted = b.status === 'COMPLETED';
+  const action = BOARDING_NEXT[b.status];
+
+  const handleAction = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!action || loading) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/bookings/${b.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: action.next }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
+      router.refresh();
+    } catch {
+      toast({ title: isFr ? 'Erreur' : 'Error', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <Link
-      href={href}
-      className={`block bg-white border border-[rgba(196,151,74,0.12)] rounded-xl p-2 sm:p-3 lg:p-4 transition-all hover:shadow-[0_4px_12px_rgba(42,37,32,0.05)] hover:-translate-y-px ${isCompleted ? 'opacity-60' : ''}`}
-    >
-      {/* Header: photo + client + pets */}
-      <div className="flex items-start gap-2 sm:gap-3 lg:gap-4">
-        <div className="relative w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-[10px] overflow-hidden bg-[#F5E6CC] flex items-center justify-center flex-shrink-0">
-          {firstPet?.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={firstPet.photoUrl} alt={firstPet.name} className="w-full h-full object-cover" />
-          ) : (
-            <span className="text-[10px] sm:text-xs font-bold text-[#8B6A2F]">{getInitials(b.clientName)}</span>
+    <div className={`bg-white border border-[rgba(196,151,74,0.12)] rounded-xl p-2 sm:p-3 lg:p-4 transition-all hover:shadow-[0_4px_12px_rgba(42,37,32,0.05)] hover:-translate-y-px ${isCompleted ? 'opacity-60' : ''}`}>
+      <Link href={href} className="block">
+        {/* Header: photo + client + pets */}
+        <div className="flex items-start gap-2 sm:gap-3 lg:gap-4">
+          <div className="relative w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-[10px] overflow-hidden bg-[#F5E6CC] flex items-center justify-center flex-shrink-0">
+            {firstPet?.photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={firstPet.photoUrl} alt={firstPet.name} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-[10px] sm:text-xs font-bold text-[#8B6A2F]">{getInitials(b.clientName)}</span>
+            )}
+            {extraCount > 0 && (
+              <span className="absolute -bottom-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#C4974A] text-white text-[9px] font-bold leading-none">
+                +{extraCount}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs sm:text-sm lg:text-base font-bold text-[#2A2520] truncate leading-tight">{b.clientName}</p>
+            <p className="text-[8px] sm:text-[9px] lg:text-[10px] text-[#8B6A2F] mt-1 flex items-center gap-1 truncate">
+              <PawPrint className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{petLine}</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Meta */}
+        <div className="mt-2 sm:mt-2.5 flex items-center gap-2 sm:gap-3 text-[7px] sm:text-[8px] lg:text-[9px] text-[#8A7E75]">
+          <span className="inline-flex items-center gap-1 truncate">
+            <Calendar className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">
+              {formatDateShortLocal(b.startDate, locale)}
+              {b.serviceType === 'BOARDING' && b.endDate && ` → ${formatDateShortLocal(b.endDate, locale)}`}
+            </span>
+          </span>
+          {b.serviceType === 'BOARDING' && nights > 0 && (
+            <span className="inline-flex items-center gap-1 flex-shrink-0">
+              <Clock className="h-3 w-3" />
+              {nights} {isFr ? `nuit${nights > 1 ? 's' : ''}` : `night${nights > 1 ? 's' : ''}`}
+            </span>
           )}
-          {extraCount > 0 && (
-            <span className="absolute -bottom-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#C4974A] text-white text-[9px] font-bold leading-none">
-              +{extraCount}
+          {b.serviceType === 'PET_TAXI' && b.arrivalTime && (
+            <span className="inline-flex items-center gap-1 flex-shrink-0">
+              <Clock className="h-3 w-3" />
+              {b.arrivalTime}
             </span>
           )}
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs sm:text-sm lg:text-base font-bold text-[#2A2520] truncate leading-tight">{b.clientName}</p>
-          <p className="text-[8px] sm:text-[9px] lg:text-[10px] text-[#8B6A2F] mt-1 flex items-center gap-1 truncate">
-            <PawPrint className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate">{petLine}</span>
-          </p>
+
+        {/* Footer: badges + price */}
+        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+          {b.includeGrooming && (
+            <span className="inline-flex items-center gap-0.5 text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 font-medium">
+              <Scissors className="h-2.5 w-2.5" />
+              {isFr ? 'Toilettage' : 'Grooming'}
+            </span>
+          )}
+          {hasTaxi && (
+            <span className="inline-flex items-center gap-1 text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-700 font-medium">
+              <Car className="h-2.5 w-2.5" />
+              {taxiBadgeLabel}
+            </span>
+          )}
+          {b.taxiType && (
+            <span className="text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
+              {TAXI_LABELS[b.taxiType]?.[locale] ?? b.taxiType}
+            </span>
+          )}
+          <span className="ml-auto text-xs sm:text-sm lg:text-base font-bold text-[#C4974A]">{formatMAD(b.totalPrice)}</span>
         </div>
-      </div>
+      </Link>
 
-      {/* Meta */}
-      <div className="mt-2 sm:mt-2.5 flex items-center gap-2 sm:gap-3 text-[7px] sm:text-[8px] lg:text-[9px] text-[#8A7E75]">
-        <span className="inline-flex items-center gap-1 truncate">
-          <Calendar className="h-3 w-3 flex-shrink-0" />
-          <span className="truncate">
-            {formatDateShortLocal(b.startDate, locale)}
-            {b.serviceType === 'BOARDING' && b.endDate && ` → ${formatDateShortLocal(b.endDate, locale)}`}
-          </span>
-        </span>
-        {b.serviceType === 'BOARDING' && nights > 0 && (
-          <span className="inline-flex items-center gap-1 flex-shrink-0">
-            <Clock className="h-3 w-3" />
-            {nights} {isFr ? `nuit${nights > 1 ? 's' : ''}` : `night${nights > 1 ? 's' : ''}`}
-          </span>
-        )}
-        {b.serviceType === 'PET_TAXI' && b.arrivalTime && (
-          <span className="inline-flex items-center gap-1 flex-shrink-0">
-            <Clock className="h-3 w-3" />
-            {b.arrivalTime}
-          </span>
-        )}
-      </div>
-
-      {/* Footer: badges + price */}
-      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-        {b.includeGrooming && (
-          <span className="inline-flex items-center gap-0.5 text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 font-medium">
-            <Scissors className="h-2.5 w-2.5" />
-            {isFr ? 'Toilettage' : 'Grooming'}
-          </span>
-        )}
-        {hasTaxi && (
-          <span className="inline-flex items-center gap-1 text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-700 font-medium">
-            <Car className="h-2.5 w-2.5" />
-            {taxiBadgeLabel}
-          </span>
-        )}
-        {b.taxiType && (
-          <span className="text-[6px] sm:text-[7px] lg:text-[8px] px-1.5 sm:px-2 lg:px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
-            {TAXI_LABELS[b.taxiType]?.[locale] ?? b.taxiType}
-          </span>
-        )}
-        <span className="ml-auto text-xs sm:text-sm lg:text-base font-bold text-[#C4974A]">{formatMAD(b.totalPrice)}</span>
-      </div>
-    </Link>
+      {/* Bouton transition statut BOARDING */}
+      {action && (
+        <button
+          type="button"
+          onClick={handleAction}
+          disabled={loading}
+          className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-[#C4974A] text-[#C4974A] hover:bg-[#C4974A] hover:text-white transition-all duration-200 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+          <span className="truncate">{isFr ? action.labelFr : action.labelEn}</span>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -369,16 +413,16 @@ const ALLER_COLS: TaxiColConfig[] = [
   },
   {
     status: 'EN_ROUTE_TO_CLIENT',
-    label:    { fr: 'En route vers le client', en: 'En route to client' },
-    sublabel: { fr: 'Véhicule en approche',    en: 'Vehicle approaching' },
+    label:    { fr: 'En route',             en: 'En route' },
+    sublabel: { fr: 'Véhicule en approche', en: 'Vehicle approaching' },
     icon: Car,
     color: 'bg-sky-50 border-sky-200',
     dot:   'bg-sky-500',
   },
   {
     status: 'ON_SITE_CLIENT',
-    label:    { fr: 'Sur place',    en: 'On site' },
-    sublabel: { fr: 'Chez le client', en: 'At client location' },
+    label:    { fr: 'Arrivé chez le client', en: 'On site' },
+    sublabel: { fr: 'Chez le client',        en: 'At client location' },
     icon: MapPin,
     color: 'bg-teal-50 border-teal-200',
     dot:   'bg-teal-500',
@@ -393,8 +437,8 @@ const ALLER_COLS: TaxiColConfig[] = [
   },
   {
     status: 'ARRIVED_AT_PENSION',
-    label:    { fr: 'Arrivé à la pension', en: 'At pension' },
-    sublabel: { fr: 'Déposé avec succès',  en: 'Successfully dropped off' },
+    label:    { fr: 'Arrivé en pension',  en: 'At pension' },
+    sublabel: { fr: 'Déposé avec succès', en: 'Successfully dropped off' },
     icon: Home,
     color: 'bg-green-50 border-green-200',
     dot:   'bg-green-500',
@@ -421,16 +465,16 @@ const RETOUR_COLS: TaxiColConfig[] = [
   },
   {
     status: 'EN_ROUTE_TO_CLIENT',
-    label:    { fr: 'En route vers le client', en: 'En route to client' },
-    sublabel: { fr: 'Trajet retour en cours',  en: 'Return ride in progress' },
+    label:    { fr: 'En route',               en: 'En route' },
+    sublabel: { fr: 'Trajet retour en cours', en: 'Return ride in progress' },
     icon: Car,
     color: 'bg-amber-100 border-amber-300',
     dot:   'bg-amber-600',
   },
   {
     status: 'ARRIVED_AT_CLIENT',
-    label:    { fr: 'Arrivé chez le client', en: 'At client' },
-    sublabel: { fr: 'Retour terminé',        en: 'Return completed' },
+    label:    { fr: 'Rendu au client', en: 'At client' },
+    sublabel: { fr: 'Retour terminé',  en: 'Return completed' },
     icon: Home,
     color: 'bg-green-50 border-green-200',
     dot:   'bg-green-500',
@@ -451,16 +495,16 @@ const RETOUR_NEXT: Record<string, string> = {
 };
 
 const ALLER_ACTION_LABELS: Record<string, { fr: string; en: string }> = {
-  PLANNED:            { fr: 'Véhicule en route vers le client', en: 'Vehicle en route to client' },
-  EN_ROUTE_TO_CLIENT: { fr: 'Véhicule sur place',              en: 'Vehicle on site' },
-  ON_SITE_CLIENT:     { fr: 'Animal à bord',                   en: 'Pet on board' },
-  ANIMAL_ON_BOARD:    { fr: 'Arrivé à la pension',             en: 'Arrived at pension' },
+  PLANNED:            { fr: 'En route',               en: 'En route' },
+  EN_ROUTE_TO_CLIENT: { fr: 'Arrivé chez le client',  en: 'Arrived at client' },
+  ON_SITE_CLIENT:     { fr: 'Animal à bord',          en: 'Pet on board' },
+  ANIMAL_ON_BOARD:    { fr: 'Arrivé en pension',      en: 'At pension' },
 };
 
 const RETOUR_ACTION_LABELS: Record<string, { fr: string; en: string }> = {
-  PLANNED:            { fr: 'Animal à bord',           en: 'Pet on board' },
-  ANIMAL_ON_BOARD:    { fr: 'En route vers le client', en: 'En route to client' },
-  EN_ROUTE_TO_CLIENT: { fr: 'Arrivé chez le client',  en: 'Arrived at client' },
+  PLANNED:            { fr: 'Animal à bord',  en: 'Pet on board' },
+  ANIMAL_ON_BOARD:    { fr: 'En route',       en: 'En route' },
+  EN_ROUTE_TO_CLIENT: { fr: 'Rendu au client', en: 'At client' },
 };
 
 function parseAddresses(notes: string | null): { departure: string | null; arrival: string | null } {
@@ -471,6 +515,63 @@ function parseAddresses(notes: string | null): { departure: string | null; arriv
     departure: departureMatch ? departureMatch[1].trim() : null,
     arrival: arrivalMatch ? arrivalMatch[1].trim() : null,
   };
+}
+
+// Étapes courtes affichées sous chaque rond du stepper taxi
+const TAXI_STEP_SHORT: Record<string, { fr: string; en: string }> = {
+  PLANNED:            { fr: 'Plan.',  en: 'Plan.' },
+  EN_ROUTE_TO_CLIENT: { fr: 'Route',  en: 'Route' },
+  ON_SITE_CLIENT:     { fr: 'Client', en: 'Client' },
+  ANIMAL_ON_BOARD:    { fr: 'Bord',   en: 'Aboard' },
+  ARRIVED_AT_PENSION: { fr: 'Pens.',  en: 'Pens.' },
+  ARRIVED_AT_CLIENT:  { fr: 'Rendu',  en: 'Done' },
+};
+
+const ALLER_FLOW = ['PLANNED', 'EN_ROUTE_TO_CLIENT', 'ON_SITE_CLIENT', 'ANIMAL_ON_BOARD', 'ARRIVED_AT_PENSION'];
+const RETOUR_FLOW = ['PLANNED', 'ANIMAL_ON_BOARD', 'EN_ROUTE_TO_CLIENT', 'ARRIVED_AT_CLIENT'];
+
+function TaxiStepper({
+  flow,
+  currentStatus,
+  locale,
+}: {
+  flow: string[];
+  currentStatus: string;
+  locale: string;
+}) {
+  const isFr = locale === 'fr';
+  const currentIdx = Math.max(0, flow.indexOf(currentStatus));
+  return (
+    <div className="mt-2 flex items-stretch">
+      {flow.map((step, i) => {
+        const isActive = i <= currentIdx;
+        const short = TAXI_STEP_SHORT[step];
+        const label = short ? (isFr ? short.fr : short.en) : '';
+        return (
+          <div key={step} className="flex-1 flex flex-col items-center min-w-0">
+            <div className="flex items-center w-full">
+              {i > 0 && (
+                <div className={`h-[2px] flex-1 mx-1 ${i <= currentIdx ? 'bg-[#C4974A]' : 'bg-[rgba(196,151,74,0.2)]'}`} />
+              )}
+              <div
+                className={`flex items-center justify-center rounded-full border-2 text-[9px] sm:text-[10px] flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 transition-colors ${
+                  isActive
+                    ? 'bg-[#C4974A] border-[#C4974A] text-white font-bold'
+                    : 'bg-white border-[rgba(196,151,74,0.35)] text-[#8A7E75]'
+                }`}
+              >
+                {i + 1}
+              </div>
+              {i < flow.length - 1 && (
+                <div className={`h-[2px] flex-1 mx-1 ${i < currentIdx ? 'bg-[#C4974A]' : 'bg-[rgba(196,151,74,0.2)]'}`} />
+              )}
+            </div>
+            <span className="text-[9px] sm:text-[10px] text-center mt-1 truncate w-full text-[#8A7E75]">{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function TaxiKanbanCard({
@@ -485,6 +586,7 @@ function TaxiKanbanCard({
   const isFr = locale === 'fr';
   const [loading, setLoading] = useState(false);
   const isRetour = b._cardType === 'RETURN';
+  const flow = isRetour ? RETOUR_FLOW : ALLER_FLOW;
   const nextStatus = (isRetour ? RETOUR_NEXT : ALLER_NEXT)[b._colStatus];
   const actionLabel = nextStatus ? (isRetour ? RETOUR_ACTION_LABELS : ALLER_ACTION_LABELS)[b._colStatus] : null;
   const { departure, arrival } = parseAddresses(b.notes);
@@ -600,6 +702,9 @@ function TaxiKanbanCard({
             </span>
           )}
         </div>
+
+        {/* Stepper progression — ronds */}
+        <TaxiStepper flow={flow} currentStatus={b._colStatus} locale={locale} />
       </Link>
       {actionLabel && (
         <button

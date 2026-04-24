@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { petCompanion, petVerb, petArrived, petChouchoute } from './sms';
 
 let transporter: nodemailer.Transporter;
 
@@ -78,13 +79,33 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
-export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'invoice_paid' | 'reset_password' | 'booking_reminder' | 'stay_end_reminder' | 'admin_stay_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder' | 'welcome' | 'admin_new_client', data: Record<string, string>, locale: string = 'fr'): { subject: string; html: string } {
+export function getEmailTemplate(
+  type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'invoice_paid' | 'reset_password' | 'booking_reminder' | 'stay_end_reminder' | 'admin_stay_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder' | 'welcome' | 'admin_new_client',
+  data: Record<string, string>,
+  locale: string = 'fr',
+  pets: { gender?: string | null }[] = [],
+): { subject: string; html: string } {
   // Escape all user-supplied fields to prevent XSS in email HTML
   const d: Record<string, string> = {};
   for (const [key, val] of Object.entries(data)) {
     // URL fields must not be escaped (they go in href attributes as-is)
     d[key] = (key === 'resetUrl' || key === 'loginUrl') ? val : escapeHtml(val ?? '');
   }
+
+  // Genre / pluriel — fallback masculin singulier si pets vide
+  const hasPets = pets.length > 0;
+  const allFemale = hasPets && pets.every(p => p.gender === 'FEMALE');
+  const isPlural = pets.length > 1;
+  const _companion = hasPets ? petCompanion(pets) : 'votre compagnon';
+  const _CompanionCap = _companion.charAt(0).toUpperCase() + _companion.slice(1);
+  const _verbFut   = hasPets ? petVerb(pets, 'future')  : 'sera';
+  const _verbPres  = hasPets ? petVerb(pets, 'present') : 'est';
+  const _arrived   = hasPets ? petArrived(pets)   : 'arrivé(e)';
+  const _chouchoute = hasPets ? petChouchoute(pets) : 'chouchouté(e)';
+  const _pret = !hasPets ? 'prêt(e)' : isPlural ? (allFemale ? 'prêtes' : 'prêts') : (allFemale ? 'prête' : 'prêt');
+  const _recup = !hasPets ? 'récupéré(e)' : isPlural ? (allFemale ? 'récupérées' : 'récupérés') : (allFemale ? 'récupérée' : 'récupéré');
+  // _verbFut / _chouchoute exposés pour de futurs templates — référence no-op
+  void _verbFut; void _chouchoute;
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -141,7 +162,7 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
       bodyFr: `
         <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
         <p>Excellente nouvelle ! Votre réservation <strong>${d.bookingRef}</strong> a été <strong style="color: #16a34a;">confirmée</strong>.</p>
-        <p>Nous attendons votre compagnon avec impatience.</p>
+        <p>Nous attendons ${_companion} avec impatience.</p>
         <p style="color: #6B7280; font-size: 14px;">Service : ${d.service} | Animal : ${d.petName} | Dates : ${d.dates}</p>
         <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
       `,
@@ -186,20 +207,20 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
         ? `
           <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
           <p>Votre trajet Pet Taxi (réf. <strong>${d.bookingRef}</strong>) est terminé.</p>
-          <p><strong>${d.petName}</strong> est arrivé(e) à destination en toute sécurité.</p>
+          <p><strong>${d.petName}</strong> ${_verbPres} ${_arrived} à destination en toute sécurité.</p>
           <p>Merci de votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
         `
         : d.hasGrooming === 'true'
           ? `
             <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
             <p>Le séjour et le toilettage de <strong>${d.petName}</strong> (réf. <strong>${d.bookingRef}</strong>) sont maintenant terminés.</p>
-            <p>Votre compagnon est prêt à être récupéré. N'hésitez pas à nous contacter pour convenir de l'heure de passage.</p>
+            <p>${_CompanionCap} ${_verbPres} ${_pret} à être ${_recup}. N'hésitez pas à nous contacter pour convenir de l'heure de passage.</p>
             <p>Merci de votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
           `
           : `
             <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
             <p>Le séjour de <strong>${d.petName}</strong> (réf. <strong>${d.bookingRef}</strong>) est maintenant terminé.</p>
-            <p>Votre compagnon est prêt à être récupéré. N'hésitez pas à nous contacter pour convenir de l'heure de passage.</p>
+            <p>${_CompanionCap} ${_verbPres} ${_pret} à être ${_recup}. N'hésitez pas à nous contacter pour convenir de l'heure de passage.</p>
             <p>Merci de votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
           `,
       bodyEn: d.serviceType === 'PET_TAXI'
@@ -263,7 +284,7 @@ export function getEmailTemplate(type: 'booking_confirmation' | 'booking_validat
       bodyFr: `
         <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
         <p>Le séjour de <strong>${d.petName}</strong> (réf. <strong>${d.bookingRef}</strong>) se termine <strong>demain</strong>, le <strong>${d.endDate}</strong>.</p>
-        <p>Pensez à prévoir votre venue pour récupérer votre compagnon. N'hésitez pas à nous contacter pour convenir de l'heure.</p>
+        <p>Pensez à prévoir votre venue pour récupérer ${_companion}. N'hésitez pas à nous contacter pour convenir de l'heure.</p>
         <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
       `,
       bodyEn: `

@@ -73,9 +73,10 @@ export async function GET(req: NextRequest) {
       select: { phone: true, name: true },
     });
     if (owner?.phone) {
+      const ownerFirstName = (owner.name ?? '').split(' ')[0] || (owner.name ?? '');
       await sendSMS(
         owner.phone,
-        `Bonjour ${owner.name} ! 🎂 Toute l'équipe Dog Universe souhaite un joyeux anniversaire à ${pet.name} qui fête ses ${age} an(s) aujourd'hui ! — Dog Universe ❤️`,
+        `Bonjour ${ownerFirstName} ! 🎂 Toute l'équipe Dog Universe souhaite un merveilleux anniversaire à ${pet.name} qui fête ses ${age} an(s) aujourd'hui ! — Dog Universe ❤️`,
       );
     }
 

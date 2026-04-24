@@ -96,14 +96,16 @@ export async function POST(request: Request, { params }: Params) {
   await allocatePayments(id);
 
   // --- SMS confirmation paiement ---
+  const clientFullName = invoice.clientDisplayName ?? invoice.client.name ?? '';
+  const firstName = clientFullName.split(' ')[0] || clientFullName;
   if (!invoice.client.isWalkIn) {
     await sendSMS(
       invoice.client.phone,
-      `Bonjour ${invoice.client.name} ! Nous confirmons la réception de votre paiement de ${formatMAD(parsedAmount)}. Merci ! — Dog Universe`,
+      `Bonjour ${firstName} ! Votre paiement de ${formatMAD(parsedAmount)} a bien été reçu. Merci pour votre fidélité. — Dog Universe`,
     );
   }
   await sendAdminSMS(
-    `💰 Paiement reçu : ${formatMAD(parsedAmount)} de ${invoice.clientDisplayName ?? invoice.client.name} — ${invoice.invoiceNumber}.`,
+    `💰 Paiement : ${formatMAD(parsedAmount)} reçu de ${clientFullName} — ${invoice.invoiceNumber}.`,
   );
 
   // --- Log ---

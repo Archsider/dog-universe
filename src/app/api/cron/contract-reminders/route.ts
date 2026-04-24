@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { sendSMS } from '@/lib/sms';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
 
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   const unsigned = await prisma.user.findMany({
     where: { role: 'CLIENT', contract: null },
-    select: { id: true, name: true, email: true, language: true },
+    select: { id: true, name: true, email: true, language: true, phone: true },
   });
 
   let sent = 0;
@@ -28,6 +29,15 @@ export async function GET(req: NextRequest) {
         locale
       );
       await sendEmail({ to: client.email, subject, html });
+
+      // SMS rappel contrat — premium tone (additif, échec ne bloque pas)
+      if (client.phone) {
+        const firstName = (client.name ?? '').split(' ')[0] || (client.name ?? '');
+        await sendSMS(
+          client.phone,
+          `Bonjour ${firstName}, votre contrat Dog Universe est en attente de signature. Connectez-vous sur votre espace client pour finaliser votre dossier. — Dog Universe`,
+        );
+      }
       sent++;
     } catch (e) {
       console.error(`contract-reminders cron: failed for ${client.email}:`, e);
