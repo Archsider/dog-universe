@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Check, Loader2, Clock } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 
 // ── Flows ────────────────────────────────────────────────────────────────────
@@ -54,7 +53,7 @@ const ACTION_LABELS: Record<TripType, Record<string, { fr: string; en: string }>
     ANIMAL_ON_BOARD:    { fr: 'Arrivé à destination',   en: 'Mark arrived' },
   },
   RETURN: {
-    PLANNED:            { fr: "Charger l'animal",        en: 'Load the pet' },
+    PLANNED:            { fr: 'Mettre à bord',            en: 'Board the pet' },
     ANIMAL_ON_BOARD:    { fr: 'En route vers domicile',  en: 'Start driving home' },
     EN_ROUTE_TO_CLIENT: { fr: 'Animal rendu',            en: 'Mark pet returned' },
   },
@@ -146,19 +145,34 @@ export default function TaxiTimeline({ trip, readOnly = false, locale }: Props) 
         </div>
       )}
 
-      {/* Horizontal timeline */}
+      {/* Horizontal timeline — connecteurs symétriques pour aligner tous les ronds */}
       <div className="flex items-start overflow-x-auto pb-1">
         {flow.map((step, idx) => {
           const isDone    = currentIdx > idx;
           const isActive  = currentIdx === idx;
+          const isFirst   = idx === 0;
+          const isLast    = idx === flow.length - 1;
           const ts        = statusTimestamps[step];
           const label     = stepLabels[step];
 
+          // Connecteurs gauche/droit rendus systématiquement, transparents aux extrémités
+          const leftConnClass = isFirst
+            ? 'bg-transparent'
+            : currentIdx >= idx
+              ? 'bg-green-400'
+              : 'bg-gray-200';
+          const rightConnClass = isLast
+            ? 'bg-transparent'
+            : currentIdx > idx
+              ? 'bg-green-400'
+              : 'bg-gray-200';
+
           return (
-            <div key={step} className="flex items-start flex-1 min-w-0">
-              <div className="flex flex-col items-center flex-1 min-w-0">
-                {/* Dot */}
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 z-10 transition-all ${
+            <div key={step} className="flex-1 flex flex-col items-center min-w-0">
+              {/* Rangée du rond avec connecteurs symétriques */}
+              <div className="flex items-center justify-center w-full">
+                <div className={`h-0.5 flex-1 mx-0.5 transition-all min-w-[8px] ${leftConnClass}`} />
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mx-auto z-10 transition-all ${
                   isDone   ? 'bg-green-500 text-white' :
                   isActive ? 'bg-charcoal text-white ring-4 ring-charcoal/10 animate-pulse' :
                              'bg-gray-100 text-gray-300 border border-gray-200'
@@ -167,49 +181,43 @@ export default function TaxiTimeline({ trip, readOnly = false, locale }: Props) 
                     ? <Check className="h-3.5 w-3.5" />
                     : <span className="text-[10px] font-bold">{idx + 1}</span>}
                 </div>
-
-                {/* Label */}
-                <p className={`text-[10px] font-medium mt-1.5 text-center leading-tight px-0.5 ${
-                  isDone   ? 'text-green-700' :
-                  isActive ? 'text-charcoal font-semibold' :
-                             'text-gray-300'
-                }`}>
-                  {isFr ? label?.fr : label?.en}
-                </p>
-
-                {/* Timestamp */}
-                {ts && (isDone || isActive) && (
-                  <p className="text-[9px] text-gray-400 mt-0.5 flex items-center gap-0.5">
-                    <Clock className="h-2.5 w-2.5" />
-                    {fmtTime(ts)}
-                  </p>
-                )}
+                <div className={`h-0.5 flex-1 mx-0.5 transition-all min-w-[8px] ${rightConnClass}`} />
               </div>
 
-              {/* Connector */}
-              {idx < flow.length - 1 && (
-                <div className={`h-0.5 flex-1 mt-3.5 mx-0.5 transition-all min-w-[8px] ${
-                  isDone ? 'bg-green-400' : 'bg-gray-200'
-                }`} />
+              {/* Label */}
+              <span className={`block w-full text-center text-[10px] font-medium mt-1.5 leading-tight px-0.5 ${
+                isDone   ? 'text-green-700' :
+                isActive ? 'text-charcoal font-semibold' :
+                           'text-gray-300'
+              }`}>
+                {isFr ? label?.fr : label?.en}
+              </span>
+
+              {/* Timestamp */}
+              {ts && (isDone || isActive) && (
+                <span className="block w-full text-center text-[9px] text-[#8A7E75] mt-0.5">
+                  <Clock className="h-2.5 w-2.5 inline-block mr-0.5 align-text-bottom" />
+                  {fmtTime(ts)}
+                </span>
               )}
             </div>
           );
         })}
       </div>
 
-      {/* Advance button */}
+      {/* Advance button — palette dorée Dog Universe */}
       {!readOnly && nextActionLabel && (
-        <Button
+        <button
+          type="button"
           onClick={handleAdvance}
           disabled={loading}
-          size="sm"
-          className="w-full bg-charcoal hover:bg-charcoal/90 text-white"
+          className="w-full py-3 flex items-center justify-center gap-2 bg-white border-2 border-[#C4974A] text-[#C4974A] hover:bg-[#C4974A] hover:text-white rounded-xl text-sm font-medium transition-all duration-200 disabled:opacity-50"
         >
           {loading
-            ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            : <ArrowRight className="h-4 w-4 mr-2" />}
-          {isFr ? nextActionLabel.fr : nextActionLabel.en}
-        </Button>
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <ArrowRight className="h-4 w-4" />}
+          <span>{isFr ? nextActionLabel.fr : nextActionLabel.en}</span>
+        </button>
       )}
 
       {/* History */}

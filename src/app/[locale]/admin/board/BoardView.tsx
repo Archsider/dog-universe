@@ -260,7 +260,7 @@ function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href:
           type="button"
           onClick={handleAction}
           disabled={loading}
-          className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-[#C4974A] text-[#C4974A] hover:bg-[#C4974A] hover:text-white transition-all duration-200 disabled:opacity-50"
+          className="w-full mt-2 py-2 flex items-center justify-center gap-1.5 rounded-lg text-sm font-medium bg-white border border-[#C4974A] text-[#C4974A] hover:bg-[#C4974A] hover:text-white transition-all duration-200 disabled:opacity-50"
         >
           {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
           <span className="truncate">{isFr ? action.labelFr : action.labelEn}</span>
@@ -565,7 +565,7 @@ function TaxiStepper({
             <div className="flex items-center justify-center w-full">
               <div className={`h-[2px] flex-1 mx-1 ${leftConnectorClass}`} />
               <div
-                className={`flex items-center justify-center rounded-full border-2 text-[9px] sm:text-[10px] flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 transition-colors ${
+                className={`flex items-center justify-center mx-auto rounded-full border-2 text-[10px] flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 transition-colors ${
                   isActive
                     ? 'bg-[#C4974A] border-[#C4974A] text-white font-bold'
                     : 'bg-white border-[rgba(196,151,74,0.35)] text-[#8A7E75]'
@@ -575,7 +575,7 @@ function TaxiStepper({
               </div>
               <div className={`h-[2px] flex-1 mx-1 ${rightConnectorClass}`} />
             </div>
-            <span className="block w-full text-center text-[9px] sm:text-[10px] mt-1 truncate text-[#8A7E75]">{label}</span>
+            <span className="block w-full text-center text-[10px] mt-1 truncate text-[#8A7E75]">{label}</span>
           </div>
         );
       })}
