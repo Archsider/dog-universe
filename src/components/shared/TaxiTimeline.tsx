@@ -34,7 +34,7 @@ const STEP_LABELS: Record<TripType, Record<string, { fr: string; en: string }>> 
   },
   RETURN: {
     PLANNED:             { fr: 'Planifié',          en: 'Planned' },
-    ANIMAL_ON_BOARD:     { fr: 'Animal chargé',     en: 'Pet loaded' },
+    ANIMAL_ON_BOARD:     { fr: 'Animal à bord',     en: 'Pet on board' },
     EN_ROUTE_TO_CLIENT:  { fr: 'En route domicile', en: 'En route home' },
     ARRIVED_AT_CLIENT:   { fr: 'Rendu au client',    en: 'Returned' },
   },
