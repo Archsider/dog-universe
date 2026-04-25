@@ -43,33 +43,32 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
 
   if (!booking) notFound();
 
-  const supplementaryInvoice = await prisma.invoice.findFirst({
-    where: {
-      OR: [
-        { supplementaryForBookingId: id },
-        // legacy fallback for rows created before the FK column was added
-        { clientId: booking.client.id, notes: `EXTENSION_SURCHARGE:${id}` },
-      ],
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  // ── Pré-calcul des fenêtres de date pour les requêtes "adjacent bookings" ─
+  // (logique pure, indépendante de la DB — permet de paralléliser les 6 queries)
+  const clientId = booking.client.id;
+  let beforeWindow: { gte: Date; lte: Date } | null = null;
+  let afterWindow: { gte: Date; lte: Date } | null = null;
+  if (booking.serviceType === 'BOARDING') {
+    if (booking.startDate) {
+      const startDayEnd = new Date(booking.startDate);
+      startDayEnd.setUTCHours(23, 59, 59, 999);
+      const dayBefore = new Date(booking.startDate);
+      dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+      const dayBeforeStart = new Date(dayBefore);
+      dayBeforeStart.setUTCHours(0, 0, 0, 0);
+      beforeWindow = { gte: dayBeforeStart, lte: startDayEnd };
+    }
+    if (booking.endDate) {
+      const endDayStart = new Date(booking.endDate);
+      endDayStart.setUTCHours(0, 0, 0, 0);
+      const dayAfter = new Date(booking.endDate);
+      dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+      const dayAfterEnd = new Date(dayAfter);
+      dayAfterEnd.setUTCHours(23, 59, 59, 999);
+      afterWindow = { gte: endDayStart, lte: dayAfterEnd };
+    }
+  }
 
-  // Pending extension booking (if any) — for showing a notice on the original booking
-  const pendingExtensionBooking = await prisma.booking.findFirst({
-    where: { extensionForBookingId: id, status: 'PENDING_EXTENSION' },
-    select: { id: true, startDate: true, endDate: true, totalPrice: true },
-  });
-
-  // If this IS a PENDING_EXTENSION booking, find the original booking
-  const originalBooking = booking.extensionForBookingId
-    ? await prisma.booking.findUnique({
-        where: { id: booking.extensionForBookingId },
-        select: { id: true, startDate: true, endDate: true, totalPrice: true, status: true },
-      })
-    : null;
-
-  // Adjacent bookings for manual merge (same client, BOARDING, contiguous dates)
-  // New rule: same-day contiguity (endDate === startDate)
   type AdjacentBooking = {
     id: string;
     startDate: Date;
@@ -79,102 +78,92 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
     pets: string;
     relation: 'before' | 'after';
   };
+
+  // ── 6 queries indépendantes en parallèle ──────────────────────────────────
+  const [
+    supplementaryInvoice,
+    pendingExtensionBooking,
+    originalBooking,
+    before,
+    after,
+    bookingMessages,
+  ] = await Promise.all([
+    prisma.invoice.findFirst({
+      where: {
+        OR: [
+          { supplementaryForBookingId: id },
+          // legacy fallback for rows created before the FK column was added
+          { clientId, notes: `EXTENSION_SURCHARGE:${id}` },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.booking.findFirst({
+      where: { extensionForBookingId: id, status: 'PENDING_EXTENSION' },
+      select: { id: true, startDate: true, endDate: true, totalPrice: true },
+    }),
+    booking.extensionForBookingId
+      ? prisma.booking.findUnique({
+          where: { id: booking.extensionForBookingId },
+          select: { id: true, startDate: true, endDate: true, totalPrice: true, status: true },
+        })
+      : Promise.resolve(null),
+    beforeWindow
+      ? prisma.booking.findFirst({
+          where: {
+            id: { not: id },
+            clientId,
+            serviceType: 'BOARDING',
+            status: { notIn: ['CANCELLED', 'REJECTED'] },
+            endDate: beforeWindow,
+          },
+          include: { bookingPets: { include: { pet: true } } },
+          orderBy: { startDate: 'desc' },
+        })
+      : Promise.resolve(null),
+    afterWindow
+      ? prisma.booking.findFirst({
+          where: {
+            id: { not: id },
+            clientId,
+            serviceType: 'BOARDING',
+            status: { notIn: ['CANCELLED', 'REJECTED'] },
+            startDate: afterWindow,
+          },
+          include: { bookingPets: { include: { pet: true } } },
+          orderBy: { startDate: 'asc' },
+        })
+      : Promise.resolve(null),
+    prisma.notification.findMany({
+      where: { userId: clientId, type: 'ADMIN_MESSAGE', metadata: { contains: id } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, messageFr: true, messageEn: true, createdAt: true },
+    }),
+  ]);
+
   const adjacentBookings: AdjacentBooking[] = [];
-  if (booking.serviceType === 'BOARDING') {
-    const clientId = booking.client.id;
-
-    // Booking that ends on the same day this one starts (same-day contiguous)
-    // OR ends the day before (legacy next-day contiguous)
-    if (booking.startDate) {
-      const startDayStart = new Date(booking.startDate);
-      startDayStart.setUTCHours(0, 0, 0, 0);
-      const startDayEnd = new Date(booking.startDate);
-      startDayEnd.setUTCHours(23, 59, 59, 999);
-
-      // Also check the day before (legacy behavior)
-      const dayBefore = new Date(booking.startDate);
-      dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
-      const dayBeforeStart = new Date(dayBefore);
-      dayBeforeStart.setUTCHours(0, 0, 0, 0);
-      const dayBeforeEnd = new Date(dayBefore);
-      dayBeforeEnd.setUTCHours(23, 59, 59, 999);
-
-      const before = await prisma.booking.findFirst({
-        where: {
-          id: { not: id },
-          clientId,
-          serviceType: 'BOARDING',
-          status: { notIn: ['CANCELLED', 'REJECTED'] },
-          endDate: {
-            gte: dayBeforeStart,
-            lte: startDayEnd, // covers both same-day and day-before
-          },
-        },
-        include: { bookingPets: { include: { pet: true } } },
-        orderBy: { startDate: 'desc' },
-      });
-      if (before) {
-        adjacentBookings.push({
-          id: before.id,
-          startDate: before.startDate,
-          endDate: before.endDate,
-          totalPrice: before.totalPrice,
-          status: before.status,
-          pets: before.bookingPets.map(bp => bp.pet.name).join(', '),
-          relation: 'before',
-        });
-      }
-    }
-
-    // Booking that starts on the same day this one ends (same-day contiguous)
-    // OR starts the day after (legacy next-day contiguous)
-    if (booking.endDate) {
-      const endDayStart = new Date(booking.endDate);
-      endDayStart.setUTCHours(0, 0, 0, 0);
-      const endDayEnd = new Date(booking.endDate);
-      endDayEnd.setUTCHours(23, 59, 59, 999);
-
-      // Also check the day after (legacy behavior)
-      const dayAfter = new Date(booking.endDate);
-      dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
-      const dayAfterStart = new Date(dayAfter);
-      dayAfterStart.setUTCHours(0, 0, 0, 0);
-      const dayAfterEnd = new Date(dayAfter);
-      dayAfterEnd.setUTCHours(23, 59, 59, 999);
-
-      const after = await prisma.booking.findFirst({
-        where: {
-          id: { not: id },
-          clientId,
-          serviceType: 'BOARDING',
-          status: { notIn: ['CANCELLED', 'REJECTED'] },
-          startDate: {
-            gte: endDayStart, // covers same-day and day-after
-            lte: dayAfterEnd,
-          },
-        },
-        include: { bookingPets: { include: { pet: true } } },
-        orderBy: { startDate: 'asc' },
-      });
-      if (after) {
-        adjacentBookings.push({
-          id: after.id,
-          startDate: after.startDate,
-          endDate: after.endDate,
-          totalPrice: after.totalPrice,
-          status: after.status,
-          pets: after.bookingPets.map(bp => bp.pet.name).join(', '),
-          relation: 'after',
-        });
-      }
-    }
+  if (before) {
+    adjacentBookings.push({
+      id: before.id,
+      startDate: before.startDate,
+      endDate: before.endDate,
+      totalPrice: before.totalPrice,
+      status: before.status,
+      pets: before.bookingPets.map(bp => bp.pet.name).join(', '),
+      relation: 'before',
+    });
   }
-
-  const bookingMessages = await prisma.notification.findMany({
-    where: { userId: booking.client.id, type: 'ADMIN_MESSAGE', metadata: { contains: id } },
-    orderBy: { createdAt: 'asc' },
-    select: { id: true, messageFr: true, messageEn: true, createdAt: true },
-  });
+  if (after) {
+    adjacentBookings.push({
+      id: after.id,
+      startDate: after.startDate,
+      endDate: after.endDate,
+      totalPrice: after.totalPrice,
+      status: after.status,
+      pets: after.bookingPets.map(bp => bp.pet.name).join(', '),
+      relation: 'after',
+    });
+  }
 
   const CANCELLATION_REASONS: Record<string, { fr: string; en: string }> = {
     plans_changed:  { fr: 'Changement de plans',            en: 'Plans changed' },

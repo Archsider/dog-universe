@@ -51,6 +51,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
   }
 
+  if (gender && !['MALE', 'FEMALE'].includes(gender)) {
+    return NextResponse.json({ error: 'INVALID_GENDER' }, { status: 400 });
+  }
+
   const owner = await prisma.user.findUnique({ where: { id: ownerId, role: 'CLIENT' } });
   if (!owner) return NextResponse.json({ error: 'Owner not found' }, { status: 404 });
 

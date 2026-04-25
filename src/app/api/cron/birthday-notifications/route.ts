@@ -21,15 +21,28 @@ export async function GET(req: NextRequest) {
   const month = today.getMonth() + 1; // 1-12
   const day = today.getDate();
 
-  // Prisma doesn't have MONTH()/DAY() helpers — use raw query
+  // Prisma doesn't have MONTH()/DAY() helpers — use raw query.
+  // JOIN avec User pour ramener nom + téléphone owner en 1 seule requête (évite N+1 ensuite).
   const pets = await prisma.$queryRaw<
-    { id: string; name: string; species: string; ownerId: string; dateOfBirth: Date }[]
+    Array<{
+      id: string;
+      name: string;
+      species: string;
+      ownerId: string;
+      dateOfBirth: Date;
+      ownerName: string | null;
+      ownerPhone: string | null;
+    }>
   >`
-    SELECT id, name, species, "ownerId", "dateOfBirth"
-    FROM "Pet"
-    WHERE "dateOfBirth" IS NOT NULL
-      AND EXTRACT(MONTH FROM "dateOfBirth") = ${month}
-      AND EXTRACT(DAY FROM "dateOfBirth") = ${day}
+    SELECT
+      p.id, p.name, p.species, p."ownerId", p."dateOfBirth",
+      u.name AS "ownerName",
+      u.phone AS "ownerPhone"
+    FROM "Pet" p
+    JOIN "User" u ON u.id = p."ownerId"
+    WHERE p."dateOfBirth" IS NOT NULL
+      AND EXTRACT(MONTH FROM p."dateOfBirth") = ${month}
+      AND EXTRACT(DAY FROM p."dateOfBirth") = ${day}
   `;
 
   if (pets.length === 0) {
@@ -67,15 +80,11 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // SMS anniversaire au propriétaire
-    const owner = await prisma.user.findUnique({
-      where: { id: pet.ownerId },
-      select: { phone: true, name: true },
-    });
-    if (owner?.phone) {
-      const ownerFirstName = (owner.name ?? '').split(' ')[0] || (owner.name ?? '');
+    // SMS anniversaire au propriétaire — données issues du JOIN du $queryRaw (pas de query supplémentaire)
+    if (pet.ownerPhone) {
+      const ownerFirstName = (pet.ownerName ?? '').split(' ')[0] || (pet.ownerName ?? '');
       await sendSMS(
-        owner.phone,
+        pet.ownerPhone,
         `Bonjour ${ownerFirstName} ! 🎂 Toute l'équipe Dog Universe souhaite un merveilleux anniversaire à ${pet.name} qui fête ses ${age} an(s) aujourd'hui ! — Dog Universe ❤️`,
       );
     }
