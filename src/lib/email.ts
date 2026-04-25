@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { petCompanion, petVerb, petArrived, petChouchoute } from './sms';
+import { petCompanion, petVerb, petArrived } from './sms';
 
 let transporter: nodemailer.Transporter;
 
@@ -92,20 +92,17 @@ export function getEmailTemplate(
     d[key] = (key === 'resetUrl' || key === 'loginUrl') ? val : escapeHtml(val ?? '');
   }
 
-  // Genre / pluriel — fallback masculin singulier si pets vide
+  // Genre / pluriel — fallback masculin singulier si pets vide.
+  // Seuls les helpers réellement utilisés par les templates ci-dessous sont calculés.
   const hasPets = pets.length > 0;
   const allFemale = hasPets && pets.every(p => p.gender === 'FEMALE');
   const isPlural = pets.length > 1;
   const _companion = hasPets ? petCompanion(pets) : 'votre compagnon';
   const _CompanionCap = _companion.charAt(0).toUpperCase() + _companion.slice(1);
-  const _verbFut   = hasPets ? petVerb(pets, 'future')  : 'sera';
   const _verbPres  = hasPets ? petVerb(pets, 'present') : 'est';
   const _arrived   = hasPets ? petArrived(pets)   : 'arrivé(e)';
-  const _chouchoute = hasPets ? petChouchoute(pets) : 'chouchouté(e)';
   const _pret = !hasPets ? 'prêt(e)' : isPlural ? (allFemale ? 'prêtes' : 'prêts') : (allFemale ? 'prête' : 'prêt');
   const _recup = !hasPets ? 'récupéré(e)' : isPlural ? (allFemale ? 'récupérées' : 'récupérés') : (allFemale ? 'récupérée' : 'récupéré');
-  // _verbFut / _chouchoute exposés pour de futurs templates — référence no-op
-  void _verbFut; void _chouchoute;
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;

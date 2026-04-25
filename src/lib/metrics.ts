@@ -7,7 +7,8 @@ export function deltaPercent(cur: number, prev: number): number {
 }
 
 // ItemCategory → display key. Returns null for OTHER (never silently absorbed).
-export function categoryKey(
+// Internal helper — pas exporté (3 utilisations dans ce fichier uniquement).
+function categoryKey(
   cat: string,
 ): 'boarding' | 'taxi' | 'grooming' | 'croquettes' | null {
   if (cat === 'BOARDING') return 'boarding';

@@ -68,12 +68,6 @@ export function formatMAD(amount: number): string {
   return amount.toLocaleString('fr-FR') + ' MAD'
 }
 
-// Helper espèce animal
-export function petEmoji(species: string): string {
-  if (species === 'CAT') return '🐱'
-  return '🐾'
-}
-
 // ─── Helpers genre / pluriel ─────────────────────────────────────────────────
 // Tous prennent `pets: { gender?: string | null }[]` et retournent la forme
 // française accordée. Si la liste est vide, fallback masculin singulier.
@@ -114,12 +108,6 @@ export function petReturned(pets: PetForGender[]): string {
 
 export function petPossessive(pets: PetForGender[]): string {
   return pets.length > 1 ? 'leurs' : 'ses'
-}
-
-export function petPronoun(pets: PetForGender[]): string {
-  const allFemale = isAllFemale(pets)
-  if (pets.length > 1) return allFemale ? 'elles' : 'ils'
-  return allFemale ? 'elle' : 'il'
 }
 
 export function petChouchoute(pets: PetForGender[]): string {
