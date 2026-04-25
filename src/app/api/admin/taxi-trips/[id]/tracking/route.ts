@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { sendSMS } from '@/lib/sms';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
 const MAX_LOCATIONS_PER_TRIP = 50;
@@ -55,10 +56,35 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       where: { id: params.id },
       data: { trackingActive: true, trackingToken },
     });
+
+    // Récupère les infos client pour envoyer le SMS de suivi (1 query, action rare)
+    const tripWithClient = await prisma.taxiTrip.findUnique({
+      where: { id: params.id },
+      select: {
+        booking: {
+          select: {
+            client: { select: { name: true, phone: true, language: true } },
+          },
+        },
+      },
+    });
+    const client = tripWithClient?.booking?.client;
+    const clientLocale = client?.language === 'en' ? 'en' : 'fr';
+    const trackingUrl = `${APP_URL}/${clientLocale}/track/${trackingToken}`;
+
+    // SMS automatique au client (additif, échec n'empêche pas l'admin de démarrer le tracking)
+    if (client?.phone) {
+      const firstName = (client.name ?? '').split(' ')[0] || (client.name ?? '');
+      const msg = clientLocale === 'en'
+        ? `Hello ${firstName}! 🚗 Dog Universe is on the way. Track your pet live: ${trackingUrl} — Dog Universe`
+        : `Bonjour ${firstName} ! 🚗 Dog Universe est en route. Suivez votre animal en direct : ${trackingUrl} — Dog Universe`;
+      sendSMS(client.phone, msg).catch(() => { /* SMS additif */ });
+    }
+
     return NextResponse.json({
       ok: true,
       trackingToken,
-      trackingUrl: `${APP_URL}/track/${trackingToken}`,
+      trackingUrl,
     });
   }
 

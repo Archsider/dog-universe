@@ -6,6 +6,7 @@ import { Car, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
+import TaxiTrackingButton from '@/components/admin/TaxiTrackingButton';
 
 interface BoardingDetailTaxi {
   taxiGoEnabled: boolean;
@@ -23,6 +24,9 @@ interface EditTaxiAddonSectionProps {
   boardingDetail: BoardingDetailTaxi | null;
   goTrip: TaxiTripData | null;
   returnTrip: TaxiTripData | null;
+  // Tracking GPS metadata (passée séparément car non incluse dans TaxiTripData)
+  goTracking?: { trackingActive: boolean; trackingToken: string | null } | null;
+  returnTracking?: { trackingActive: boolean; trackingToken: string | null } | null;
   locale: string;
 }
 
@@ -60,7 +64,7 @@ const l = {
 };
 
 export default function EditTaxiAddonSection({
-  bookingId, boardingDetail, goTrip, returnTrip, locale,
+  bookingId, boardingDetail, goTrip, returnTrip, goTracking, returnTracking, locale,
 }: EditTaxiAddonSectionProps) {
   const router = useRouter();
   const t = l[locale as keyof typeof l] || l.fr;
@@ -149,7 +153,19 @@ export default function EditTaxiAddonSection({
             <div>
               <p className="text-xs font-semibold text-orange-700 mb-2">↗ Aller (dépôt pension)</p>
               {goTrip
-                ? <TaxiTimeline trip={goTrip} locale={locale} />
+                ? <>
+                    <TaxiTimeline trip={goTrip} locale={locale} />
+                    {goTracking && (
+                      <TaxiTrackingButton
+                        taxiTripId={goTrip.id}
+                        tripType={goTrip.tripType}
+                        status={goTrip.status}
+                        trackingActive={goTracking.trackingActive}
+                        trackingToken={goTracking.trackingToken}
+                        locale={locale}
+                      />
+                    )}
+                  </>
                 : <p className="text-xs text-gray-400 italic">{t.noTrip}</p>}
             </div>
           )}
@@ -157,7 +173,19 @@ export default function EditTaxiAddonSection({
             <div>
               <p className="text-xs font-semibold text-orange-700 mb-2">↙ Retour (domicile)</p>
               {returnTrip
-                ? <TaxiTimeline trip={returnTrip} locale={locale} />
+                ? <>
+                    <TaxiTimeline trip={returnTrip} locale={locale} />
+                    {returnTracking && (
+                      <TaxiTrackingButton
+                        taxiTripId={returnTrip.id}
+                        tripType={returnTrip.tripType}
+                        status={returnTrip.status}
+                        trackingActive={returnTracking.trackingActive}
+                        trackingToken={returnTracking.trackingToken}
+                        locale={locale}
+                      />
+                    )}
+                  </>
                 : <p className="text-xs text-gray-400 italic">{t.noTrip}</p>}
             </div>
           )}
@@ -191,6 +219,16 @@ export default function EditTaxiAddonSection({
                 {goTrip && (
                   <div className="border-t border-gray-100 pt-3">
                     <TaxiTimeline trip={goTrip} locale={locale} />
+                    {goTracking && (
+                      <TaxiTrackingButton
+                        taxiTripId={goTrip.id}
+                        tripType={goTrip.tripType}
+                        status={goTrip.status}
+                        trackingActive={goTracking.trackingActive}
+                        trackingToken={goTracking.trackingToken}
+                        locale={locale}
+                      />
+                    )}
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3 mt-2">
@@ -237,6 +275,16 @@ export default function EditTaxiAddonSection({
                 {returnTrip && (
                   <div className="border-t border-gray-100 pt-3">
                     <TaxiTimeline trip={returnTrip} locale={locale} />
+                    {returnTracking && (
+                      <TaxiTrackingButton
+                        taxiTripId={returnTrip.id}
+                        tripType={returnTrip.tripType}
+                        status={returnTrip.status}
+                        trackingActive={returnTracking.trackingActive}
+                        trackingToken={returnTracking.trackingToken}
+                        locale={locale}
+                      />
+                    )}
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3 mt-2">

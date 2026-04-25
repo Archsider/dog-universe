@@ -596,6 +596,14 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
               } : null}
               goTrip={goTrip}
               returnTrip={returnTrip}
+              goTracking={(() => {
+                const raw = booking.taxiTrips.find(t => t.tripType === 'OUTBOUND');
+                return raw ? { trackingActive: raw.trackingActive, trackingToken: raw.trackingToken } : null;
+              })()}
+              returnTracking={(() => {
+                const raw = booking.taxiTrips.find(t => t.tripType === 'RETURN');
+                return raw ? { trackingActive: raw.trackingActive, trackingToken: raw.trackingToken } : null;
+              })()}
               locale={locale}
             />
           )}
