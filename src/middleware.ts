@@ -142,13 +142,17 @@ export async function middleware(request: NextRequest) {
     `style-src-elem 'self' 'nonce-${nonce}'`,
     "style-src-attr 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' blob: data: https://*.supabase.co https://supabase.co",
+    // img-src ajoute les CDN tuiles cartographiques (Leaflet/OpenStreetMap)
+    // pour le suivi GPS taxi.
+    "img-src 'self' blob: data: https://*.supabase.co https://supabase.co https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com",
     "font-src 'self'",
     // Restrict connect-src to known origins — 'https:' was too permissive.
     // Upstash Redis is called server-side only (no browser fetch needed).
+    // wss://*.supabase.co : Supabase Realtime pour le push temps-réel de la position GPS.
+    // https://*.tile.openstreetmap.org : tuiles cartographiques Leaflet.
     isDev
-      ? "connect-src 'self' https://*.supabase.co https://supabase.co ws://localhost:* http://localhost:*"
-      : "connect-src 'self' https://*.supabase.co https://supabase.co",
+      ? "connect-src 'self' https://*.supabase.co https://supabase.co wss://*.supabase.co https://*.tile.openstreetmap.org ws://localhost:* http://localhost:*"
+      : "connect-src 'self' https://*.supabase.co https://supabase.co wss://*.supabase.co https://*.tile.openstreetmap.org",
     "frame-ancestors 'none'",
   ].join('; ');
 

@@ -239,11 +239,15 @@ model TaxiTrip {
   address   String?
   taxiType  String?  // "STANDARD" | "VET" | "AIRPORT" — STANDALONE only
   price     Float    @default(0)
+  // GPS tracking — controlled per-trip by admin
+  trackingActive Boolean @default(false)
+  trackingToken  String? @unique  // public token, allows client tracking without auth
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  booking Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  history TaxiStatusHistory[]
+  booking   Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  history   TaxiStatusHistory[]
+  locations TaxiLocation[]
 
   @@index([bookingId])
 }
@@ -259,6 +263,22 @@ model TaxiStatusHistory {
   taxiTrip TaxiTrip @relation(fields: [taxiTripId], references: [id], onDelete: Cascade)
 
   @@index([taxiTripId])
+}
+
+model TaxiLocation {
+  id         String   @id @default(cuid())
+  taxiTripId String
+  latitude   Float
+  longitude  Float
+  heading    Float?   // direction en degrés (0-360)
+  speed      Float?   // km/h
+  accuracy   Float?   // précision GPS en mètres
+  createdAt  DateTime @default(now())
+
+  taxiTrip TaxiTrip @relation(fields: [taxiTripId], references: [id], onDelete: Cascade)
+
+  @@index([taxiTripId])
+  @@index([createdAt])
 }
 
 model Invoice {
