@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import type { Map as LeafletMap, Marker as LeafletMarker } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 // Tuiles OpenStreetMap (whitelisted dans CSP middleware) — pas d'API key requise.
@@ -41,6 +42,11 @@ export default function TrackPage() {
   const [status, setStatus] = useState<'loading' | 'ok' | 'inactive' | 'notfound' | 'error'>('loading');
   const [carIcon, setCarIcon] = useState<LeafletDivIcon | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Refs impératifs Leaflet — la prop "position" du Marker peut ne pas
+  // se réactualiser correctement en mode dynamic-import. On déplace le
+  // marker et recentre la carte via setLatLng / setView à chaque update.
+  const mapRef = useRef<LeafletMap | null>(null);
+  const markerRef = useRef<LeafletMarker | null>(null);
 
   // Charge l'icône custom (divIcon = pas d'image externe — CSP-safe)
   useEffect(() => {
@@ -92,6 +98,23 @@ export default function TrackPage() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [token]);
+
+  // Déplacement impératif du marker + recentrage de la carte à chaque
+  // nouvelle position GPS (évite les soucis de propagation de prop sur
+  // un composant Leaflet chargé via dynamic({ ssr: false })).
+  useEffect(() => {
+    const loc = data?.lastLocation;
+    if (!loc) return;
+    const next: [number, number] = [loc.lat, loc.lng];
+    if (markerRef.current) {
+      markerRef.current.setLatLng(next);
+    }
+    if (mapRef.current) {
+      mapRef.current.setView(next, mapRef.current.getZoom());
+    }
+    // Volontairement deps minimales — re-render sur changement de coords seulement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.lastLocation?.lat, data?.lastLocation?.lng]);
 
   // ── Vues d'erreur / état ────────────────────────────────────────────────
   if (status === 'loading') {
@@ -181,13 +204,14 @@ export default function TrackPage() {
             zoom={15}
             scrollWheelZoom
             style={{ height: '100%', width: '100%', minHeight: '60vh' }}
+            ref={mapRef as never}
           >
             <TileLayer attribution={TILE_ATTRIB} url={TILE_URL} />
-            {carIcon ? (
-              <Marker position={center} icon={carIcon as never} />
-            ) : (
-              <Marker position={center} />
-            )}
+            <Marker
+              position={center}
+              ref={markerRef as never}
+              {...(carIcon ? { icon: carIcon as never } : {})}
+            />
           </MapContainer>
         ) : (
           <div className="flex items-center justify-center min-h-[60vh] text-[#8A7E75] text-sm px-6 text-center">
