@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
-import { ArrowLeft, ArrowRight, Check, PawPrint, Car, Calendar, Package, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, PawPrint, Car, Package, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,9 +47,15 @@ const isValidTaxiDate = (dateStr: string): boolean => {
   return d.getDay() !== 0; // 0 = dimanche
 };
 
+const isValidTaxiTime = (timeStr: string): boolean => {
+  if (!timeStr) return true;
+  const [h, m] = timeStr.split(':').map(Number);
+  const totalMinutes = h * 60 + (m || 0);
+  return totalMinutes >= 10 * 60 && totalMinutes <= 17 * 60;
+};
+
 export default function NewBookingPage() {
   const locale = useLocale();
-  const router = useRouter();
 
   const [step, setStep] = useState(1);
   const [pets, setPets] = useState<Pet[]>([]);
@@ -320,14 +325,18 @@ export default function NewBookingPage() {
       if (taxiGoEnabled) {
         if (!taxiGoDate || !taxiGoTime || !taxiGoAddress) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
         if (!isValidTaxiDate(taxiGoDate)) { toast({ title: l.sundayNotAllowed, variant: 'destructive' }); return false; }
+        if (!isValidTaxiTime(taxiGoTime)) { toast({ title: l.invalidTime, variant: 'destructive' }); return false; }
       }
       if (taxiReturnEnabled) {
         if (!taxiReturnDate || !taxiReturnTime || !taxiReturnAddress) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
         if (!isValidTaxiDate(taxiReturnDate)) { toast({ title: l.sundayNotAllowed, variant: 'destructive' }); return false; }
+        if (!isValidTaxiTime(taxiReturnTime)) { toast({ title: l.invalidTime, variant: 'destructive' }); return false; }
       }
     }
     if (step === 3 && bookingType === 'PET_TAXI') {
       if (!taxiDate || !taxiTime || !pickupAddress || !dropoffAddress) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
+      if (!isValidTaxiDate(taxiDate)) { toast({ title: l.sundayNotAllowed, variant: 'destructive' }); return false; }
+      if (!isValidTaxiTime(taxiTime)) { toast({ title: l.invalidTime, variant: 'destructive' }); return false; }
     }
     return true;
   };
@@ -366,8 +375,8 @@ export default function NewBookingPage() {
         body.taxiReturnAddress = taxiReturnEnabled ? taxiReturnAddress : null;
         body.taxiAddonPrice = (taxiGoEnabled ? TAXI_ADDON_PRICE : 0) + (taxiReturnEnabled ? TAXI_ADDON_PRICE : 0);
       } else {
-        const dateTime = new Date(`${taxiDate}T${taxiTime}`);
-        body.startDate = dateTime.toISOString();
+        body.startDate = taxiDate; // date only — pas de conversion UTC pour éviter le décalage horaire
+        body.arrivalTime = taxiTime; // heure brute parsée côté serveur
         body.taxiType = taxiType;
         const notes = [taxiNotes, pickupAddress && `Départ: ${pickupAddress}`, dropoffAddress && `Arrivée: ${dropoffAddress}`].filter(Boolean).join(' | ');
         body.notes = notes || undefined;
@@ -378,7 +387,18 @@ export default function NewBookingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (err.error === 'SUNDAY_NOT_ALLOWED') {
+          toast({ title: l.sundayNotAllowed, variant: 'destructive' });
+          return;
+        }
+        if (err.error === 'INVALID_TIME_SLOT') {
+          toast({ title: l.invalidTime, variant: 'destructive' });
+          return;
+        }
+        throw new Error('Failed');
+      }
       const data = await res.json();
       setBookingRef(data.bookingRef || data.id);
       setStep(5);
@@ -690,11 +710,30 @@ export default function NewBookingPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="tdate">{l.taxiDateLabel} *</Label>
-                <Input id="tdate" type="date" value={taxiDate} onChange={e => setTaxiDate(e.target.value)} min={today} className="mt-1" />
+                <Input
+                  id="tdate"
+                  type="date"
+                  value={taxiDate}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setTaxiDate(val);
+                    if (val && !isValidTaxiDate(val)) toast({ title: l.sundayNotAllowed, variant: 'destructive' });
+                  }}
+                  min={today}
+                  className="mt-1"
+                />
               </div>
               <div>
-                <Label htmlFor="ttime">{l.taxiTimeLabel} *</Label>
-                <Input id="ttime" type="time" value={taxiTime} onChange={e => setTaxiTime(e.target.value)} className="mt-1" />
+                <Label htmlFor="ttime">{l.taxiTimeLabel} * (10h-17h)</Label>
+                <Input
+                  id="ttime"
+                  type="time"
+                  value={taxiTime}
+                  onChange={e => setTaxiTime(e.target.value)}
+                  min="10:00"
+                  max="17:00"
+                  className="mt-1"
+                />
               </div>
             </div>
             <div>

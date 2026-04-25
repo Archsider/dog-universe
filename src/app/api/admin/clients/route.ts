@@ -6,15 +6,15 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 export async function GET(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('search') ?? '';
   const grade = searchParams.get('grade') ?? '';
-  const page = parseInt(searchParams.get('page') ?? '1');
-  const limit = parseInt(searchParams.get('limit') ?? '50');
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
+  const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') ?? '50')), 100);
 
   const where: Record<string, unknown> = { role: 'CLIENT' };
 
@@ -25,7 +25,8 @@ export async function GET(request: Request) {
     ];
   }
 
-  if (grade) {
+  const VALID_GRADES = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];
+  if (grade && VALID_GRADES.includes(grade)) {
     where.loyaltyGrade = { grade };
   }
 
@@ -56,33 +57,41 @@ export async function GET(request: Request) {
     prisma.user.count({ where }),
   ]);
 
-  const clientsWithRevenue = clients.map((client) => ({
-    ...client,
-    totalRevenue: client.invoices.reduce((sum, inv) => sum + inv.amount, 0),
-    lastStay: client.bookings[0] ?? null,
-    totalStays: client._count.bookings,
-    passwordHash: undefined, // never expose
-  }));
+  const clientsWithRevenue = clients.map((client) => {
+    // Explicitly exclude passwordHash via destructuring (safer than `undefined` override)
+    const { passwordHash: _pw, ...safeClient } = client;
+    return {
+      ...safeClient,
+      totalRevenue: client.invoices.reduce((sum, inv) => sum + inv.amount, 0),
+      lastStay: client.bookings[0] ?? null,
+      totalStays: client._count.bookings,
+    };
+  });
 
   return NextResponse.json({ clients: clientsWithRevenue, total, page, limit });
 }
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { name, email, phone, password, language } = await request.json();
+  const body = await request.json();
+  const { password, language } = body;
+
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 255) : '';
+  const email = typeof body.email === 'string' ? body.email.toLowerCase().trim().slice(0, 255) : '';
+  const phone = typeof body.phone === 'string' ? body.phone.trim().slice(0, 20) : null;
 
   if (!name || !email || !password) {
     return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
   }
-  if (password.length < 8) {
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
     return NextResponse.json({ error: 'WEAK_PASSWORD' }, { status: 400 });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     return NextResponse.json({ error: 'EMAIL_TAKEN' }, { status: 409 });
   }
@@ -91,9 +100,9 @@ export async function POST(request: Request) {
 
   const user = await prisma.user.create({
     data: {
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
-      phone: phone?.trim() || null,
+      name,
+      email,
+      phone: phone || null,
       passwordHash,
       role: 'CLIENT',
       language: language ?? 'fr',

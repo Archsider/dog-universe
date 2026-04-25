@@ -157,8 +157,8 @@ export default function PricingForm({ initialValues }: { initialValues: Record<s
         <ul className="text-sm text-amber-700 space-y-1 list-disc list-inside">
           <li>Les tarifs sont appliqués automatiquement à chaque nouvelle réservation.</li>
           <li>Les réservations existantes ne sont pas modifiées.</li>
-          <li>Le seuil long séjour détermine à partir de combien de nuits le tarif réduit s'applique.</li>
-          <li>Le tarif multi-chien s'applique si ≥2 chiens OU si le séjour dépasse le seuil.</li>
+          <li>Le seuil long séjour détermine à partir de combien de nuits le tarif réduit s&apos;applique.</li>
+          <li>Le tarif multi-chien s&apos;applique si ≥2 chiens OU si le séjour dépasse le seuil.</li>
         </ul>
       </div>
     </div>

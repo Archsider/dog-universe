@@ -24,13 +24,14 @@ export default function CreateAnimalModal({ locale, defaultOwnerId }: Props) {
     breed: '',
     gender: '',
     dateOfBirth: '',
+    weight: '',
   });
   const [error, setError] = useState('');
   const router = useRouter();
 
   const l = locale === 'en'
-    ? { btn: 'New animal', title: 'Add an animal', owner: 'Owner', name: 'Name', species: 'Species', breed: 'Breed (optional)', gender: 'Gender (optional)', dob: 'Date of birth (optional)', dog: 'Dog', cat: 'Cat', male: 'Male', female: 'Female', none: '—', cancel: 'Cancel', create: 'Add', success: 'Animal added', errMissing: 'Required fields missing', selectOwner: 'Select owner...' }
-    : { btn: 'Nouvel animal', title: 'Ajouter un animal', owner: 'Propriétaire', name: 'Nom', species: 'Espèce', breed: 'Race (optionnel)', gender: 'Sexe (optionnel)', dob: 'Date de naissance (optionnel)', dog: 'Chien', cat: 'Chat', male: 'Mâle', female: 'Femelle', none: '—', cancel: 'Annuler', create: 'Ajouter', success: 'Animal ajouté', errMissing: 'Champs requis manquants', selectOwner: 'Choisir un propriétaire...' };
+    ? { btn: 'New animal', title: 'Add an animal', owner: 'Owner', name: 'Name', species: 'Species', breed: 'Breed (optional)', gender: 'Gender (optional)', dob: 'Date of birth *', weight: 'Weight (kg)', dog: 'Dog', cat: 'Cat', male: 'Male', female: 'Female', none: '—', cancel: 'Cancel', create: 'Add', success: 'Animal added', errMissing: 'Required fields missing', selectOwner: 'Select owner...' }
+    : { btn: 'Nouvel animal', title: 'Ajouter un animal', owner: 'Propriétaire', name: 'Nom', species: 'Espèce', breed: 'Race (optionnel)', gender: 'Sexe (optionnel)', dob: 'Date de naissance *', weight: 'Poids (kg)', dog: 'Chien', cat: 'Chat', male: 'Mâle', female: 'Femelle', none: '—', cancel: 'Annuler', create: 'Ajouter', success: 'Animal ajouté', errMissing: 'Champs requis manquants', selectOwner: 'Choisir un propriétaire...' };
 
   const openModal = async () => {
     setOpen(true);
@@ -49,6 +50,10 @@ export default function CreateAnimalModal({ locale, defaultOwnerId }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!form.dateOfBirth) {
+      setError(locale === 'en' ? 'Date of birth is required' : 'La date de naissance est obligatoire');
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/admin/animals', {
@@ -62,7 +67,7 @@ export default function CreateAnimalModal({ locale, defaultOwnerId }: Props) {
       }
       toast({ title: l.success, variant: 'success' });
       setOpen(false);
-      setForm({ ownerId: defaultOwnerId ?? '', name: '', species: 'DOG', breed: '', gender: '', dateOfBirth: '' });
+      setForm({ ownerId: defaultOwnerId ?? '', name: '', species: 'DOG', breed: '', gender: '', dateOfBirth: '', weight: '' });
       router.refresh();
     } catch {
       setError(l.errMissing);
@@ -159,14 +164,29 @@ export default function CreateAnimalModal({ locale, defaultOwnerId }: Props) {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{l.dob}</label>
-                <input
-                  type="date"
-                  value={form.dateOfBirth}
-                  onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))}
-                  className="w-full px-3 py-2 border border-ivory-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{l.dob}</label>
+                  <input
+                    type="date"
+                    value={form.dateOfBirth}
+                    onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))}
+                    required
+                    className="w-full px-3 py-2 border border-ivory-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{l.weight}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={form.weight}
+                    onChange={e => setForm(f => ({ ...f, weight: e.target.value }))}
+                    placeholder="4.5"
+                    className="w-full px-3 py-2 border border-ivory-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
+                  />
+                </div>
               </div>
 
               {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}

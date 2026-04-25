@@ -8,13 +8,19 @@ export async function POST(request: Request) {
   try {
     const { email, locale = 'fr' } = await request.json();
 
-    if (!email) {
-      return NextResponse.json({ message: 'ok' }); // Always return ok
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return NextResponse.json({ message: 'ok' }); // Always return ok to prevent enumeration
     }
 
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
 
     if (user) {
+      // Invalider les anciens tokens non utilisés avant d'en créer un nouveau
+      await prisma.passwordResetToken.deleteMany({
+        where: { userId: user.id, used: false },
+      });
+
       const token = randomUUID();
       await prisma.passwordResetToken.create({
         data: {
@@ -24,7 +30,8 @@ export async function POST(request: Request) {
         },
       });
 
-      const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/${locale}/auth/reset-password/${token}`;
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
+      const resetUrl = `${appUrl}/${locale}/auth/reset-password/${token}`;
       const { subject, html } = getEmailTemplate('reset_password', { resetUrl }, locale);
 
       await sendEmail({ to: user.email, subject, html });
@@ -58,8 +65,9 @@ export async function PUT(request: Request) {
     const bcrypt = await import('bcryptjs');
     const passwordHash = await bcrypt.hash(password, 12);
 
+    // Increment tokenVersion to invalidate all existing sessions immediately
     await prisma.$transaction([
-      prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash } }),
+      prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash, tokenVersion: { increment: 1 } } }),
       prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { used: true } }),
     ]);
 

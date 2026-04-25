@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { createBookingValidationNotification, createBookingRefusalNotification } from '@/lib/notifications';
+import { createBookingValidationNotification, createBookingRefusalNotification, createBookingCompletedNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { formatDateShort } from '@/lib/utils';
 
 type Params = { params: Promise<{ id: string }> };
@@ -50,7 +51,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Client can only cancel their own pending bookings
+  // Client path — strictly isolated: only status=CANCELLED allowed, no other fields
   if (session.user.role === 'CLIENT') {
     if (booking.clientId !== session.user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -61,11 +62,77 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!['PENDING', 'CONFIRMED'].includes(booking.status)) {
       return NextResponse.json({ error: 'Cannot cancel this booking' }, { status: 400 });
     }
+    // Clients can ONLY set status to CANCELLED — no other field modification allowed
+    const updated = await prisma.booking.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        cancellationReason: typeof body.cancellationReason === 'string'
+          ? body.cancellationReason.trim().slice(0, 500)
+          : null,
+      },
+      include: { client: true, bookingPets: { include: { pet: true } } },
+    });
+    await logAction({
+      userId: session.user.id,
+      action: LOG_ACTIONS.BOOKING_CANCELLED,
+      entityType: 'Booking',
+      entityId: id,
+    });
+
+    // ── Notifications admin (SMS + in-app) — annulation initiée par le client ─
+    const cancelPetNames = booking.bookingPets.map(bp => bp.pet.name).join(' et ') || 'votre animal';
+    const cancelClientName = booking.client.name ?? booking.client.email;
+    const cancelDateRange = booking.endDate
+      ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
+      : `le ${formatDateFR(booking.startDate)}`;
+    const cancelDateRangeEn = booking.endDate
+      ? `from ${formatDateFR(booking.startDate)} to ${formatDateFR(booking.endDate)}`
+      : `on ${formatDateFR(booking.startDate)}`;
+
+    sendAdminSMS(
+      `⚠️ Annulation client : ${cancelClientName} a annulé sa réservation pour ${cancelPetNames} ${cancelDateRange}.`,
+    ).catch(() => { /* SMS additif — échec non bloquant */ });
+
+    try {
+      const admins = await prisma.user.findMany({
+        where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+        select: { id: true },
+      });
+      await Promise.all(
+        admins.map(admin =>
+          prisma.notification.create({
+            data: {
+              userId: admin.id,
+              type: 'BOOKING_CANCELLED',
+              titleFr: `Annulation — ${cancelClientName}`,
+              titleEn: `Cancelled — ${cancelClientName}`,
+              messageFr: `${cancelPetNames} ${cancelDateRange} a été annulée par le client.`,
+              messageEn: `${cancelPetNames} ${cancelDateRangeEn} was cancelled by the client.`,
+              metadata: JSON.stringify({ bookingId: id }),
+              read: false,
+            },
+          }).catch(err => console.error('[Notif] Admin cancel failed:', err)),
+        ),
+      );
+    } catch (err) {
+      console.error('[Notif] Admin lookup failed on client cancel:', err);
+    }
+
+    return NextResponse.json(updated);
   }
 
-  // Admin can update any field
+  // Admin path — explicit role check (defensive guard)
+  if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const updateData: Record<string, unknown> = {};
 
+  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'CANCELLED', 'REJECTED', 'COMPLETED'];
+  if (body.status && !VALID_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+  }
   if (body.status) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
   if (body.cancellationReason !== undefined) updateData.cancellationReason = body.cancellationReason;
@@ -73,6 +140,13 @@ export async function PATCH(request: Request, { params }: Params) {
   if (body.startDate) updateData.startDate = new Date(body.startDate);
   if (body.endDate) updateData.endDate = new Date(body.endDate);
   if (body.arrivalTime !== undefined) updateData.arrivalTime = body.arrivalTime;
+
+  // Validate date ordering
+  const resolvedStart = (updateData.startDate as Date | undefined) ?? booking.startDate;
+  const resolvedEnd = (updateData.endDate as Date | undefined) ?? booking.endDate;
+  if (resolvedStart && resolvedEnd && resolvedEnd <= resolvedStart) {
+    return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 });
+  }
 
   const updated = await prisma.booking.update({
     where: { id },
@@ -103,7 +177,7 @@ export async function PATCH(request: Request, { params }: Params) {
       dates,
     }, locale);
 
-    await sendEmail({ to: updated.client.email, subject, html });
+    sendEmail({ to: updated.client.email, subject, html }).catch(() => {});
 
     await logAction({
       userId: session.user.id,
@@ -129,16 +203,24 @@ export async function PATCH(request: Request, { params }: Params) {
       entityType: 'Booking',
       entityId: id,
     });
+
+    // Notify client (non-blocking)
+    createBookingCompletedNotification(
+      updated.clientId,
+      id,
+      petNames,
+      updated.serviceType as 'BOARDING' | 'PET_TAXI',
+    ).catch(() => {});
   }
 
-  if (body.status === 'CANCELLED' && session.user.role === 'ADMIN') {
+  if (body.status === 'CANCELLED' && (session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN')) {
     await createBookingRefusalNotification(updated.clientId, id, body.reason);
     const { subject, html } = getEmailTemplate('booking_refused', {
       clientName: updated.client.name,
       bookingRef: id,
       reason: body.reason ?? '',
     }, locale);
-    await sendEmail({ to: updated.client.email, subject, html });
+    sendEmail({ to: updated.client.email, subject, html }).catch(() => {});
     await logAction({
       userId: session.user.id,
       action: LOG_ACTIONS.BOOKING_REJECTED,

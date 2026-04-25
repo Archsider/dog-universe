@@ -14,15 +14,21 @@ import {
   BarChart3,
   ScrollText,
   ClipboardList,
+  LayoutGrid,
   LogOut,
   Menu,
   X,
   ShieldCheck,
   Settings,
   UserCircle,
+  FileText,
+  UserCog,
+  Gift,
+  TrendingUp,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { SidebarSkyline } from './SidebarSkyline';
 
 interface NavItem {
   href: string;
@@ -30,7 +36,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
+export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, userRole = 'ADMIN' }: { pendingCount?: number; pendingClaimsCount?: number; userRole?: string }) {
   const t = useTranslations('nav.admin');
   const locale = useLocale();
   const pathname = usePathname();
@@ -42,11 +48,20 @@ export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
     { href: `/${locale}/admin/animals`, labelKey: 'animals', icon: PawPrint },
     { href: `/${locale}/admin/calendar`, labelKey: 'calendar', icon: Calendar },
     { href: `/${locale}/admin/reservations`, labelKey: 'reservations', icon: ClipboardList },
+    { href: `/${locale}/admin/board`, labelKey: 'board', icon: LayoutGrid },
     { href: `/${locale}/admin/billing`, labelKey: 'billing', icon: Receipt },
+    { href: `/${locale}/admin/contracts`, labelKey: 'contracts', icon: FileText },
+    { href: `/${locale}/admin/loyalty`, labelKey: 'loyalty', icon: Gift },
     { href: `/${locale}/admin/analytics`, labelKey: 'analytics', icon: BarChart3 },
     { href: `/${locale}/admin/logs`, labelKey: 'logs', icon: ScrollText },
     { href: `/${locale}/admin/settings`, labelKey: 'settings', icon: Settings },
     { href: `/${locale}/admin/profile`, labelKey: 'profile', icon: UserCircle },
+    ...(userRole === 'SUPERADMIN'
+      ? [
+          { href: `/${locale}/admin/users`, labelKey: 'users', icon: UserCog },
+          { href: `/${locale}/admin/revenue-summary`, labelKey: 'revenue_summary', icon: TrendingUp },
+        ]
+      : []),
   ];
 
   const SidebarContent = () => (
@@ -68,6 +83,7 @@ export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
           const isActive = pathname.startsWith(item.href);
           const Icon = item.icon;
           const isReservations = item.href.includes('/reservations');
+          const isLoyalty = item.href.includes('/loyalty');
 
           return (
             <Link
@@ -88,10 +104,18 @@ export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
                   {pendingCount > 99 ? '99+' : pendingCount}
                 </span>
               )}
+              {isLoyalty && pendingClaimsCount > 0 && (
+                <span className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-gold-500 text-white text-xs font-bold">
+                  {pendingClaimsCount > 99 ? '99+' : pendingClaimsCount}
+                </span>
+              )}
             </Link>
           );
         })}
       </nav>
+
+      {/* Skyline décorative marocaine */}
+      <SidebarSkyline />
 
       {/* Logout */}
       <div className="px-3 pb-4 pt-2 border-t border-[#F0D98A]/20">
@@ -100,7 +124,7 @@ export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
           className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-charcoal/70 hover:text-red-600 hover:bg-red-50 transition-colors w-full"
         >
           <LogOut className="h-4 w-4" />
-          <span>Déconnexion</span>
+          <span>{t('logout')}</span>
         </button>
       </div>
     </div>
@@ -122,7 +146,7 @@ export function AdminSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
         />
       )}
 
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-[#F0D98A]/30 min-h-screen flex-shrink-0">
+      <aside className="hidden lg:flex flex-col fixed top-0 left-0 h-screen w-64 bg-white border-r border-[#F0D98A]/30 z-30 overflow-y-auto">
         <SidebarContent />
       </aside>
 

@@ -41,7 +41,8 @@ export function getGradeLabel(grade: Grade, locale: string = 'fr'): string {
   return labels[grade][locale] ?? labels[grade]['fr'];
 }
 
-export function getGradeOrder(grade: Grade): number {
+// Internal helper — non exporté (utilisé seulement par isUpgrade ci-dessous)
+function getGradeOrder(grade: Grade): number {
   const orders: Record<Grade, number> = {
     BRONZE: 1,
     SILVER: 2,
@@ -56,3 +57,59 @@ export function isUpgrade(oldGrade: Grade, newGrade: Grade): boolean {
 }
 
 export const ALL_GRADES: Grade[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];
+
+export interface GradeBenefit {
+  key: string;       // unique identifier for claiming
+  labelFr: string;
+  labelEn: string;
+  claimable: boolean; // false = automatic perk (booking priority), true = can be manually claimed
+}
+
+export const GRADE_BENEFITS: Record<Grade, GradeBenefit[]> = {
+  BRONZE: [],
+  SILVER: [
+    { key: 'booking_priority', labelFr: 'Priorité de réservation', labelEn: 'Booking priority', claimable: false },
+    { key: 'grooming_discount_5', labelFr: '5% de réduction sur le toilettage', labelEn: '5% grooming discount', claimable: true },
+  ],
+  GOLD: [
+    { key: 'booking_priority', labelFr: 'Priorité de réservation', labelEn: 'Booking priority', claimable: false },
+    { key: 'grooming_discount_10', labelFr: '10% de réduction sur le toilettage', labelEn: '10% grooming discount', claimable: true },
+    { key: 'free_grooming', labelFr: '1 séance de toilettage offerte / an', labelEn: '1 free grooming session / year', claimable: true },
+    { key: 'free_taxi_2', labelFr: '2 trajets Pet Taxi offerts / an', labelEn: '2 free Pet Taxi rides / year', claimable: true },
+  ],
+  PLATINUM: [
+    { key: 'booking_priority_absolute', labelFr: 'Priorité absolue de réservation', labelEn: 'Absolute booking priority', claimable: false },
+    { key: 'grooming_discount_15', labelFr: '15% de réduction sur le toilettage', labelEn: '15% grooming discount', claimable: true },
+    { key: 'free_grooming_2', labelFr: '2 séances de toilettage offertes / an', labelEn: '2 free grooming sessions / year', claimable: true },
+    { key: 'free_taxi_3', labelFr: '3 trajets Pet Taxi offerts / an', labelEn: '3 free Pet Taxi rides / year', claimable: true },
+    { key: 'vet_priority', labelFr: 'Assistance vétérinaire prioritaire', labelEn: 'Priority veterinary assistance', claimable: true },
+  ],
+};
+
+export interface NextGradeInfo {
+  nextGrade: Grade | null;
+  staysToNext: number;
+  currentStays: number;
+  progressPercent: number; // 0-100
+}
+
+export function getNextGradeInfo(totalStays: number, currentGrade?: Grade): NextGradeInfo {
+  // If the actual grade (including manual overrides) is PLATINUM → max level
+  if (currentGrade === 'PLATINUM' || totalStays >= STAY_THRESHOLDS.PLATINUM.min) {
+    return { nextGrade: null, staysToNext: 0, currentStays: totalStays, progressPercent: 100 };
+  }
+  // Progress is always computed toward the grade above the current actual grade
+  if (currentGrade === 'GOLD' || totalStays >= STAY_THRESHOLDS.GOLD.min) {
+    const staysToNext = STAY_THRESHOLDS.PLATINUM.min - totalStays;
+    const progress = Math.round(((totalStays - STAY_THRESHOLDS.GOLD.min) / (STAY_THRESHOLDS.PLATINUM.min - STAY_THRESHOLDS.GOLD.min)) * 100);
+    return { nextGrade: 'PLATINUM', staysToNext, currentStays: totalStays, progressPercent: Math.min(Math.max(progress, 0), 99) };
+  }
+  if (currentGrade === 'SILVER' || totalStays >= STAY_THRESHOLDS.SILVER.min) {
+    const staysToNext = STAY_THRESHOLDS.GOLD.min - totalStays;
+    const progress = Math.round(((totalStays - STAY_THRESHOLDS.SILVER.min) / (STAY_THRESHOLDS.GOLD.min - STAY_THRESHOLDS.SILVER.min)) * 100);
+    return { nextGrade: 'GOLD', staysToNext, currentStays: totalStays, progressPercent: Math.min(Math.max(progress, 0), 99) };
+  }
+  const staysToNext = STAY_THRESHOLDS.SILVER.min - totalStays;
+  const progress = Math.round((totalStays / STAY_THRESHOLDS.SILVER.min) * 100);
+  return { nextGrade: 'SILVER', staysToNext, currentStays: totalStays, progressPercent: Math.min(Math.max(progress, 0), 99) };
+}

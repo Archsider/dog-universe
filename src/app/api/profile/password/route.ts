@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 12);
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+  // Increment tokenVersion to invalidate all existing sessions immediately
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash, tokenVersion: { increment: 1 } } });
   return NextResponse.json({ success: true });
 }

@@ -49,20 +49,28 @@
     "bookings": "Réservations",
     "history": "Historique",
     "invoices": "Factures",
+    "loyalty": "Mes avantages",
     "notifications": "Notifications",
     "profile": "Mon profil",
     "logout": "Se déconnecter",
+    "connectedAs": "Connecté en tant que",
     "admin": {
       "dashboard": "Tableau de bord",
       "clients": "Clients",
       "animals": "Animaux",
       "calendar": "Calendrier",
       "reservations": "Réservations",
+      "board": "Tableau opérationnel",
       "billing": "Facturation",
       "analytics": "Analytiques",
       "logs": "Journaux",
       "settings": "Paramètres",
-      "profile": "Mon profil"
+      "profile": "Mon profil",
+      "contracts": "Contrats",
+      "users": "Utilisateurs",
+      "loyalty": "Réclamations fidélité",
+      "logout": "Déconnexion",
+      "revenue_summary": "Données historiques"
     }
   },
   "auth": {
