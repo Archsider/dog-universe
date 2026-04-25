@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingValidationNotification, createBookingRefusalNotification, createBookingCompletedNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { formatDateShort } from '@/lib/utils';
 
 type Params = { params: Promise<{ id: string }> };
@@ -78,6 +79,46 @@ export async function PATCH(request: Request, { params }: Params) {
       entityType: 'Booking',
       entityId: id,
     });
+
+    // ── Notifications admin (SMS + in-app) — annulation initiée par le client ─
+    const cancelPetNames = booking.bookingPets.map(bp => bp.pet.name).join(' et ') || 'votre animal';
+    const cancelClientName = booking.client.name ?? booking.client.email;
+    const cancelDateRange = booking.endDate
+      ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
+      : `le ${formatDateFR(booking.startDate)}`;
+    const cancelDateRangeEn = booking.endDate
+      ? `from ${formatDateFR(booking.startDate)} to ${formatDateFR(booking.endDate)}`
+      : `on ${formatDateFR(booking.startDate)}`;
+
+    sendAdminSMS(
+      `⚠️ Annulation client : ${cancelClientName} a annulé sa réservation pour ${cancelPetNames} ${cancelDateRange}.`,
+    ).catch(() => { /* SMS additif — échec non bloquant */ });
+
+    try {
+      const admins = await prisma.user.findMany({
+        where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+        select: { id: true },
+      });
+      await Promise.all(
+        admins.map(admin =>
+          prisma.notification.create({
+            data: {
+              userId: admin.id,
+              type: 'BOOKING_CANCELLED',
+              titleFr: `Annulation — ${cancelClientName}`,
+              titleEn: `Cancelled — ${cancelClientName}`,
+              messageFr: `${cancelPetNames} ${cancelDateRange} a été annulée par le client.`,
+              messageEn: `${cancelPetNames} ${cancelDateRangeEn} was cancelled by the client.`,
+              metadata: JSON.stringify({ bookingId: id }),
+              read: false,
+            },
+          }).catch(err => console.error('[Notif] Admin cancel failed:', err)),
+        ),
+      );
+    } catch (err) {
+      console.error('[Notif] Admin lookup failed on client cancel:', err);
+    }
+
     return NextResponse.json(updated);
   }
 

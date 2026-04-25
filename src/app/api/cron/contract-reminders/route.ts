@@ -18,9 +18,25 @@ export async function GET(req: NextRequest) {
     select: { id: true, name: true, email: true, language: true, phone: true },
   });
 
+  // Limite : 1 rappel max par client tous les 7 jours.
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
   let sent = 0;
+  let skipped = 0;
   for (const client of unsigned) {
     try {
+      // Skip si un rappel a déjà été envoyé dans les 7 derniers jours.
+      const recentReminder = await prisma.notification.findFirst({
+        where: {
+          userId: client.id,
+          type: 'CONTRACT_REMINDER',
+          createdAt: { gte: sevenDaysAgo },
+        },
+        select: { id: true },
+      });
+      if (recentReminder) { skipped++; continue; }
+
       const locale = client.language ?? 'fr';
       const loginUrl = `${APP_URL}/${locale}/auth/login`;
       const { subject, html } = getEmailTemplate(
@@ -38,12 +54,26 @@ export async function GET(req: NextRequest) {
           `Bonjour ${firstName}, votre contrat Dog Universe est en attente de signature. Connectez-vous sur votre espace client pour finaliser votre dossier. — Dog Universe`,
         );
       }
+
+      // Trace de l'envoi — sert de marqueur pour la fenêtre de 7 jours.
+      await prisma.notification.create({
+        data: {
+          userId: client.id,
+          type: 'CONTRACT_REMINDER',
+          titleFr: 'Rappel contrat',
+          titleEn: 'Contract reminder',
+          messageFr: 'Votre contrat Dog Universe est en attente de signature.',
+          messageEn: 'Your Dog Universe contract is pending signature.',
+          read: false,
+        },
+      }).catch(err => console.error('[Notif] Contract reminder trace failed:', err));
+
       sent++;
     } catch (e) {
       console.error(`contract-reminders cron: failed for ${client.email}:`, e);
     }
   }
 
-  console.log(`contract-reminders cron: sent ${sent}/${unsigned.length}`);
-  return NextResponse.json({ sent, total: unsigned.length });
+  console.log(`contract-reminders cron: sent ${sent}/${unsigned.length} (skipped ${skipped})`);
+  return NextResponse.json({ sent, skipped, total: unsigned.length });
 }

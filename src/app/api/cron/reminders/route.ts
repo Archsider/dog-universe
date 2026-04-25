@@ -40,7 +40,13 @@ export async function GET(request: Request) {
   });
 
   let sent = 0;
+  let skipped = 0;
   const errors: string[] = [];
+
+  // Marqueur de jour : permet de détecter une notif déjà créée aujourd'hui
+  // pour la même booking (anti double-fire du cron Vercel).
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
 
   // ── Start reminders (CONFIRMED bookings starting tomorrow) ────────────────
   const startBookings = await prisma.booking.findMany({
@@ -57,6 +63,19 @@ export async function GET(request: Request) {
 
   for (const booking of startBookings) {
     try {
+      // Déduplication : si une notif STAY_REMINDER pour cette booking
+      // a déjà été créée aujourd'hui, on saute (évite double envoi sur retry cron).
+      const alreadySent = await prisma.notification.findFirst({
+        where: {
+          userId: booking.clientId,
+          type: 'STAY_REMINDER',
+          metadata: { contains: `"bookingId":"${booking.id}"` },
+          createdAt: { gte: todayStart },
+        },
+        select: { id: true },
+      });
+      if (alreadySent) { skipped++; continue; }
+
       const locale = booking.client.language ?? 'fr';
       const pets = booking.bookingPets.map(bp => bp.pet);
       const petNames = pets.map(p => p.name).join(' et ');
@@ -147,6 +166,18 @@ export async function GET(request: Request) {
 
   for (const booking of endBookings) {
     try {
+      // Déduplication : skip si une notif STAY_END_REMINDER existe déjà aujourd'hui.
+      const alreadySent = await prisma.notification.findFirst({
+        where: {
+          userId: booking.clientId,
+          type: 'STAY_END_REMINDER',
+          metadata: { contains: `"bookingId":"${booking.id}"` },
+          createdAt: { gte: todayStart },
+        },
+        select: { id: true },
+      });
+      if (alreadySent) { skipped++; continue; }
+
       const locale = booking.client.language ?? 'fr';
       const pets = booking.bookingPets.map(bp => bp.pet);
       const petNames = pets.map(p => p.name).join(' et ');
@@ -225,6 +256,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ok: true,
     sent,
+    skipped,
     startReminders: startBookings.length,
     endReminders: endBookings.length,
     errors: errors.length ? errors : undefined,
