@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import ReservationActions from './ReservationActions';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
+import TaxiTrackingButton from '@/components/admin/TaxiTrackingButton';
 import DeleteBookingButton from './DeleteBookingButton';
 import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import StayPhotosSection from './StayPhotosSection';
@@ -548,15 +549,28 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
           <ReservationActions booking={{ id: booking.id, status: booking.status, serviceType: booking.serviceType }} locale={locale} />
 
           {/* Standalone PET_TAXI timeline */}
-          {!isBoarding && standaloneTrip && (
-            <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-3">
-              <h3 className="font-semibold text-charcoal text-sm flex items-center gap-2">
-                <span className="text-base">🚗</span>
-                {locale === 'fr' ? 'Suivi du transport' : 'Transport tracking'}
-              </h3>
-              <TaxiTimeline trip={standaloneTrip} locale={locale} />
-            </div>
-          )}
+          {!isBoarding && standaloneTrip && (() => {
+            const rawStandalone = booking.taxiTrips.find(t => t.tripType === 'STANDALONE');
+            return (
+              <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-3">
+                <h3 className="font-semibold text-charcoal text-sm flex items-center gap-2">
+                  <span className="text-base">🚗</span>
+                  {locale === 'fr' ? 'Suivi du transport' : 'Transport tracking'}
+                </h3>
+                <TaxiTimeline trip={standaloneTrip} locale={locale} />
+                {rawStandalone && (
+                  <TaxiTrackingButton
+                    taxiTripId={rawStandalone.id}
+                    tripType={rawStandalone.tripType}
+                    status={rawStandalone.status}
+                    trackingActive={rawStandalone.trackingActive}
+                    trackingToken={rawStandalone.trackingToken}
+                    locale={locale}
+                  />
+                )}
+              </div>
+            );
+          })()}
 
           {/* Edit dates (available on all BOARDING bookings) */}
           {isBoarding && (
