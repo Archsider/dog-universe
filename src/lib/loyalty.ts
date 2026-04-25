@@ -41,7 +41,8 @@ export function getGradeLabel(grade: Grade, locale: string = 'fr'): string {
   return labels[grade][locale] ?? labels[grade]['fr'];
 }
 
-export function getGradeOrder(grade: Grade): number {
+// Internal helper — non exporté (utilisé seulement par isUpgrade ci-dessous)
+function getGradeOrder(grade: Grade): number {
   const orders: Record<Grade, number> = {
     BRONZE: 1,
     SILVER: 2,

@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
-import { ArrowLeft, ArrowRight, Check, PawPrint, Car, Calendar, Package, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, PawPrint, Car, Package, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,7 +56,6 @@ const isValidTaxiTime = (timeStr: string): boolean => {
 
 export default function NewBookingPage() {
   const locale = useLocale();
-  const router = useRouter();
 
   const [step, setStep] = useState(1);
   const [pets, setPets] = useState<Pet[]>([]);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle, XCircle, Clock, ChevronDown } from 'lucide-react';
+import { CheckCircle, XCircle, Clock } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 interface Claim {

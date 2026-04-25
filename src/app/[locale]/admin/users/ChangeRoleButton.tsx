@@ -14,7 +14,6 @@ export default function ChangeRoleButton({ userId, currentRole, locale }: Props)
   const router = useRouter();
 
   const changeRole = async (newRole: string) => {
-    const label = locale === 'fr' ? newRole : newRole;
     const confirmMsg = locale === 'fr'
       ? `Changer ce rôle en ${newRole} ?`
       : `Change this role to ${newRole}?`;

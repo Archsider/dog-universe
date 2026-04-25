@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { FileText, Download, Calendar, CheckCircle2, Clock, Package, Car, Banknote, CreditCard, Receipt, Building2 } from 'lucide-react';
+import { FileText, Download, Calendar, CheckCircle2, Clock, Package, Car, Receipt } from 'lucide-react';
 import { formatDate, formatMAD } from '@/lib/utils';
 
 interface PageProps { params: { locale: string } }

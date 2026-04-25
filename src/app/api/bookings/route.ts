@@ -5,7 +5,6 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingConfirmationNotification, notifyAdminsNewBooking } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
-import { formatDate } from '@/lib/utils';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
 
 export async function GET(request: Request) {

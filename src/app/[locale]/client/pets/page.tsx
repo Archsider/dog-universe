@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
-import { PawPrint, Plus, Calendar } from 'lucide-react';
+import { PawPrint, Plus } from 'lucide-react';
 import { calculateAge, formatDateShort } from '@/lib/utils';
 
 type Params = { locale: string };

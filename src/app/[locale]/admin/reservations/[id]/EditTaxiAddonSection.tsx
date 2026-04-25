@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Car, ChevronDown, ChevronUp, Save, Loader2 } from 'lucide-react';
+import { Car, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';

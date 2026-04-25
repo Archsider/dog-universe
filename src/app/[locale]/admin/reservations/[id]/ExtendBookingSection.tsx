@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { CalendarPlus, Check, X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
-import { formatDate, formatMAD } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 
 interface ExtendBookingSectionProps {
   booking: {

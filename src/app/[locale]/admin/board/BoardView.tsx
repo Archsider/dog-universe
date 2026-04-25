@@ -315,35 +315,6 @@ function Column({ col, cards, locale }: ColumnProps) {
   );
 }
 
-function BoardingTaxiCard({ t, locale }: { t: AllBoardingTaxi; locale: string }) {
-  const isFr = locale === 'fr';
-  const dirLabel = t.direction === 'GO' ? (isFr ? 'Aller' : 'Go') : (isFr ? 'Retour' : 'Return');
-  const timeLabel = t.time ?? (isFr ? 'À confirmer' : 'TBD');
-
-  return (
-    <Link
-      href={`/${locale}/admin/reservations/${t.bookingId}`}
-      className="block bg-white border border-ivory-200 rounded-xl p-3 hover:border-orange-300 hover:shadow-sm transition-all"
-    >
-      <p className="text-sm font-medium text-charcoal truncate">
-        {t.clientName}{' '}
-        <span className="font-normal text-charcoal/55">— {t.pets}</span>
-      </p>
-      <p className="text-xs text-charcoal/70 mt-1">
-        🚗 {dirLabel} ·{' '}
-        {t.time
-          ? <span className="font-semibold text-charcoal">{t.time}</span>
-          : <span className="italic text-charcoal/40">{timeLabel}</span>
-        }
-      </p>
-      <p className="text-xs text-charcoal/40 mt-0.5">
-        {formatDateShortLocal(t.bookingStartDate, locale)}
-        {t.bookingEndDate && ` → ${formatDateShortLocal(t.bookingEndDate, locale)}`}
-      </p>
-    </Link>
-  );
-}
-
 // ─── PENSION Kanban config ─────────────────────────────────────────────────
 
 type PensionColKey = 'pending' | 'confirmed' | 'inProgress' | 'completed';
@@ -822,12 +793,6 @@ export default function BoardView({ locale, bookings: initialBookings, stats }: 
   const sortByTimeAsc = (a: AllBoardingTaxi, b: AllBoardingTaxi) => {
     if (a.time && b.time) return a.time.localeCompare(b.time);
     return a.time ? -1 : b.time ? 1 : 0;
-  };
-  const sortByDateThenTime = (a: AllBoardingTaxi, b: AllBoardingTaxi) => {
-    const da = normDateTs(a.date);
-    const db = normDateTs(b.date);
-    if (da !== db) return da - db;
-    return sortByTimeAsc(a, b);
   };
 
   const todayBoardingTaxisList = stats.allBoardingTaxis

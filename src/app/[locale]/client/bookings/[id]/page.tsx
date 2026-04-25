@@ -75,7 +75,6 @@ function BookingStepper({
       {steps.map((step, idx) => {
         const isDone = currentIdx > idx;
         const isActive = currentIdx === idx;
-        const isFuture = currentIdx < idx;
 
         return (
           <div key={step.status} className="flex gap-4">

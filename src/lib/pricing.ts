@@ -217,11 +217,6 @@ export function calculateTaxiPrice(taxiType: TaxiType, pricing?: PricingSettings
   };
 }
 
-export function getGroomingPriceForPet(groomingSize: GroomingSize, pricing?: PricingSettings): number {
-  const p = pricing ?? PRICING_DEFAULTS;
-  return groomingSize === 'SMALL' ? p.grooming_small_dog : p.grooming_large_dog;
-}
-
 /**
  * Recalculate total boarding price for a stay extension.
  * Grooming and taxi add-on are fixed (already paid/set at booking time) —

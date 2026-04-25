@@ -49,17 +49,6 @@ export async function uploadBuffer(
   return data.publicUrl;
 }
 
-/**
- * Delete a file from the public Supabase Storage bucket.
- */
-export async function deleteFromStorage(key: string): Promise<void> {
-  const client = getSupabaseAdmin();
-  const { error } = await client.storage.from(bucket).remove([key]);
-  if (error) {
-    throw new Error(`Supabase delete failed: ${error.message}`);
-  }
-}
-
 // ─── Private bucket (contracts / documents) ────────────────────────────────
 
 /**

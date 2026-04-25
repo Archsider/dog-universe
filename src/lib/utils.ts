@@ -61,38 +61,9 @@ export function calculateAge(dateOfBirth: Date | string | null | undefined, loca
   return `${years} an${years > 1 ? 's' : ''}`;
 }
 
-export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 export function truncate(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.slice(0, length) + '…';
-}
-
-export function generateInvoiceNumber(counter: number): string {
-  const year = new Date().getFullYear();
-  return `DU-${year}-${String(counter).padStart(4, '0')}`;
-}
-
-export function getLoyaltyGradeColor(grade: string): string {
-  switch (grade) {
-    case 'BRONZE': return 'text-amber-700 bg-amber-50 border-amber-200';
-    case 'SILVER': return 'text-slate-600 bg-slate-50 border-slate-200';
-    case 'GOLD': return 'text-yellow-700 bg-yellow-50 border-yellow-200';
-    case 'PLATINUM': return 'text-indigo-700 bg-indigo-50 border-indigo-200';
-    default: return 'text-gray-600 bg-gray-50 border-gray-200';
-  }
-}
-
-export function getLoyaltyGradeLabel(grade: string, locale: string = 'fr'): string {
-  const labels: Record<string, Record<string, string>> = {
-    fr: { BRONZE: 'Bronze', SILVER: 'Argent', GOLD: 'Or', PLATINUM: 'Platine' },
-    en: { BRONZE: 'Bronze', SILVER: 'Silver', GOLD: 'Gold', PLATINUM: 'Platinum' },
-  };
-  return labels[locale]?.[grade] ?? grade;
 }
 
 export function getBookingStatusColor(status: string): string {

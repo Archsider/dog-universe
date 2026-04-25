@@ -7,7 +7,6 @@ import { MemberCard } from '@/components/shared/MemberCard';
 import { Grade } from '@/lib/loyalty';
 import { PawPrint, Calendar, FileText, History, CheckCircle, AlertCircle } from 'lucide-react';
 import { formatDateShort, formatMAD } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 
 type Params = { locale: string };
 
@@ -78,9 +77,6 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
   const firstName = nameParts[0] ?? '';
   const lastName = nameParts.slice(1).join(' ');
 
-  const statusColors: Record<string, string> = {
-    PENDING: 'pending', CONFIRMED: 'confirmed', COMPLETED: 'completed', CANCELLED: 'cancelled',
-  };
   const statusLabels: Record<string, Record<string, string>> = {
     fr: { PENDING: 'En attente', CONFIRMED: 'Confirmée', COMPLETED: 'Terminée', CANCELLED: 'Annulée' },
     en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', COMPLETED: 'Completed', CANCELLED: 'Cancelled' },
