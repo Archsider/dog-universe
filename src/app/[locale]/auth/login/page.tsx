@@ -66,7 +66,7 @@ export default function LoginPage() {
           </Link>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/images/mascotte-debout.webp"
+            src="/images/mascotte-debout.jpg"
             alt="Mascotte Dog Universe"
             className="h-28 w-auto mx-auto mb-6 object-contain"
           />

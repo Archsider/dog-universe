@@ -34,14 +34,17 @@ export default async function AdminLayout({ children, params: { locale } }: Layo
           </div>
         </header>
         <main className="relative flex-1 p-4 lg:p-8 bg-[#FEFCF9] min-h-screen">
-          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div
+            className="absolute inset-0 pointer-events-none overflow-hidden"
+            style={{ background: 'linear-gradient(#FEFCF9, #FEFCF9)' }}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/images/zellige-pattern.png"
               alt=""
               aria-hidden="true"
-              className="w-full h-full object-cover opacity-[0.08]"
-              style={{ mixBlendMode: 'multiply' }}
+              className="w-full h-full object-cover opacity-[0.12]"
+              style={{ mixBlendMode: 'overlay' }}
             />
           </div>
           <div className="relative z-10">{children}</div>
