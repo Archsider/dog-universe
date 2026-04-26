@@ -1,35 +1,43 @@
-// Skyline Marrakech utilisé dans AdminSidebar — fond crème/doré gradient.
+// Skyline Marrakech utilisé dans AdminSidebar — bandeau gradient crème/doré.
 // Cohérent avec le bandeau ClientSidebar.
 export function SidebarSkyline() {
   return (
-    <div className="mx-3 mb-3 mt-2">
+    <div className="mx-3 mb-3 mt-auto">
       <div
         className="relative rounded-xl overflow-hidden"
         style={{
-          height: '80px',
-          background: 'linear-gradient(135deg, #F5ECD8 0%, #EDD9A3 60%, #E8C97A 100%)',
+          height: '90px',
+          background: 'linear-gradient(180deg, #F5ECD8 0%, #E8C97A 100%)',
         }}
       >
         <span
-          className="absolute top-2 left-3 text-[8px] tracking-[3px] uppercase font-medium z-10"
-          style={{ color: 'rgba(154,114,53,0.7)' }}
+          style={{
+            position: 'absolute',
+            top: '8px',
+            left: '12px',
+            fontSize: '8px',
+            letterSpacing: '3px',
+            textTransform: 'uppercase',
+            color: 'rgba(154,114,53,0.8)',
+            fontWeight: '600',
+            zIndex: 10,
+          }}
         >
           Marrakech
         </span>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/images/marrakech-skyline.png"
-          alt="Skyline Marrakech"
+          alt=""
           style={{
             position: 'absolute',
-            bottom: 0,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            height: '70px',
-            width: 'auto',
-            maxWidth: '100%',
-            objectFit: 'contain',
-            objectPosition: 'bottom center',
+            bottom: '-4px',
+            left: 0,
+            right: 0,
+            width: '100%',
+            height: '85px',
+            objectFit: 'cover',
+            objectPosition: 'center bottom',
           }}
         />
       </div>

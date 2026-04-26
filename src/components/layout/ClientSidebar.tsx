@@ -97,35 +97,43 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
         })}
       </nav>
 
-      {/* Skyline Marrakech — fond crème/doré gradient pour faire ressortir la silhouette dorée */}
-      <div className="mx-3 mb-3 mt-2">
+      {/* Skyline Marrakech — bandeau gradient crème/doré, image full-width object-cover */}
+      <div className="mx-3 mb-3 mt-auto">
         <div
           className="relative rounded-xl overflow-hidden"
           style={{
-            height: '80px',
-            background: 'linear-gradient(135deg, #F5ECD8 0%, #EDD9A3 60%, #E8C97A 100%)',
+            height: '90px',
+            background: 'linear-gradient(180deg, #F5ECD8 0%, #E8C97A 100%)',
           }}
         >
           <span
-            className="absolute top-2 left-3 text-[8px] tracking-[3px] uppercase font-medium z-10"
-            style={{ color: 'rgba(154,114,53,0.7)' }}
+            style={{
+              position: 'absolute',
+              top: '8px',
+              left: '12px',
+              fontSize: '8px',
+              letterSpacing: '3px',
+              textTransform: 'uppercase',
+              color: 'rgba(154,114,53,0.8)',
+              fontWeight: '600',
+              zIndex: 10,
+            }}
           >
             Marrakech
           </span>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/images/marrakech-skyline.png"
-            alt="Skyline Marrakech"
+            alt=""
             style={{
               position: 'absolute',
-              bottom: 0,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              height: '70px',
-              width: 'auto',
-              maxWidth: '100%',
-              objectFit: 'contain',
-              objectPosition: 'bottom center',
+              bottom: '-4px',
+              left: 0,
+              right: 0,
+              width: '100%',
+              height: '85px',
+              objectFit: 'cover',
+              objectPosition: 'center bottom',
             }}
           />
         </div>

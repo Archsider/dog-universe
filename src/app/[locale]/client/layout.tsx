@@ -56,16 +56,16 @@ export default async function ClientLayout({
             </div>
           </header>
 
-          {/* Page content — zellige Gemini transparent en overlay subtil 10% */}
+          {/* Page content — zellige Gemini transparent en overlay subtil 12% */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in relative">
-            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ opacity: 0.12 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/images/zellige-pattern.png"
                 alt=""
                 aria-hidden="true"
-                className="w-full h-full object-cover"
-                style={{ opacity: 0.1 }}
+                className="w-full h-full"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             </div>
             <div className="relative z-10">{children}</div>
