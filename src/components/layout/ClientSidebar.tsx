@@ -97,20 +97,36 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
         })}
       </nav>
 
-      {/* Skyline Marrakech — fond sombre pour faire ressortir le doré Gemini */}
-      <div className="px-3 pb-2 mt-2">
+      {/* Skyline Marrakech — fond crème/doré gradient pour faire ressortir la silhouette dorée */}
+      <div className="mx-3 mb-3 mt-2">
         <div
-          className="relative h-28 rounded-xl overflow-hidden bg-[#1C1208]"
-          style={{ boxShadow: 'inset 0 -2px 8px rgba(196,151,74,0.2)' }}
+          className="relative rounded-xl overflow-hidden"
+          style={{
+            height: '80px',
+            background: 'linear-gradient(135deg, #F5ECD8 0%, #EDD9A3 60%, #E8C97A 100%)',
+          }}
         >
-          <p className="absolute top-2 left-3 text-[8px] tracking-[2px] uppercase text-[#C4974A]/80 z-10">
+          <span
+            className="absolute top-2 left-3 text-[8px] tracking-[3px] uppercase font-medium z-10"
+            style={{ color: 'rgba(154,114,53,0.7)' }}
+          >
             Marrakech
-          </p>
+          </span>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/images/marrakech-skyline.png"
             alt="Skyline Marrakech"
-            className="absolute bottom-0 left-0 w-full h-full object-contain object-bottom"
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              height: '70px',
+              width: 'auto',
+              maxWidth: '100%',
+              objectFit: 'contain',
+              objectPosition: 'bottom center',
+            }}
           />
         </div>
       </div>
