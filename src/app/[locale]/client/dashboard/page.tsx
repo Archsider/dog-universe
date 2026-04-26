@@ -88,17 +88,26 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
-      {/* Greeting — premium label + nom + ligne dorée */}
-      <div className="text-center">
-        <p className="text-[10px] uppercase tracking-[2px] text-[#8A7E75]">
-          {locale === 'fr' ? 'Bonjour' : 'Hello'}
-        </p>
-        <h1 className="font-serif text-4xl font-bold text-[#1C1612] mt-1 leading-tight">
-          {firstName}
-          {lastName && <> <span className="italic text-[#C4974A]">{lastName}</span></>}
-        </h1>
-        <div className="w-10 h-[2px] bg-[#C4974A] mt-3 mx-auto" />
-        <p className="text-sm text-[#7A6E65] mt-3">{t('subtitle')}</p>
+      {/* Greeting — premium label + nom + ligne dorée + mascotte à droite (sm+) */}
+      <div className="flex justify-between items-end gap-4">
+        <div className="flex-1 text-center sm:text-left">
+          <p className="text-[10px] uppercase tracking-[2px] text-[#8A7E75]">
+            {locale === 'fr' ? 'Bonjour' : 'Hello'}
+          </p>
+          <h1 className="font-serif text-4xl font-bold text-[#1C1612] mt-1 leading-tight">
+            {firstName}
+            {lastName && <> <span className="italic text-[#C4974A]">{lastName}</span></>}
+          </h1>
+          <div className="w-10 h-[2px] bg-[#C4974A] mt-3 mx-auto sm:mx-0" />
+          <p className="text-sm text-[#7A6E65] mt-3">{t('subtitle')}</p>
+        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/mascotte-debout.webp"
+          alt=""
+          aria-hidden="true"
+          className="hidden sm:block h-32 w-auto object-contain opacity-90 flex-shrink-0"
+        />
       </div>
 
       {/* Member Card — wrapper shadow + border doré */}

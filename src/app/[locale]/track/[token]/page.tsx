@@ -54,10 +54,10 @@ export default function TrackPage() {
     import('leaflet').then((L) => {
       if (cancelled) return;
       const icon = L.divIcon({
-        html: '<div style="width:40px;height:40px;border-radius:50%;background:#C4974A;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:22px;">🐕</div>',
+        html: '<div style="width:52px;height:52px;border-radius:50%;border:2.5px solid #C4974A;background:white;box-shadow:0 2px 12px rgba(196,151,74,0.4);overflow:hidden;display:flex;align-items:center;justify-content:center;"><img src="/images/mascotte-assise.webp" alt="" style="width:44px;height:44px;object-fit:contain;" /></div>',
         className: '',
-        iconSize: [40, 40],
-        iconAnchor: [20, 20],
+        iconSize: [52, 52],
+        iconAnchor: [26, 26],
       });
       setCarIcon(icon);
     });
