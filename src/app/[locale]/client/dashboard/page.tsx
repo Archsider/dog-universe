@@ -88,9 +88,9 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
-      {/* Greeting — mascotte en position absolute top-right, drop-shadow doré */}
-      <div className="relative">
-        <div className="text-center sm:text-left sm:pr-52">
+      {/* Greeting — mascotte debout en flex à droite (sm+), drop-shadow propre */}
+      <div className="flex justify-between items-end gap-4">
+        <div className="flex-1 text-center sm:text-left">
           <p className="text-[10px] uppercase tracking-[2px] text-[#8A7E75]">
             {locale === 'fr' ? 'Bonjour' : 'Hello'}
           </p>
@@ -103,10 +103,9 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/images/mascotte-debout.jpg"
+          src="/images/mascotte-debout.png"
           alt="Mascotte Dog Universe"
-          className="hidden sm:block absolute top-0 right-0 h-48 w-auto object-contain mascotte-bounce"
-          style={{ filter: 'drop-shadow(0 4px 12px rgba(196,151,74,0.3))' }}
+          className="hidden sm:block h-40 w-auto object-contain drop-shadow-lg flex-shrink-0"
         />
       </div>
 
