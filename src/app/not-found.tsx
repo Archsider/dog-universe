@@ -7,7 +7,7 @@ export default function NotFound() {
     <div className="min-h-screen bg-[#FEFCF9] flex flex-col items-center justify-center text-center px-4">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/images/mascotte-assise.webp"
+        src="/images/mascotte-assise.jpg"
         alt=""
         className="h-48 w-auto mb-6 mascotte-bounce"
       />
