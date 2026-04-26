@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from './auth';
 import createMiddleware from 'next-intl/middleware';
 import { routing } from './src/i18n/routing';
+import type { Session } from 'next-auth';
 
 const intlMiddleware = createMiddleware(routing);
 
@@ -37,18 +38,22 @@ export default auth(async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Explicit root redirect — next-intl won't always catch this before auth wrapper
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL('/fr', req.url));
+  }
+
   // Apply i18n middleware
   const intlResponse = intlMiddleware(req);
   if (intlResponse) {
-    // If it's a redirect (for locale prefix), let it through
-    if (intlResponse.status === 307 || intlResponse.status === 308) {
+    // Let through any redirect (locale prefix etc.)
+    if (intlResponse.status >= 300 && intlResponse.status < 400) {
       return intlResponse;
     }
   }
 
-  // Get session from the augmented request
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const session = (req as any).auth;
+  // Get session from the NextAuth-augmented request
+  const session = (req as NextRequest & { auth: Session | null }).auth;
 
   // Extract locale from pathname
   const localeMatch = pathname.match(/^\/(fr|en)/);
@@ -58,7 +63,7 @@ export default auth(async function middleware(req: NextRequest) {
   if (isPublicPath(pathname)) {
     // If logged in and trying to access auth pages, redirect to dashboard
     if (session && (pathname.includes('/auth/login') || pathname.includes('/auth/register'))) {
-      const redirectPath = session.user.role === 'ADMIN'
+      const redirectPath = (session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN')
         ? `/${locale}/admin/dashboard`
         : `/${locale}/client/dashboard`;
       return NextResponse.redirect(new URL(redirectPath, req.url));
@@ -75,7 +80,8 @@ export default auth(async function middleware(req: NextRequest) {
   }
 
   // Admin-only routes
-  if (isAdminRoute && session?.user?.role !== 'ADMIN') {
+  const role = session?.user?.role;
+  if (isAdminRoute && role !== 'ADMIN' && role !== 'SUPERADMIN') {
     return NextResponse.redirect(new URL(`/${locale}/client/dashboard`, req.url));
   }
 

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
-import { PawPrint, Plus, Calendar } from 'lucide-react';
+import { PawPrint, Plus } from 'lucide-react';
 import { calculateAge, formatDateShort } from '@/lib/utils';
 
 type Params = { locale: string };
@@ -17,8 +17,19 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
 
   const pets = await prisma.pet.findMany({
     where: { ownerId: session.user.id },
-    include: {
-      vaccinations: { orderBy: { date: 'desc' }, take: 1 },
+    select: {
+      id: true,
+      name: true,
+      species: true,
+      breed: true,
+      dateOfBirth: true,
+      gender: true,
+      photoUrl: true,
+      vaccinations: {
+        select: { id: true, vaccineType: true, date: true },
+        orderBy: { date: 'desc' },
+        take: 1,
+      },
       _count: { select: { bookingPets: true } },
     },
     orderBy: { createdAt: 'asc' },
@@ -116,7 +127,7 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
               {pet.vaccinations[0] && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <p className="text-xs text-charcoal/40">
-                    {locale === 'fr' ? 'Dernier vaccin:' : 'Last vaccine:'} {pet.vaccinations[0].vaccineType} · {formatDateShort(pet.vaccinations[0].date, locale)}
+                    {locale === 'fr' ? 'Dernier vaccin:' : 'Last vaccine:'} {pet.vaccinations[0].vaccineType}{pet.vaccinations[0].date ? ` · ${formatDateShort(pet.vaccinations[0].date, locale)}` : ''}
                   </p>
                 </div>
               )}

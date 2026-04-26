@@ -3,14 +3,32 @@ import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
-import { ArrowLeft, PawPrint, Edit, Plus, FileText, Shield } from 'lucide-react';
+import { ArrowLeft, PawPrint, Edit } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { calculateAge, formatDateShort, formatDateShort as fds, formatMAD } from '@/lib/utils';
+import { calculateAge, formatDateShort, formatMAD, getAntiparasiticDurationDays } from '@/lib/utils';
+import { createSignedUrl } from '@/lib/supabase';
 import VaccinationSection from '@/components/pets/VaccinationSection';
+import { PROOF_PREFIX } from '@/components/pets/constants';
 import DocumentSection from '@/components/pets/DocumentSection';
 
 type Params = { locale: string; id: string };
+
+function getAntiparasiticStatus(lastDate: Date | null, product?: string | null): 'up_to_date' | 'expiring_soon' | 'expired' | 'unknown' {
+  if (!lastDate) return 'unknown';
+  const duration = getAntiparasiticDurationDays(product);
+  const days = Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000);
+  if (days <= duration - 5) return 'up_to_date';
+  if (days <= duration) return 'expiring_soon';
+  return 'expired';
+}
+
+const BEHAVIOR_LABELS: Record<string, Record<string, string>> = {
+  SOCIABLE: { fr: 'Sociable', en: 'Sociable' },
+  TOLERANT: { fr: 'Tolérant', en: 'Tolerant' },
+  MONITOR:  { fr: 'À surveiller', en: 'Needs monitoring' },
+  REACTIVE: { fr: 'Réactif', en: 'Reactive' },
+};
 
 export default async function PetDetailPage({ params }: { params: Promise<Params> }) {
   const { locale, id } = await params;
@@ -18,19 +36,36 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
   if (!session?.user) redirect(`/${locale}/auth/login`);
 
   const t = await getTranslations('pets');
+  const fr = locale === 'fr';
 
-  const pet = await prisma.pet.findUnique({
+  const rawPet = await prisma.pet.findUnique({
     where: { id },
-    include: {
+    select: {
+      id: true, ownerId: true, name: true, species: true, breed: true,
+      dateOfBirth: true, gender: true, photoUrl: true,
+      isNeutered: true, microchipNumber: true, tattooNumber: true, weight: true,
+      vetName: true, vetPhone: true, allergies: true, currentMedication: true,
+      behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
+      lastAntiparasiticDate: true, antiparasiticProduct: true, antiparasiticNotes: true,
+      createdAt: true, updatedAt: true,
       owner: { select: { name: true, email: true } },
-      vaccinations: { orderBy: { date: 'desc' } },
-      documents: { orderBy: { uploadedAt: 'desc' } },
+      vaccinations: {
+        select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true, nextDueDate: true, status: true, isAutoDetected: true, sourceDocumentId: true },
+        orderBy: { date: 'desc' },
+      },
+      documents: {
+        select: { id: true, name: true, fileUrl: true, storageKey: true, fileType: true, uploadedAt: true },
+        orderBy: { uploadedAt: 'desc' },
+      },
       bookingPets: {
-        include: {
+        select: {
+          id: true,
           booking: {
-            include: {
-              boardingDetail: true,
-              taxiDetail: true,
+            select: {
+              id: true, status: true, serviceType: true,
+              startDate: true, endDate: true, totalPrice: true,
+              boardingDetail: { select: { includeGrooming: true } },
+              taxiDetail: { select: { id: true } },
               invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
             },
           },
@@ -40,39 +75,70 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
     },
   });
 
-  if (!pet) notFound();
+  if (!rawPet) notFound();
+
+  // Dates are serialized to ISO strings to avoid Next.js RSC serialization errors
+  // when passing Date objects from Server Components to Client Components.
+  const pet = {
+    ...rawPet,
+    vaccinations: rawPet.vaccinations.map(v => ({
+      id: v.id,
+      vaccineType: v.vaccineType,
+      date: v.date ? v.date.toISOString() : null,
+      comment: v.comment,
+      nextDueDate: v.nextDueDate ? v.nextDueDate.toISOString() : null,
+      status: v.status,
+      isAutoDetected: v.isAutoDetected,
+      sourceDocumentId: v.sourceDocumentId,
+    })),
+    documents: await Promise.all(rawPet.documents.map(async d => ({
+      id: d.id,
+      name: d.name,
+      fileUrl: d.storageKey ? await createSignedUrl(d.storageKey) : d.fileUrl,
+      fileType: d.fileType,
+      uploadedAt: d.uploadedAt.toISOString(),
+    }))),
+  };
   if (session.user.role !== 'ADMIN' && pet.ownerId !== session.user.id) {
     redirect(`/${locale}/client/pets`);
   }
 
-  const speciesLabel = pet.species === 'DOG' ? (locale === 'fr' ? 'Chien' : 'Dog') : (locale === 'fr' ? 'Chat' : 'Cat');
-  const genderLabel = pet.gender === 'MALE' ? (locale === 'fr' ? 'Mâle' : 'Male') : pet.gender === 'FEMALE' ? (locale === 'fr' ? 'Femelle' : 'Female') : null;
+  const speciesLabel = pet.species === 'DOG' ? (fr ? 'Chien' : 'Dog') : (fr ? 'Chat' : 'Cat');
+  const genderLabel = pet.gender === 'MALE' ? (fr ? 'Mâle' : 'Male') : pet.gender === 'FEMALE' ? (fr ? 'Femelle' : 'Female') : null;
 
-  const statusLabels: Record<string, Record<string, string>> = {
-    fr: { BOARDING: 'Pension', PET_TAXI: 'Taxi', PENDING: 'En attente', CONFIRMED: 'Confirmée', COMPLETED: 'Terminée', CANCELLED: 'Annulée' },
-    en: { BOARDING: 'Boarding', PET_TAXI: 'Taxi', PENDING: 'Pending', CONFIRMED: 'Confirmed', COMPLETED: 'Completed', CANCELLED: 'Cancelled' },
-  };
+  const serviceLabels: Record<string, string> = fr
+    ? { BOARDING: 'Pension', PET_TAXI: 'Taxi' }
+    : { BOARDING: 'Boarding', PET_TAXI: 'Taxi' };
+  const bookingStatusLabels: Record<string, string> = fr
+    ? { PENDING: 'En attente', CONFIRMED: 'Confirmée', COMPLETED: 'Terminée', CANCELLED: 'Annulée' }
+    : { PENDING: 'Pending', CONFIRMED: 'Confirmed', COMPLETED: 'Completed', CANCELLED: 'Cancelled' };
+
+  // Helper to render a profile info row
+  const Field = ({ label, value }: { label: string; value: string }) => (
+    <div className="border-b border-gray-50 pb-3">
+      <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{label}</p>
+      <p className="font-medium text-charcoal">{value}</p>
+    </div>
+  );
 
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Back */}
+      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Link href={`/${locale}/client/pets`} className="text-charcoal/50 hover:text-charcoal">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-gold-100 flex items-center justify-center overflow-hidden">
-              {pet.photoUrl ? (
-                <img src={pet.photoUrl} alt={pet.name} className="h-10 w-10 rounded-full object-cover" />
-              ) : (
-                <PawPrint className="h-5 w-5 text-gold-500" />
-              )}
-            </div>
-            <div>
-              <h1 className="text-2xl font-serif font-bold text-charcoal">{pet.name}</h1>
-              <p className="text-sm text-charcoal/50">{speciesLabel}{pet.breed ? ` — ${pet.breed}` : ''}</p>
-            </div>
+        <div className="flex-1 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-gold-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+            {pet.photoUrl ? (
+              <img src={pet.photoUrl} alt={pet.name} className="h-10 w-10 rounded-full object-cover" />
+            ) : (
+              <PawPrint className="h-5 w-5 text-gold-500" />
+            )}
+          </div>
+          <div>
+            <h1 className="text-2xl font-serif font-bold text-charcoal">{pet.name}</h1>
+            <p className="text-sm text-charcoal/50">{speciesLabel}{pet.breed ? ` — ${pet.breed}` : ''}</p>
           </div>
         </div>
         <Link href={`/${locale}/client/pets/${id}/edit`}
@@ -82,7 +148,6 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
         </Link>
       </div>
 
-      {/* Tabs */}
       <Tabs defaultValue="profile">
         <TabsList className="mb-6">
           <TabsTrigger value="profile">{t('tabs.profile')}</TabsTrigger>
@@ -91,37 +156,187 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
           <TabsTrigger value="history">{t('tabs.history')}</TabsTrigger>
         </TabsList>
 
-        {/* Profile */}
+        {/* ── Profile ── */}
         <TabsContent value="profile">
-          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
-            <div className="grid sm:grid-cols-2 gap-5">
-              {[
-                { label: locale === 'fr' ? 'Espèce' : 'Species', value: speciesLabel },
-                ...(pet.breed ? [{ label: locale === 'fr' ? 'Race' : 'Breed', value: pet.breed }] : []),
-                ...(pet.dateOfBirth ? [{ label: locale === 'fr' ? 'Naissance' : 'Born', value: `${formatDateShort(pet.dateOfBirth, locale)} (${calculateAge(pet.dateOfBirth)})` }] : []),
-                ...(genderLabel ? [{ label: locale === 'fr' ? 'Sexe' : 'Gender', value: genderLabel }] : []),
-                { label: locale === 'fr' ? 'Séjours' : 'Stays', value: String(pet.bookingPets.length) },
-              ].map((field) => (
-                <div key={field.label} className="border-b border-gray-50 pb-3">
-                  <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{field.label}</p>
-                  <p className="font-medium text-charcoal">{field.value}</p>
-                </div>
-              ))}
+          <div className="space-y-5">
+
+            {/* Identité */}
+            <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+              <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide mb-4">
+                {fr ? 'Identité' : 'Identity'}
+              </h3>
+              <div className="grid sm:grid-cols-2 gap-5">
+                <Field label={fr ? 'Espèce' : 'Species'} value={speciesLabel} />
+                {pet.breed && <Field label={fr ? 'Race' : 'Breed'} value={pet.breed} />}
+                {pet.dateOfBirth && (
+                  <Field
+                    label={fr ? 'Naissance' : 'Born'}
+                    value={`${formatDateShort(pet.dateOfBirth, locale)} (${calculateAge(pet.dateOfBirth)})`}
+                  />
+                )}
+                {genderLabel && <Field label={fr ? 'Sexe' : 'Gender'} value={genderLabel} />}
+                {pet.weight !== null && pet.weight !== undefined && (
+                  <Field label={fr ? 'Poids' : 'Weight'} value={`${pet.weight} kg`} />
+                )}
+                {pet.isNeutered !== null && pet.isNeutered !== undefined && (
+                  <Field
+                    label={fr ? 'Statut reproductif' : 'Reproductive status'}
+                    value={pet.isNeutered
+                      ? (fr ? 'Stérilisé(e) / Castré(e)' : 'Neutered / Spayed')
+                      : (fr ? 'Non stérilisé(e)' : 'Not neutered')}
+                  />
+                )}
+                {pet.microchipNumber && <Field label={fr ? 'N° de puce' : 'Microchip'} value={pet.microchipNumber} />}
+                {pet.tattooNumber && <Field label={fr ? 'Tatouage' : 'Tattoo'} value={pet.tattooNumber} />}
+                <Field label={fr ? 'Séjours' : 'Stays'} value={String(pet.bookingPets.length)} />
+              </div>
             </div>
+
+            {/* Vétérinaire */}
+            {(pet.vetName || pet.vetPhone) && (
+              <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+                <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide mb-4">
+                  {fr ? 'Vétérinaire' : 'Veterinarian'}
+                </h3>
+                <div className="grid sm:grid-cols-2 gap-5">
+                  {pet.vetName && <Field label={fr ? 'Nom' : 'Name'} value={pet.vetName} />}
+                  {pet.vetPhone && <Field label={fr ? 'Téléphone' : 'Phone'} value={pet.vetPhone} />}
+                </div>
+              </div>
+            )}
+
+            {/* Santé */}
+            {(pet.allergies || pet.currentMedication) && (
+              <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+                <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide mb-4">
+                  {fr ? 'Santé' : 'Health'}
+                </h3>
+                <div className="space-y-4">
+                  {pet.allergies && (
+                    <div className="border-b border-gray-50 pb-3">
+                      <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">
+                        {fr ? 'Allergies / Conditions médicales' : 'Allergies / Medical conditions'}
+                      </p>
+                      <p className="font-medium text-charcoal">{pet.allergies}</p>
+                    </div>
+                  )}
+                  {pet.currentMedication && (
+                    <div className="border-b border-gray-50 pb-3">
+                      <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">
+                        {fr ? 'Médication en cours' : 'Current medication'}
+                      </p>
+                      <p className="font-medium text-charcoal">{pet.currentMedication}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Antiparasitaire */}
+            {(() => {
+              const status = getAntiparasiticStatus(pet.lastAntiparasiticDate, pet.antiparasiticProduct);
+              const statusConfig = {
+                up_to_date:    { label: fr ? 'À jour' : 'Up to date',         cls: 'bg-green-50 text-green-700 border-green-200' },
+                expiring_soon: { label: fr ? 'Expire bientôt' : 'Expiring soon', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+                expired:       { label: fr ? 'Expiré' : 'Expired',            cls: 'bg-red-50 text-red-700 border-red-200' },
+                unknown:       { label: fr ? 'Non renseigné' : 'Not recorded', cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+              };
+              const cfg = statusConfig[status];
+              return (
+                <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide">
+                      {fr ? 'Antiparasitaire' : 'Anti-parasitic treatment'}
+                    </h3>
+                    <span className={`text-xs font-semibold border rounded-full px-3 py-1 ${cfg.cls}`}>{cfg.label}</span>
+                  </div>
+                  <div className="space-y-3">
+                    {pet.lastAntiparasiticDate ? (
+                      <div className="border-b border-gray-50 pb-3">
+                        <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{fr ? 'Dernière application' : 'Last treatment'}</p>
+                        <p className="font-medium text-charcoal">{formatDateShort(pet.lastAntiparasiticDate, locale)}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-charcoal/40 italic">{fr ? 'Aucune date enregistrée — pensez à mettre à jour le profil.' : 'No date recorded — remember to update the profile.'}</p>
+                    )}
+                    {pet.antiparasiticProduct && (
+                      <div className="border-b border-gray-50 pb-3">
+                        <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{fr ? 'Produit' : 'Product'}</p>
+                        <p className="font-medium text-charcoal">{pet.antiparasiticProduct}</p>
+                      </div>
+                    )}
+                    {pet.antiparasiticNotes && (
+                      <div>
+                        <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{fr ? 'Notes' : 'Notes'}</p>
+                        <p className="text-charcoal">{pet.antiparasiticNotes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Comportement */}
+            {(pet.behaviorWithDogs || pet.behaviorWithCats || pet.behaviorWithHumans) && (
+              <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+                <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide mb-4">
+                  {fr ? 'Comportement' : 'Behavior'}
+                </h3>
+                <div className="grid sm:grid-cols-3 gap-5">
+                  {pet.behaviorWithDogs && (
+                    <Field
+                      label={fr ? 'Avec les chiens' : 'With dogs'}
+                      value={BEHAVIOR_LABELS[pet.behaviorWithDogs]?.[locale] ?? pet.behaviorWithDogs}
+                    />
+                  )}
+                  {pet.behaviorWithCats && (
+                    <Field
+                      label={fr ? 'Avec les chats' : 'With cats'}
+                      value={BEHAVIOR_LABELS[pet.behaviorWithCats]?.[locale] ?? pet.behaviorWithCats}
+                    />
+                  )}
+                  {pet.behaviorWithHumans && (
+                    <Field
+                      label={fr ? 'Avec les humains' : 'With humans'}
+                      value={BEHAVIOR_LABELS[pet.behaviorWithHumans]?.[locale] ?? pet.behaviorWithHumans}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            {pet.notes && (
+              <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+                <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide mb-3">
+                  {fr ? 'Notes spéciales' : 'Special notes'}
+                </h3>
+                <p className="text-charcoal whitespace-pre-wrap">{pet.notes}</p>
+              </div>
+            )}
           </div>
         </TabsContent>
 
-        {/* Vaccinations */}
+        {/* ── Vaccinations ── */}
         <TabsContent value="vaccinations">
-          <VaccinationSection petId={id} vaccinations={pet.vaccinations} locale={locale} />
+          <VaccinationSection
+            petId={id}
+            vaccinations={pet.vaccinations}
+            documents={pet.documents.filter(d => d.name.startsWith(PROOF_PREFIX))}
+            locale={locale}
+          />
         </TabsContent>
 
-        {/* Documents */}
+        {/* ── Documents ── */}
         <TabsContent value="documents">
-          <DocumentSection petId={id} documents={pet.documents} locale={locale} />
+          <DocumentSection
+            petId={id}
+            documents={pet.documents.filter(d => !d.name.startsWith(PROOF_PREFIX))}
+            locale={locale}
+          />
         </TabsContent>
 
-        {/* History */}
+        {/* ── History ── */}
         <TabsContent value="history">
           <div className="space-y-3">
             {pet.bookingPets.length === 0 ? (
@@ -134,30 +349,32 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <span className="font-medium text-charcoal text-sm">
-                        {statusLabels[locale]?.[booking.serviceType] ?? booking.serviceType}
+                        {serviceLabels[booking.serviceType] ?? booking.serviceType}
                       </span>
+                      {booking.boardingDetail?.includeGrooming && (
+                        <span className="ml-2 text-xs bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5">
+                          {fr ? '+ Toilettage' : '+ Grooming'}
+                        </span>
+                      )}
                       <span className="text-charcoal/40 text-sm ml-2">
                         {formatDateShort(booking.startDate, locale)}
                         {booking.endDate && ` → ${formatDateShort(booking.endDate, locale)}`}
                       </span>
                     </div>
-                    <Badge variant={booking.status === 'COMPLETED' ? 'completed' : booking.status === 'CANCELLED' ? 'cancelled' : 'confirmed'}>
-                      {statusLabels[locale]?.[booking.status] ?? booking.status}
+                    <Badge variant={
+                      booking.status === 'COMPLETED' ? 'completed'
+                      : booking.status === 'CANCELLED' ? 'cancelled'
+                      : 'confirmed'
+                    }>
+                      {bookingStatusLabels[booking.status] ?? booking.status}
                     </Badge>
                   </div>
-                  <div className="flex justify-between items-center text-sm text-charcoal/50">
-                    <span>
-                      {booking.boardingDetail?.includeGrooming
-                        ? (locale === 'fr' ? '+ Toilettage' : '+ Grooming')
-                        : ''}
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-charcoal/40">
+                      {booking.invoice ? `${fr ? 'Facture' : 'Invoice'}: ${booking.invoice.invoiceNumber}` : ''}
                     </span>
-                    <span className="font-semibold text-gold-700">{formatMAD(booking.totalPrice)}</span>
+                    <span className="font-semibold text-gold-700 text-sm">{formatMAD(booking.totalPrice)}</span>
                   </div>
-                  {booking.invoice && (
-                    <div className="mt-2 text-xs text-charcoal/40">
-                      {locale === 'fr' ? 'Facture:' : 'Invoice:'} {booking.invoice.invoiceNumber}
-                    </div>
-                  )}
                 </div>
               ))
             )}

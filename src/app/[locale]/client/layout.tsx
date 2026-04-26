@@ -1,9 +1,12 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { auth } from '../../../../auth';
 import { ClientSidebar } from '@/components/layout/ClientSidebar';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { NotificationBell } from '@/components/shared/NotificationBell';
 import { getUnreadCount } from '@/lib/notifications';
+import { prisma } from '@/lib/prisma';
+import { ContractGate } from '@/components/contract/ContractGate';
 
 type Params = { locale: string };
 
@@ -21,29 +24,59 @@ export default async function ClientLayout({
     redirect(`/${locale}/auth/login`);
   }
 
-  if (session.user.role === 'ADMIN') {
+  if (session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN') {
     redirect(`/${locale}/admin/dashboard`);
   }
 
-  const unreadCount = await getUnreadCount(session.user.id);
+  const [unreadCount, contract] = await Promise.all([
+    getUnreadCount(session.user.id),
+    prisma.clientContract.findUnique({
+      where: { clientId: session.user.id },
+      select: { id: true },
+    }),
+  ]);
+
+  const hasContract = !!contract;
 
   return (
-    <div className="flex min-h-screen bg-[#FAF6F0]">
-      <ClientSidebar userName={session.user.name} unreadCount={unreadCount} />
+    <ContractGate hasContract={hasContract} clientName={session.user.name ?? ''}>
+      <div className="flex min-h-screen bg-[#FEFCF9]">
+        <ClientSidebar userName={session.user.name} unreadCount={unreadCount} />
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top bar */}
-        <header className="bg-white border-b border-[#F0D98A]/30 h-14 flex items-center justify-end px-4 sm:px-6 gap-3 flex-shrink-0 lg:sticky lg:top-0 lg:z-30">
-          <NotificationBell />
-          <LanguageSwitcher />
-        </header>
+        {/* Main content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Top bar */}
+          <header className="bg-[#FEFCF9]/95 backdrop-blur-sm border-b border-[rgba(196,151,74,0.15)] h-14 flex items-center justify-between px-4 sm:px-6 gap-3 flex-shrink-0 lg:sticky lg:top-0 lg:z-30">
+            <Link href={`/${locale}/client/dashboard`} className="font-serif text-lg font-semibold text-[#1C1612] hidden lg:block">
+              Dog <span className="text-[#C4974A]">Universe</span>
+            </Link>
+            <div className="flex items-center gap-3 ml-auto">
+              <NotificationBell />
+              <LanguageSwitcher />
+            </div>
+          </header>
 
-        {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in">
-          {children}
-        </main>
+          {/* Page content — zellige pattern in background @ 4% opacity */}
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in relative">
+            <div aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden opacity-[0.10]">
+              <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <pattern id="zellige" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
+                    <polygon
+                      points="30,5 35,22 48,12 42,28 58,25 45,33 52,48 38,41 33,58 28,41 14,48 21,33 8,25 24,28 18,12 31,22"
+                      fill="none"
+                      stroke="#C4974A"
+                      strokeWidth="0.8"
+                    />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#zellige)" />
+              </svg>
+            </div>
+            <div className="relative z-10">{children}</div>
+          </main>
+        </div>
       </div>
-    </div>
+    </ContractGate>
   );
 }

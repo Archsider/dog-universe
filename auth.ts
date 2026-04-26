@@ -24,6 +24,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
 
         if (!user) return null;
+        if (user.isWalkIn) return null;
 
         const isValid = await bcrypt.compare(password, user.passwordHash);
         if (!isValid) return null;
@@ -31,8 +32,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return {
           id: user.id,
           email: user.email,
-          name: user.name,
-          role: user.role as 'ADMIN' | 'CLIENT',
+          name: user.name ?? user.email.split('@')[0],
+          role: user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN',
           language: user.language,
         };
       },
@@ -40,14 +41,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 24 * 60 * 60, // 1 day (réduit pour limiter la fenêtre d'exposition en cas de vol de session)
   },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id!;
-        token.role = user.role as 'ADMIN' | 'CLIENT';
+        token.role = user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
         token.language = (user as { language?: string }).language ?? 'fr';
+        // Store tokenVersion at login time — used to detect password changes
+        const dbUserAtLogin = await prisma.user.findUnique({
+          where: { id: user.id! },
+          select: { tokenVersion: true },
+        });
+        token.tokenVersion = dbUserAtLogin?.tokenVersion ?? 0;
+      } else if (token.id) {
+        // Re-fetch role and tokenVersion from DB on every token renewal
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { role: true, language: true, tokenVersion: true },
+        });
+        if (!dbUser) return null; // Account deleted → invalidate session
+        // If tokenVersion changed (password changed/reset), reject the token
+        if (dbUser.tokenVersion !== token.tokenVersion) return null;
+        token.role = dbUser.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
+        token.language = dbUser.language ?? 'fr';
       }
       return token;
     },
@@ -61,8 +79,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   pages: {
-    signIn: '/fr/auth/login',
-    error: '/fr/auth/login',
+    signIn: '/auth/login',
+    error: '/auth/login',
   },
   trustHost: true,
 });

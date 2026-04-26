@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+Disallow: /api/
+Disallow: /*/admin/
+Disallow: /*/client/
+Disallow: /*/auth/
+
+Sitemap: https://app.doguniverse.ma/sitemap.xml

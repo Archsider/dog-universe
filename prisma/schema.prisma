@@ -14,10 +14,21 @@ model User {
   name         String
   phone        String?
   passwordHash String
-  role         String   @default("CLIENT") // "ADMIN" | "CLIENT"
+  role         String   @default("CLIENT") // "ADMIN" | "CLIENT" | "SUPERADMIN"
   language     String   @default("fr")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // Incremented on password change / reset → invalidates all existing JWT tokens
+  tokenVersion Int @default(0)
+
+  // Walk-in / client de passage : pas d'accès portail, pas de fidélité, pas de notifications
+  isWalkIn Boolean @default(false)
+
+  // Historical baseline (for pre-existing clients before the app)
+  historicalStays    Int    @default(0)
+  historicalSpendMAD Float  @default(0)
+  historicalNote     String?
 
   pets          Pet[]
   bookings      Booking[]
@@ -27,6 +38,10 @@ model User {
   actionLogs    ActionLog[]
   adminNotes    AdminNote[]    @relation("NoteAuthor")
   passwordResets PasswordResetToken[]
+  contract      ClientContract?
+  benefitClaims    LoyaltyBenefitClaim[]
+  reviewedClaims   LoyaltyBenefitClaim[] @relation("ClaimReviewer")
+  revenueSummaries MonthlyRevenueSummary[]
 }
 
 model Pet {
@@ -38,28 +53,69 @@ model Pet {
   dateOfBirth DateTime?
   gender      String?  // "MALE" | "FEMALE"
   photoUrl    String?
+  // Identification
+  isNeutered      Boolean?
+  microchipNumber String?
+  tattooNumber    String?
+  weight          Float?   // kg
+  // Vet info
+  vetName         String?
+  vetPhone        String?
+  // Health
+  allergies         String?
+  currentMedication String?
+  // Behavior: "SOCIABLE" | "TOLERANT" | "MONITOR" | "REACTIVE"
+  behaviorWithDogs   String?
+  behaviorWithCats   String?
+  behaviorWithHumans String?
+  // Notes
+  notes             String?
+  // Anti-parasitic treatment
+  lastAntiparasiticDate    DateTime?
+  antiparasiticProduct     String?
+  antiparasiticNotes       String?
+  antiparasiticDurationDays Int?    // Admin-only override (days). Null = use product default.
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  vaccinations Vaccination[]
-  documents    PetDocument[]
-  bookingPets  BookingPet[]
+  owner         User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  vaccinations  Vaccination[]
+  documents     PetDocument[]
+  bookingPets   BookingPet[]
+  weightEntries PetWeightEntry[]
 
   @@index([ownerId])
 }
 
-model Vaccination {
+model PetWeightEntry {
   id          String   @id @default(cuid())
   petId       String
-  date        DateTime
-  vaccineType String
-  comment     String?
-  createdAt   DateTime @default(now())
+  weightKg    Float
+  measuredAt  DateTime @default(now())
+  note        String?
 
   pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
 
   @@index([petId])
+  @@index([measuredAt])
+}
+
+model Vaccination {
+  id               String    @id @default(cuid())
+  petId            String
+  date             DateTime?
+  vaccineType      String    @default("")
+  nextDueDate      DateTime?
+  comment          String?
+  status           String    @default("CONFIRMED") // "CONFIRMED" | "DRAFT"
+  isAutoDetected   Boolean   @default(false)
+  sourceDocumentId String?   // PetDocument.id reference (informational, no FK)
+  createdAt        DateTime  @default(now())
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([petId])
+  @@index([status])
 }
 
 model PetDocument {
@@ -67,6 +123,7 @@ model PetDocument {
   petId      String
   name       String
   fileUrl    String
+  storageKey String?
   fileType   String
   uploadedAt DateTime @default(now())
 
@@ -86,13 +143,22 @@ model Booking {
   notes              String?
   cancellationReason String?
   totalPrice         Float    @default(0)
+  source             String?  // "ONLINE" | "MANUAL" — null = legacy / unknown
+  // Boarding stay extension request (from client)
+  hasExtensionRequest       Boolean   @default(false)
+  extensionRequestedEndDate DateTime?
+  extensionRequestNote      String?
+  // For PENDING_EXTENSION bookings: links back to the original booking being extended
+  extensionForBookingId     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   client         User           @relation(fields: [clientId], references: [id])
   bookingPets    BookingPet[]
+  bookingItems   BookingItem[]
   boardingDetail BoardingDetail?
   taxiDetail     TaxiDetail?
+  taxiTrips      TaxiTrip[]
   invoice        Invoice?
   stayPhotos     StayPhoto[]
 
@@ -113,12 +179,28 @@ model BookingPet {
   @@index([bookingId])
 }
 
+// Extra billable lines added manually by admin at booking time (products, custom services)
+model BookingItem {
+  id          String       @id @default(cuid())
+  bookingId   String
+  description String
+  quantity    Int          @default(1)
+  unitPrice   Float
+  total       Float
+  category    ItemCategory @default(OTHER)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+}
+
 model BoardingDetail {
   id              String  @id @default(cuid())
   bookingId       String  @unique
   includeGrooming Boolean @default(false)
   groomingSize    String? // "SMALL" | "LARGE"
   groomingPrice   Float   @default(0)
+  groomingStatus  String? // "PLANNED" | "IN_PROGRESS" | "DONE" — null si pas de toilettage
   pricePerNight   Float   @default(0)
   // Pet taxi addon
   taxiGoEnabled     Boolean @default(false)
@@ -143,38 +225,125 @@ model TaxiDetail {
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }
 
+// Unified taxi trip — one row per trajet (OUTBOUND / RETURN / STANDALONE)
+// Replaces the flat taxiGoStatus/taxiReturnStatus columns on BoardingDetail
+// and provides the TaxiStatusHistory log.
+model TaxiTrip {
+  id        String   @id @default(cuid())
+  bookingId String
+  tripType  String   // "OUTBOUND" | "RETURN" | "STANDALONE"
+  status    String   @default("PLANNED")
+  // Scheduling metadata (mirrors BoardingDetail for addons; from TaxiDetail for standalone)
+  date      String?
+  time      String?
+  address   String?
+  taxiType  String?  // "STANDARD" | "VET" | "AIRPORT" — STANDALONE only
+  price     Float    @default(0)
+  // GPS tracking — controlled per-trip by admin
+  trackingActive Boolean @default(false)
+  trackingToken  String? @unique  // public token, allows client tracking without auth
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking   Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  history   TaxiStatusHistory[]
+  locations TaxiLocation[]
+
+  @@index([bookingId])
+}
+
+model TaxiStatusHistory {
+  id         String   @id @default(cuid())
+  taxiTripId String
+  status     String
+  timestamp  DateTime @default(now())
+  updatedBy  String   // userId admin or "MIGRATION"
+  createdAt  DateTime @default(now())
+
+  taxiTrip TaxiTrip @relation(fields: [taxiTripId], references: [id], onDelete: Cascade)
+
+  @@index([taxiTripId])
+}
+
+model TaxiLocation {
+  id         String   @id @default(cuid())
+  taxiTripId String
+  latitude   Float
+  longitude  Float
+  heading    Float?   // direction en degrés (0-360)
+  speed      Float?   // km/h
+  accuracy   Float?   // précision GPS en mètres
+  createdAt  DateTime @default(now())
+
+  taxiTrip TaxiTrip @relation(fields: [taxiTripId], references: [id], onDelete: Cascade)
+
+  @@index([taxiTripId])
+  @@index([createdAt])
+}
+
 model Invoice {
   id            String   @id @default(cuid())
   bookingId     String?  @unique
   clientId      String
   invoiceNumber String   @unique
   amount        Float
-  status        String   @default("PENDING") // "PAID" | "PENDING"
+  paidAmount    Float    @default(0) // Calculé = SUM(payments.amount), mis à jour par allocatePayments()
+  status        String   @default("PENDING") // "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED"
+  serviceType   String?  // "BOARDING" | "PET_TAXI" | "GROOMING" | "PRODUCT_SALE" | null (legacy)
   pdfUrl        String?
-  notes         String?
-  paymentMethod String?  // "CASH" | "CARD" | "CHECK" | "TRANSFER"
+  notes                     String?
+  supplementaryForBookingId String?  // set on extension-surcharge invoices (bookingId=null) — replaces fragile notes pattern
+  clientDisplayName  String?  // overrides client.name on this invoice (Jordan / passage client)
+  clientDisplayPhone String?  // overrides client.phone on this invoice
+  clientDisplayEmail String?  // overrides client.email on this invoice
   issuedAt      DateTime @default(now())
   paidAt        DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  client  User        @relation(fields: [clientId], references: [id])
-  booking Booking?    @relation(fields: [bookingId], references: [id])
-  items   InvoiceItem[]
+  client   User          @relation(fields: [clientId], references: [id])
+  booking  Booking?      @relation(fields: [bookingId], references: [id])
+  items    InvoiceItem[]
+  payments Payment[]
 
   @@index([clientId])
   @@index([status])
+  @@index([supplementaryForBookingId])
+}
+
+enum ItemCategory {
+  BOARDING
+  PET_TAXI
+  GROOMING
+  PRODUCT
+  OTHER
 }
 
 model InvoiceItem {
-  id          String @id @default(cuid())
-  invoiceId   String
-  description String
-  quantity    Int    @default(1)
-  unitPrice   Float
-  total       Float
+  id              String       @id @default(cuid())
+  invoiceId       String
+  description     String
+  quantity        Int          @default(1)
+  unitPrice       Float
+  total           Float
+  allocatedAmount Float        @default(0)   // Montant alloué par allocatePayments()
+  status          String       @default("PENDING") // "PENDING" | "PARTIAL" | "PAID"
+  category        ItemCategory @default(OTHER)
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  invoiceId     String
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount        Float
+  paymentMethod String   // "CASH" | "CARD" | "CHECK" | "TRANSFER"
+  paymentDate   DateTime
+  notes         String?
+  createdAt     DateTime @default(now())
 
   @@index([invoiceId])
 }
@@ -208,6 +377,26 @@ model LoyaltyGrade {
   updatedAt  DateTime  @updatedAt
 
   client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model LoyaltyBenefitClaim {
+  id          String   @id @default(cuid())
+  clientId    String
+  grade       String   // grade at time of claim
+  benefitKey  String   // e.g. "grooming_discount_10", "free_grooming", "pet_taxi_ride"
+  benefitLabelFr String
+  benefitLabelEn String
+  status      String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  rejectionReason String?
+  reviewedBy  String?  // admin user id
+  reviewedAt  DateTime?
+  claimedAt   DateTime @default(now())
+
+  client   User          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reviewer User?         @relation("ClaimReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([clientId])
+  @@index([status])
 }
 
 model AdminNote {
@@ -269,3 +458,38 @@ model PasswordResetToken {
 
   @@index([token])
 }
+
+model ClientContract {
+  id          String   @id @default(cuid())
+  clientId    String   @unique
+  signedAt    DateTime @default(now())
+  pdfUrl      String?  // Deprecated: legacy public URL. Use storageKey + createSignedUrl() instead.
+  storageKey  String   // e.g. contracts/{clientId}.pdf
+  ipAddress   String?
+  version     String   @default("1.0")
+  createdAt   DateTime @default(now())
+
+  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+// Historical revenue summaries — for pre-production data entry (Jan/Feb/Mar/etc.)
+// Independent from Booking/Invoice — never affects normal workflows.
+model MonthlyRevenueSummary {
+  id              String   @id @default(cuid())
+  year            Int
+  month           Int      // 1–12
+  boardingRevenue Float    @default(0)
+  groomingRevenue Float    @default(0)
+  taxiRevenue     Float    @default(0)
+  otherRevenue    Float    @default(0)
+  notes           String?
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  author User @relation(fields: [createdBy], references: [id])
+
+  @@unique([year, month])
+  @@index([year])
+}
+

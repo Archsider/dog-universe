@@ -2,64 +2,62 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, LogIn, LogOut } from 'lucide-react';
+import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, LogIn, LogOut, Package } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import RevenueChartWrapper from './RevenueChartWrapper';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import {
+  totalCashCollected,
+  cashByMonth,
+  billedByCategory,
+  deltaPercent,
+  currentBoarders,
+  pendingBookingsCount,
+  newClientsCount,
+} from '@/lib/metrics';
 
 interface PageProps { params: { locale: string } }
 
 export default async function AdminDashboardPage({ params: { locale } }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const now = new Date();
+  const currentYear = now.getFullYear();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
   const thisMonthStart = startOfMonth(now);
   const thisMonthEnd = endOfMonth(now);
   const lastMonthStart = startOfMonth(subMonths(now, 1));
   const lastMonthEnd = endOfMonth(subMonths(now, 1));
-  const startOfLast12Months = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-
-  const boardingNow = {
-    serviceType: 'BOARDING' as const,
-    status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
-    startDate: { lte: now },
-    endDate: { gte: now },
-  };
 
   const [
     totalClients,
     pendingBookings,
-    currentCatBoarders,
-    currentDogBoarders,
-    monthlyRevenue,
-    lastMonthRevenue,
+    boarders,
+    thisCash,
+    lastCash,
     recentBookings,
-    revenueData,
-    monthlyBoardingInvoices,
-    monthlyTaxiAgg,
+    lastYearMonthly,
+    currentYearMonthly,
     loyalClientsGroups,
-    newClientsThisMonth,
+    newClients,
     top5Revenue,
     pendingInvoicesAgg,
     bookingsWithoutInvoice,
     todayCheckIns,
     todayCheckOuts,
+    historicalSummaries,
+    thisMonthHistorical,
+    lastMonthHistorical,
+    thisBilled,
+    lastBilled,
   ] = await Promise.all([
-    prisma.user.count({ where: { role: 'CLIENT' } }),
-    prisma.booking.count({ where: { status: 'PENDING' } }),
-    prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingNow } }),
-    prisma.bookingPet.count({ where: { pet: { species: 'DOG' }, booking: boardingNow } }),
-    prisma.invoice.aggregate({
-      where: { status: 'PAID', issuedAt: { gte: thisMonthStart, lte: thisMonthEnd } },
-      _sum: { amount: true },
-    }),
-    prisma.invoice.aggregate({
-      where: { status: 'PAID', issuedAt: { gte: lastMonthStart, lte: lastMonthEnd } },
-      _sum: { amount: true },
-    }),
+    prisma.user.count({ where: { role: 'CLIENT', isWalkIn: false } }),
+    pendingBookingsCount(),
+    currentBoarders(),
+    totalCashCollected(thisMonthStart, thisMonthEnd),
+    totalCashCollected(lastMonthStart, lastMonthEnd),
     prisma.booking.findMany({
       include: {
         client: { select: { name: true, email: true } },
@@ -68,31 +66,19 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       orderBy: { startDate: 'desc' },
       take: 8,
     }),
-    prisma.invoice.findMany({
-      where: { status: 'PAID', issuedAt: { gte: startOfLast12Months } },
-      select: { amount: true, issuedAt: true, booking: { select: { serviceType: true, boardingDetail: { select: { groomingPrice: true } } } } },
-    }),
-    prisma.invoice.findMany({
-      where: { status: 'PAID', issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, booking: { serviceType: 'BOARDING' } },
-      select: { amount: true, booking: { select: { boardingDetail: { select: { groomingPrice: true } } } } },
-    }),
-    prisma.invoice.aggregate({
-      where: { status: 'PAID', issuedAt: { gte: thisMonthStart, lte: thisMonthEnd }, booking: { serviceType: 'PET_TAXI' } },
-      _sum: { amount: true },
-    }),
+    cashByMonth(currentYear - 1),
+    cashByMonth(currentYear),
     prisma.booking.groupBy({
       by: ['clientId'],
       _count: { clientId: true },
       having: { clientId: { _count: { gt: 1 } } },
     }),
-    prisma.user.count({
-      where: { role: 'CLIENT', createdAt: { gte: thisMonthStart, lte: thisMonthEnd } },
-    }),
+    newClientsCount(thisMonthStart, thisMonthEnd, true),
     prisma.invoice.groupBy({
       by: ['clientId'],
-      where: { status: 'PAID' },
-      _sum: { amount: true },
-      orderBy: { _sum: { amount: 'desc' } },
+      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+      _sum: { paidAmount: true },
+      orderBy: { _sum: { paidAmount: 'desc' } },
       take: 5,
     }),
     prisma.invoice.aggregate({
@@ -129,7 +115,22 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
         bookingPets: { include: { pet: { select: { name: true, species: true } } } },
       },
     }),
+    prisma.monthlyRevenueSummary.findMany({
+      select: { year: true, month: true, boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
+    }).catch(() => [] as { year: number; month: number; boardingRevenue: number; groomingRevenue: number; taxiRevenue: number; otherRevenue: number }[]),
+    prisma.monthlyRevenueSummary.findFirst({
+      where: { year: thisMonthStart.getFullYear(), month: thisMonthStart.getMonth() + 1 },
+      select: { boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
+    }).catch(() => null),
+    prisma.monthlyRevenueSummary.findFirst({
+      where: { year: lastMonthStart.getFullYear(), month: lastMonthStart.getMonth() + 1 },
+      select: { boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
+    }).catch(() => null),
+    billedByCategory(thisMonthStart, thisMonthEnd),
+    billedByCategory(lastMonthStart, lastMonthEnd),
   ]);
+
+  const { cat: currentCatBoarders, dog: currentDogBoarders } = boarders;
 
   const capacitySettings = await prisma.setting.findMany({
     where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
@@ -146,42 +147,53 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     id: r.clientId,
     name: top5Users.find(u => u.id === r.clientId)?.name ?? r.clientId,
     email: top5Users.find(u => u.id === r.clientId)?.email ?? '',
-    totalRevenue: r._sum.amount ?? 0,
+    totalRevenue: r._sum.paidAmount ?? 0,
   }));
 
-  // CA variation vs previous month
-  const thisMonthAmt = monthlyRevenue._sum.amount ?? 0;
-  const lastMonthAmt = lastMonthRevenue._sum.amount ?? 0;
-  const monthVariation = lastMonthAmt > 0
-    ? Math.round(((thisMonthAmt - lastMonthAmt) / lastMonthAmt) * 1000) / 10
+  // CA global — paiements réels + données historiques manuelles
+  const thisHistAmt = thisMonthHistorical
+    ? thisMonthHistorical.boardingRevenue + thisMonthHistorical.groomingRevenue + thisMonthHistorical.taxiRevenue + thisMonthHistorical.otherRevenue
     : 0;
+  const lastHistAmt = lastMonthHistorical
+    ? lastMonthHistorical.boardingRevenue + lastMonthHistorical.groomingRevenue + lastMonthHistorical.taxiRevenue + lastMonthHistorical.otherRevenue
+    : 0;
+  const thisAmt = thisCash + thisHistAmt;
+  const lastAmt = lastCash + lastHistAmt;
+  const delta = deltaPercent(thisAmt, lastAmt);
 
-  // Build monthly chart data
-  const monthlyData: Record<string, { boarding: number; taxi: number; grooming: number }> = {};
+  // Cartes service — billed family (item.total, PAID+PARTIALLY_PAID, issuedAt)
+  const monthlyBoardingRevenue   = thisBilled.boarding;
+  const monthlyTaxiRevenue       = thisBilled.taxi;
+  const monthlyGroomingRevenue   = thisBilled.grooming;
+  const monthlyCroquettesRevenue = thisBilled.croquettes;
+  const boardingDelta   = deltaPercent(thisBilled.boarding,   lastBilled.boarding);
+  const taxiDelta       = deltaPercent(thisBilled.taxi,       lastBilled.taxi);
+  const groomingDelta   = deltaPercent(thisBilled.grooming,   lastBilled.grooming);
+  const croquettesDelta = deltaPercent(thisBilled.croquettes, lastBilled.croquettes);
+
+  // Graphe 12 mois — cash family (cashByMonth, 2 calendar years combined)
+  const chartLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
+  const chartData: { month: string; boarding: number; taxi: number; grooming: number; croquettes: number }[] = [];
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = d.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: '2-digit' });
-    monthlyData[key] = { boarding: 0, taxi: 0, grooming: 0 };
+    const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
+    const yr = d.getFullYear();
+    const mo = d.getMonth();
+    const entry = yr === currentYear ? currentYearMonthly[mo] : lastYearMonthly[mo];
+    chartData.push({ month: key, boarding: entry.boarding, taxi: entry.taxi, grooming: entry.grooming, croquettes: entry.croquettes });
   }
-  revenueData.forEach(inv => {
-    const d = new Date(inv.issuedAt);
-    const key = d.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: '2-digit' });
-    if (monthlyData[key]) {
-      if (inv.booking?.serviceType === 'PET_TAXI') {
-        monthlyData[key].taxi += inv.amount;
-      } else {
-        const groomingPrice = inv.booking?.boardingDetail?.groomingPrice ?? 0;
-        monthlyData[key].grooming += groomingPrice;
-        monthlyData[key].boarding += inv.amount - groomingPrice;
-      }
+  historicalSummaries.forEach(s => {
+    const d = new Date(s.year, s.month - 1, 1);
+    const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
+    const existing = chartData.find(c => c.month === key);
+    if (existing) {
+      existing.boarding += s.boardingRevenue;
+      existing.grooming += s.groomingRevenue;
+      existing.taxi += s.taxiRevenue;
+      existing.croquettes += s.otherRevenue;
     }
   });
-  const chartData = Object.entries(monthlyData).map(([month, v]) => ({ month, ...v }));
 
-  // Service revenue this month
-  const monthlyGroomingRevenue = monthlyBoardingInvoices.reduce((sum, inv) => sum + (inv.booking?.boardingDetail?.groomingPrice ?? 0), 0);
-  const monthlyBoardingRevenue = monthlyBoardingInvoices.reduce((sum, inv) => sum + inv.amount, 0) - monthlyGroomingRevenue;
-  const monthlyTaxiRevenue = monthlyTaxiAgg._sum.amount ?? 0;
   const loyalClients = loyalClientsGroups.length;
   const pendingInvoicesAmount = pendingInvoicesAgg._sum.amount ?? 0;
   const pendingInvoicesCount = pendingInvoicesAgg._count.id ?? 0;
@@ -189,19 +201,20 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   const labels = {
     fr: {
       title: 'Tableau de bord',
-      caMonthly: 'CA mensuel',
+      caMonthly: 'CA mensuel · encaissé',
       animauxHeberges: 'Pension actuelle',
       pending: 'En attente',
       totalClients: 'Total clients',
       pension: 'Pension',
       taxi: 'Taxi animalier',
       grooming: 'Toilettage',
+      croquettes: 'Croquettes',
       loyalClients: 'Clients fidèles',
       newClients: 'Nouveaux clients',
       recentBookings: 'Réservations récentes',
       viewAll: 'Voir tout',
       revenueTitle: 'CA mensuel — 12 derniers mois',
-      thisMth: 'ce mois',
+      thisMth: 'ce mois · facturé',
       top5: 'Top 5 clients',
       cats: 'Chats',
       dogs: 'Chiens',
@@ -215,19 +228,20 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
     },
     en: {
       title: 'Dashboard',
-      caMonthly: 'Monthly revenue',
+      caMonthly: 'Monthly revenue · collected',
       animauxHeberges: 'Current boarders',
       pending: 'Pending',
       totalClients: 'Total clients',
       pension: 'Boarding',
       taxi: 'Pet taxi',
       grooming: 'Grooming',
+      croquettes: 'Croquettes',
       loyalClients: 'Loyal clients',
       newClients: 'New clients',
       recentBookings: 'Recent bookings',
       viewAll: 'View all',
       revenueTitle: 'Monthly revenue — last 12 months',
-      thisMth: 'this month',
+      thisMth: 'this month · billed',
       top5: 'Top 5 clients',
       cats: 'Cats',
       dogs: 'Dogs',
@@ -259,8 +273,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
   const sl = statusLabels[locale] || statusLabels.fr;
 
   const monthName = now.toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
-  const variationColor = monthVariation > 0 ? 'text-green-600' : monthVariation < 0 ? 'text-red-500' : 'text-gray-400';
-  const variationSign = monthVariation > 0 ? '+' : '';
+  const variationColor = delta > 0 ? 'text-green-600' : delta < 0 ? 'text-red-500' : 'text-gray-400';
 
   return (
     <div>
@@ -289,10 +302,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center mb-3">
               <TrendingUp className="h-5 w-5 text-purple-500" />
             </div>
-            <div className="text-xl font-bold text-charcoal">{formatMAD(thisMonthAmt)}</div>
+            <div className="text-xl font-bold text-charcoal">{formatMAD(thisAmt)}</div>
             <div className="text-xs text-gray-500 mt-0.5">{l.caMonthly}</div>
             <div className={`text-xs mt-1 font-medium ${variationColor}`}>
-              {variationSign}{monthVariation}% vs mois préc.
+              {`${delta > 0 ? '+' : ''}${delta}% vs mois préc.`}
             </div>
           </div>
         </Link>
@@ -344,14 +357,17 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
       </div>
 
       {/* Row 2 — Service revenues this month */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-gradient-to-br from-[#FBF5E0] to-[#FDF8EC] rounded-xl border border-[#E2C048]/30 p-4 shadow-card">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gold-700 uppercase tracking-wide">{l.pension}</span>
             <Calendar className="h-4 w-4 text-gold-500" />
           </div>
           <div className="text-2xl font-bold text-gold-800">{formatMAD(monthlyBoardingRevenue)}</div>
-          <div className="text-xs text-gold-600 mt-1">{l.thisMth}</div>
+          <div className="text-xs text-gold-600 mt-1 flex items-center gap-1.5">
+            {l.thisMth}
+            {lastBilled.boarding > 0 && <span className={boardingDelta >= 0 ? 'text-green-600' : 'text-red-400'}>{boardingDelta > 0 ? '+' : ''}{boardingDelta}%</span>}
+          </div>
         </div>
 
         <div className="bg-gradient-to-br from-[#EBF4FF] to-[#F0F7FF] rounded-xl border border-blue-200/50 p-4 shadow-card">
@@ -360,7 +376,10 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <Car className="h-4 w-4 text-blue-500" />
           </div>
           <div className="text-2xl font-bold text-blue-800">{formatMAD(monthlyTaxiRevenue)}</div>
-          <div className="text-xs text-blue-600 mt-1">{l.thisMth}</div>
+          <div className="text-xs text-blue-600 mt-1 flex items-center gap-1.5">
+            {l.thisMth}
+            {lastBilled.taxi > 0 && <span className={taxiDelta >= 0 ? 'text-green-600' : 'text-red-400'}>{taxiDelta > 0 ? '+' : ''}{taxiDelta}%</span>}
+          </div>
         </div>
 
         <div className="bg-gradient-to-br from-[#F3EEFF] to-[#F7F2FF] rounded-xl border border-purple-200/50 p-4 shadow-card">
@@ -369,7 +388,22 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
             <Scissors className="h-4 w-4 text-purple-500" />
           </div>
           <div className="text-2xl font-bold text-purple-800">{formatMAD(monthlyGroomingRevenue)}</div>
-          <div className="text-xs text-purple-600 mt-1">{l.thisMth}</div>
+          <div className="text-xs text-purple-600 mt-1 flex items-center gap-1.5">
+            {l.thisMth}
+            {lastBilled.grooming > 0 && <span className={groomingDelta >= 0 ? 'text-green-600' : 'text-red-400'}>{groomingDelta > 0 ? '+' : ''}{groomingDelta}%</span>}
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-[#FEF3E2] to-[#FFF8EE] rounded-xl border border-orange-200/50 p-4 shadow-card">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-orange-700 uppercase tracking-wide">{l.croquettes}</span>
+            <Package className="h-4 w-4 text-orange-500" />
+          </div>
+          <div className="text-2xl font-bold text-orange-800">{formatMAD(monthlyCroquettesRevenue)}</div>
+          <div className="text-xs text-orange-600 mt-1 flex items-center gap-1.5">
+            {l.thisMth}
+            {lastBilled.croquettes > 0 && <span className={croquettesDelta >= 0 ? 'text-green-600' : 'text-red-400'}>{croquettesDelta > 0 ? '+' : ''}{croquettesDelta}%</span>}
+          </div>
         </div>
       </div>
 
@@ -556,7 +590,7 @@ export default async function AdminDashboardPage({ params: { locale } }: PagePro
               <UserPlus className="h-6 w-6 text-green-500" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-charcoal">{newClientsThisMonth}</div>
+              <div className="text-2xl font-bold text-charcoal">{newClients}</div>
               <div className="text-sm text-gray-500">{l.newClients}</div>
             </div>
           </div>

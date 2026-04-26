@@ -49,20 +49,28 @@
     "bookings": "Bookings",
     "history": "History",
     "invoices": "Invoices",
+    "loyalty": "My Benefits",
     "notifications": "Notifications",
     "profile": "My Profile",
     "logout": "Sign Out",
+    "connectedAs": "Signed in as",
     "admin": {
       "dashboard": "Dashboard",
       "clients": "Clients",
       "animals": "Animals",
       "calendar": "Calendar",
       "reservations": "Reservations",
+      "board": "Operations Board",
       "billing": "Billing",
       "analytics": "Analytics",
       "logs": "Logs",
       "settings": "Settings",
-      "profile": "My Profile"
+      "profile": "My Profile",
+      "contracts": "Contracts",
+      "users": "Users",
+      "loyalty": "Loyalty Claims",
+      "logout": "Sign Out",
+      "revenue_summary": "Historical Revenue"
     }
   },
   "auth": {

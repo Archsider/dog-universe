@@ -7,6 +7,7 @@ interface RevenueDataPoint {
   boarding: number;
   taxi: number;
   grooming?: number;
+  croquettes?: number;
 }
 
 interface RevenueChartProps {
@@ -16,8 +17,8 @@ interface RevenueChartProps {
 
 export default function RevenueChart({ data, locale }: RevenueChartProps) {
   const labels = {
-    fr: { boarding: 'Pension', taxi: 'Taxi', grooming: 'Toilettage', currency: 'MAD' },
-    en: { boarding: 'Boarding', taxi: 'Taxi', grooming: 'Grooming', currency: 'MAD' },
+    fr: { boarding: 'Pension', taxi: 'Taxi', grooming: 'Toilettage', croquettes: 'Croquettes', currency: 'MAD' },
+    en: { boarding: 'Boarding', taxi: 'Taxi', grooming: 'Grooming', croquettes: 'Croquettes', currency: 'MAD' },
   };
   const l = labels[locale as keyof typeof labels] || labels.fr;
 
@@ -31,15 +32,29 @@ export default function RevenueChart({ data, locale }: RevenueChartProps) {
         <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
         <Tooltip
           formatter={(value: number, name: string) => {
-            const label = name === 'boarding' ? l.boarding : name === 'taxi' ? l.taxi : l.grooming;
-            return [formatValue(value), label];
+            const labelMap: Record<string, string> = {
+              boarding: l.boarding,
+              taxi: l.taxi,
+              grooming: l.grooming,
+              croquettes: l.croquettes,
+            };
+            return [formatValue(value), labelMap[name] ?? name];
           }}
           contentStyle={{ borderRadius: '8px', border: '1px solid #F0D98A', backgroundColor: '#FFFEF7' }}
         />
-        <Legend formatter={(value) => value === 'boarding' ? l.boarding : value === 'taxi' ? l.taxi : l.grooming} />
+        <Legend formatter={(value) => {
+          const labelMap: Record<string, string> = {
+            boarding: l.boarding,
+            taxi: l.taxi,
+            grooming: l.grooming,
+            croquettes: l.croquettes,
+          };
+          return labelMap[value] ?? value;
+        }} />
         <Bar dataKey="boarding" fill="#C9A84C" radius={[4, 4, 0, 0]} />
         <Bar dataKey="taxi" fill="#2C2C2C" radius={[4, 4, 0, 0]} />
         <Bar dataKey="grooming" fill="#7C9D8E" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="croquettes" fill="#E8A838" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

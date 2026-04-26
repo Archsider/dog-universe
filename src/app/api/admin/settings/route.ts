@@ -13,11 +13,13 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   taxi_standard: '150',
   taxi_vet: '300',
   taxi_airport: '300',
+  capacity_dog: '50',
+  capacity_cat: '10',
 };
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -32,24 +34,30 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const body = await request.json() as Record<string, string>;
 
-  // Only allow known keys
+  // Only allow known keys with positive numeric values
   const allowedKeys = Object.keys(DEFAULT_SETTINGS);
-  const updates = Object.entries(body).filter(([k]) => allowedKeys.includes(k));
+  const updates = Object.entries(body)
+    .filter(([k]) => allowedKeys.includes(k))
+    .filter(([, v]) => {
+      const parsed = Number(v);
+      return !isNaN(parsed) && parsed > 0;
+    });
 
+  if (updates.length === 0) return NextResponse.json({ ok: true });
   if (!prisma.setting) return NextResponse.json({ ok: true });
 
   await Promise.all(
     updates.map(([key, value]) =>
       prisma.setting!.upsert({
         where: { key },
-        update: { value: String(value) },
-        create: { key, value: String(value) },
+        update: { value: String(Number(value)) },
+        create: { key, value: String(Number(value)) },
       })
     )
   );

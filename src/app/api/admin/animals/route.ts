@@ -5,7 +5,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 export async function GET(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     where,
     include: {
       owner: { select: { id: true, name: true, email: true } },
-      vaccinations: { orderBy: { date: 'desc' }, take: 5 },
+      vaccinations: { select: { id: true, vaccineType: true, date: true }, orderBy: { date: 'desc' }, take: 5 },
       documents: { orderBy: { uploadedAt: 'desc' }, take: 3 },
       _count: { select: { bookingPets: true } },
     },
@@ -41,14 +41,18 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { ownerId, name, species, breed, gender, dateOfBirth } = await request.json();
+  const { ownerId, name, species, breed, gender, dateOfBirth, weight } = await request.json();
 
-  if (!ownerId || !name || !species) {
+  if (!ownerId || !name || !species || !dateOfBirth) {
     return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
+  }
+
+  if (gender && !['MALE', 'FEMALE'].includes(gender)) {
+    return NextResponse.json({ error: 'INVALID_GENDER' }, { status: 400 });
   }
 
   const owner = await prisma.user.findUnique({ where: { id: ownerId, role: 'CLIENT' } });
@@ -62,6 +66,7 @@ export async function POST(request: Request) {
       breed: breed?.trim() || null,
       gender: gender || null,
       dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+      weight: weight ? Number(weight) : null,
     },
   });
 

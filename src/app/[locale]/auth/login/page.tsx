@@ -45,7 +45,7 @@ export default function LoginPage() {
       const sessionRes = await fetch('/api/auth/session');
       const session = await sessionRes.json();
 
-      if (session?.user?.role === 'ADMIN') {
+      if (session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPERADMIN') {
         router.push(`/${locale}/admin/dashboard`);
       } else {
         router.push(`/${locale}/client/dashboard`);
@@ -57,7 +57,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF6F0] flex items-center justify-center p-4">
+    <main className="min-h-screen bg-[#FAF6F0] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
@@ -65,7 +65,7 @@ export default function LoginPage() {
             <Image src="/logo.png" alt="Dog Universe" width={160} height={44} className="h-12 w-auto object-contain mx-auto" priority />
           </Link>
           <h1 className="text-2xl font-serif font-semibold text-charcoal">{t('title')}</h1>
-          <p className="text-charcoal/60 mt-1 text-sm">{t('subtitle')}</p>
+          <p className="text-neutral-600 mt-1 text-sm">{t('subtitle')}</p>
         </div>
 
         {/* Card */}
@@ -108,7 +108,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-charcoal/70"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -133,36 +133,10 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Demo credentials */}
-          <div className="mt-6 pt-5 border-t border-gray-100">
-            <p className="text-xs text-charcoal/50 text-center mb-3">
-              {locale === 'fr' ? 'Comptes de démonstration' : 'Demo accounts'}
-            </p>
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => { setEmail('marie.dupont@email.com'); setPassword('Marie2024!'); }}
-                className="w-full text-left text-xs bg-[#FAF6F0] hover:bg-gold-50 border border-[#E2C048]/30 rounded-md px-3 py-2 transition-colors"
-              >
-                <span className="font-medium text-charcoal/70">Client:</span>{' '}
-                <span className="text-gold-700">marie.dupont@email.com</span>
-                <span className="text-charcoal/50"> / Marie2024!</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail('admin@doguniverse.ma'); setPassword('Admin2024!'); }}
-                className="w-full text-left text-xs bg-[#FAF6F0] hover:bg-gold-50 border border-[#E2C048]/30 rounded-md px-3 py-2 transition-colors"
-              >
-                <span className="font-medium text-charcoal/70">Admin:</span>{' '}
-                <span className="text-gold-700">admin@doguniverse.ma</span>
-                <span className="text-charcoal/50"> / Admin2024!</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Links */}
-        <p className="text-center text-sm text-charcoal/60 mt-6">
+        <p className="text-center text-sm text-neutral-600 mt-6">
           {t('noAccount')}{' '}
           <Link href={`/${locale}/auth/register`} className="text-gold-600 hover:text-gold-700 font-medium">
             {t('register')}
@@ -173,6 +147,6 @@ export default function LoginPage() {
           <LanguageSwitcher />
         </div>
       </div>
-    </div>
+    </main>
   );
 }

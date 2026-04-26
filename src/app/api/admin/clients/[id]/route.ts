@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
+import { calculateSuggestedGrade } from '@/lib/loyalty';
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -17,9 +18,12 @@ export async function GET(_req: Request, { params }: Params) {
     where: { id, role: 'CLIENT' },
     include: {
       pets: {
-        include: {
-          vaccinations: { orderBy: { date: 'desc' } },
-          documents: { orderBy: { uploadedAt: 'desc' } },
+        select: {
+          id: true, ownerId: true, name: true, species: true, breed: true,
+          dateOfBirth: true, gender: true, photoUrl: true, weight: true,
+          createdAt: true, updatedAt: true,
+          vaccinations: { select: { id: true, vaccineType: true, date: true }, orderBy: { date: 'desc' } },
+          documents: { select: { id: true, name: true, fileUrl: true, fileType: true, uploadedAt: true }, orderBy: { uploadedAt: 'desc' } },
         },
       },
       loyaltyGrade: true,
@@ -51,9 +55,9 @@ export async function GET(_req: Request, { params }: Params) {
     orderBy: { createdAt: 'desc' },
   });
 
+  const { passwordHash: _pw, ...safeClient } = client;
   return NextResponse.json({
-    ...client,
-    passwordHash: undefined,
+    ...safeClient,
     totalRevenue,
     adminNotes,
   });
@@ -61,7 +65,7 @@ export async function GET(_req: Request, { params }: Params) {
 
 export async function PATCH(request: Request, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -69,18 +73,68 @@ export async function PATCH(request: Request, { params }: Params) {
   const body = await request.json();
 
   const updateData: Record<string, unknown> = {};
-  if (body.name !== undefined) updateData.name = body.name;
-  if (body.phone !== undefined) updateData.phone = body.phone;
+  if (body.name !== undefined) {
+    const name = String(body.name).trim().slice(0, 255);
+    if (!name) return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 });
+    updateData.name = name;
+  }
+  if (body.phone !== undefined) {
+    updateData.phone = body.phone ? String(body.phone).trim().slice(0, 20) : null;
+  }
+  if (body.email !== undefined) {
+    const email = String(body.email).trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
+    }
+    const existing = await prisma.user.findFirst({ where: { email, NOT: { id } } });
+    if (existing) return NextResponse.json({ error: 'EMAIL_TAKEN' }, { status: 409 });
+    updateData.email = email;
+  }
+
+  // --- Historical baseline fields (admin only) ---
+  let recalculateLoyalty = false;
+  if (body.historicalStays !== undefined) {
+    const val = Math.max(0, Math.round(Number(body.historicalStays)));
+    if (!isNaN(val)) { updateData.historicalStays = val; recalculateLoyalty = true; }
+  }
+  if (body.historicalSpendMAD !== undefined) {
+    const val = Math.max(0, Number(body.historicalSpendMAD));
+    if (!isNaN(val)) { updateData.historicalSpendMAD = val; recalculateLoyalty = true; }
+  }
+  if (body.historicalNote !== undefined) {
+    updateData.historicalNote = body.historicalNote ? String(body.historicalNote).trim().slice(0, 500) : null;
+  }
 
   await prisma.user.update({ where: { id }, data: updateData });
+
+  // Recalculate loyalty grade when historical data changes (unless manually overridden)
+  if (recalculateLoyalty) {
+    const currentGrade = await prisma.loyaltyGrade.findUnique({ where: { clientId: id } });
+    if (!currentGrade?.isOverride) {
+      const user = await prisma.user.findUnique({ where: { id }, select: { historicalStays: true, historicalSpendMAD: true } });
+      const [totalPaid, completedStays] = await Promise.all([
+        prisma.invoice.aggregate({ where: { clientId: id, status: 'PAID' }, _sum: { amount: true } }),
+        prisma.booking.count({ where: { clientId: id, status: 'COMPLETED' } }),
+      ]);
+      const totalStays = completedStays + (user?.historicalStays ?? 0);
+      const totalRevenue = (totalPaid._sum.amount ?? 0) + (user?.historicalSpendMAD ?? 0);
+      const suggestedGrade = calculateSuggestedGrade(totalStays, totalRevenue);
+      await prisma.loyaltyGrade.upsert({
+        where: { clientId: id },
+        update: { grade: suggestedGrade },
+        create: { clientId: id, grade: suggestedGrade },
+      });
+    }
+  }
 
   return NextResponse.json({ message: 'ok' });
 }
 
 export async function DELETE(_req: Request, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  // Destructive: SUPERADMIN only
+  if (!session?.user || session.user.role !== 'SUPERADMIN') {
+    return NextResponse.json({ error: 'Forbidden — SUPERADMIN only' }, { status: 403 });
   }
 
   const { id } = await params;

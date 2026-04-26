@@ -8,7 +8,7 @@ interface Params { params: { id: string } }
 
 export async function POST(request: NextRequest, { params }: Params) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     { clientName: booking.client.name, message, bookingRef },
     locale
   );
-  await sendEmail({ to: booking.client.email, subject, html });
+  sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
 
   return NextResponse.json({ success: true });
 }

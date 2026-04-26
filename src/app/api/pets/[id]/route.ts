@@ -13,16 +13,30 @@ export async function GET(_req: Request, { params }: Params) {
 
   const pet = await prisma.pet.findUnique({
     where: { id },
-    include: {
-      vaccinations: { orderBy: { date: 'desc' } },
+    select: {
+      id: true, ownerId: true, name: true, species: true, breed: true,
+      dateOfBirth: true, gender: true, photoUrl: true,
+      isNeutered: true, microchipNumber: true, tattooNumber: true, weight: true,
+      vetName: true, vetPhone: true, allergies: true, currentMedication: true,
+      behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
+      lastAntiparasiticDate: true, antiparasiticProduct: true, antiparasiticNotes: true,
+      antiparasiticDurationDays: true,
+      createdAt: true, updatedAt: true,
+      vaccinations: {
+        select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true },
+        orderBy: { date: 'desc' },
+      },
       documents: { orderBy: { uploadedAt: 'desc' } },
       bookingPets: {
-        include: {
+        select: {
+          id: true,
           booking: {
-            include: {
-              boardingDetail: true,
-              taxiDetail: true,
-              invoice: true,
+            select: {
+              id: true, status: true, serviceType: true,
+              startDate: true, endDate: true, totalPrice: true,
+              boardingDetail: { select: { includeGrooming: true, pricePerNight: true, groomingPrice: true } },
+              taxiDetail: { select: { id: true, taxiType: true, price: true } },
+              invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
             },
           },
         },
@@ -34,7 +48,7 @@ export async function GET(_req: Request, { params }: Params) {
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   // Clients can only access their own pets
-  if (session.user.role !== 'ADMIN' && pet.ownerId !== session.user.id) {
+  if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && pet.ownerId !== session.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -47,26 +61,79 @@ export async function PATCH(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const pet = await prisma.pet.findUnique({ where: { id } });
+  const pet = await prisma.pet.findUnique({ where: { id }, select: { id: true, ownerId: true } });
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  if (session.user.role !== 'ADMIN' && pet.ownerId !== session.user.id) {
+  if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && pet.ownerId !== session.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
     const body = await _req.json();
-    const { name, species, breed, dateOfBirth, gender, photoUrl } = body;
+    const {
+      name, species, breed, dateOfBirth, gender, photoUrl,
+      isNeutered, microchipNumber, tattooNumber, weight,
+      vetName, vetPhone, allergies, currentMedication,
+      behaviorWithDogs, behaviorWithCats, behaviorWithHumans, notes,
+      lastAntiparasiticDate, antiparasiticProduct, antiparasiticNotes,
+      antiparasiticDurationDays,
+    } = body;
+
+    const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN';
+
+    const VALID_SPECIES = ['DOG', 'CAT'];
+    const VALID_GENDERS = ['MALE', 'FEMALE'];
+
+    if (species !== undefined && !VALID_SPECIES.includes(species)) {
+      return NextResponse.json({ error: 'INVALID_SPECIES' }, { status: 400 });
+    }
+    if (gender && !VALID_GENDERS.includes(gender)) {
+      return NextResponse.json({ error: 'INVALID_GENDER' }, { status: 400 });
+    }
+    if (dateOfBirth !== undefined) {
+      const parsedDob = new Date(dateOfBirth);
+      if (isNaN(parsedDob.getTime()) || parsedDob > new Date()) {
+        return NextResponse.json({ error: 'INVALID_DATE_OF_BIRTH' }, { status: 400 });
+      }
+    }
+    if (weight !== undefined && weight !== null && (isNaN(Number(weight)) || Number(weight) <= 0)) {
+      return NextResponse.json({ error: 'INVALID_WEIGHT' }, { status: 400 });
+    }
 
     const updated = await prisma.pet.update({
       where: { id },
       data: {
-        name: name?.trim(),
+        name: name ? String(name).trim().slice(0, 100) : undefined,
         species,
-        breed: breed?.trim() || null,
+        breed: breed ? String(breed).trim().slice(0, 100) : null,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         gender: gender || null,
         photoUrl: photoUrl || null,
+        isNeutered: isNeutered ?? null,
+        microchipNumber: microchipNumber?.trim() || null,
+        tattooNumber: tattooNumber?.trim() || null,
+        weight: weight ? Number(weight) : null,
+        vetName: vetName?.trim() || null,
+        vetPhone: vetPhone?.trim() || null,
+        allergies: allergies?.trim() || null,
+        currentMedication: currentMedication?.trim() || null,
+        behaviorWithDogs: behaviorWithDogs || null,
+        behaviorWithCats: behaviorWithCats || null,
+        behaviorWithHumans: behaviorWithHumans || null,
+        notes: notes?.trim() || null,
+        lastAntiparasiticDate: lastAntiparasiticDate !== undefined
+          ? (lastAntiparasiticDate ? new Date(lastAntiparasiticDate) : null)
+          : undefined,
+        antiparasiticProduct: antiparasiticProduct !== undefined
+          ? (antiparasiticProduct?.trim() || null)
+          : undefined,
+        antiparasiticNotes: antiparasiticNotes !== undefined
+          ? (antiparasiticNotes?.trim() || null)
+          : undefined,
+        // Admin-only: duration override
+        ...(isAdmin && antiparasiticDurationDays !== undefined && {
+          antiparasiticDurationDays: antiparasiticDurationDays ? Math.max(1, Math.round(Number(antiparasiticDurationDays))) : null,
+        }),
       },
     });
 

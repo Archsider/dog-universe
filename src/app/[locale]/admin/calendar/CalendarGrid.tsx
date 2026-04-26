@@ -17,6 +17,20 @@ export interface CalendarBooking {
   endDate: string | null;
   client: { name: string };
   bookingPets: BookingPet[];
+  taxiGoEnabled?: boolean;
+  taxiGoDate?: string | null;
+  taxiGoTime?: string | null;
+  taxiReturnEnabled?: boolean;
+  taxiReturnDate?: string | null;
+  taxiReturnTime?: string | null;
+}
+
+interface TaxiDayEntry {
+  bookingId: string;
+  clientName: string;
+  pets: string;
+  direction: 'aller' | 'retour';
+  time: string | null;
 }
 
 interface Props {
@@ -112,7 +126,61 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
     if (active.length > 0) dayBookingsMap.set(d, active);
   }
 
+  // Precompute departure days: Set of booking IDs whose endDate falls on each day of the month
+  const dayDepartureIds = new Map<number, Set<string>>();
+  for (const b of bookings) {
+    if (b.serviceType !== 'BOARDING' || !b.endDate) continue;
+    const endD = new Date(b.endDate);
+    if (endD.getFullYear() === year && endD.getMonth() + 1 === month) {
+      const d = endD.getDate();
+      const ids = dayDepartureIds.get(d) ?? new Set<string>();
+      ids.add(b.id);
+      dayDepartureIds.set(d, ids);
+    }
+  }
+
+  // Precompute arrival days: Set of booking IDs whose startDate falls on each day of the month
+  const dayArrivalIds = new Map<number, Set<string>>();
+  for (const b of bookings) {
+    if (b.serviceType !== 'BOARDING') continue;
+    const startD = new Date(b.startDate);
+    if (startD.getFullYear() === year && startD.getMonth() + 1 === month) {
+      const d = startD.getDate();
+      const ids = dayArrivalIds.get(d) ?? new Set<string>();
+      ids.add(b.id);
+      dayArrivalIds.set(d, ids);
+    }
+  }
+
+  // Precompute taxi add-on indicators per day (BOARDING only)
+  // Use taxiGoDate/taxiReturnDate from boardingDetail when set; fall back to startDate/endDate.
+  const dayTaxiMap = new Map<number, TaxiDayEntry[]>();
+  for (const b of bookings) {
+    if (b.serviceType !== 'BOARDING') continue;
+    if (b.taxiGoEnabled) {
+      const goDate = b.taxiGoDate ? new Date(b.taxiGoDate) : new Date(b.startDate);
+      if (goDate.getFullYear() === year && goDate.getMonth() + 1 === month) {
+        const d = goDate.getDate();
+        const entries = dayTaxiMap.get(d) ?? [];
+        const pets = b.bookingPets.map((bp) => bp.pet.name).join(', ');
+        entries.push({ bookingId: b.id, clientName: b.client.name, pets, direction: 'aller', time: b.taxiGoTime ?? null });
+        dayTaxiMap.set(d, entries);
+      }
+    }
+    if (b.taxiReturnEnabled) {
+      const retDate = b.taxiReturnDate ? new Date(b.taxiReturnDate) : (b.endDate ? new Date(b.endDate) : null);
+      if (retDate && retDate.getFullYear() === year && retDate.getMonth() + 1 === month) {
+        const d = retDate.getDate();
+        const entries = dayTaxiMap.get(d) ?? [];
+        const pets = b.bookingPets.map((bp) => bp.pet.name).join(', ');
+        entries.push({ bookingId: b.id, clientName: b.client.name, pets, direction: 'retour', time: b.taxiReturnTime ?? null });
+        dayTaxiMap.set(d, entries);
+      }
+    }
+  }
+
   const selectedBookings = selectedDay ? (dayBookingsMap.get(selectedDay) ?? []) : [];
+  const selectedTaxis = selectedDay ? (dayTaxiMap.get(selectedDay) ?? []) : [];
 
   return (
     <div className="flex flex-col xl:flex-row gap-6">
@@ -195,20 +263,31 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
                   {dayBks.slice(0, 2).map((b) => {
                     const petName = b.bookingPets[0]?.pet.name ?? '?';
                     const extra = b.bookingPets.length > 1 ? ` +${b.bookingPets.length - 1}` : '';
+                    const isDeparture = dayDepartureIds.get(day)?.has(b.id) ?? false;
+                    const isArrival = dayArrivalIds.get(day)?.has(b.id) ?? false;
+                    const title = isDeparture
+                      ? (isEn ? 'Departure day' : 'Jour de départ')
+                      : isArrival
+                      ? (isEn ? 'Arrival day' : 'Jour d\'arrivée')
+                      : undefined;
                     return (
                       <div
                         key={b.id}
                         className={cn(
                           'text-[10px] leading-tight px-1.5 py-0.5 rounded border flex items-center gap-1 overflow-hidden',
                           STATUS_CHIP[b.status] ?? 'bg-gray-100 text-gray-600 border-gray-200',
+                          isDeparture && 'border-dashed',
                         )}
+                        title={title}
                       >
+                        {isArrival && <span className="text-[9px] flex-shrink-0">→</span>}
                         {b.serviceType === 'PET_TAXI' ? (
                           <Car className="h-2.5 w-2.5 flex-shrink-0" />
                         ) : (
                           <PawPrint className="h-2.5 w-2.5 flex-shrink-0" />
                         )}
                         <span className="truncate font-medium">{petName}{extra}</span>
+                        {isDeparture && <span className="ml-auto text-[9px] flex-shrink-0">↩</span>}
                       </div>
                     );
                   })}
@@ -218,6 +297,26 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
                     </p>
                   )}
                 </div>
+
+                {/* Taxi add-on indicators */}
+                {(dayTaxiMap.get(day) ?? []).map((t) => {
+                  const dirLabel = t.direction === 'aller' ? (isEn ? 'Go' : 'Aller') : (isEn ? 'Return' : 'Retour');
+                  const dirIcon = t.direction === 'aller' ? '→' : '↩';
+                  const timeLabel = t.time ?? (isEn ? 'TBD' : 'À confirmer');
+                  const tooltip = `Pet Taxi ${dirLabel} — ${t.clientName} — ${t.pets} — ${timeLabel}`;
+                  const firstPet = t.pets.split(', ')[0];
+                  return (
+                    <div
+                      key={`${t.bookingId}-${t.direction}`}
+                      title={tooltip}
+                      className="text-[10px] leading-tight px-1.5 py-0.5 rounded border flex items-center gap-1 overflow-hidden bg-orange-50 border-orange-200 text-orange-700 cursor-help mt-0.5"
+                    >
+                      <span className="truncate font-medium">
+                        🚗 {firstPet} {dirIcon}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -263,51 +362,139 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
             </button>
           </div>
 
-          <div className="p-4">
-            {selectedBookings.length === 0 ? (
+          <div className="p-4 space-y-4">
+            {selectedBookings.length === 0 && selectedTaxis.length === 0 ? (
               <p className="text-sm text-charcoal/40 text-center py-6">
                 {isEn ? 'No bookings this day' : 'Aucune réservation ce jour'}
               </p>
             ) : (
-              <div className="space-y-3">
-                {selectedBookings.map((b) => (
-                  <a
-                    key={b.id}
-                    href={`/${locale}/admin/reservations/${b.id}`}
-                    className="block p-3 rounded-xl border border-ivory-200 hover:border-gold-300 hover:bg-ivory-50 transition-colors group"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5">
-                        {b.serviceType === 'PET_TAXI' ? (
-                          <Car className="h-3.5 w-3.5 text-charcoal/40" />
-                        ) : (
-                          <PawPrint className="h-3.5 w-3.5 text-charcoal/40" />
-                        )}
-                        <span className="text-xs font-semibold text-charcoal">
-                          {b.serviceType === 'BOARDING' ? (isEn ? 'Boarding' : 'Pension') : 'Taxi'}
-                        </span>
-                      </div>
-                      <span
-                        className={cn(
-                          'text-[10px] px-1.5 py-0.5 rounded border',
-                          STATUS_CHIP[b.status] ?? 'bg-gray-100 border-gray-200 text-gray-600',
-                        )}
-                      >
-                        {statusLabel[b.status] ?? b.status}
-                      </span>
+              <>
+                {selectedBookings.length > 0 && (() => {
+                  // Tag each booking: arrival | departure | ongoing
+                  const tagged = selectedBookings.map((b) => ({
+                    b,
+                    isArrival: dayArrivalIds.get(selectedDay!)?.has(b.id) ?? false,
+                    isDeparture: dayDepartureIds.get(selectedDay!)?.has(b.id) ?? false,
+                  }));
+                  // Sort: arrivals first, then ongoing, then departures
+                  const sorted = [
+                    ...tagged.filter((t) => t.isArrival && !t.isDeparture),
+                    ...tagged.filter((t) => !t.isArrival && !t.isDeparture),
+                    ...tagged.filter((t) => t.isDeparture),
+                  ];
+
+                  const formatShort = (iso: string) =>
+                    new Intl.DateTimeFormat(isEn ? 'en-US' : 'fr-FR', { day: 'numeric', month: 'short' }).format(new Date(iso));
+
+                  return (
+                    <div className="space-y-3">
+                      {sorted.map(({ b, isArrival, isDeparture }) => (
+                        <a
+                          key={b.id}
+                          href={`/${locale}/admin/reservations/${b.id}`}
+                          className={cn(
+                            'block p-3 rounded-xl border transition-colors group',
+                            isDeparture
+                              ? 'border-purple-200 bg-purple-50/40 hover:border-purple-400 hover:bg-purple-50'
+                              : isArrival
+                              ? 'border-green-200 bg-green-50/40 hover:border-green-400 hover:bg-green-50'
+                              : 'border-ivory-200 hover:border-gold-300 hover:bg-ivory-50',
+                          )}
+                        >
+                          {/* Top row: type + status + event badge */}
+                          <div className="flex items-center justify-between mb-1.5 gap-1">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              {b.serviceType === 'PET_TAXI' ? (
+                                <Car className="h-3.5 w-3.5 text-charcoal/40 flex-shrink-0" />
+                              ) : (
+                                <PawPrint className="h-3.5 w-3.5 text-charcoal/40 flex-shrink-0" />
+                              )}
+                              <span className="text-xs font-semibold text-charcoal truncate">
+                                {b.serviceType === 'BOARDING' ? (isEn ? 'Boarding' : 'Pension') : 'Taxi'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              {isDeparture && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded border bg-purple-100 border-purple-300 text-purple-700 font-semibold">
+                                  ↩ {isEn ? 'Departure' : 'Départ'}
+                                </span>
+                              )}
+                              {isArrival && !isDeparture && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded border bg-green-100 border-green-300 text-green-700 font-semibold">
+                                  → {isEn ? 'Arrival' : 'Arrivée'}
+                                </span>
+                              )}
+                              {!isDeparture && !isArrival && (
+                                <span
+                                  className={cn(
+                                    'text-[10px] px-1.5 py-0.5 rounded border',
+                                    STATUS_CHIP[b.status] ?? 'bg-gray-100 border-gray-200 text-gray-600',
+                                  )}
+                                >
+                                  {statusLabel[b.status] ?? b.status}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {/* Client */}
+                          <p className="text-xs text-charcoal/50 mb-0.5">{b.client.name}</p>
+                          {/* Pets */}
+                          <p className="text-xs font-medium text-charcoal group-hover:text-gold-700 transition-colors">
+                            {b.bookingPets.map((bp) => bp.pet.name).join(', ')}
+                          </p>
+                          {/* Species + dates */}
+                          <div className="flex items-center justify-between mt-0.5">
+                            {b.bookingPets.length > 0 && (
+                              <p className="text-[10px] text-charcoal/40">
+                                {b.bookingPets.map((bp) => bp.pet.species === 'DOG' ? '🐶' : '🐱').join(' ')}
+                              </p>
+                            )}
+                            {b.serviceType === 'BOARDING' && b.endDate && (
+                              <p className="text-[10px] text-charcoal/35 ml-auto">
+                                {formatShort(b.startDate)} → {formatShort(b.endDate)}
+                              </p>
+                            )}
+                          </div>
+                        </a>
+                      ))}
                     </div>
-                    <p className="text-xs text-charcoal/50 mb-0.5">{b.client.name}</p>
-                    <p className="text-xs font-medium text-charcoal group-hover:text-gold-700 transition-colors">
-                      {b.bookingPets.map((bp) => bp.pet.name).join(', ')}
-                    </p>
-                    {b.bookingPets.length > 0 && (
-                      <p className="text-[10px] text-charcoal/40 mt-0.5">
-                        {b.bookingPets.map((bp) => bp.pet.species === 'DOG' ? '🐶' : '🐱').join(' ')}
-                      </p>
+                  );
+                })()}
+
+                {/* Transports du jour */}
+                {selectedTaxis.length > 0 && (
+                  <div>
+                    {selectedBookings.length > 0 && (
+                      <div className="border-t border-ivory-100 pt-3 mb-3" />
                     )}
-                  </a>
-                ))}
-              </div>
+                    <p className="text-[10px] font-semibold text-charcoal/40 uppercase tracking-wide mb-2">
+                      {isEn ? 'Transports' : 'Transports'}
+                    </p>
+                    <div className="space-y-2">
+                      {selectedTaxis.map((t) => {
+                        const dir = t.direction === 'aller' ? (isEn ? 'Go' : 'Aller') : (isEn ? 'Return' : 'Retour');
+                        const timeLabel = t.time ?? (isEn ? 'TBD' : 'À confirmer');
+                        return (
+                          <div
+                            key={`${t.bookingId}-${t.direction}`}
+                            className="flex items-start gap-2 p-2.5 rounded-lg bg-orange-50 border border-orange-100"
+                          >
+                            <span className="text-base leading-none mt-0.5">🚗</span>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-orange-800">
+                                {dir}
+                                {t.time && <span className="ml-1 font-normal text-orange-700">· {t.time}</span>}
+                                {!t.time && <span className="ml-1 font-normal italic text-orange-500">· {timeLabel}</span>}
+                              </p>
+                              <p className="text-[11px] text-orange-700/70 truncate">{t.clientName} — {t.pets}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

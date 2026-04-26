@@ -5,16 +5,17 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
+  const inline = new URL(req.url).searchParams.get('view') === '1';
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },
     include: {
-      client: true,
+      client: { select: { id: true, name: true, email: true, phone: true, language: true } },
       booking: {
         include: {
           bookingPets: { include: { pet: true } },
@@ -22,7 +23,8 @@ export async function GET(_req: Request, { params }: Params) {
           taxiDetail: true,
         },
       },
-      items: true,
+      items: { orderBy: { id: 'asc' } },
+      payments: { orderBy: { paymentDate: 'asc' } },
     },
   });
 
@@ -47,7 +49,7 @@ export async function GET(_req: Request, { params }: Params) {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${invoice.invoiceNumber}.pdf"`,
+        'Content-Disposition': inline ? `inline; filename="${invoice.invoiceNumber}.pdf"` : `attachment; filename="${invoice.invoiceNumber}.pdf"`,
         'Content-Length': pdfBuffer.byteLength.toString(),
       },
     });

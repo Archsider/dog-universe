@@ -13,7 +13,7 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
   const sp = await searchParams;
 
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const now = new Date();
   const year = parseInt(sp.year ?? String(now.getFullYear()));
@@ -23,6 +23,9 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
   firstDay.setHours(0, 0, 0, 0);
   const lastDay = new Date(year, month, 0);
   lastDay.setHours(23, 59, 59, 999);
+  // String format for taxi date comparisons (stored as "YYYY-MM-DD" strings)
+  const firstDayStr = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDayStr = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
 
   const bookings = await prisma.booking.findMany({
     where: {
@@ -31,11 +34,16 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
       OR: [
         { endDate: { gte: firstDay } },
         { endDate: null, startDate: { gte: firstDay } },
+        // Boarding with taxi return date in this month (even if stay endDate is before month)
+        { boardingDetail: { taxiReturnEnabled: true, taxiReturnDate: { gte: firstDayStr, lte: lastDayStr } } },
+        // Boarding with taxi go date in this month
+        { boardingDetail: { taxiGoEnabled: true, taxiGoDate: { gte: firstDayStr, lte: lastDayStr } } },
       ],
     },
     include: {
       client: { select: { name: true } },
       bookingPets: { include: { pet: { select: { name: true, species: true } } } },
+      boardingDetail: { select: { taxiGoEnabled: true, taxiGoDate: true, taxiGoTime: true, taxiReturnEnabled: true, taxiReturnDate: true, taxiReturnTime: true } },
     },
     orderBy: { startDate: 'asc' },
   });
@@ -51,6 +59,12 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
     bookingPets: b.bookingPets.map((bp) => ({
       pet: { name: bp.pet.name, species: bp.pet.species },
     })),
+    taxiGoEnabled: b.boardingDetail?.taxiGoEnabled ?? false,
+    taxiGoDate: b.boardingDetail?.taxiGoDate ?? null,
+    taxiGoTime: b.boardingDetail?.taxiGoTime ?? null,
+    taxiReturnEnabled: b.boardingDetail?.taxiReturnEnabled ?? false,
+    taxiReturnDate: b.boardingDetail?.taxiReturnDate ?? null,
+    taxiReturnTime: b.boardingDetail?.taxiReturnTime ?? null,
   }));
 
   // Stats

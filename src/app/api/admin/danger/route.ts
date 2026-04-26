@@ -10,7 +10,7 @@ import { logAction } from '@/lib/log';
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || session.user.role !== 'SUPERADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

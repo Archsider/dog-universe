@@ -13,17 +13,23 @@ interface PageProps {
 
 export default async function AdminAnimalsPage({ params: { locale }, searchParams }: PageProps) {
   const session = await auth();
-  if (!session?.user || session.user.role !== 'ADMIN') redirect(`/${locale}/auth/login`);
+  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const q = searchParams.q || '';
   const species = searchParams.species || '';
 
   const pets = await prisma.pet.findMany({
     where: {
-      ...(q && { OR: [{ name: { contains: q } }, { breed: { contains: q } }, { owner: { name: { contains: q } } }] }),
+      ...(q && { OR: [{ name: { contains: q, mode: 'insensitive' } }, { breed: { contains: q, mode: 'insensitive' } }, { owner: { name: { contains: q, mode: 'insensitive' } } }] }),
       ...(species && { species }),
     },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      species: true,
+      breed: true,
+      dateOfBirth: true,
+      photoUrl: true,
       owner: { select: { id: true, name: true, email: true } },
       vaccinations: { select: { id: true } },
       _count: { select: { bookingPets: true } },

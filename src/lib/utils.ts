@@ -47,17 +47,18 @@ export function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-export function calculateAge(dateOfBirth: Date | string, locale: string = 'fr'): string {
+export function calculateAge(dateOfBirth: Date | string | null | undefined, locale: string = 'fr'): string {
+  if (!dateOfBirth) return locale === 'en' ? 'Unknown age' : 'Âge inconnu';
   const dob = typeof dateOfBirth === 'string' ? new Date(dateOfBirth) : dateOfBirth;
-  const years = Math.floor(differenceInDays(new Date(), dob) / 365);
+  const totalDays = differenceInDays(new Date(), dob);
+  const months = Math.floor(totalDays / 30.44);
+  if (months < 12) {
+    if (locale === 'en') return `${months} month${months !== 1 ? 's' : ''}`;
+    return `${months} mois`;
+  }
+  const years = Math.floor(totalDays / 365);
   if (locale === 'en') return `${years} year${years > 1 ? 's' : ''}`;
   return `${years} an${years > 1 ? 's' : ''}`;
-}
-
-export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function truncate(str: string, length: number): string {
@@ -65,43 +66,37 @@ export function truncate(str: string, length: number): string {
   return str.slice(0, length) + '…';
 }
 
-export function generateInvoiceNumber(counter: number): string {
-  const year = new Date().getFullYear();
-  return `DU-${year}-${String(counter).padStart(4, '0')}`;
-}
-
-export function getLoyaltyGradeColor(grade: string): string {
-  switch (grade) {
-    case 'BRONZE': return 'text-amber-700 bg-amber-50 border-amber-200';
-    case 'SILVER': return 'text-slate-600 bg-slate-50 border-slate-200';
-    case 'GOLD': return 'text-yellow-700 bg-yellow-50 border-yellow-200';
-    case 'PLATINUM': return 'text-indigo-700 bg-indigo-50 border-indigo-200';
-    default: return 'text-gray-600 bg-gray-50 border-gray-200';
-  }
-}
-
-export function getLoyaltyGradeLabel(grade: string, locale: string = 'fr'): string {
-  const labels: Record<string, Record<string, string>> = {
-    fr: { BRONZE: 'Bronze', SILVER: 'Argent', GOLD: 'Or', PLATINUM: 'Platine' },
-    en: { BRONZE: 'Bronze', SILVER: 'Silver', GOLD: 'Gold', PLATINUM: 'Platinum' },
-  };
-  return labels[locale]?.[grade] ?? grade;
-}
-
 export function getBookingStatusColor(status: string): string {
   switch (status) {
-    case 'PENDING': return 'text-amber-700 bg-amber-50 border-amber-200';
-    case 'CONFIRMED': return 'text-blue-700 bg-blue-50 border-blue-200';
-    case 'COMPLETED': return 'text-green-700 bg-green-50 border-green-200';
-    case 'CANCELLED': return 'text-red-700 bg-red-50 border-red-200';
-    default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    case 'PENDING':           return 'text-amber-700 bg-amber-50 border-amber-200';
+    case 'PENDING_EXTENSION': return 'text-orange-700 bg-orange-50 border-orange-200';
+    case 'CONFIRMED':         return 'text-blue-700 bg-blue-50 border-blue-200';
+    case 'AT_PICKUP':         return 'text-teal-700 bg-teal-50 border-teal-200';
+    case 'IN_PROGRESS':       return 'text-purple-700 bg-purple-50 border-purple-200';
+    case 'COMPLETED':         return 'text-green-700 bg-green-50 border-green-200';
+    case 'CANCELLED':         return 'text-red-700 bg-red-50 border-red-200';
+    case 'REJECTED':          return 'text-red-700 bg-red-50 border-red-200';
+    default:                  return 'text-gray-600 bg-gray-50 border-gray-200';
   }
+}
+
+export function getAntiparasiticDurationDays(
+  product: string | null | undefined,
+  durationOverride?: number | null,
+): number {
+  if (durationOverride && durationOverride > 0) return durationOverride;
+  if (!product) return 30;
+  const p = product.toLowerCase();
+  if (p.includes('bravecto')) return 84; // 12 weeks
+  if (p.includes('nexgard') || p.includes('simparica') || p.includes('frontline')) return 30;
+  return 30;
 }
 
 export function getInvoiceStatusColor(status: string): string {
   switch (status) {
-    case 'PAID': return 'text-green-700 bg-green-50 border-green-200';
-    case 'PENDING': return 'text-amber-700 bg-amber-50 border-amber-200';
-    default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    case 'PAID':           return 'text-green-700 bg-green-50 border-green-200';
+    case 'PARTIALLY_PAID': return 'text-orange-700 bg-orange-50 border-orange-200';
+    case 'PENDING':        return 'text-amber-700 bg-amber-50 border-amber-200';
+    default:               return 'text-gray-600 bg-gray-50 border-gray-200';
   }
 }
