@@ -55,9 +55,20 @@ const RATE_LIMITED_ROUTES: Record<
   '/api/auth/callback/credentials': 'auth',
   '/api/register': 'auth',
   '/api/reset-password': 'passwordReset',
+  '/api/profile/password': 'passwordReset', // change password — brute force protection
+  '/api/contracts/sign': 'uploads', // signature contrat — spam protection
   '/api/bookings': 'bookings',
   '/api/uploads': 'uploads',
 };
+
+// Routes dynamiques (avec [params]) — match par suffixe de path
+function getDynamicLimitBucket(path: string): 'uploads' | 'auth' | 'passwordReset' | 'bookings' | null {
+  // /api/pets/{petId}/vaccinations/extract — upload + parsing PDF coûteux
+  if (path.startsWith('/api/pets/') && path.endsWith('/vaccinations/extract')) {
+    return 'uploads';
+  }
+  return null;
+}
 
 const ADMIN_MUTATION_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
 
@@ -95,12 +106,15 @@ export async function middleware(request: NextRequest) {
         '127.0.0.1';
 
       const exactKey = RATE_LIMITED_ROUTES[path];
+      const dynamicKey = exactKey ? null : getDynamicLimitBucket(path);
       const isAdminMutation =
         path.startsWith('/api/admin/') && ADMIN_MUTATION_METHODS.has(request.method);
 
-      const limitKey = exactKey ?? (isAdminMutation ? 'adminMutation' : null);
+      const limitKey = exactKey ?? dynamicKey ?? (isAdminMutation ? 'adminMutation' : null);
 
-      if (limitKey && (exactKey ? request.method === 'POST' : true)) {
+      // Routes exactes + dynamiques : POST seulement (mutations).
+      // Admin : toutes méthodes mutantes (déjà filtré par isAdminMutation).
+      if (limitKey && ((exactKey || dynamicKey) ? request.method === 'POST' : true)) {
         const { success, limit, remaining, reset } = await limiter[limitKey].limit(ip);
 
         if (!success) {

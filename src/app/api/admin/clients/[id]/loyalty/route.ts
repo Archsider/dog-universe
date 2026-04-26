@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createLoyaltyUpdateNotification } from '@/lib/notifications';
 import { isUpgrade } from '@/lib/loyalty';
+import { gradeOverrideSchema, formatZodError } from '@/lib/validation';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -14,11 +15,11 @@ export async function PUT(request: Request, { params }: Params) {
   }
 
   const { id } = await params;
-  const { grade } = await request.json();
-
-  if (!['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'].includes(grade)) {
-    return NextResponse.json({ error: 'Invalid grade' }, { status: 400 });
+  const parsed = gradeOverrideSchema.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json(formatZodError(parsed.error), { status: 400 });
   }
+  const { grade } = parsed.data;
 
   const currentGrade = await prisma.loyaltyGrade.findUnique({ where: { clientId: id } });
 

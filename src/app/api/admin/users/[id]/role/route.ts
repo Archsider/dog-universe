@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { roleChangeSchema, formatZodError } from '@/lib/validation';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth();
@@ -16,17 +17,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Cannot change your own role' }, { status: 400 });
   }
 
-  let role: string;
-  try {
-    const body = await req.json();
-    role = body.role;
-  } catch {
-    return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
+  const parsed = roleChangeSchema.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json(formatZodError(parsed.error), { status: 400 });
   }
-
-  if (!['ADMIN', 'SUPERADMIN', 'CLIENT'].includes(role)) {
-    return NextResponse.json({ error: 'Invalid role. Must be ADMIN, SUPERADMIN or CLIENT' }, { status: 400 });
-  }
+  const { role } = parsed.data;
 
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user || !['ADMIN', 'SUPERADMIN'].includes(user.role)) {

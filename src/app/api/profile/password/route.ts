@@ -2,17 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { passwordChangeSchema, formatZodError } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await request.json();
-  const { oldPassword, newPassword } = body;
-
-  if (!oldPassword || !newPassword || newPassword.length < 8) {
-    return NextResponse.json({ error: 'Invalid fields' }, { status: 400 });
+  const parsed = passwordChangeSchema.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json(formatZodError(parsed.error), { status: 400 });
   }
+  const { oldPassword, newPassword } = parsed.data;
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
