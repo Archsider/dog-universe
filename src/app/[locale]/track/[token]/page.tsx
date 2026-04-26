@@ -9,7 +9,7 @@ import 'leaflet/dist/leaflet.css';
 // Tuiles OpenStreetMap (whitelisted dans CSP middleware) — pas d'API key requise.
 const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-const POLL_MS = 5000;
+const POLL_MS = 3000;
 
 // Composants Leaflet : SSR off (Leaflet utilise window/document).
 const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });

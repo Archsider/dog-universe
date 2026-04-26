@@ -20,7 +20,14 @@ const TRACKABLE_STATUSES = new Set([
   'ANIMAL_ON_BOARD',
 ]);
 
-const GPS_INTERVAL_MS = 5000;
+// Type minimal Wake Lock (compat tous environnements TS / browsers anciens)
+type WakeLockSentinelLike = {
+  release: () => Promise<void>;
+  released: boolean;
+};
+type WakeLockNavigator = {
+  wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinelLike> };
+};
 
 export default function TaxiTrackingButton({
   taxiTripId,
@@ -32,17 +39,30 @@ export default function TaxiTrackingButton({
   const router = useRouter();
   const isFr = locale !== 'en';
   const [busy, setBusy] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Refs : watchPosition pour GPS continu, Wake Lock pour garder l'écran allumé
+  const watchIdRef = useRef<number | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
 
-  // Démarre / arrête le polling GPS quand trackingActive change
+  // Démarre / arrête le watch GPS + le wake lock quand trackingActive change
   useEffect(() => {
+    const releaseWakeLock = async () => {
+      try {
+        if (wakeLockRef.current && !wakeLockRef.current.released) {
+          await wakeLockRef.current.release();
+        }
+      } catch { /* silent */ }
+      wakeLockRef.current = null;
+    };
+
     if (!trackingActive) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
       }
+      releaseWakeLock();
       return;
     }
+
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       toast({
         title: isFr ? 'Géolocalisation non disponible' : 'Geolocation unavailable',
@@ -51,38 +71,63 @@ export default function TaxiTrackingButton({
       return;
     }
 
-    const pushLocation = () => {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          try {
-            await fetch(`/api/admin/taxi-trips/${taxiTripId}/tracking`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'location',
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude,
-                heading: pos.coords.heading,
-                speed: pos.coords.speed,
-                accuracy: pos.coords.accuracy,
-              }),
-            });
-          } catch {
-            /* erreur réseau silencieuse — la prochaine tentative dans 5s */
-          }
-        },
-        () => { /* permission refusée — silencieux, l'admin peut arrêter */ },
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 4500 },
-      );
+    const pushLocation = async (pos: GeolocationPosition) => {
+      try {
+        await fetch(`/api/admin/taxi-trips/${taxiTripId}/tracking`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'location',
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            heading: pos.coords.heading,
+            speed: pos.coords.speed,
+            accuracy: pos.coords.accuracy,
+          }),
+        });
+      } catch {
+        /* erreur réseau silencieuse — watchPosition continuera d'émettre */
+      }
     };
 
-    pushLocation(); // premier point immédiat
-    intervalRef.current = setInterval(pushLocation, GPS_INTERVAL_MS);
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+    // watchPosition émet automatiquement à chaque changement de position
+    // (pas besoin de setInterval). maximumAge:0 + timeout 10s pour fiabilité mobile.
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      pushLocation,
+      (err) => {
+        // Permission refusée ou GPS indisponible — log mais ne stoppe pas le watch
+        console.error('[GPS]', err.code, err.message);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
+    );
+
+    // Wake Lock — empêche l'écran de s'éteindre pendant la course
+    const requestWakeLock = async () => {
+      try {
+        const nav = navigator as unknown as WakeLockNavigator;
+        if (nav.wakeLock?.request) {
+          wakeLockRef.current = await nav.wakeLock.request('screen');
+        }
+      } catch { /* non supporté ou refusé — silencieux */ }
+    };
+    requestWakeLock();
+
+    // Le Wake Lock est libéré automatiquement par le navigateur quand la page
+    // est cachée. On le ré-acquiert dès le retour de la page au premier plan.
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && trackingActive && !wakeLockRef.current) {
+        requestWakeLock();
       }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      document.removeEventListener('visibilitychange', handleVisibility);
+      releaseWakeLock();
     };
   }, [trackingActive, taxiTripId, isFr]);
 
