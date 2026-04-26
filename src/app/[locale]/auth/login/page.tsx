@@ -67,9 +67,8 @@ export default function LoginPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/images/mascotte-debout.webp"
-            alt=""
-            aria-hidden="true"
-            className="h-28 w-auto mx-auto mb-4 object-contain"
+            alt="Mascotte Dog Universe"
+            className="h-28 w-auto mx-auto mb-6 object-contain"
           />
           <h1 className="text-2xl font-serif font-semibold text-charcoal">{t('title')}</h1>
           <p className="text-neutral-600 mt-1 text-sm">{t('subtitle')}</p>

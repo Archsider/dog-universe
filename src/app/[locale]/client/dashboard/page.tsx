@@ -104,9 +104,8 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/images/mascotte-debout.webp"
-          alt=""
-          aria-hidden="true"
-          className="hidden sm:block h-32 w-auto object-contain opacity-90 flex-shrink-0"
+          alt="Mascotte Dog Universe"
+          className="hidden sm:block h-36 w-auto object-contain mascotte-bounce flex-shrink-0"
         />
       </div>
 
