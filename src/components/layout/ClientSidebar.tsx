@@ -97,13 +97,13 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
         })}
       </nav>
 
-      {/* Skyline Marrakech — bandeau gradient crème/doré, image full-width object-cover */}
+      {/* Skyline Marrakech — fond noir, skyline dorée pleine largeur */}
       <div className="mx-3 mb-3 mt-auto">
         <div
           className="relative rounded-xl overflow-hidden"
           style={{
             height: '90px',
-            background: 'linear-gradient(180deg, #F5ECD8 0%, #E8C97A 100%)',
+            background: '#0E0C08',
           }}
         >
           <span
@@ -114,7 +114,7 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
               fontSize: '8px',
               letterSpacing: '3px',
               textTransform: 'uppercase',
-              color: 'rgba(154,114,53,0.8)',
+              color: 'rgba(196,151,74,0.8)',
               fontWeight: '600',
               zIndex: 10,
             }}
@@ -131,9 +131,9 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
               left: 0,
               right: 0,
               width: '100%',
-              height: '85px',
+              height: '80px',
               objectFit: 'cover',
-              objectPosition: 'center bottom',
+              objectPosition: 'center center',
             }}
           />
         </div>
