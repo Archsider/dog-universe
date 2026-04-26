@@ -64,6 +64,13 @@ export default function LoginPage() {
           <Link href={`/${locale}`} className="inline-block mb-6">
             <Image src="/logo.png" alt="Dog Universe" width={160} height={44} className="h-12 w-auto object-contain mx-auto" priority />
           </Link>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/mascotte-debout.webp"
+            alt=""
+            aria-hidden="true"
+            className="h-28 w-auto mx-auto mb-4 object-contain"
+          />
           <h1 className="text-2xl font-serif font-semibold text-charcoal">{t('title')}</h1>
           <p className="text-neutral-600 mt-1 text-sm">{t('subtitle')}</p>
         </div>

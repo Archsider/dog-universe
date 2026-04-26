@@ -56,23 +56,15 @@ export default async function ClientLayout({
             </div>
           </header>
 
-          {/* Page content — zellige pattern in background @ 4% opacity */}
+          {/* Page content — zellige pattern PNG en arrière-plan @ 6% opacité */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in relative">
-            <div aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden opacity-[0.10]">
-              <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <pattern id="zellige" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
-                    <polygon
-                      points="30,5 35,22 48,12 42,28 58,25 45,33 52,48 38,41 33,58 28,41 14,48 21,33 8,25 24,28 18,12 31,22"
-                      fill="none"
-                      stroke="#C4974A"
-                      strokeWidth="0.8"
-                    />
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#zellige)" />
-              </svg>
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/zellige-pattern.png"
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 w-full h-full object-cover opacity-[0.06] pointer-events-none"
+            />
             <div className="relative z-10">{children}</div>
           </main>
         </div>

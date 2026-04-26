@@ -1,49 +1,47 @@
 import Link from 'next/link';
-import Image from 'next/image';
 
 // Fallback for paths outside any locale segment (e.g. /random-path).
 // Defaults to French since it is the primary locale.
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-[#FAF6F0] flex flex-col">
-      <header className="bg-white border-b border-[#F0D98A]/30">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center">
-          <Link href="/fr">
-            <Image
-              src="/logo.png"
-              alt="Dog Universe"
-              width={140}
-              height={38}
-              className="h-9 w-auto object-contain"
-              priority
+    <div className="relative min-h-screen flex items-center justify-center bg-[#FEFCF9] px-6 py-12 overflow-hidden">
+      {/* Zellige pattern fond — opacité 6% */}
+      <svg
+        className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06]"
+        aria-hidden="true"
+      >
+        <defs>
+          <pattern id="zellige-404" x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
+            <path
+              d="M40 0 L80 40 L40 80 L0 40 Z M40 16 L64 40 L40 64 L16 40 Z"
+              fill="none"
+              stroke="#C4974A"
+              strokeWidth="1.2"
             />
-          </Link>
-        </div>
-      </header>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#zellige-404)" />
+      </svg>
 
-      <main className="flex-1 flex items-center justify-center px-4 py-20">
-        <div className="text-center max-w-md">
-          <p className="text-7xl font-serif font-bold text-[#F0D98A] mb-6 select-none">404</p>
-          <h1 className="text-2xl font-serif font-bold text-[#1a1a2e] mb-3">
-            Page introuvable
-          </h1>
-          <p className="text-neutral-600 mb-10 leading-relaxed">
-            La page que vous recherchez n&apos;existe pas ou a été déplacée.
-          </p>
-          <Link
-            href="/fr"
-            className="inline-block bg-[#F0D98A] hover:bg-[#e8ce72] text-stone-900 font-semibold px-6 py-3.5 rounded-lg transition-colors shadow-sm"
-          >
-            ← Retour à l&apos;accueil
-          </Link>
-        </div>
-      </main>
-
-      <footer className="border-t border-[#F0D98A]/30">
-        <div className="max-w-6xl mx-auto px-4 py-6 text-center text-sm text-neutral-500">
-          © {new Date().getFullYear()} Dog Universe — Marrakech
-        </div>
-      </footer>
+      <div className="relative z-10 text-center max-w-md">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/mascotte-assise.webp"
+          alt=""
+          aria-hidden="true"
+          className="h-48 w-auto mx-auto mb-6 object-contain"
+        />
+        <p className="font-serif text-6xl font-bold text-[#C4974A] leading-none mb-4">404</p>
+        <p className="text-[#7A6E65] text-base leading-relaxed mb-8">
+          Cette page s&apos;est perdue en chemin…
+        </p>
+        <Link
+          href="/fr"
+          className="inline-block px-6 py-3 rounded-lg border border-[#C4974A] text-[#C4974A] font-medium hover:bg-[#C4974A] hover:text-white transition-all duration-200"
+        >
+          ← Retour à l&apos;accueil
+        </Link>
+      </div>
     </div>
   );
 }

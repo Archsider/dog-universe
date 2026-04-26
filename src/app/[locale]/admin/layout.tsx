@@ -33,17 +33,15 @@ export default async function AdminLayout({ children, params: { locale } }: Layo
             <LanguageSwitcher />
           </div>
         </header>
-        <main
-          className="flex-1 p-4 lg:p-8 bg-[#FEFCF9] min-h-screen"
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect width='80' height='80' fill='%23FEFCF9'/%3E%3Cpolygon points='40,8 44,28 58,18 50,34 68,36 54,44 62,58 48,52 44,72 38,52 24,60 30,44 12,38 28,32 20,18 36,28' fill='none' stroke='%23C4974A' stroke-width='1' opacity='0.12'/%3E%3Crect x='32' y='32' width='16' height='16' fill='%23F5E8CC' stroke='%23C4974A' stroke-width='0.8' opacity='0.15' transform='rotate(45 40 40)'/%3E%3Cline x1='40' y1='0' x2='40' y2='80' stroke='%23C4974A' stroke-width='0.4' opacity='0.06'/%3E%3Cline x1='0' y1='40' x2='80' y2='40' stroke='%23C4974A' stroke-width='0.4' opacity='0.06'/%3E%3C/svg%3E\")",
-            backgroundSize: '80px 80px',
-            backgroundRepeat: 'repeat',
-            backgroundAttachment: 'local',
-          }}
-        >
-          {children}
+        <main className="relative flex-1 p-4 lg:p-8 bg-[#FEFCF9] min-h-screen">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/zellige-pattern.png"
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover opacity-[0.06] pointer-events-none"
+          />
+          <div className="relative z-10">{children}</div>
         </main>
       </div>
     </div>
