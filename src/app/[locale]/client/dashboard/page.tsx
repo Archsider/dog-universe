@@ -105,7 +105,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         <img
           src="/images/mascotte-debout.png"
           alt="Mascotte Dog Universe"
-          className="hidden sm:block h-40 w-auto object-contain drop-shadow-lg flex-shrink-0"
+          className="hidden sm:block h-40 w-auto object-contain drop-shadow-lg flex-shrink-0 mascotte-wave"
         />
       </div>
 

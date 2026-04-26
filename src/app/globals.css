@@ -134,6 +134,14 @@
   to   { opacity: 1; transform: translateX(0); }
 }
 
+@keyframes mascotteWave {
+  0%, 100% { transform: translateY(0)    rotate(0deg);  }
+  20%      { transform: translateY(-5px) rotate(-5deg); }
+  40%      { transform: translateY(-10px) rotate(5deg);  }
+  60%      { transform: translateY(-5px) rotate(-3deg); }
+  80%      { transform: translateY(-8px) rotate(4deg);  }
+}
+
 .mascotte-bounce {
   animation: mascotte-bounce 2s ease-in-out infinite;
   transform-origin: bottom center;
@@ -143,6 +151,11 @@
   animation: mascotte-wag 0.5s ease-in-out;
 }
 
+.mascotte-wave {
+  animation: mascotteWave 1.5s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
 .mascotte-slide-in {
   animation: slideInRight 0.6s ease-out forwards;
 }
@@ -150,6 +163,7 @@
 @media (prefers-reduced-motion: reduce) {
   .mascotte-bounce,
   .mascotte-bounce:hover,
+  .mascotte-wave,
   .mascotte-slide-in {
     animation: none;
   }
