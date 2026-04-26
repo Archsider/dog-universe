@@ -24,6 +24,8 @@ const TRACKABLE_STATUSES = new Set([
 type WakeLockSentinelLike = {
   release: () => Promise<void>;
   released: boolean;
+  addEventListener: (event: 'release', handler: () => void) => void;
+  removeEventListener: (event: 'release', handler: () => void) => void;
 };
 type WakeLockNavigator = {
   wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinelLike> };
@@ -71,18 +73,18 @@ export default function TaxiTrackingButton({
       return;
     }
 
-    const pushLocation = async (pos: GeolocationPosition) => {
+    const pushLocation = async (coords: GeolocationCoordinates) => {
       try {
         await fetch(`/api/admin/taxi-trips/${taxiTripId}/tracking`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'location',
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            heading: pos.coords.heading,
-            speed: pos.coords.speed,
-            accuracy: pos.coords.accuracy,
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            heading: coords.heading,
+            speed: coords.speed,
+            accuracy: coords.accuracy,
           }),
         });
       } catch {
@@ -90,33 +92,38 @@ export default function TaxiTrackingButton({
       }
     };
 
-    // watchPosition émet automatiquement à chaque changement de position
-    // (pas besoin de setInterval). maximumAge:0 + timeout 10s pour fiabilité mobile.
+    // 1) Envoi immédiat via getCurrentPosition (ne pas attendre le 1er tick watchPosition)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => pushLocation(pos.coords),
+      (err) => console.error('[GPS init]', err.code, err.message),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+    );
+
+    // 2) Watch continu — émet à chaque changement de position significatif
+    //    distanceFilter:5 — non standard W3C, ignoré silencieusement par les browsers
+    //    (filtrage applicatif côté serveur si besoin)
     watchIdRef.current = navigator.geolocation.watchPosition(
-      pushLocation,
-      (err) => {
-        // Permission refusée ou GPS indisponible — log mais ne stoppe pas le watch
-        console.error('[GPS]', err.code, err.message);
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
+      (pos) => pushLocation(pos.coords),
+      (err) => console.error('[GPS]', err.code, err.message),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000, distanceFilter: 5 } as PositionOptions,
     );
 
     // Wake Lock — empêche l'écran de s'éteindre pendant la course
-    const requestWakeLock = async () => {
+    // Ré-acquisition automatique sur 'release' event (browser ou OS l'a relâché)
+    const acquireWakeLock = async () => {
       try {
         const nav = navigator as unknown as WakeLockNavigator;
-        if (nav.wakeLock?.request) {
-          wakeLockRef.current = await nav.wakeLock.request('screen');
-        }
-      } catch { /* non supporté ou refusé — silencieux */ }
+        if (!nav.wakeLock?.request) return;
+        wakeLockRef.current = await nav.wakeLock.request('screen');
+        wakeLockRef.current.addEventListener('release', acquireWakeLock);
+      } catch (e) { console.warn('Wake Lock non supporté:', e); }
     };
-    requestWakeLock();
+    acquireWakeLock();
 
-    // Le Wake Lock est libéré automatiquement par le navigateur quand la page
-    // est cachée. On le ré-acquiert dès le retour de la page au premier plan.
+    // Sécurité supplémentaire : ré-acquérir aussi sur retour à la visibilité
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && trackingActive && !wakeLockRef.current) {
-        requestWakeLock();
+        acquireWakeLock();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);

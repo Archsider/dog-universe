@@ -116,8 +116,11 @@
 /* ── Animations mascotte ────────────────────────────────────────────────── */
 
 @keyframes mascotte-bounce {
-  0%, 100% { transform: translateY(0px); }
-  50%      { transform: translateY(-8px); }
+  0%   { transform: translateY(0px) rotate(0deg); }
+  25%  { transform: translateY(-6px) rotate(-2deg); }
+  50%  { transform: translateY(-10px) rotate(0deg); }
+  75%  { transform: translateY(-6px) rotate(2deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
 }
 
 @keyframes mascotte-wag {
@@ -132,7 +135,12 @@
 }
 
 .mascotte-bounce {
-  animation: mascotte-bounce 3s ease-in-out infinite;
+  animation: mascotte-bounce 2s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+.mascotte-bounce:hover {
+  animation: mascotte-wag 0.5s ease-in-out;
 }
 
 .mascotte-slide-in {
@@ -141,6 +149,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .mascotte-bounce,
+  .mascotte-bounce:hover,
   .mascotte-slide-in {
     animation: none;
   }

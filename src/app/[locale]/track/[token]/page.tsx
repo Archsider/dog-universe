@@ -41,10 +41,11 @@ export default function TrackPage() {
   const [data, setData] = useState<TrackResponse | null>(null);
   const [status, setStatus] = useState<'loading' | 'ok' | 'inactive' | 'notfound' | 'error'>('loading');
   const [carIcon, setCarIcon] = useState<LeafletDivIcon | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Polling : setTimeout récursif (plus fiable que setInterval pour les requêtes lentes)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Refs impératifs Leaflet — la prop "position" du Marker peut ne pas
   // se réactualiser correctement en mode dynamic-import. On déplace le
-  // marker et recentre la carte via setLatLng / setView à chaque update.
+  // marker et recentre la carte via setLatLng / flyTo à chaque update.
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<LeafletMarker | null>(null);
 
@@ -64,44 +65,44 @@ export default function TrackPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Fetch initial + polling 5s
+  // Fetch + polling récursif via setTimeout (plus fiable que setInterval)
   useEffect(() => {
     if (!token) return;
     let aborted = false;
 
-    const fetchOnce = async () => {
+    const poll = async () => {
       try {
         const res = await fetch(`/api/taxi-tracking/${token}`, { cache: 'no-store' });
         if (aborted) return;
         if (res.status === 404) {
           setStatus('notfound');
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          return;
+          return; // pas de re-schedule
         }
         if (!res.ok) {
           setStatus('error');
-          return;
+        } else {
+          const json = (await res.json()) as TrackResponse;
+          if (aborted) return;
+          setData(json);
+          setStatus(json.active ? 'ok' : 'inactive');
         }
-        const json = (await res.json()) as TrackResponse;
-        if (aborted) return;
-        setData(json);
-        setStatus(json.active ? 'ok' : 'inactive');
       } catch {
         if (!aborted) setStatus('error');
       }
+      if (!aborted) {
+        timeoutRef.current = setTimeout(poll, POLL_MS);
+      }
     };
 
-    fetchOnce();
-    intervalRef.current = setInterval(fetchOnce, POLL_MS);
+    poll();
     return () => {
       aborted = true;
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [token]);
 
-  // Déplacement impératif du marker + recentrage de la carte à chaque
-  // nouvelle position GPS (évite les soucis de propagation de prop sur
-  // un composant Leaflet chargé via dynamic({ ssr: false })).
+  // Déplacement impératif du marker + auto-centrage carte (flyTo animé)
+  // à chaque nouvelle position GPS.
   useEffect(() => {
     const loc = data?.lastLocation;
     if (!loc) return;
@@ -110,7 +111,7 @@ export default function TrackPage() {
       markerRef.current.setLatLng(next);
     }
     if (mapRef.current) {
-      mapRef.current.setView(next, mapRef.current.getZoom());
+      mapRef.current.flyTo(next, 16, { duration: 1 });
     }
     // Volontairement deps minimales — re-render sur changement de coords seulement.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,10 +215,18 @@ export default function TrackPage() {
             />
           </MapContainer>
         ) : (
-          <div className="flex items-center justify-center min-h-[60vh] text-[#8A7E75] text-sm px-6 text-center">
-            {isFr
-              ? 'En attente de la première position GPS du chauffeur…'
-              : 'Waiting for the driver\'s first GPS position…'}
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6 gap-4">
+            <div className="inline-block w-10 h-10 border-[3px] border-[#C4974A] border-t-transparent rounded-full animate-spin" />
+            <p className="text-[#7A6E65] text-sm">
+              {isFr
+                ? 'En attente de la position GPS…'
+                : 'Waiting for GPS position…'}
+            </p>
+            <p className="text-[#8A7E75] text-xs">
+              {isFr
+                ? 'Le chauffeur active le suivi sur son téléphone.'
+                : 'Driver is enabling tracking on their phone.'}
+            </p>
           </div>
         )}
       </div>
