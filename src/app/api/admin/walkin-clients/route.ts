@@ -69,5 +69,12 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json(user, { status: 201 });
+  return NextResponse.json({
+    id: user.id,
+    name: user.name,
+    phone: user.phone,
+    email: user.email,
+    role: user.role,
+    isWalkIn: user.isWalkIn,
+  }, { status: 201 });
 }
