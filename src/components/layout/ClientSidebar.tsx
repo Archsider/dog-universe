@@ -97,21 +97,17 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
         })}
       </nav>
 
-      {/* Skyline décoratif Marrakech — signature visuelle (PNG premium) */}
+      {/* Skyline Marrakech — signature visuelle (Gemini transparent) */}
       <div className="px-3 pb-2 mt-2">
-        <div
-          className="relative h-16 rounded-xl overflow-hidden"
-          style={{ background: 'linear-gradient(180deg, #F5ECD8 0%, #EDD9A3 100%)' }}
-        >
-          <p className="absolute top-2 left-3 text-[8px] tracking-[2px] uppercase text-[#9A7235]/50 z-10">
+        <div className="relative h-16 rounded-xl overflow-hidden bg-gradient-to-r from-[#F5ECD8] to-[#EDD9A3]">
+          <p className="absolute top-2 left-3 text-[8px] tracking-[2px] uppercase text-[#9A7235]/60 z-10">
             Marrakech
           </p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/images/marrakech-skyline.png"
-            alt=""
-            aria-hidden="true"
-            className="absolute bottom-0 left-0 w-full h-full object-contain object-bottom opacity-70"
+            alt="Skyline Marrakech"
+            className="absolute bottom-0 left-0 w-full h-full object-contain object-bottom opacity-80"
           />
         </div>
       </div>
