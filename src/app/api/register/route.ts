@@ -4,24 +4,17 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { notifyAdminsNewClient } from '@/lib/notifications';
+import { registerSchema, formatZodError } from '@/lib/validation';
 
 export async function POST(request: Request) {
   try {
-    const { name, email, phone, password, language } = await request.json();
-
-    if (!name || !email || !password) {
-      return NextResponse.json({ error: 'MISSING_FIELDS', message: 'Required fields missing' }, { status: 400 });
+    const parsed = registerSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) {
+      return NextResponse.json(formatZodError(parsed.error), { status: 400 });
     }
+    const { name, email, phone, password, language } = parsed.data;
 
-    if (name.trim().split(/\s+/).length < 2) {
-      return NextResponse.json({ error: 'FULL_NAME_REQUIRED', message: 'Please enter your first and last name' }, { status: 400 });
-    }
-
-    if (password.length < 8) {
-      return NextResponse.json({ error: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters' }, { status: 400 });
-    }
-
-    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json({ error: 'EMAIL_TAKEN', message: 'Email already in use' }, { status: 409 });
     }
@@ -31,9 +24,9 @@ export async function POST(request: Request) {
     const user = await prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
         data: {
-          name: name.trim(),
-          email: email.toLowerCase().trim(),
-          phone: phone?.trim() || null,
+          name,            // déjà trimmé par Zod
+          email,           // déjà lowercased + trimmé
+          phone,           // déjà trimmé / converti en null si vide
           passwordHash,
           role: 'CLIENT',
           language: language ?? 'fr',

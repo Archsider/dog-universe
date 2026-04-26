@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { petUpdateSchema, formatZodError } from '@/lib/validation';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -69,72 +70,46 @@ export async function PATCH(_req: Request, { params }: Params) {
   }
 
   try {
-    const body = await _req.json();
-    const {
-      name, species, breed, dateOfBirth, gender, photoUrl,
-      isNeutered, microchipNumber, tattooNumber, weight,
-      vetName, vetPhone, allergies, currentMedication,
-      behaviorWithDogs, behaviorWithCats, behaviorWithHumans, notes,
-      lastAntiparasiticDate, antiparasiticProduct, antiparasiticNotes,
-      antiparasiticDurationDays,
-    } = body;
-
+    const parsed = petUpdateSchema.safeParse(await _req.json().catch(() => ({})));
+    if (!parsed.success) {
+      return NextResponse.json(formatZodError(parsed.error), { status: 400 });
+    }
+    const d = parsed.data;
     const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPERADMIN';
 
-    const VALID_SPECIES = ['DOG', 'CAT'];
-    const VALID_GENDERS = ['MALE', 'FEMALE'];
-
-    if (species !== undefined && !VALID_SPECIES.includes(species)) {
-      return NextResponse.json({ error: 'INVALID_SPECIES' }, { status: 400 });
+    // Construit data en respectant la sémantique PATCH (undefined = laisser, null = reset)
+    const data: Record<string, unknown> = {};
+    if (d.name !== undefined)               data.name = d.name;
+    if (d.species !== undefined)            data.species = d.species;
+    if (d.breed !== undefined)              data.breed = d.breed;
+    if (d.dateOfBirth !== undefined)        data.dateOfBirth = new Date(d.dateOfBirth);
+    if (d.gender !== undefined)             data.gender = d.gender;
+    if (d.photoUrl !== undefined)           data.photoUrl = d.photoUrl;
+    if (d.isNeutered !== undefined)         data.isNeutered = d.isNeutered;
+    if (d.microchipNumber !== undefined)    data.microchipNumber = d.microchipNumber;
+    if (d.tattooNumber !== undefined)       data.tattooNumber = d.tattooNumber;
+    if (d.weight !== undefined)             data.weight = d.weight;
+    if (d.vetName !== undefined)            data.vetName = d.vetName;
+    if (d.vetPhone !== undefined)           data.vetPhone = d.vetPhone;
+    if (d.allergies !== undefined)          data.allergies = d.allergies;
+    if (d.currentMedication !== undefined)  data.currentMedication = d.currentMedication;
+    if (d.behaviorWithDogs !== undefined)   data.behaviorWithDogs = d.behaviorWithDogs;
+    if (d.behaviorWithCats !== undefined)   data.behaviorWithCats = d.behaviorWithCats;
+    if (d.behaviorWithHumans !== undefined) data.behaviorWithHumans = d.behaviorWithHumans;
+    if (d.notes !== undefined)              data.notes = d.notes;
+    if (d.lastAntiparasiticDate !== undefined) {
+      data.lastAntiparasiticDate = d.lastAntiparasiticDate ? new Date(d.lastAntiparasiticDate) : null;
     }
-    if (gender && !VALID_GENDERS.includes(gender)) {
-      return NextResponse.json({ error: 'INVALID_GENDER' }, { status: 400 });
-    }
-    if (dateOfBirth !== undefined) {
-      const parsedDob = new Date(dateOfBirth);
-      if (isNaN(parsedDob.getTime()) || parsedDob > new Date()) {
-        return NextResponse.json({ error: 'INVALID_DATE_OF_BIRTH' }, { status: 400 });
-      }
-    }
-    if (weight !== undefined && weight !== null && (isNaN(Number(weight)) || Number(weight) <= 0)) {
-      return NextResponse.json({ error: 'INVALID_WEIGHT' }, { status: 400 });
+    if (d.antiparasiticProduct !== undefined) data.antiparasiticProduct = d.antiparasiticProduct;
+    if (d.antiparasiticNotes !== undefined)   data.antiparasiticNotes = d.antiparasiticNotes;
+    // Admin-only override
+    if (isAdmin && d.antiparasiticDurationDays !== undefined) {
+      data.antiparasiticDurationDays = d.antiparasiticDurationDays;
     }
 
     const updated = await prisma.pet.update({
       where: { id },
-      data: {
-        name: name ? String(name).trim().slice(0, 100) : undefined,
-        species,
-        breed: breed ? String(breed).trim().slice(0, 100) : null,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-        gender: gender || null,
-        photoUrl: photoUrl || null,
-        isNeutered: isNeutered ?? null,
-        microchipNumber: microchipNumber?.trim() || null,
-        tattooNumber: tattooNumber?.trim() || null,
-        weight: weight ? Number(weight) : null,
-        vetName: vetName?.trim() || null,
-        vetPhone: vetPhone?.trim() || null,
-        allergies: allergies?.trim() || null,
-        currentMedication: currentMedication?.trim() || null,
-        behaviorWithDogs: behaviorWithDogs || null,
-        behaviorWithCats: behaviorWithCats || null,
-        behaviorWithHumans: behaviorWithHumans || null,
-        notes: notes?.trim() || null,
-        lastAntiparasiticDate: lastAntiparasiticDate !== undefined
-          ? (lastAntiparasiticDate ? new Date(lastAntiparasiticDate) : null)
-          : undefined,
-        antiparasiticProduct: antiparasiticProduct !== undefined
-          ? (antiparasiticProduct?.trim() || null)
-          : undefined,
-        antiparasiticNotes: antiparasiticNotes !== undefined
-          ? (antiparasiticNotes?.trim() || null)
-          : undefined,
-        // Admin-only: duration override
-        ...(isAdmin && antiparasiticDurationDays !== undefined && {
-          antiparasiticDurationDays: antiparasiticDurationDays ? Math.max(1, Math.round(Number(antiparasiticDurationDays))) : null,
-        }),
-      },
+      data,
     });
 
     await logAction({

@@ -6,6 +6,7 @@ import { createBookingValidationNotification, createBookingRefusalNotification, 
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { formatDateShort } from '@/lib/utils';
+import { bookingClientCancelSchema, formatZodError } from '@/lib/validation';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -56,20 +57,19 @@ export async function PATCH(request: Request, { params }: Params) {
     if (booking.clientId !== session.user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
-    if (body.status !== 'CANCELLED') {
-      return NextResponse.json({ error: 'Clients can only cancel bookings' }, { status: 403 });
+    // Validation Zod stricte du body côté client (force status=CANCELLED + cancellationReason ≤ 500)
+    const parsed = bookingClientCancelSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(formatZodError(parsed.error), { status: 400 });
     }
     if (!['PENDING', 'CONFIRMED'].includes(booking.status)) {
       return NextResponse.json({ error: 'Cannot cancel this booking' }, { status: 400 });
     }
-    // Clients can ONLY set status to CANCELLED — no other field modification allowed
     const updated = await prisma.booking.update({
       where: { id },
       data: {
         status: 'CANCELLED',
-        cancellationReason: typeof body.cancellationReason === 'string'
-          ? body.cancellationReason.trim().slice(0, 500)
-          : null,
+        cancellationReason: parsed.data.cancellationReason ?? null,
       },
       include: { client: true, bookingPets: { include: { pet: true } } },
     });

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { vaccinationCreateSchema, vaccinationConfirmSchema, formatZodError } from '@/lib/validation';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -17,18 +18,18 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   try {
-    const { vaccineType, date, comment } = await request.json();
-
-    if (!vaccineType || !date) {
-      return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
+    const parsed = vaccinationCreateSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) {
+      return NextResponse.json(formatZodError(parsed.error), { status: 400 });
     }
+    const { vaccineType, date, comment } = parsed.data;
 
     const vaccination = await prisma.vaccination.create({
       data: {
         petId: id,
-        vaccineType: vaccineType.trim(),
+        vaccineType,
         date: new Date(date),
-        comment: comment?.trim() || null,
+        comment: comment ?? null,
         status: 'CONFIRMED',
       },
     });
@@ -54,19 +55,19 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   try {
-    const { vaccinationId, vaccineType, date, nextDueDate, comment } = await request.json();
-
-    if (!vaccinationId || !vaccineType?.trim() || !date) {
-      return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
+    const parsed = vaccinationConfirmSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) {
+      return NextResponse.json(formatZodError(parsed.error), { status: 400 });
     }
+    const { vaccinationId, vaccineType, date, nextDueDate, comment } = parsed.data;
 
     const vaccination = await prisma.vaccination.update({
       where: { id: vaccinationId, petId: id },
       data: {
-        vaccineType: String(vaccineType).trim(),
+        vaccineType,
         date: new Date(date),
         nextDueDate: nextDueDate ? new Date(nextDueDate) : null,
-        comment: comment?.trim() || null,
+        comment: comment ?? null,
         status: 'CONFIRMED',
       },
     });

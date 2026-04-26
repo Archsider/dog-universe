@@ -2,17 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { notifyAdminsExtensionRequest } from '@/lib/notifications';
+import { bookingExtensionRequestSchema, formatZodError } from '@/lib/validation';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await request.json();
-  const { requestedEndDate, note } = body as { requestedEndDate?: string; note?: string };
-
-  if (!requestedEndDate) {
-    return NextResponse.json({ error: 'requestedEndDate is required' }, { status: 400 });
+  const parsed = bookingExtensionRequestSchema.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json(formatZodError(parsed.error), { status: 400 });
   }
+  const { requestedEndDate, note } = parsed.data;
 
   const booking = await prisma.booking.findUnique({
     where: { id: params.id },

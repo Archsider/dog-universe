@@ -6,6 +6,7 @@ import { createBookingConfirmationNotification, notifyAdminsNewBooking } from '@
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
+import { bookingCreateSchema, formatZodError } from '@/lib/validation';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -46,7 +47,14 @@ export async function POST(request: Request) {
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const body = await request.json();
+    // Validation de FORME via Zod (types, enums, longueurs).
+    // Les règles métier (date passée, créneau taxi, ownership pets) restent
+    // ci-dessous car elles dépendent du rôle et de la DB.
+    const parsed = bookingCreateSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) {
+      return NextResponse.json(formatZodError(parsed.error), { status: 400 });
+    }
+    const body = parsed.data;
     const {
       serviceType,
       petIds,
@@ -56,12 +64,10 @@ export async function POST(request: Request) {
       notes,
       totalPrice,
       source,
-      // Boarding specific
       includeGrooming,
       groomingSize,
       groomingPrice,
       pricePerNight,
-      // Boarding taxi addon
       taxiGoEnabled,
       taxiGoDate,
       taxiGoTime,
@@ -71,19 +77,9 @@ export async function POST(request: Request) {
       taxiReturnTime,
       taxiReturnAddress,
       taxiAddonPrice,
-      // Taxi specific
       taxiType,
-      // Extra billable lines (admin only)
       bookingItems,
     } = body;
-
-    const VALID_SERVICE_TYPES = ['BOARDING', 'PET_TAXI'];
-    if (!serviceType || !VALID_SERVICE_TYPES.includes(serviceType)) {
-      return NextResponse.json({ error: 'INVALID_SERVICE_TYPE' }, { status: 400 });
-    }
-    if (!petIds?.length || !startDate) {
-      return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
-    }
 
     // Clients cannot book in the past (admins can for data entry)
     if (session.user.role === 'CLIENT') {

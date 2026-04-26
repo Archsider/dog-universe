@@ -3,15 +3,17 @@ import { randomUUID } from 'crypto';
 import { addHours } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { resetPasswordRequestSchema, resetPasswordConfirmSchema, formatZodError } from '@/lib/validation';
 
 export async function POST(request: Request) {
   try {
-    const { email, locale = 'fr' } = await request.json();
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
-      return NextResponse.json({ message: 'ok' }); // Always return ok to prevent enumeration
+    // Anti-enumeration : on parse en safeParse mais on retourne toujours { message: 'ok' }
+    // sans révéler les détails de validation.
+    const parsed = resetPasswordRequestSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) {
+      return NextResponse.json({ message: 'ok' });
     }
+    const { email, locale } = parsed.data;
 
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
 
@@ -47,11 +49,11 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { token, password } = await request.json();
-
-    if (!token || !password || password.length < 8) {
-      return NextResponse.json({ error: 'INVALID_INPUT' }, { status: 400 });
+    const parsed = resetPasswordConfirmSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) {
+      return NextResponse.json(formatZodError(parsed.error), { status: 400 });
     }
+    const { token, password } = parsed.data;
 
     const resetToken = await prisma.passwordResetToken.findUnique({
       where: { token },

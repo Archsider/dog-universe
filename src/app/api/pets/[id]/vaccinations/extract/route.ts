@@ -5,6 +5,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { readFile } from 'fs/promises';
 import path from 'path';
 import { createSignedUrl } from '@/lib/supabase';
+import { vaccinationExtractSchema, formatZodError } from '@/lib/validation';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -142,8 +143,11 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   try {
-    const { documentId } = await request.json();
-    if (!documentId) return NextResponse.json({ error: 'MISSING_DOCUMENT_ID' }, { status: 400 });
+    const parsed = vaccinationExtractSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) {
+      return NextResponse.json(formatZodError(parsed.error), { status: 400 });
+    }
+    const { documentId } = parsed.data;
 
     const doc = await prisma.petDocument.findUnique({
       where: { id: documentId, petId: id },

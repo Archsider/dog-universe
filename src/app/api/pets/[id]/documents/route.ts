@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { uploadFile } from '@/lib/upload';
+import { petDocumentNameSchema, formatZodError } from '@/lib/validation';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -20,16 +21,24 @@ export async function POST(request: Request, { params }: Params) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const name = formData.get('name') as string;
-
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+
+    // Validation Zod du champ name (string optionnel, max 255)
+    const rawName = formData.get('name');
+    const nameParse = petDocumentNameSchema.safeParse({
+      name: typeof rawName === 'string' ? rawName : undefined,
+    });
+    if (!nameParse.success) {
+      return NextResponse.json(formatZodError(nameParse.error), { status: 400 });
+    }
+    const finalName = nameParse.data.name?.trim() || file.name;
 
     const uploadResult = await uploadFile(file, 'document');
 
     const document = await prisma.petDocument.create({
       data: {
         petId: id,
-        name: name?.trim() || file.name,
+        name: finalName,
         fileUrl: uploadResult.url,
         storageKey: uploadResult.storageKey ?? null,
         fileType: uploadResult.mimeType,
