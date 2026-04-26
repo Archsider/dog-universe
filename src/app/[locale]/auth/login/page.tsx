@@ -69,6 +69,10 @@ export default function LoginPage() {
             src="/images/mascotte-debout.png"
             alt="Mascotte Dog Universe"
             className="h-28 w-auto object-contain mx-auto mb-6 drop-shadow-md mascotte-bounce"
+            style={{
+              animation: 'mascotteBounce 2s ease-in-out infinite',
+              transformOrigin: 'bottom center',
+            }}
           />
           <h1 className="text-2xl font-serif font-semibold text-charcoal">{t('title')}</h1>
           <p className="text-neutral-600 mt-1 text-sm">{t('subtitle')}</p>
