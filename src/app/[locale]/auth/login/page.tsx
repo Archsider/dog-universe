@@ -148,15 +148,14 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Mascotte assistant — APNG centré bas. Le drop-shadow crème (couleur
-          du fond #FAF6F0) fond les bords pixelisés/verts résiduels dans la
-          page — workaround pour les artefacts de compression APNG. */}
+      {/* Mascotte assistant — APNG centré bas. mix-blend-mode multiply
+          fond les pixels clairs résiduels dans le fond crème de la page. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/images/pixy_login.apng"
         alt="Mascotte Dog Universe"
         className="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-[280px] sm:w-[380px] h-auto"
-        style={{ filter: 'drop-shadow(0 0 8px rgba(253, 246, 238, 0.9))' }}
+        style={{ mixBlendMode: 'multiply' }}
       />
     </main>
   );
