@@ -77,10 +77,11 @@ export default function AnalyticsVolumeChart({ data, locale }: Props) {
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number, _name: string, props: { payload?: { sub?: string } }) => [
-            `${value} ${props.payload?.sub ?? ''}`,
-            '',
-          ]}
+          formatter={(value, _name, item) => {
+            const numeric = typeof value === 'number' ? value : Number(value ?? 0);
+            const payload = (item as { payload?: { sub?: string } } | undefined)?.payload;
+            return [`${numeric} ${payload?.sub ?? ''}`, ''];
+          }}
           cursor={{ fill: 'rgba(0,0,0,0.03)' }}
         />
         <Bar dataKey="value" radius={[0, 4, 4, 0]}>

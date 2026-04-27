@@ -31,14 +31,16 @@ export default function RevenueChart({ data, locale }: RevenueChartProps) {
         <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6B7280' }} />
         <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
         <Tooltip
-          formatter={(value: number, name: string) => {
+          formatter={(value, name) => {
             const labelMap: Record<string, string> = {
               boarding: l.boarding,
               taxi: l.taxi,
               grooming: l.grooming,
               croquettes: l.croquettes,
             };
-            return [formatValue(value), labelMap[name] ?? name];
+            const numeric = typeof value === 'number' ? value : Number(value ?? 0);
+            const key = typeof name === 'string' ? name : String(name ?? '');
+            return [formatValue(numeric), labelMap[key] ?? key];
           }}
           contentStyle={{ borderRadius: '8px', border: '1px solid #F0D98A', backgroundColor: '#FFFEF7' }}
         />

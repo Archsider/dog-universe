@@ -72,7 +72,10 @@ export default function AnalyticsBreakdownDonut({ data, locale }: Props) {
             ))}
           </Pie>
           <Tooltip
-            formatter={(value: number) => [`${Math.round(value).toLocaleString()} MAD`]}
+            formatter={(value) => {
+              const numeric = typeof value === 'number' ? value : Number(value ?? 0);
+              return [`${Math.round(numeric).toLocaleString()} MAD`];
+            }}
             contentStyle={tooltipStyle}
           />
         </PieChart>

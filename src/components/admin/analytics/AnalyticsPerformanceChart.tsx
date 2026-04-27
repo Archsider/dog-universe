@@ -99,10 +99,14 @@ export default function AnalyticsPerformanceChart({ data, lastYearData, locale }
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number, name: string) => [
-            `${Math.round(value).toLocaleString()} MAD`,
-            labels[name] ?? name,
-          ]}
+          formatter={(value, name) => {
+            const numeric = typeof value === 'number' ? value : Number(value ?? 0);
+            const key = typeof name === 'string' ? name : String(name ?? '');
+            return [
+              `${Math.round(numeric).toLocaleString()} MAD`,
+              labels[key] ?? key,
+            ];
+          }}
           cursor={{ stroke: 'rgba(0,0,0,0.08)', strokeWidth: 1 }}
         />
 
