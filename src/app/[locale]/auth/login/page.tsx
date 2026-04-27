@@ -156,13 +156,15 @@ export default function LoginPage() {
         className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] h-[120px] sm:w-[200px] sm:h-[200px] rounded-full overflow-hidden bg-[#FEFCF9] border-[3px] border-[#C4974A] shadow-[0_8px_24px_rgba(196,151,74,0.35)]"
       >
         <video
-          src="/images/mascotte.mp4"
           autoPlay
           loop
           muted
           playsInline
           className="block w-full h-full object-cover"
-        />
+        >
+          <source src="/images/mascotte.webm" type="video/webm" />
+          <source src="/images/mascotte.mp4" type="video/mp4" />
+        </video>
       </div>
     </main>
   );
