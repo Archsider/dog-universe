@@ -55,8 +55,8 @@ export default function TrackPage() {
     import('leaflet').then((L) => {
       if (cancelled) return;
       const icon = L.divIcon({
-        html: '<div style="width:52px;height:52px;border-radius:50%;border:2.5px solid #C4974A;background:white;box-shadow:0 2px 12px rgba(196,151,74,0.4);overflow:hidden;display:flex;align-items:center;justify-content:center;"><img src="/images/mascotte-assise.png" alt="" style="width:44px;height:44px;object-fit:contain;" /></div>',
-        className: 'mascotte-bounce',
+        html: '<div style="width:52px;height:52px;border-radius:50%;border:2.5px solid #C4974A;background:white;box-shadow:0 2px 12px rgba(196,151,74,0.4);overflow:hidden;display:flex;align-items:center;justify-content:center;"><video src="/images/mascotte.mp4" autoplay loop muted playsinline style="width:44px;height:44px;object-fit:cover;"></video></div>',
+        className: '',
         iconSize: [52, 52],
         iconAnchor: [26, 26],
       });

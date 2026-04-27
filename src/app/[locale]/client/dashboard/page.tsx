@@ -101,15 +101,14 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           <div className="w-10 h-[2px] bg-[#C4974A] mt-3 mx-auto sm:mx-0" />
           <p className="text-sm text-[#7A6E65] mt-3">{t('subtitle')}</p>
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/images/mascotte-debout.png"
-          alt="Mascotte Dog Universe"
-          className="hidden sm:block h-40 w-auto object-contain drop-shadow-lg flex-shrink-0 mascotte-wave"
-          style={{
-            animation: 'mascotteWave 1.5s ease-in-out infinite',
-            transformOrigin: 'bottom center',
-          }}
+        <video
+          src="/images/mascotte.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          aria-label="Mascotte Dog Universe"
+          className="hidden sm:block h-40 w-auto object-contain drop-shadow-lg flex-shrink-0"
         />
       </div>
 
