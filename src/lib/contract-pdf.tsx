@@ -1,10 +1,29 @@
 import React from 'react';
+import fs from 'fs';
 import path from 'path';
 import { renderToBuffer, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 
-const LOGO_PATH = path.resolve(process.cwd(), 'public', 'logo_rgba.png');
-// stamp.png est dans /private/ (PAS dans /public/) → jamais servi comme fichier statique
-const STAMP_PATH = path.resolve(process.cwd(), 'private', 'stamp.png');
+// Lire les assets au module-init :
+//   1. Path littéral → Vercel Node File Tracer les bundle dans la lambda
+//      (le path.resolve dynamique précédent était invisible pour NFT, d'où
+//      le bug PDF_GENERATION_FAILED en prod sur tous navigateurs)
+//   2. Évite un fs.readFileSync par requête PDF
+//   3. <Image src={Buffer}> est supporté nativement par @react-pdf/renderer v3
+//
+// Le fallback sur erreur évite de planter le module entier — si un asset
+// manque, le PDF est généré sans logo/cachet plutôt qu'aucun PDF du tout.
+let LOGO_BUFFER: Buffer | null = null;
+let STAMP_BUFFER: Buffer | null = null;
+try {
+  LOGO_BUFFER = fs.readFileSync(path.join(process.cwd(), 'public', 'logo_rgba.png'));
+} catch (err) {
+  console.error('[contract-pdf] logo_rgba.png introuvable:', err);
+}
+try {
+  STAMP_BUFFER = fs.readFileSync(path.join(process.cwd(), 'private', 'stamp.png'));
+} catch (err) {
+  console.error('[contract-pdf] stamp.png introuvable:', err);
+}
 
 const styles = StyleSheet.create({
   page: {
@@ -217,7 +236,9 @@ function ContractPDFDocument({ data }: { data: ContractPDFData }) {
         {/* Header */}
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Image src={LOGO_PATH} style={{ width: 44, height: 44, objectFit: 'contain' }} />
+            {LOGO_BUFFER && (
+              <Image src={LOGO_BUFFER} style={{ width: 44, height: 44, objectFit: 'contain' }} />
+            )}
             <View>
               <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: '#C9A84C' }}>DOG UNIVERSE</Text>
               <Text style={{ fontSize: 7.5, color: '#9CA3AF', marginTop: 2 }}>Pension & Services pour animaux — Marrakech</Text>
@@ -264,10 +285,12 @@ function ContractPDFDocument({ data }: { data: ContractPDFData }) {
           {/* Stamp / Cachet */}
           <View style={{ ...styles.signatureBox, alignItems: 'flex-end' }}>
             <Text style={styles.signatureLabel}>{`Cachet de l'établissement`}</Text>
-            <Image
-              src={STAMP_PATH}
-              style={styles.stampImg}
-            />
+            {STAMP_BUFFER && (
+              <Image
+                src={STAMP_BUFFER}
+                style={styles.stampImg}
+              />
+            )}
             <Text style={styles.metaInfo}>DOG UNIVERSE SARLAU</Text>
           </View>
         </View>

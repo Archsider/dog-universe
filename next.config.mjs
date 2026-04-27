@@ -39,6 +39,19 @@ const nextConfig = {
     serverComponentsExternalPackages: ['@react-pdf/renderer', 'sharp'],
     instrumentationHook: true,
   },
+  // Force Vercel/Next File Tracer à inclure les assets utilisés via fs.readFileSync
+  // dans le bundle des lambdas serverless — sans ça, les fichiers de public/private
+  // ne sont PAS copiés dans /var/task et toute lecture runtime échoue avec ENOENT
+  // (cause confirmée du bug PDF_GENERATION_FAILED prod).
+  outputFileTracingIncludes: {
+    '/api/contracts/sign': [
+      './public/logo_rgba.png',
+      './private/stamp.png',
+    ],
+    '/api/invoices/**': [
+      './public/logo_rgba.png',
+    ],
+  },
   async headers() {
     return [
       {

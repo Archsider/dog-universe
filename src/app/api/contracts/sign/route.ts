@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sharp from 'sharp';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { generateContractPDF } from '@/lib/contract-pdf';
@@ -61,23 +60,6 @@ export async function POST(req: NextRequest) {
 
   const signedAt = new Date();
 
-  // Normalise le PNG via sharp avant génération PDF.
-  // WebKit iOS produit parfois des PNG avec chunks iCCP/color profiles que la
-  // lib PNG interne de @react-pdf/renderer rejette → PDF_GENERATION_FAILED.
-  // sharp re-encode en PNG canonique, conserve l'alpha, strip les métadonnées.
-  let cleanedSignatureDataUrl: string;
-  try {
-    const base64 = signatureDataUrl.split(',')[1] ?? '';
-    const inputBuffer = Buffer.from(base64, 'base64');
-    const cleanedBuffer = await sharp(inputBuffer)
-      .png({ compressionLevel: 9, force: true })
-      .toBuffer();
-    cleanedSignatureDataUrl = `data:image/png;base64,${cleanedBuffer.toString('base64')}`;
-  } catch (err) {
-    console.error('Signature PNG normalization failed:', err);
-    return NextResponse.json({ error: 'INVALID_SIGNATURE_IMAGE' }, { status: 400 });
-  }
-
   // Generate PDF server-side
   let pdfBuffer: Buffer;
   try {
@@ -85,12 +67,26 @@ export async function POST(req: NextRequest) {
       clientName: client.name,
       clientEmail: client.email,
       signedAt,
-      signatureDataUrl: cleanedSignatureDataUrl,
+      signatureDataUrl,
       ipAddress,
       version: '1.0',
     });
   } catch (err) {
-    console.error('Contract PDF generation failed:', err);
+    // Logs structurés détaillés pour diagnostic prod — chaque échec doit être
+    // traçable depuis Sentry/Vercel logs sans avoir à reproduire localement.
+    const errInfo = err instanceof Error
+      ? {
+          name: err.name,
+          message: err.message,
+          stack: err.stack?.split('\n').slice(0, 5).join('\n'),
+        }
+      : { raw: String(err) };
+    console.error('[contracts/sign] PDF_GENERATION_FAILED', JSON.stringify({
+      clientId,
+      signatureLength: signatureDataUrl.length,
+      cwd: process.cwd(),
+      err: errInfo,
+    }));
     return NextResponse.json({ error: 'PDF_GENERATION_FAILED' }, { status: 500 });
   }
 
