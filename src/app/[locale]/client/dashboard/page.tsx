@@ -349,12 +349,10 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         )}
       </div>
 
-      {/* Mascotte assistant — fixed bottom-right (Salesforce style), wrappée
-          pour isoler le contexte de blend mode. darken = gray bg disparaît
-          sur fond crème. */}
+      {/* Mascotte assistant — badge circulaire bottom-right (style Salesforce Einstein) */}
       <div
-        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] sm:w-[200px] drop-shadow-lg"
-        style={{ isolation: 'isolate', background: 'transparent', overflow: 'hidden' }}
+        aria-label="Mascotte Dog Universe"
+        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] h-[120px] sm:w-[200px] sm:h-[200px] rounded-full overflow-hidden bg-[#FEFCF9] border-[3px] border-[#C4974A] shadow-[0_8px_24px_rgba(196,151,74,0.35)]"
       >
         <video
           src="/images/mascotte.mp4"
@@ -362,9 +360,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           loop
           muted
           playsInline
-          aria-label="Mascotte Dog Universe"
-          className="block w-full h-auto"
-          style={{ mixBlendMode: 'darken', background: 'transparent' }}
+          className="block w-full h-full object-cover"
         />
       </div>
     </div>
