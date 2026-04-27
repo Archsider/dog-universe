@@ -5,15 +5,6 @@ import Link from 'next/link';
 export default function NotFound() {
   return (
     <div className="min-h-screen bg-[#FEFCF9] flex flex-col items-center justify-center text-center px-4">
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="h-48 w-auto object-contain drop-shadow-lg mx-auto mb-6"
-      >
-        <source src="/images/mascotte.webm" type="video/webm" />
-      </video>
       <h1 className="font-serif text-8xl font-bold text-[#C4974A] mb-2">404</h1>
       <p className="text-[#7A6E65] text-lg mb-8">
         Cette page s&apos;est perdue en chemin…
@@ -24,6 +15,12 @@ export default function NotFound() {
       >
         ← Retour à l&apos;accueil
       </Link>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/images/pixy.apng"
+        alt="Mascotte Dog Universe"
+        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] sm:w-[200px] h-auto"
+      />
     </div>
   );
 }

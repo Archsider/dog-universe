@@ -148,14 +148,12 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Mascotte assistant — GIF + mix-blend-mode multiply pour fondre le
-          fond clair dans la page. */}
+      {/* Mascotte assistant — APNG (animation + transparence native). */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/images/mascotte.gif"
+        src="/images/pixy.apng"
         alt="Mascotte Dog Universe"
         className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] sm:w-[200px] h-auto"
-        style={{ mixBlendMode: 'multiply' }}
       />
     </main>
   );
