@@ -148,10 +148,13 @@ export default function TaxiTimeline({ trip, readOnly = false, locale }: Props) 
       {/* Horizontal timeline — connecteurs symétriques pour aligner tous les ronds */}
       <div className="flex items-start overflow-x-auto pb-1">
         {flow.map((step, idx) => {
-          const isDone    = currentIdx > idx;
-          const isActive  = currentIdx === idx;
           const isFirst   = idx === 0;
           const isLast    = idx === flow.length - 1;
+          // La dernière étape est terminale : dès qu'elle est atteinte, on la
+          // marque comme "done" (verte) plutôt que "active" (noire/pulsing) —
+          // il n'y a pas d'étape suivante à laquelle progresser.
+          const isDone    = currentIdx > idx || (isLast && currentIdx === idx);
+          const isActive  = currentIdx === idx && !isLast;
           const ts        = statusTimestamps[step];
           const label     = stepLabels[step];
 
