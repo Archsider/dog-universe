@@ -80,19 +80,9 @@ export async function middleware(request: NextRequest) {
     return new NextResponse(null, { status: 400 });
   }
 
-  // Block protocol-relative URL paths (//host) — open-redirect vector
-  // exploitable via next-intl redirect() (GHSA-8f24-v5vv-gm5j).
-  if (request.nextUrl.pathname.startsWith('//')) {
-    return new NextResponse(null, { status: 400 });
-  }
-
-  // Block ASCII control characters in pathname (TAB \x09, LF \x0a, CR \x0d, etc.)
-  // Browsers strip these before sending but next-intl preserves them, allowing
-  // attackers to bypass the // check above (GHSA-8f24-v5vv-gm5j mitigation).
-  // Full fix: upgrade next-intl to ≥ 4.9.1.
-  if (/[\x00-\x1f]/.test(request.nextUrl.pathname)) {
-    return new NextResponse(null, { status: 400 });
-  }
+  // Note: l'ancienne mitigation manuelle pour GHSA-8f24-v5vv-gm5j (open
+  // redirect via next-intl) a ete retiree — corrigee en amont dans
+  // next-intl >= 4.9.1.
 
   const path = request.nextUrl.pathname;
 
