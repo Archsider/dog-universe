@@ -79,3 +79,40 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm audit --audit-level=high
+
+  # E2E Playwright : exécuté APRÈS build + test mais ne bloque PAS le déploiement.
+  # Vercel déploie en parallèle dès le push sur main ; ce job vérifie a posteriori
+  # contre la prod (PLAYWRIGHT_BASE_URL=https://app.doguniverse.ma).
+  # Si un test échoue, l'équipe est notifiée mais le déploiement Vercel n'est pas bloqué.
+  e2e:
+    name: E2E (Playwright)
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_BASE_URL: https://app.doguniverse.ma
+      TEST_CLIENT_EMAIL: ${{ secrets.TEST_CLIENT_EMAIL }}
+      TEST_CLIENT_PASSWORD: ${{ secrets.TEST_CLIENT_PASSWORD }}
+      TEST_CLIENT_NAME: ${{ secrets.TEST_CLIENT_NAME }}
+      TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+      TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+      - name: Run Playwright tests
+        run: npx playwright test
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

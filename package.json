@@ -14,7 +14,9 @@
     "db:studio": "prisma studio",
     "setup": "npm install && npx prisma generate && npx prisma db push && npm run db:seed",
     "test": "vitest run",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.85.0",
@@ -79,6 +81,7 @@
     }
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.1",
     "@types/nodemailer": "^6.4.17",

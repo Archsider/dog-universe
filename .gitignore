@@ -15,6 +15,13 @@ build/
 .env
 .env.local
 .env.*.local
+.env.test
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # Database
 prisma/dev.db
