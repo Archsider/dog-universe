@@ -153,7 +153,7 @@ export default function LoginPage() {
       <img
         src="/images/pixy.apng"
         alt="Mascotte Dog Universe"
-        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] sm:w-[200px] h-auto"
+        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[160px] sm:w-[280px] h-auto"
       />
     </main>
   );
