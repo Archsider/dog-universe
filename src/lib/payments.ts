@@ -23,7 +23,7 @@ import { calculateSuggestedGrade } from '@/lib/loyalty';
 //   3 — Others
 // Preserves insertion order within each group.
 // ---------------------------------------------------------------------------
-function getItemAllocationPriority(description: string): number {
+export function getItemAllocationPriority(description: string): number {
   const d = description.toLowerCase();
   if (d.includes('taxi') && d.includes('aller')) return 0;
   if (
@@ -35,6 +35,59 @@ function getItemAllocationPriority(description: string): number {
   ) return 1;
   if (d.includes('taxi') && d.includes('retour')) return 2;
   return 3;
+}
+
+// ---------------------------------------------------------------------------
+// Pure allocation kernel — testable without DB
+// ---------------------------------------------------------------------------
+export interface AllocationItem {
+  id: string;
+  description: string;
+  total: number;
+}
+
+export interface AllocationResult {
+  id: string;
+  allocatedAmount: number;
+  status: 'PAID' | 'PARTIAL' | 'PENDING';
+}
+
+export function computeItemAllocation(
+  items: AllocationItem[],
+  totalPaid: number,
+): AllocationResult[] {
+  const sorted = [...items].sort(
+    (a, b) => getItemAllocationPriority(a.description) - getItemAllocationPriority(b.description),
+  );
+
+  let remaining = totalPaid;
+  return sorted.map(item => {
+    let allocatedAmount: number;
+    let status: 'PAID' | 'PARTIAL' | 'PENDING';
+
+    if (remaining >= item.total) {
+      allocatedAmount = item.total;
+      status = 'PAID';
+    } else if (remaining > 0) {
+      allocatedAmount = remaining;
+      status = 'PARTIAL';
+    } else {
+      allocatedAmount = 0;
+      status = 'PENDING';
+    }
+
+    remaining = Math.max(0, remaining - allocatedAmount);
+    return { id: item.id, allocatedAmount, status };
+  });
+}
+
+export function deriveInvoiceStatus(
+  paidAmount: number,
+  totalAmount: number,
+): 'PENDING' | 'PARTIALLY_PAID' | 'PAID' {
+  if (paidAmount <= 0) return 'PENDING';
+  if (paidAmount < totalAmount) return 'PARTIALLY_PAID';
+  return 'PAID';
 }
 
 // ---------------------------------------------------------------------------
@@ -68,48 +121,22 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
     // ── 2. Recompute paidAmount ──────────────────────────────────────────
     const paidAmount = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
 
-    // ── 3. Sort items by allocation priority ────────────────────────────
-    const sortedItems = [...invoice.items].sort(
-      (a, b) => getItemAllocationPriority(a.description) - getItemAllocationPriority(b.description)
-    );
+    // ── 3 & 4. Sort items and distribute payment across them ─────────────
+    const allocations = computeItemAllocation(invoice.items, paidAmount);
 
-    // ── 4. Distribute payment across items ──────────────────────────────
-    let remaining = paidAmount;
-
-    for (const item of sortedItems) {
-      let allocatedAmount: number;
-      let itemStatus: string;
-
-      if (remaining >= item.total) {
-        allocatedAmount = item.total;
-        itemStatus = 'PAID';
-      } else if (remaining > 0) {
-        allocatedAmount = remaining;
-        itemStatus = 'PARTIAL';
-      } else {
-        allocatedAmount = 0;
-        itemStatus = 'PENDING';
-      }
-
-      remaining = Math.max(0, remaining - allocatedAmount);
-
+    for (const { id, allocatedAmount, status: itemStatus } of allocations) {
       await tx.invoiceItem.update({
-        where: { id: item.id },
+        where: { id },
         data: { allocatedAmount, status: itemStatus },
       });
     }
 
     // ── 5. Derive invoice status ─────────────────────────────────────────
-    let newStatus: string;
+    let newStatus: string = deriveInvoiceStatus(paidAmount, invoice.amount);
     let paidAt = invoice.paidAt;
 
-    if (paidAmount <= 0) {
-      newStatus = 'PENDING';
-    } else if (paidAmount < invoice.amount) {
-      newStatus = 'PARTIALLY_PAID';
-    } else {
-      newStatus = 'PAID';
-      if (!paidAt) paidAt = new Date();
+    if (newStatus === 'PAID' && !paidAt) {
+      paidAt = new Date();
     }
 
     await tx.invoice.update({

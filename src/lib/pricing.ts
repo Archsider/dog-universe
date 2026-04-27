@@ -32,7 +32,7 @@ export interface PricingSettings {
   taxi_airport: number;
 }
 
-const PRICING_DEFAULTS: PricingSettings = {
+export const PRICING_DEFAULTS: PricingSettings = {
   boarding_dog_per_night: 120,
   boarding_cat_per_night: 70,
   boarding_dog_long_stay: 100,
