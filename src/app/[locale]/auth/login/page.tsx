@@ -148,17 +148,24 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Mascotte assistant — fixed bottom-right (Salesforce style) */}
-      <video
-        src="/images/mascotte.mp4"
-        autoPlay
-        loop
-        muted
-        playsInline
-        aria-label="Mascotte Dog Universe"
-        className="fixed bottom-4 right-4 w-20 sm:w-[120px] h-auto z-50 pointer-events-none drop-shadow-lg"
-        style={{ mixBlendMode: 'multiply' }}
-      />
+      {/* Mascotte assistant — fixed bottom-right (Salesforce style), wrappée pour
+          isoler le contexte de blend mode (sinon multiply ne s'applique pas
+          correctement sur <video>). darken = gray bg disparaît sur fond crème. */}
+      <div
+        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] sm:w-[200px] drop-shadow-lg"
+        style={{ isolation: 'isolate', background: 'transparent', overflow: 'hidden' }}
+      >
+        <video
+          src="/images/mascotte.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          aria-label="Mascotte Dog Universe"
+          className="block w-full h-auto"
+          style={{ mixBlendMode: 'darken', background: 'transparent' }}
+        />
+      </div>
     </main>
   );
 }
