@@ -35,10 +35,7 @@ const nextConfig = {
       },
     ],
   },
-  experimental: {
-    serverComponentsExternalPackages: ['@react-pdf/renderer', 'sharp'],
-    instrumentationHook: true,
-  },
+  serverExternalPackages: ['@react-pdf/renderer', 'sharp'],
   // Force Vercel/Next File Tracer à inclure les assets utilisés via fs.readFileSync
   // dans le bundle des lambdas serverless — sans ça, les fichiers de public/private
   // ne sont PAS copiés dans /var/task et toute lecture runtime échoue avec ENOENT
