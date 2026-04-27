@@ -349,20 +349,15 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         )}
       </div>
 
-      {/* Mascotte assistant — badge circulaire bottom-right (style Salesforce Einstein).
-          GIF animé + wrapper rond + bg matché à la page (#fdf6ee) pour cacher
-          le fond gris du GIF (workaround mécanique — clip + couleur). */}
-      <div
-        aria-label="Mascotte Dog Universe"
-        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] h-[120px] sm:w-[200px] sm:h-[200px] rounded-full overflow-hidden bg-[#fdf6ee] border-[3px] border-[#C4974A] shadow-[0_8px_24px_rgba(196,151,74,0.35)]"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/images/mascotte.gif"
-          alt=""
-          className="block w-full h-full object-cover"
-        />
-      </div>
+      {/* Mascotte assistant — GIF + mix-blend-mode multiply pour fondre le
+          fond clair dans la page. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/images/mascotte.gif"
+        alt="Mascotte Dog Universe"
+        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] sm:w-[200px] h-auto"
+        style={{ mixBlendMode: 'multiply' }}
+      />
     </div>
   );
 }
