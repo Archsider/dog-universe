@@ -10,8 +10,8 @@ import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
 import RecomputeAllocationsButton from '@/components/admin/RecomputeAllocationsButton';
 
 interface PageProps {
-  params: { locale: string };
-  searchParams: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{
     status?: string;
     page?: string;
     search?: string;
@@ -24,10 +24,12 @@ interface PageProps {
     sort?: string;
     order?: string;
     clientId?: string;
-  };
+  }>;
 }
 
-export default async function AdminBillingPage({ params: { locale }, searchParams }: PageProps) {
+export default async function AdminBillingPage(props: PageProps) {
+  const { locale } = await props.params;
+  const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 

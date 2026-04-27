@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { createLoyaltyClaimResultNotification } from '@/lib/notifications';
 
 // PATCH /api/admin/loyalty/claims/[id] — approve or reject a claim
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -19,7 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const claim = await prisma.loyaltyBenefitClaim.update({
-    where: { id: params.id },
+    where: { id: id },
     data: {
       status: action,
       rejectionReason: action === 'REJECTED' ? rejectionReason.trim() : null,

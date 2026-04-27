@@ -13,9 +13,10 @@ import {
   newClientsCount,
 } from '@/lib/metrics';
 
-interface PageProps { params: { locale: string } }
+interface PageProps { params: Promise<{ locale: string }> }
 
-export default async function AdminAnalyticsPage({ params: { locale } }: PageProps) {
+export default async function AdminAnalyticsPage({ params }: PageProps) {
+  const { locale } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN'))
     redirect(`/${locale}/auth/login`);

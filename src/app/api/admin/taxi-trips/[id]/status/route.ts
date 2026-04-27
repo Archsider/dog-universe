@@ -11,7 +11,8 @@ const FLOWS: Record<string, string[]> = {
 
 const TERMINAL = new Set(['ARRIVED_AT_PENSION', 'ARRIVED_AT_CLIENT']);
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role ?? '')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -21,7 +22,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const { nextStatus } = body;
 
   const trip = await prisma.taxiTrip.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     include: {
       booking: {
         select: {
@@ -47,9 +48,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 
   await prisma.$transaction([
-    prisma.taxiTrip.update({ where: { id: params.id }, data: { status: nextStatus } }),
+    prisma.taxiTrip.update({ where: { id: id }, data: { status: nextStatus } }),
     prisma.taxiStatusHistory.create({
-      data: { taxiTripId: params.id, status: nextStatus, updatedBy: session.user.id },
+      data: { taxiTripId: id, status: nextStatus, updatedBy: session.user.id },
     }),
   ]);
 

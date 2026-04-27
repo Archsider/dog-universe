@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma';
 import { createAdminMessageNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, { params }: Params) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   const booking = await prisma.booking.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     include: {
       client: { select: { id: true, name: true, email: true, language: true } },
     },

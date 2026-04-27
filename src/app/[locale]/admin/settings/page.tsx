@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import PricingForm from './PricingForm';
 import DangerZone from './DangerZone';
 
-interface PageProps { params: { locale: string } }
+interface PageProps { params: Promise<{ locale: string }> }
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   boarding_dog_per_night: '120',
@@ -21,7 +21,8 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   capacity_cat: '10',
 };
 
-export default async function AdminSettingsPage({ params: { locale } }: PageProps) {
+export default async function AdminSettingsPage({ params }: PageProps) {
+  const { locale } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 

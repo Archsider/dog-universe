@@ -16,7 +16,7 @@ import AutoRefresh from '@/components/shared/AutoRefresh';
 import RequestExtensionButton from './RequestExtensionButton';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 
-interface PageProps { params: { locale: string; id: string } }
+interface PageProps { params: Promise<{ locale: string; id: string }> }
 
 // Stepper steps par pipeline
 const BOARDING_STEPS = [
@@ -122,7 +122,8 @@ function BookingStepper({
   );
 }
 
-export default async function ClientBookingDetailPage({ params: { locale, id } }: PageProps) {
+export default async function ClientBookingDetailPage({ params }: PageProps) {
+  const { locale, id } = await params;
   const session = await auth();
   if (!session?.user) redirect(`/${locale}/auth/login`);
 

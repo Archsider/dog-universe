@@ -6,9 +6,10 @@ import { getInitials, formatDate } from '@/lib/utils';
 import ChangeRoleButton from './ChangeRoleButton';
 import ProductionResetPanel from './ProductionResetPanel';
 
-interface PageProps { params: { locale: string } }
+interface PageProps { params: Promise<{ locale: string }> }
 
-export default async function AdminUsersPage({ params: { locale } }: PageProps) {
+export default async function AdminUsersPage({ params }: PageProps) {
+  const { locale } = await params;
   const session = await auth();
   // SUPERADMIN only
   if (!session?.user || session.user.role !== 'SUPERADMIN') {

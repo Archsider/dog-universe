@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { FileText, Download, Calendar, CheckCircle2, Clock, Package, Car, Receipt } from 'lucide-react';
 import { formatDate, formatMAD } from '@/lib/utils';
 
-interface PageProps { params: { locale: string } }
+interface PageProps { params: Promise<{ locale: string }> }
 
-export default async function InvoicesPage({ params: { locale } }: PageProps) {
+export default async function InvoicesPage({ params }: PageProps) {
+  const { locale } = await params;
   const session = await auth();
   if (!session?.user) redirect(`/${locale}/auth/login`);
 

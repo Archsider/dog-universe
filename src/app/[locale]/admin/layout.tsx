@@ -7,10 +7,11 @@ import { prisma } from '@/lib/prisma';
 
 interface LayoutProps {
   children: React.ReactNode;
-  params: { locale: string };
+  params: Promise<{ locale: string }>;
 }
 
-export default async function AdminLayout({ children, params: { locale } }: LayoutProps) {
+export default async function AdminLayout({ children, params }: LayoutProps) {
+  const { locale } = await params;
   const session = await auth();
   if (!session?.user) redirect(`/${locale}/auth/login`);
   if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/client/dashboard`);

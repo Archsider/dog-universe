@@ -9,14 +9,15 @@ import {
   petVerb, petArrived, petChouchoute,
 } from '@/lib/sms';
 
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const booking = await prisma.booking.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     include: {
       client: { select: { id: true, name: true, email: true, phone: true } },
       bookingPets: { include: { pet: true } },
@@ -30,7 +31,8 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   return NextResponse.json(booking);
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -45,7 +47,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 
   const booking = await prisma.booking.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     include: {
       client: true,
       bookingPets: { include: { pet: true } },
@@ -72,25 +74,25 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ error: `Invalid fields: ${invalidKeys.join(', ')}` }, { status: 400 });
     }
     await prisma.boardingDetail.upsert({
-      where: { bookingId: params.id },
+      where: { bookingId: id },
       update: patch,
-      create: { bookingId: params.id, ...patch },
+      create: { bookingId: id, ...patch },
     });
     await logAction({
       userId: session.user.id,
       action: 'BOARDING_DETAIL_PATCHED',
       entityType: 'Booking',
-      entityId: params.id,
+      entityId: id,
       details: { patch },
     });
 
     // Create TaxiTrip for each enabled taxi leg (idempotent — skip if already exists)
-    const bd = await prisma.boardingDetail.findUnique({ where: { bookingId: params.id } });
+    const bd = await prisma.boardingDetail.findUnique({ where: { bookingId: id } });
     if (bd?.taxiGoEnabled) {
-      const exists = await prisma.taxiTrip.findFirst({ where: { bookingId: params.id, tripType: 'OUTBOUND' } });
+      const exists = await prisma.taxiTrip.findFirst({ where: { bookingId: id, tripType: 'OUTBOUND' } });
       if (!exists) {
         const t = await prisma.taxiTrip.create({
-          data: { bookingId: params.id, tripType: 'OUTBOUND', status: 'PLANNED',
+          data: { bookingId: id, tripType: 'OUTBOUND', status: 'PLANNED',
                   date: bd.taxiGoDate ?? undefined, time: bd.taxiGoTime ?? undefined,
                   address: bd.taxiGoAddress ?? undefined },
         });
@@ -103,10 +105,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
     if (bd?.taxiReturnEnabled) {
-      const exists = await prisma.taxiTrip.findFirst({ where: { bookingId: params.id, tripType: 'RETURN' } });
+      const exists = await prisma.taxiTrip.findFirst({ where: { bookingId: id, tripType: 'RETURN' } });
       if (!exists) {
         const t = await prisma.taxiTrip.create({
-          data: { bookingId: params.id, tripType: 'RETURN', status: 'PLANNED',
+          data: { bookingId: id, tripType: 'RETURN', status: 'PLANNED',
                   date: bd.taxiReturnDate ?? undefined, time: bd.taxiReturnTime ?? undefined,
                   address: bd.taxiReturnAddress ?? undefined },
         });
@@ -119,7 +121,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
 
-    const updated = await prisma.boardingDetail.findUnique({ where: { bookingId: params.id } });
+    const updated = await prisma.boardingDetail.findUnique({ where: { bookingId: id } });
     return NextResponse.json({ message: 'boarding_detail_patched', boardingDetail: updated });
   }
   // ── End patchBoardingDetail ───────────────────────────────────────────────
@@ -162,8 +164,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     await prisma.$transaction(async (tx) => {
       // Migrate photos and items from extension booking to original
-      await tx.stayPhoto.updateMany({ where: { bookingId: params.id }, data: { bookingId: originalBooking.id } });
-      await tx.bookingItem.updateMany({ where: { bookingId: params.id }, data: { bookingId: originalBooking.id } });
+      await tx.stayPhoto.updateMany({ where: { bookingId: id }, data: { bookingId: originalBooking.id } });
+      await tx.bookingItem.updateMany({ where: { bookingId: id }, data: { bookingId: originalBooking.id } });
 
       // Update invoice
       if (originalBooking.invoice && booking.invoice) {
@@ -201,7 +203,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       });
 
       // Delete the extension booking (cascades BookingPets, BoardingDetail, etc.)
-      await tx.booking.delete({ where: { id: params.id } });
+      await tx.booking.delete({ where: { id: id } });
     });
 
     const bookingRef = originalBooking.id.slice(0, 8).toUpperCase();
@@ -214,7 +216,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       action: 'EXTENSION_APPROVED',
       entityType: 'Booking',
       entityId: originalBooking.id,
-      details: { extensionBookingId: params.id, newEndDate: newEndDate.toISOString().slice(0, 10), newTotal },
+      details: { extensionBookingId: id, newEndDate: newEndDate.toISOString().slice(0, 10), newTotal },
     });
 
     return NextResponse.json({ message: 'extension_approved', originalBookingId: originalBooking.id, newTotal });
@@ -230,7 +232,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         await tx.invoiceItem.deleteMany({ where: { invoiceId: booking.invoice.id } });
         await tx.invoice.delete({ where: { id: booking.invoice.id } });
       }
-      await tx.booking.delete({ where: { id: params.id } });
+      await tx.booking.delete({ where: { id: id } });
 
       // Clear hasExtensionRequest flag on original booking
       if (originalBookingId) {
@@ -251,7 +253,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       userId: session.user.id,
       action: 'EXTENSION_REJECTED',
       entityType: 'Booking',
-      entityId: params.id,
+      entityId: id,
       details: { originalBookingId },
     });
 
@@ -300,7 +302,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     // Update booking and invoice
     await prisma.$transaction(async (tx) => {
       await tx.booking.update({
-        where: { id: params.id },
+        where: { id: id },
         data: { startDate: newStart, endDate: newEnd, totalPrice: newTotal },
       });
 
@@ -339,7 +341,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       userId: session.user.id,
       action: 'BOOKING_DATES_EDITED',
       entityType: 'Booking',
-      entityId: params.id,
+      entityId: id,
       details: { newStartDate: newStartStr, newEndDate: newEndStr, newNights, newTotal },
     });
 
@@ -360,7 +362,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         return NextResponse.json({ error: 'No pending extension request' }, { status: 400 });
       }
       await prisma.booking.update({
-        where: { id: params.id },
+        where: { id: id },
         data: {
           hasExtensionRequest: false,
           extensionRequestedEndDate: null,
@@ -374,7 +376,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         userId: session.user.id,
         action: 'EXTENSION_REJECTED',
         entityType: 'Booking',
-        entityId: params.id,
+        entityId: id,
         details: { bookingRef },
       });
       return NextResponse.json({ message: 'extension_rejected' });
@@ -450,7 +452,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
 
     await prisma.booking.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         endDate: newEndDate,
         totalPrice: newTotal,
@@ -469,7 +471,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       userId: session.user.id,
       action: body.approveExtension ? 'EXTENSION_APPROVED' : 'EXTENSION_DIRECT',
       entityType: 'Booking',
-      entityId: params.id,
+      entityId: id,
       details: { newEndDate: newEndDateStr, newTotal, invoiceWarning },
     });
 
@@ -478,7 +480,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   // ── End extension handling ────────────────────────────────────────────────────
 
   const updated = await prisma.booking.update({
-    where: { id: params.id },
+    where: { id: id },
     data: {
       ...(status && { status }),
       ...(notes !== undefined && { notes }),
@@ -527,12 +529,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
       // For PET_TAXI: ensure a STANDALONE TaxiTrip exists
       if (booking.serviceType === 'PET_TAXI') {
-        const existingTrip = await prisma.taxiTrip.findFirst({ where: { bookingId: params.id } });
+        const existingTrip = await prisma.taxiTrip.findFirst({ where: { bookingId: id } });
         if (!existingTrip) {
           const dateStr = booking.startDate.toISOString().slice(0, 10);
           const t = await prisma.taxiTrip.create({
             data: {
-              bookingId: params.id,
+              bookingId: id,
               tripType: 'STANDALONE',
               status: 'PLANNED',
               date: dateStr,
@@ -549,7 +551,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         userId: session.user.id,
         action: LOG_ACTIONS.BOOKING_CONFIRMED,
         entityType: 'Booking',
-        entityId: params.id,
+        entityId: id,
         details: { from: booking.status, to: status },
       });
     } else if (status === 'REJECTED' || status === 'CANCELLED') {
@@ -577,7 +579,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         userId: session.user.id,
         action: status === 'REJECTED' ? LOG_ACTIONS.BOOKING_REJECTED : LOG_ACTIONS.BOOKING_CANCELLED,
         entityType: 'Booking',
-        entityId: params.id,
+        entityId: id,
         details: { from: booking.status, to: status },
       });
     } else if (status === 'COMPLETED') {
@@ -605,7 +607,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         userId: session.user.id,
         action: LOG_ACTIONS.BOOKING_COMPLETED,
         entityType: 'Booking',
-        entityId: params.id,
+        entityId: id,
         details: { from: booking.status, to: status },
       });
 
@@ -661,7 +663,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         userId: session.user.id,
         action: 'BOOKING_IN_PROGRESS',
         entityType: 'Booking',
-        entityId: params.id,
+        entityId: id,
         details: { from: booking.status, to: status },
       });
     }
@@ -670,14 +672,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const booking = await prisma.booking.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     include: { invoice: { select: { id: true, status: true, invoiceNumber: true } } },
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -694,19 +697,19 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   await prisma.$transaction(async (tx) => {
     // BookingPets, BoardingDetail, TaxiDetail cascade from Booking
     // Invoice items cascade from Invoice
-    const invoice = await tx.invoice.findUnique({ where: { bookingId: params.id } });
+    const invoice = await tx.invoice.findUnique({ where: { bookingId: id } });
     if (invoice) {
       await tx.invoiceItem.deleteMany({ where: { invoiceId: invoice.id } });
       await tx.invoice.delete({ where: { id: invoice.id } });
     }
-    await tx.booking.delete({ where: { id: params.id } });
+    await tx.booking.delete({ where: { id: id } });
   });
 
   await logAction({
     userId: session.user.id,
     action: 'BOOKING_DELETED',
     entityType: 'Booking',
-    entityId: params.id,
+    entityId: id,
     details: { status: booking.status, clientId: booking.clientId },
   });
 

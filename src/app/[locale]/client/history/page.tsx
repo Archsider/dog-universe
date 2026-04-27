@@ -8,8 +8,8 @@ import { formatDate, formatMAD } from '@/lib/utils';
 import CancelBookingButton from './CancelBookingButton';
 
 interface PageProps {
-  params: { locale: string };
-  searchParams: { status?: string };
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ status?: string }>;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -32,7 +32,9 @@ const STATUS_ICONS: Record<string, React.ElementType> = {
   REJECTED:    XCircle,
 };
 
-export default async function HistoryPage({ params: { locale }, searchParams }: PageProps) {
+export default async function HistoryPage(props: PageProps) {
+  const { locale } = await props.params;
+  const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user) redirect(`/${locale}/auth/login`);
 

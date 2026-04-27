@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma';
 // Public endpoint — accédé via un token UUID partagé au client par l'admin.
 // Aucune session requise. Retourne uniquement les infos minimales
 // (nom client + animaux + dernière position) pour préserver la PII.
-export async function GET(_req: Request, { params }: { params: { token: string } }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
   const trip = await prisma.taxiTrip.findUnique({
-    where: { trackingToken: params.token },
+    where: { trackingToken: token },
     select: {
       trackingActive: true,
       booking: {

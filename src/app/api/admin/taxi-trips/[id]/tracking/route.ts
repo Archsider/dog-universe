@@ -28,14 +28,15 @@ function isValidNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role ?? '')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const trip = await prisma.taxiTrip.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     select: { id: true, trackingActive: true, trackingToken: true },
   });
   if (!trip) {
@@ -53,13 +54,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (body.action === 'start') {
     const trackingToken = trip.trackingToken ?? crypto.randomUUID();
     await prisma.taxiTrip.update({
-      where: { id: params.id },
+      where: { id: id },
       data: { trackingActive: true, trackingToken },
     });
 
     // Récupère les infos client pour envoyer le SMS de suivi (1 query, action rare)
     const tripWithClient = await prisma.taxiTrip.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       select: {
         booking: {
           select: {
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // ── stop ───────────────────────────────────────────────────────────────
   if (body.action === 'stop') {
     await prisma.taxiTrip.update({
-      where: { id: params.id },
+      where: { id: id },
       data: { trackingActive: false },
     });
     return NextResponse.json({ ok: true });
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     await prisma.taxiLocation.create({
       data: {
-        taxiTripId: params.id,
+        taxiTripId: id,
         latitude,
         longitude,
         heading: isValidNumber(heading) ? heading : null,
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     // Cleanup : ne garder que les MAX_LOCATIONS_PER_TRIP plus récentes
     const stale = await prisma.taxiLocation.findMany({
-      where: { taxiTripId: params.id },
+      where: { taxiTripId: id },
       orderBy: { createdAt: 'desc' },
       skip: MAX_LOCATIONS_PER_TRIP,
       select: { id: true },

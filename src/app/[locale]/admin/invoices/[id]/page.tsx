@@ -6,10 +6,11 @@ import { ChevronLeft } from 'lucide-react';
 import InvoiceDetailClient, { type InvoiceData } from '@/components/admin/InvoiceDetailClient';
 
 interface PageProps {
-  params: { locale: string; id: string };
+  params: Promise<{ locale: string; id: string }>;
 }
 
-export default async function InvoiceDetailPage({ params: { locale, id } }: PageProps) {
+export default async function InvoiceDetailPage({ params }: PageProps) {
+  const { locale, id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     redirect(`/${locale}/auth/login`);

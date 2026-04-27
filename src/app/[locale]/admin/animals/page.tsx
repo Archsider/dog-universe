@@ -7,11 +7,13 @@ import { calculateAge } from '@/lib/utils';
 import CreateAnimalModal from './CreateAnimalModal';
 
 interface PageProps {
-  params: { locale: string };
-  searchParams: { q?: string; species?: string };
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ q?: string; species?: string }>;
 }
 
-export default async function AdminAnimalsPage({ params: { locale }, searchParams }: PageProps) {
+export default async function AdminAnimalsPage(props: PageProps) {
+  const { locale } = await props.params;
+  const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 

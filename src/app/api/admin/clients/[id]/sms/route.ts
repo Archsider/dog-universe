@@ -7,7 +7,8 @@ import { logAction } from '@/lib/log';
 type SmsType = 'INCOMPLETE_FILE' | 'MISSING_VACCINES' | 'CONTRACT_REMINDER';
 const VALID_TYPES: SmsType[] = ['INCOMPLETE_FILE', 'MISSING_VACCINES', 'CONTRACT_REMINDER'];
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -21,7 +22,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   const client = await prisma.user.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     select: { name: true, phone: true, isWalkIn: true, role: true },
   });
 
@@ -42,7 +43,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (type === 'INCOMPLETE_FILE') {
     // Récupère le premier animal du client pour personnaliser le message
     const pet = await prisma.pet.findFirst({
-      where: { ownerId: params.id },
+      where: { ownerId: id },
       select: { name: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -62,7 +63,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     userId: session.user.id,
     action: 'SMS_SENT',
     entityType: 'User',
-    entityId: params.id,
+    entityId: id,
     details: { type, message, delivered: ok },
   });
 

@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { Shield, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface PageProps {
-  params: { locale: string };
-  searchParams: { page?: string; action?: string };
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ page?: string; action?: string }>;
 }
 
-export default async function AdminLogsPage({ params: { locale }, searchParams }: PageProps) {
+export default async function AdminLogsPage(props: PageProps) {
+  const { locale } = await props.params;
+  const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 

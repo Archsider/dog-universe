@@ -14,11 +14,13 @@ const TIER_STYLES: Record<string, { bg: string; text: string }> = {
 };
 
 interface PageProps {
-  params: { locale: string };
-  searchParams: { q?: string; grade?: string; page?: string };
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ q?: string; grade?: string; page?: string }>;
 }
 
-export default async function AdminClientsPage({ params: { locale }, searchParams }: PageProps) {
+export default async function AdminClientsPage(props: PageProps) {
+  const { locale } = await props.params;
+  const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 

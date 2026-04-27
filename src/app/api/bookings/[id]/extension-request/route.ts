@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { notifyAdminsExtensionRequest } from '@/lib/notifications';
 import { bookingExtensionRequestSchema, formatZodError } from '@/lib/validation';
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const { requestedEndDate, note } = parsed.data;
 
   const booking = await prisma.booking.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     include: { bookingPets: { include: { pet: true } } },
   });
 
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const extensionBooking = await prisma.$transaction(async (tx) => {
     // Mark original booking as having a pending extension
     await tx.booking.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         hasExtensionRequest: true,
         extensionRequestedEndDate: newEndDate,
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         totalPrice: 0,
         source: 'ONLINE',
         notes: note ? note.trim().slice(0, 500) : null,
-        extensionForBookingId: params.id,
+        extensionForBookingId: id,
         // Copy pets from original booking
         bookingPets: {
           create: booking.bookingPets.map(bp => ({ petId: bp.petId })),
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const clientName = client?.name ?? session.user.email ?? 'Client';
   const dateDisplay = newEndDate.toLocaleDateString('fr-MA');
 
-  await notifyAdminsExtensionRequest(bookingRef, clientName, petNames, dateDisplay, params.id).catch(() => {});
+  await notifyAdminsExtensionRequest(bookingRef, clientName, petNames, dateDisplay, id).catch(() => {});
 
   return NextResponse.json({ message: 'extension_request_submitted', extensionBookingId: extensionBooking.id });
 }

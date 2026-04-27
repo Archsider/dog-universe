@@ -8,11 +8,13 @@ import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import { ReservationsKanban, type KanbanBooking } from './ReservationsKanban';
 
 interface PageProps {
-  params: { locale: string };
-  searchParams: { status?: string; type?: string; page?: string; view?: string };
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ status?: string; type?: string; page?: string; view?: string }>;
 }
 
-export default async function AdminReservationsPage({ params: { locale }, searchParams }: PageProps) {
+export default async function AdminReservationsPage(props: PageProps) {
+  const { locale } = await props.params;
+  const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 

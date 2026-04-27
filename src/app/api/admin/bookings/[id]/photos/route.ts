@@ -5,16 +5,17 @@ import { uploadFile } from '@/lib/upload';
 import { createStayPhotoNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 export async function GET(_req: NextRequest, { params }: Params) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const photos = await prisma.stayPhoto.findMany({
-    where: { bookingId: params.id },
+    where: { bookingId: id },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -22,13 +23,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const booking = await prisma.booking.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     include: {
       client: { select: { id: true, name: true, email: true, language: true } },
       bookingPets: { include: { pet: { select: { name: true } } } },
@@ -47,7 +49,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const photo = await prisma.stayPhoto.create({
     data: {
-      bookingId: params.id,
+      bookingId: id,
       url: result.url,
       caption,
     },
@@ -72,6 +74,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(request: NextRequest, { params }: Params) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -80,7 +83,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   const { photoId } = await request.json();
   if (!photoId) return NextResponse.json({ error: 'photoId required' }, { status: 400 });
 
-  await prisma.stayPhoto.delete({ where: { id: photoId, bookingId: params.id } });
+  await prisma.stayPhoto.delete({ where: { id: photoId, bookingId: id } });
 
   return NextResponse.json({ success: true });
 }

@@ -4,14 +4,15 @@ import { prisma } from '@/lib/prisma';
 import { deleteFromPrivateStorage } from '@/lib/supabase';
 
 // DELETE /api/admin/contracts/[id] — delete a contract (forces client to re-sign)
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const contract = await prisma.clientContract.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     select: { id: true, storageKey: true },
   });
 
@@ -28,7 +29,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     }
   }
 
-  await prisma.clientContract.delete({ where: { id: params.id } });
+  await prisma.clientContract.delete({ where: { id: id } });
 
   return NextResponse.json({ success: true });
 }

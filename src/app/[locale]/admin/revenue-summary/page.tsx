@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma';
 import RevenueSummaryManager from './RevenueSummaryManager';
 import { AlertTriangle } from 'lucide-react';
 
-interface PageProps { params: { locale: string } }
+interface PageProps { params: Promise<{ locale: string }> }
 
-export default async function RevenueSummaryPage({ params: { locale } }: PageProps) {
+export default async function RevenueSummaryPage({ params }: PageProps) {
+  const { locale } = await params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     redirect(`/${locale}/auth/login`);
