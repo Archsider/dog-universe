@@ -13,8 +13,8 @@ export async function GET(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const booking = await prisma.booking.findUnique({
-    where: { id },
+  const booking = await prisma.booking.findFirst({
+    where: { id, deletedAt: null },
     include: {
       bookingPets: { include: { pet: { select: { id: true, name: true, species: true } } } },
       boardingDetail: true,

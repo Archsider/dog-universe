@@ -25,16 +25,16 @@ export async function POST(request: NextRequest) {
   }
 
   const [bookingA, bookingB] = await Promise.all([
-    prisma.booking.findUnique({
-      where: { id: targetBookingId },
+    prisma.booking.findFirst({
+      where: { id: targetBookingId, deletedAt: null },
       include: {
         invoice: true,
         boardingDetail: true,
         bookingPets: { include: { pet: { select: { id: true, name: true, species: true } } } },
       },
     }),
-    prisma.booking.findUnique({
-      where: { id: sourceBookingId },
+    prisma.booking.findFirst({
+      where: { id: sourceBookingId, deletedAt: null },
       include: {
         invoice: true,
         boardingDetail: true,

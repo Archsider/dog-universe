@@ -43,6 +43,7 @@ export default async function HistoryPage(props: PageProps) {
   const bookings = await prisma.booking.findMany({
     where: {
       clientId: session.user.id,
+      deletedAt: null,
       ...(statusFilter && {
       status: statusFilter === 'CANCELLED'
         ? { in: ['CANCELLED', 'REJECTED'] as const }
@@ -60,7 +61,7 @@ export default async function HistoryPage(props: PageProps) {
   });
 
   const allBookings = await prisma.booking.findMany({
-    where: { clientId: session.user.id },
+    where: { clientId: session.user.id, deletedAt: null },
     select: { status: true },
   });
   const counts: Record<string, number> = {};

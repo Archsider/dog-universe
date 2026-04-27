@@ -26,6 +26,7 @@ export default async function AdminReservationsPage(props: PageProps) {
   const skip = (page - 1) * limit;
 
   const where: Record<string, unknown> = {
+    deletedAt: null,
     ...(status && { status }),
     ...(type && { serviceType: type }),
   };
@@ -54,6 +55,7 @@ export default async function AdminReservationsPage(props: PageProps) {
 
     const raw = await prisma.booking.findMany({
       where: {
+        deletedAt: null,
         OR: [
           { status: { in: ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'] } },
           { status: 'COMPLETED', updatedAt: { gte: sevenDaysAgo } },

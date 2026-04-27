@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REJECTED'];
   const VALID_SERVICE_TYPES = ['BOARDING', 'PET_TAXI'];
 
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { deletedAt: null };
   if (status && VALID_STATUSES.includes(status)) where.status = status;
   if (serviceType && VALID_SERVICE_TYPES.includes(serviceType)) where.serviceType = serviceType;
 

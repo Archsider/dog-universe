@@ -114,7 +114,7 @@ export async function PATCH(request: Request, { params }: Params) {
       const user = await prisma.user.findUnique({ where: { id }, select: { historicalStays: true, historicalSpendMAD: true } });
       const [totalPaid, completedStays] = await Promise.all([
         prisma.invoice.aggregate({ where: { clientId: id, status: 'PAID' }, _sum: { amount: true } }),
-        prisma.booking.count({ where: { clientId: id, status: 'COMPLETED' } }),
+        prisma.booking.count({ where: { clientId: id, status: 'COMPLETED', deletedAt: null } }),
       ]);
       const totalStays = completedStays + (user?.historicalStays ?? 0);
       const totalRevenue = (totalPaid._sum.amount ?? 0) + (user?.historicalSpendMAD ?? 0);

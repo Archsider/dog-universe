@@ -17,7 +17,7 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
   if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/client/dashboard`);
 
   const [pendingCount, pendingClaimsCount] = await Promise.all([
-    prisma.booking.count({ where: { status: 'PENDING' } }),
+    prisma.booking.count({ where: { status: 'PENDING', deletedAt: null } }),
     prisma.loyaltyBenefitClaim.count({ where: { status: 'PENDING' } }),
   ]);
 

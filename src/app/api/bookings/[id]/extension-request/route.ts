@@ -15,8 +15,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   const { requestedEndDate, note } = parsed.data;
 
-  const booking = await prisma.booking.findUnique({
-    where: { id: id },
+  const booking = await prisma.booking.findFirst({
+    where: { id: id, deletedAt: null },
     include: { bookingPets: { include: { pet: true } } },
   });
 

@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const status = searchParams.get('status');
   const clientId = searchParams.get('clientId');
 
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { deletedAt: null };
 
   if (session.user.role === 'CLIENT') {
     where.clientId = session.user.id;
@@ -257,6 +257,7 @@ export async function POST(request: Request) {
           status: { notIn: ['CANCELLED', 'REJECTED', 'COMPLETED'] },
           endDate: { gte: dayBeforeStart, lte: dayBeforeEnd },
           bookingPets: { some: { petId: { in: petIds } } },
+          deletedAt: null,
         },
         include: {
           invoice: true,

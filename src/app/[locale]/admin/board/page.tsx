@@ -22,6 +22,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
 
   const bookings = await prisma.booking.findMany({
     where: {
+      deletedAt: null,
       OR: [
         { status: { in: ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'] } },
         { status: 'COMPLETED', updatedAt: { gte: sevenDaysAgo } },

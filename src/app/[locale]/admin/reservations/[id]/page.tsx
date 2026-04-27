@@ -26,8 +26,8 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
-  const booking = await prisma.booking.findUnique({
-    where: { id },
+  const booking = await prisma.booking.findFirst({
+    where: { id, deletedAt: null },
     include: {
       client: { select: { id: true, name: true, email: true, phone: true } },
       bookingPets: { include: { pet: true } },
@@ -100,12 +100,12 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       orderBy: { createdAt: 'desc' },
     }),
     prisma.booking.findFirst({
-      where: { extensionForBookingId: id, status: 'PENDING_EXTENSION' },
+      where: { extensionForBookingId: id, status: 'PENDING_EXTENSION', deletedAt: null },
       select: { id: true, startDate: true, endDate: true, totalPrice: true },
     }),
     booking.extensionForBookingId
-      ? prisma.booking.findUnique({
-          where: { id: booking.extensionForBookingId },
+      ? prisma.booking.findFirst({
+          where: { id: booking.extensionForBookingId, deletedAt: null },
           select: { id: true, startDate: true, endDate: true, totalPrice: true, status: true },
         })
       : Promise.resolve(null),
@@ -117,6 +117,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             serviceType: 'BOARDING',
             status: { notIn: ['CANCELLED', 'REJECTED'] },
             endDate: beforeWindow,
+            deletedAt: null,
           },
           include: { bookingPets: { include: { pet: true } } },
           orderBy: { startDate: 'desc' },
@@ -130,6 +131,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             serviceType: 'BOARDING',
             status: { notIn: ['CANCELLED', 'REJECTED'] },
             startDate: afterWindow,
+            deletedAt: null,
           },
           include: { bookingPets: { include: { pet: true } } },
           orderBy: { startDate: 'asc' },

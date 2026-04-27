@@ -259,6 +259,7 @@ export async function currentBoarders(): Promise<{
     status: 'IN_PROGRESS' as const,
     startDate: { lte: now },
     endDate: { gte: now },
+    deletedAt: null,
   };
   const [cat, dog] = await Promise.all([
     prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingFilter } }),
@@ -268,7 +269,7 @@ export async function currentBoarders(): Promise<{
 }
 
 export async function pendingBookingsCount(): Promise<number> {
-  return prisma.booking.count({ where: { status: 'PENDING' } });
+  return prisma.booking.count({ where: { status: 'PENDING', deletedAt: null } });
 }
 
 // excludeWalkIn is required — callers must be explicit about walk-in filtering.

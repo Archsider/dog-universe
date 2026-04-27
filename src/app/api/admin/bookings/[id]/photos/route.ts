@@ -29,8 +29,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const booking = await prisma.booking.findUnique({
-    where: { id: id },
+  const booking = await prisma.booking.findFirst({
+    where: { id: id, deletedAt: null },
     include: {
       client: { select: { id: true, name: true, email: true, language: true } },
       bookingPets: { include: { pet: { select: { name: true } } } },

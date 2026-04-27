@@ -18,8 +18,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Message required' }, { status: 400 });
   }
 
-  const booking = await prisma.booking.findUnique({
-    where: { id: id },
+  const booking = await prisma.booking.findFirst({
+    where: { id: id, deletedAt: null },
     include: {
       client: { select: { id: true, name: true, email: true, language: true } },
     },

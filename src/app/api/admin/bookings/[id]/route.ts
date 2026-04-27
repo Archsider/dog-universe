@@ -16,8 +16,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const booking = await prisma.booking.findUnique({
-    where: { id: id },
+  const booking = await prisma.booking.findFirst({
+    where: { id: id, deletedAt: null },
     include: {
       client: { select: { id: true, name: true, email: true, phone: true } },
       bookingPets: { include: { pet: true } },
@@ -46,8 +46,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
 
-  const booking = await prisma.booking.findUnique({
-    where: { id: id },
+  const booking = await prisma.booking.findFirst({
+    where: { id: id, deletedAt: null },
     include: {
       client: true,
       bookingPets: { include: { pet: true } },
@@ -132,8 +132,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'NO_ORIGINAL_BOOKING' }, { status: 400 });
     }
 
-    const originalBooking = await prisma.booking.findUnique({
-      where: { id: booking.extensionForBookingId },
+    const originalBooking = await prisma.booking.findFirst({
+      where: { id: booking.extensionForBookingId, deletedAt: null },
       include: { invoice: true, bookingPets: { include: { pet: true } }, boardingDetail: true, client: true },
     });
 
@@ -616,7 +616,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         const { calculateSuggestedGrade } = await import('@/lib/loyalty');
         const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
         const [totalStays, totalPaid, currentGrade] = await Promise.all([
-          prisma.booking.count({ where: { clientId: booking.clientId, status: 'COMPLETED' } }),
+          prisma.booking.count({ where: { clientId: booking.clientId, status: 'COMPLETED', deletedAt: null } }),
           prisma.invoice.aggregate({ where: { clientId: booking.clientId, status: 'PAID' }, _sum: { amount: true } }),
           prisma.loyaltyGrade.findUnique({ where: { clientId: booking.clientId } }),
         ]);
@@ -679,8 +679,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const booking = await prisma.booking.findUnique({
-    where: { id: id },
+  const booking = await prisma.booking.findFirst({
+    where: { id: id, deletedAt: null },
     include: { invoice: { select: { id: true, status: true, invoiceNumber: true } } },
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -694,16 +694,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     );
   }
 
-  await prisma.$transaction(async (tx) => {
-    // BookingPets, BoardingDetail, TaxiDetail cascade from Booking
-    // Invoice items cascade from Invoice
-    const invoice = await tx.invoice.findUnique({ where: { bookingId: id } });
-    if (invoice) {
-      await tx.invoiceItem.deleteMany({ where: { invoiceId: invoice.id } });
-      await tx.invoice.delete({ where: { id: invoice.id } });
-    }
-    await tx.booking.delete({ where: { id: id } });
-  });
+  await prisma.booking.update({ where: { id }, data: { deletedAt: new Date() } });
 
   await logAction({
     userId: session.user.id,

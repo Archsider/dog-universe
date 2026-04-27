@@ -29,6 +29,7 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
 
   const bookings = await prisma.booking.findMany({
     where: {
+      deletedAt: null,
       status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },
       startDate: { lte: lastDay },
       OR: [

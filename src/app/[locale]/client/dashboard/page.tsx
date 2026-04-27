@@ -26,6 +26,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
     prisma.booking.findMany({
       where: {
         clientId: session.user.id,
+        deletedAt: null,
         status: { in: ['PENDING', 'CONFIRMED'] },
         startDate: { gte: new Date() },
       },
@@ -52,7 +53,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
   ]);
 
   const [totalStays, totalSpent] = await Promise.all([
-    prisma.booking.count({ where: { clientId: session.user.id, status: 'COMPLETED' } }),
+    prisma.booking.count({ where: { clientId: session.user.id, status: 'COMPLETED', deletedAt: null } }),
     prisma.invoice.aggregate({ where: { clientId: session.user.id, status: 'PAID' }, _sum: { amount: true } }),
   ]);
 

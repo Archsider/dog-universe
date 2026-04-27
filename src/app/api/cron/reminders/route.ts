@@ -54,6 +54,7 @@ export async function GET(request: Request) {
       serviceType: 'BOARDING',
       status: 'CONFIRMED',
       startDate: { gte: rangeStart, lte: rangeEnd },
+      deletedAt: null,
     },
     include: {
       client: { select: { name: true, email: true, language: true, phone: true } },
@@ -157,6 +158,7 @@ export async function GET(request: Request) {
       serviceType: 'BOARDING',
       status: { in: ['IN_PROGRESS', 'CONFIRMED'] },
       endDate: { gte: rangeStart, lte: rangeEnd },
+      deletedAt: null,
     },
     include: {
       client: { select: { name: true, email: true, language: true, phone: true } },

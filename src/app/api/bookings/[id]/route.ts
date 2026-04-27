@@ -16,8 +16,8 @@ export async function GET(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const booking = await prisma.booking.findUnique({
-    where: { id },
+  const booking = await prisma.booking.findFirst({
+    where: { id, deletedAt: null },
     include: {
       client: { select: { id: true, name: true, email: true, language: true } },
       bookingPets: { include: { pet: true } },
@@ -42,8 +42,8 @@ export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params;
   const body = await request.json();
 
-  const booking = await prisma.booking.findUnique({
-    where: { id },
+  const booking = await prisma.booking.findFirst({
+    where: { id, deletedAt: null },
     include: {
       client: true,
       bookingPets: { include: { pet: true } },
