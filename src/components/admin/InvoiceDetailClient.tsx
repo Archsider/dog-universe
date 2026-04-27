@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Pencil, Trash2, Download, Eye, Loader2, Save, X, Plus,
-  Banknote, CreditCard, Receipt, Building2,
+  Banknote, CreditCard, Receipt, Building2, MessageSquare,
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { formatDate, formatMAD, getInvoiceStatusColor, getInitials } from '@/lib/utils';
@@ -142,6 +142,7 @@ export default function InvoiceDetailClient({
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [sendingSms, setSendingSms] = useState(false);
 
   // Edit form state
   const [editItems, setEditItems] = useState<EditItem[]>([]);
@@ -314,6 +315,29 @@ export default function InvoiceDetailClient({
     }
   };
 
+  const handleSendSms = async () => {
+    setSendingSms(true);
+    try {
+      const res = await fetch(`/api/admin/clients/${invoice.client.id}/sms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'INVOICE_AVAILABLE', invoiceId: invoice.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || (isFr ? 'Erreur serveur' : 'Server error'));
+      }
+      toast({ title: isFr ? 'SMS envoyé au client' : 'SMS sent to client', variant: 'success' });
+    } catch (e: unknown) {
+      toast({
+        title: e instanceof Error ? e.message : (isFr ? 'Erreur lors de l\'envoi' : 'Send failed'),
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingSms(false);
+    }
+  };
+
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -362,6 +386,23 @@ export default function InvoiceDetailClient({
               <Download className="h-3.5 w-3.5" />
               {isFr ? 'Télécharger' : 'Download'}
             </a>
+            <button
+              onClick={handleSendSms}
+              disabled={sendingSms || !invoice.client.phone || invoice.status === 'CANCELLED'}
+              title={
+                !invoice.client.phone
+                  ? (isFr ? 'Client sans téléphone' : 'No phone on file')
+                  : invoice.status === 'CANCELLED'
+                    ? (isFr ? 'Facture annulée' : 'Invoice cancelled')
+                    : undefined
+              }
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-ivory-200 rounded-lg text-gray-600 hover:border-gold-300 hover:text-gold-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {sendingSms
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <MessageSquare className="h-3.5 w-3.5" />}
+              {isFr ? 'Envoyer par SMS' : 'Send by SMS'}
+            </button>
             <button
               onClick={enterEdit}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-charcoal text-white rounded-lg hover:bg-charcoal/90 transition-colors"
