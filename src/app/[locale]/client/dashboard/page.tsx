@@ -362,7 +362,6 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           className="block w-full h-full object-cover"
         >
           <source src="/images/mascotte.webm" type="video/webm" />
-          <source src="/images/mascotte.mp4" type="video/mp4" />
         </video>
       </div>
     </div>

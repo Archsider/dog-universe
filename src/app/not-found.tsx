@@ -13,7 +13,6 @@ export default function NotFound() {
         className="h-48 w-auto object-contain drop-shadow-lg mx-auto mb-6"
       >
         <source src="/images/mascotte.webm" type="video/webm" />
-        <source src="/images/mascotte.mp4" type="video/mp4" />
       </video>
       <h1 className="font-serif text-8xl font-bold text-[#C4974A] mb-2">404</h1>
       <p className="text-[#7A6E65] text-lg mb-8">
