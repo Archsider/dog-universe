@@ -151,9 +151,9 @@ export default function LoginPage() {
       {/* Mascotte assistant — APNG (animation + transparence native). */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/images/pixy.apng"
+        src="/images/pixy_login.apng"
         alt="Mascotte Dog Universe"
-        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[160px] sm:w-[280px] h-auto"
+        className="fixed bottom-0 right-8 z-50 pointer-events-none w-[220px] sm:w-[320px] h-auto"
       />
     </main>
   );
