@@ -88,28 +88,17 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
-      {/* Greeting — mascotte debout en flex à droite (sm+), drop-shadow propre */}
-      <div className="flex justify-between items-end gap-4">
-        <div className="flex-1 text-center sm:text-left">
-          <p className="text-[10px] uppercase tracking-[2px] text-[#8A7E75]">
-            {locale === 'fr' ? 'Bonjour' : 'Hello'}
-          </p>
-          <h1 className="font-serif text-4xl font-bold text-[#1C1612] mt-1 leading-tight">
-            {firstName}
-            {lastName && <> <span className="italic text-[#C4974A]">{lastName}</span></>}
-          </h1>
-          <div className="w-10 h-[2px] bg-[#C4974A] mt-3 mx-auto sm:mx-0" />
-          <p className="text-sm text-[#7A6E65] mt-3">{t('subtitle')}</p>
-        </div>
-        <video
-          src="/images/mascotte.mp4"
-          autoPlay
-          loop
-          muted
-          playsInline
-          aria-label="Mascotte Dog Universe"
-          className="hidden sm:block h-40 w-auto object-contain drop-shadow-lg flex-shrink-0"
-        />
+      {/* Greeting */}
+      <div className="text-center sm:text-left">
+        <p className="text-[10px] uppercase tracking-[2px] text-[#8A7E75]">
+          {locale === 'fr' ? 'Bonjour' : 'Hello'}
+        </p>
+        <h1 className="font-serif text-4xl font-bold text-[#1C1612] mt-1 leading-tight">
+          {firstName}
+          {lastName && <> <span className="italic text-[#C4974A]">{lastName}</span></>}
+        </h1>
+        <div className="w-10 h-[2px] bg-[#C4974A] mt-3 mx-auto sm:mx-0" />
+        <p className="text-sm text-[#7A6E65] mt-3">{t('subtitle')}</p>
       </div>
 
       {/* Member Card — wrapper shadow + border doré */}
@@ -359,6 +348,18 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           </div>
         )}
       </div>
+
+      {/* Mascotte assistant — fixed bottom-right (Salesforce style) */}
+      <video
+        src="/images/mascotte.mp4"
+        autoPlay
+        loop
+        muted
+        playsInline
+        aria-label="Mascotte Dog Universe"
+        className="fixed bottom-4 right-4 w-20 sm:w-[120px] h-auto z-50 pointer-events-none drop-shadow-lg"
+        style={{ mixBlendMode: 'multiply' }}
+      />
     </div>
   );
 }

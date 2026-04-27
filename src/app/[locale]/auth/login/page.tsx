@@ -64,15 +64,6 @@ export default function LoginPage() {
           <Link href={`/${locale}`} className="inline-block mb-6">
             <Image src="/logo.png" alt="Dog Universe" width={160} height={44} className="h-12 w-auto object-contain mx-auto" priority />
           </Link>
-          <video
-            src="/images/mascotte.mp4"
-            autoPlay
-            loop
-            muted
-            playsInline
-            aria-label="Mascotte Dog Universe"
-            className="h-28 w-auto object-contain mx-auto mb-6 drop-shadow-md"
-          />
           <h1 className="text-2xl font-serif font-semibold text-charcoal">{t('title')}</h1>
           <p className="text-neutral-600 mt-1 text-sm">{t('subtitle')}</p>
         </div>
@@ -156,6 +147,18 @@ export default function LoginPage() {
           <LanguageSwitcher />
         </div>
       </div>
+
+      {/* Mascotte assistant — fixed bottom-right (Salesforce style) */}
+      <video
+        src="/images/mascotte.mp4"
+        autoPlay
+        loop
+        muted
+        playsInline
+        aria-label="Mascotte Dog Universe"
+        className="fixed bottom-4 right-4 w-20 sm:w-[120px] h-auto z-50 pointer-events-none drop-shadow-lg"
+        style={{ mixBlendMode: 'multiply' }}
+      />
     </main>
   );
 }
