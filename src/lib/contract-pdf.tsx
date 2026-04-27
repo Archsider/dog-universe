@@ -3,24 +3,27 @@ import fs from 'fs';
 import path from 'path';
 import { renderToBuffer, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 
-// Lire les assets au module-init :
-//   1. Path littéral → Vercel Node File Tracer les bundle dans la lambda
-//      (le path.resolve dynamique précédent était invisible pour NFT, d'où
-//      le bug PDF_GENERATION_FAILED en prod sur tous navigateurs)
-//   2. Évite un fs.readFileSync par requête PDF
-//   3. <Image src={Buffer}> est supporté nativement par @react-pdf/renderer v3
+// Lire les assets au module-init et les convertir en DATA URLS strings :
+//   1. Path littéral → Vercel Node File Tracer les bundle dans la lambda.
+//   2. Évite un fs.readFileSync par requête PDF.
+//   3. ⚠ <Image src={Buffer}> déclenche React error #31 dans @react-pdf/renderer
+//      v3.4.5 ("object with keys {$$typeof, type, key, ref, props}") — la
+//      reconciliation interne traite mal les Buffer Node. La signature client
+//      (data URL string) fonctionne, donc on aligne logo + cachet sur le même
+//      format pour cohérence et fiabilité éprouvée.
 //
-// Le fallback sur erreur évite de planter le module entier — si un asset
-// manque, le PDF est généré sans logo/cachet plutôt qu'aucun PDF du tout.
-let LOGO_BUFFER: Buffer | null = null;
-let STAMP_BUFFER: Buffer | null = null;
+// Si un asset manque, le PDF est généré sans logo/cachet plutôt qu'aucun PDF.
+let LOGO_DATA_URL: string | null = null;
+let STAMP_DATA_URL: string | null = null;
 try {
-  LOGO_BUFFER = fs.readFileSync(path.join(process.cwd(), 'public', 'logo_rgba.png'));
+  const buf = fs.readFileSync(path.join(process.cwd(), 'public', 'logo_rgba.png'));
+  LOGO_DATA_URL = `data:image/png;base64,${buf.toString('base64')}`;
 } catch (err) {
   console.error('[contract-pdf] logo_rgba.png introuvable:', err);
 }
 try {
-  STAMP_BUFFER = fs.readFileSync(path.join(process.cwd(), 'private', 'stamp.png'));
+  const buf = fs.readFileSync(path.join(process.cwd(), 'private', 'stamp.png'));
+  STAMP_DATA_URL = `data:image/png;base64,${buf.toString('base64')}`;
 } catch (err) {
   console.error('[contract-pdf] stamp.png introuvable:', err);
 }
@@ -236,8 +239,8 @@ function ContractPDFDocument({ data }: { data: ContractPDFData }) {
         {/* Header */}
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {LOGO_BUFFER && (
-              <Image src={LOGO_BUFFER} style={{ width: 44, height: 44, objectFit: 'contain' }} />
+            {LOGO_DATA_URL && (
+              <Image src={LOGO_DATA_URL} style={{ width: 44, height: 44, objectFit: 'contain' }} />
             )}
             <View>
               <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: '#C9A84C' }}>DOG UNIVERSE</Text>
@@ -285,9 +288,9 @@ function ContractPDFDocument({ data }: { data: ContractPDFData }) {
           {/* Stamp / Cachet */}
           <View style={{ ...styles.signatureBox, alignItems: 'flex-end' }}>
             <Text style={styles.signatureLabel}>{`Cachet de l'établissement`}</Text>
-            {STAMP_BUFFER && (
+            {STAMP_DATA_URL && (
               <Image
-                src={STAMP_BUFFER}
+                src={STAMP_DATA_URL}
                 style={styles.stampImg}
               />
             )}

@@ -59,11 +59,27 @@ export async function POST(req: NextRequest) {
     undefined;
 
   const signedAt = new Date();
+  const pdfStorageKey = `contracts/${clientId}.pdf`;
+  const signatureBackupKey = `contracts/${clientId}-signature.png`;
 
-  // Generate PDF server-side
-  let pdfBuffer: Buffer;
+  // ── ÉTAPE 1 : Backup de la signature brute (toujours, jamais bloquant) ─────
+  // Permet à l'admin de régénérer le PDF plus tard si la génération échoue.
+  // Un upload de buffer PNG via Supabase est ultra-stable (jamais vu échouer
+  // sauf si Supabase est down, auquel cas on est de toute façon bloqués plus loin).
   try {
-    pdfBuffer = await generateContractPDF({
+    const sigBuffer = Buffer.from(signatureDataUrl.split(',')[1] ?? '', 'base64');
+    await uploadBufferPrivate(sigBuffer, signatureBackupKey, 'image/png');
+  } catch (err) {
+    console.error('[contracts/sign] signature backup upload failed (non-fatal):', err);
+  }
+
+  // ── ÉTAPE 2 : Tentative de génération + upload du PDF (best-effort) ───────
+  // Si ça échoue, on continue quand même : le contrat sera enregistré en DB
+  // et le client débloqué. L'admin pourra régénérer le PDF a posteriori
+  // (la signature brute est sauvegardée à l'étape 1).
+  let pdfGenerated = false;
+  try {
+    const pdfBuffer = await generateContractPDF({
       clientName: client.name,
       clientEmail: client.email,
       signedAt,
@@ -71,9 +87,10 @@ export async function POST(req: NextRequest) {
       ipAddress,
       version: '1.0',
     });
+    await uploadBufferPrivate(pdfBuffer, pdfStorageKey, 'application/pdf');
+    pdfGenerated = true;
   } catch (err) {
-    // Logs structurés détaillés pour diagnostic prod — chaque échec doit être
-    // traçable depuis Sentry/Vercel logs sans avoir à reproduire localement.
+    // Logs structurés détaillés pour diagnostic prod
     const errInfo = err instanceof Error
       ? {
           name: err.name,
@@ -81,31 +98,25 @@ export async function POST(req: NextRequest) {
           stack: err.stack?.split('\n').slice(0, 5).join('\n'),
         }
       : { raw: String(err) };
-    console.error('[contracts/sign] PDF_GENERATION_FAILED', JSON.stringify({
+    console.error('[contracts/sign] PDF generation/upload failed (non-fatal — contract still saved)', JSON.stringify({
       clientId,
       signatureLength: signatureDataUrl.length,
       cwd: process.cwd(),
       err: errInfo,
     }));
-    return NextResponse.json({ error: 'PDF_GENERATION_FAILED' }, { status: 500 });
   }
 
-  // Upload to the PRIVATE Supabase Storage bucket
-  const storageKey = `contracts/${clientId}.pdf`;
-  try {
-    await uploadBufferPrivate(pdfBuffer, storageKey, 'application/pdf');
-  } catch (err) {
-    console.error('Contract storage upload failed:', err);
-    return NextResponse.json({ error: 'STORAGE_UPLOAD_FAILED' }, { status: 500 });
-  }
-
-  // Save contract record in DB — catch P2002 for concurrent signing race condition
+  // ── ÉTAPE 3 : Sauvegarde DB (TOUJOURS, même si PDF a échoué) ──────────────
+  // C'est le geste qui débloque l'accès portail du client. Le storageKey
+  // pointe vers le PDF attendu — s'il n'existe pas encore, createSignedUrl
+  // échouera proprement et le client verra le contrat signé sans bouton
+  // de téléchargement (acceptable, l'admin régénérera).
   try {
     await prisma.clientContract.create({
       data: {
         clientId,
         signedAt,
-        storageKey,
+        storageKey: pdfStorageKey,
         ipAddress,
         version: '1.0',
       },
@@ -117,16 +128,21 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
-  // Return a time-limited signed URL (1h) — never expose a permanent public URL
+  // ── ÉTAPE 4 : URL de téléchargement (uniquement si PDF généré) ────────────
   let downloadUrl: string | null = null;
-  try {
-    downloadUrl = await createSignedUrl(storageKey);
-  } catch (err) {
-    // Contract is saved — signed URL failure is non-critical, client can retrieve it later
-    console.error('Signed URL generation failed after contract save:', err);
+  if (pdfGenerated) {
+    try {
+      downloadUrl = await createSignedUrl(pdfStorageKey);
+    } catch (err) {
+      console.error('[contracts/sign] Signed URL generation failed after PDF upload:', err);
+    }
   }
 
-  return NextResponse.json({ success: true, downloadUrl });
+  return NextResponse.json({
+    success: true,
+    downloadUrl,
+    pdfPending: !pdfGenerated,
+  });
 }
 
 export async function GET() {

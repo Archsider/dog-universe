@@ -6,7 +6,7 @@ import { CheckCircle, FileText, AlertCircle } from 'lucide-react';
 
 interface ContractModalProps {
   clientName: string;
-  onSigned: (downloadUrl: string) => void;
+  onSigned: (downloadUrl: string | null) => void;
 }
 
 const CONTRACT_ARTICLES = [
