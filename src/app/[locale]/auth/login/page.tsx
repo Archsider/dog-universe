@@ -147,16 +147,6 @@ export default function LoginPage() {
           <LanguageSwitcher />
         </div>
       </div>
-
-      {/* Mascotte assistant — APNG centré bas. mix-blend-mode multiply
-          fond les pixels clairs résiduels dans le fond crème de la page. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/images/pixy_login.apng"
-        alt="Mascotte Dog Universe"
-        className="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-[280px] sm:w-[380px] h-auto"
-        style={{ mixBlendMode: 'multiply' }}
-      />
     </main>
   );
 }

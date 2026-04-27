@@ -348,16 +348,6 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           </div>
         )}
       </div>
-
-      {/* Mascotte assistant — APNG. mix-blend-mode multiply fond les pixels
-          clairs résiduels dans le fond crème de la page. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/images/pixy.apng"
-        alt="Mascotte Dog Universe"
-        className="fixed bottom-0 right-0 z-50 pointer-events-none w-[200px] sm:w-[300px] h-auto"
-        style={{ mixBlendMode: 'multiply' }}
-      />
     </div>
   );
 }

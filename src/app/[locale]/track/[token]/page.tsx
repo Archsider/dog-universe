@@ -55,10 +55,10 @@ export default function TrackPage() {
     import('leaflet').then((L) => {
       if (cancelled) return;
       const icon = L.divIcon({
-        html: '<div style="width:52px;height:52px;border-radius:50%;border:2.5px solid #C4974A;background:white;box-shadow:0 2px 12px rgba(196,151,74,0.4);overflow:hidden;display:flex;align-items:center;justify-content:center;"><img src="/images/pixy.apng" alt="" style="width:44px;height:44px;object-fit:cover;"></div>',
+        html: '<div style="width:24px;height:24px;border-radius:50%;border:3px solid white;background:#C4974A;box-shadow:0 2px 12px rgba(196,151,74,0.6);"></div>',
         className: '',
-        iconSize: [52, 52],
-        iconAnchor: [26, 26],
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
       });
       setCarIcon(icon);
     });
