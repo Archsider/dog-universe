@@ -149,21 +149,18 @@ export default function LoginPage() {
       </div>
 
       {/* Mascotte assistant — badge circulaire bottom-right (style Salesforce Einstein).
-          Le wrapper rond + overflow-hidden cache le fond gris du mp4 (les blend modes
-          CSS ne peuvent pas découper un fond uniforme — workaround mécanique). */}
+          GIF animé + wrapper rond + bg matché à la page (#fdf6ee) pour cacher
+          le fond gris du GIF (workaround mécanique — clip + couleur). */}
       <div
         aria-label="Mascotte Dog Universe"
-        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] h-[120px] sm:w-[200px] sm:h-[200px] rounded-full overflow-hidden bg-[#FEFCF9] border-[3px] border-[#C4974A] shadow-[0_8px_24px_rgba(196,151,74,0.35)]"
+        className="fixed bottom-4 right-4 z-50 pointer-events-none w-[120px] h-[120px] sm:w-[200px] sm:h-[200px] rounded-full overflow-hidden bg-[#fdf6ee] border-[3px] border-[#C4974A] shadow-[0_8px_24px_rgba(196,151,74,0.35)]"
       >
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/mascotte.gif"
+          alt=""
           className="block w-full h-full object-cover"
-        >
-          <source src="/images/mascotte.webm" type="video/webm" />
-        </video>
+        />
       </div>
     </main>
   );
