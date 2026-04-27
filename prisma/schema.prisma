@@ -150,6 +150,7 @@ model Booking {
   extensionRequestNote      String?
   // For PENDING_EXTENSION bookings: links back to the original booking being extended
   extensionForBookingId     String?
+  deletedAt   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -165,6 +166,7 @@ model Booking {
   @@index([clientId])
   @@index([status])
   @@index([startDate])
+  @@index([deletedAt])
 }
 
 model BookingPet {
