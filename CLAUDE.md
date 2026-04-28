@@ -192,11 +192,20 @@ Le `TYPE_CONFIG` dans cette page définit l'icône et la couleur par type — **
 Définis dans `vercel.json`, tous à **08h00 UTC** :
 | Route | Fréquence | Rôle |
 |---|---|---|
-| `/api/cron/reminders` | Quotidien | Rappels de séjour |
+| `/api/cron/reminders` | Quotidien | Rappels J-1 séjour (arrivée + départ) |
 | `/api/cron/birthday-notifications` | Quotidien | Notifications anniversaire des animaux |
+| `/api/cron/contract-reminders` | Lundi (hebdo) | Rappel signature contrat aux clients sans contrat |
 
 **Protection :** header `x-cron-secret` vérifié contre `CRON_SECRET` (déjà défini sur Vercel).
 Vercel l'injecte automatiquement via `Authorization: Bearer` pour ses propres crons.
+
+### Idempotence Redis (depuis 2026-04-28)
+Chaque cron est protégé par `acquireCronLock()` de `src/lib/cron-lock.ts` :
+- Lock key : `cron:{name}:{period}` — `YYYY-MM-DD` (daily) ou `YYYY-Www` (weekly, ISO)
+- `SET NX EX` atomique via Upstash Redis — premier appelant gagne
+- **Fail-open** : si Redis absent/down → retourne `true` (cron s'exécute quand même)
+- Défense en profondeur : déduplication par-entité dans le DB reste en place
+- Variables d'env requises : `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`
 
 ### Logique anniversaire
 - Requête SQL raw `EXTRACT(MONTH)` + `EXTRACT(DAY)` sur `Pet.dateOfBirth`
@@ -284,7 +293,97 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ---
 
+## VERSIONS STACK (2026-04-28)
+
+| Package | Version |
+|---|---|
+| Next.js | 15 (App Router, async params) |
+| React | 19 |
+| next-auth | 5.0.0-beta.25 (JWT, tokenVersion) |
+| Prisma | 5.22.0 |
+| next-intl | 4.9.2 (upgrade depuis 3.26 — GHSA-8f24) |
+| @upstash/redis | 1.36.3 |
+| @upstash/ratelimit | 2.0.8 |
+| date-fns | 4.1.0 |
+| Zod | 3.23.8 |
+| @sentry/nextjs | (configuré server + edge + client + instrumentation-client) |
+| Playwright | configuré, tests E2E non opérationnels (secrets manquants) |
+| Vitest | 4.1.5 (119 tests unitaires) |
+
+**Pattern Next.js 15 params** : toujours `params: Promise<{ locale: string }>` + `const { locale } = await params` (async — pattern obligatoire sur main).
+
+---
+
+## ACTIONS MANUELLES EN ATTENTE
+
+### 1. Migration SQL Supabase — capacity defaults
+Exécuter dans le SQL Editor de Supabase :
+```sql
+INSERT INTO "Setting" ("key", "value", "updatedAt")
+VALUES ('capacity_dog', '20', NOW()), ('capacity_cat', '10', NOW())
+ON CONFLICT ("key") DO NOTHING;
+```
+Fichier : `prisma/migrations/20260428_capacity_defaults/migration.sql`
+Note : les clés existent déjà avec valeur `'50'` dans `DEFAULT_SETTINGS` du code → ce seed évite le fallback hardcodé de 50.
+
+### 2. Variables d'env Vercel à ajouter
+- `UPSTASH_REDIS_REST_URL` — URL REST Upstash
+- `UPSTASH_REDIS_REST_TOKEN` — token Upstash
+Sans ces vars, le cron-lock est fail-open (crons s'exécutent, déduplication DB seule).
+
+### 3. Secrets GitHub pour E2E Playwright
+Ajouter dans Settings → Secrets and variables → Actions :
+- `TEST_CLIENT_EMAIL` / `TEST_CLIENT_PASSWORD` / `TEST_CLIENT_NAME`
+- `TEST_ADMIN_EMAIL` / `TEST_ADMIN_PASSWORD`
++ Créer le compte client de test dans la DB de production.
+Jusqu'à présent : les 3 specs E2E échouent avec `Variable d'environnement TEST_ADMIN_EMAIL manquante` — comportement attendu, pas un bug code.
+
+---
+
+## RISQUES CONNUS ET STATUT
+
+| Risque | Statut | Impact |
+|---|---|---|
+| Capacity `excludeBookingId` non câblé | OUVERT | Un admin qui prolonge un séjour verra sa propre réservation compter dans l'occupancy — faux positif possible. À câbler dans l'endpoint d'extension de réservation. |
+| E2E Playwright non opérationnel | OUVERT | CI passe (tests skippés), mais couverture e2e absente en prod |
+| Migration `20260405_private_storage` | À vérifier | Contrats PDF privés — si pas exécutée, contrats encore publics |
+| Soft-delete User/Pet | DÉFÉRÉ | Booking soft-delete (`deletedAt`) est en place ; User/Pet délibérément déféré |
+
+---
+
+## CAPACITÉ PENSION — ARCHITECTURE (depuis 2026-04-28)
+
+### `src/lib/capacity.ts`
+- `getCapacityLimits()` — lit `capacity_dog` / `capacity_cat` dans `Setting` (défauts : 20/10)
+- `countOverlappingPets(species, window, options)` — compte les animaux actifs sur une fenêtre de dates via `bookingPets` join
+- `checkBoardingCapacity({ petIds, startDate, endDate, excludeBookingId? })` — orchestre les deux
+
+### Règles métier
+- Statuts comptant dans l'occupancy : `PENDING`, `CONFIRMED`, `IN_PROGRESS` (un PENDING non encore validé réserve quand même la place)
+- Overlap : `startDate <= window.endDate AND endDate >= window.startDate`
+- Erreur API : `CAPACITY_EXCEEDED` → 400 avec `{ species, available, requested, limit }`
+- Client : toast "La pension est complète pour ces dates" (fr/en)
+- `excludeBookingId` : prévu pour extensions de séjour (non câblé actuellement)
+
+---
+
 ## HISTORIQUE ET DÉCISIONS CLÉS
+
+### 2026-04-28 — Session capacité + sécurité + cron idempotence
+
+**4 commits sur main :**
+
+1. **`feat(capacity)` b048aed** — `src/lib/capacity.ts` + check dans `POST /api/bookings` + toast client `CAPACITY_EXCEEDED` + migration SQL seed `capacity_dog=20 / capacity_cat=10`. PENDING compte dans l'occupancy (prévention race condition).
+
+2. **`fix(rgpd)` b5110f3** — Sentry : `sendDefaultPii: false` sur tous les configs (server, edge, client, instrumentation-client) + `beforeSend` filtrant `event.user.email`, `event.user.ip_address`, `request.headers.cookie/authorization`, `request.cookies` sur server + edge.
+
+3. **`security` aa65550** — Suppression de `src/app/api/admin/bootstrap-superadmin/route.ts` (privilege escalation endpoint — permettait de créer un SUPERADMIN via POST non authentifié, conditionné à `NODE_ENV !== 'production'` mais risque réel).
+
+4. **`feat(cron)` 9336123** — `src/lib/cron-lock.ts` (Redis SET NX EX, fail-open) + guard sur les 3 crons (`reminders`, `birthday-notifications`, `contract-reminders`).
+
+**Décisions techniques :**
+- Clés capacity conservées `capacity_dog` / `capacity_cat` (existantes dans UI/dashboard) plutôt que renommées `capacity.maxDogs` (aurait cassé les pages analytics/settings)
+- Fail-open sur Redis : meilleure UX (rappel manqué < lock raté) — déduplication DB = filet de sécurité
 
 ### 2026-04-05 — Session audit sécurité Supabase
 
