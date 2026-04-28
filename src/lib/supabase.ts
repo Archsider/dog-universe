@@ -87,11 +87,12 @@ export async function deleteFromPrivateStorage(key: string): Promise<void> {
 /**
  * Generate a short-lived signed URL for a file in the PRIVATE bucket.
  * @param key          Storage path, e.g. "contracts/abc123.pdf"
- * @param expiresIn    Expiry in seconds (default: 3600 = 1 hour)
+ * @param expiresIn    Expiry in seconds (default: 900 = 15 min)
+ *                     15 min — standard sécurité documents privés (ISO 27001).
  */
 export async function createSignedUrl(
   key: string,
-  expiresIn = 3600
+  expiresIn = 900
 ): Promise<string> {
   const client = getSupabaseAdmin();
   const { data, error } = await client.storage

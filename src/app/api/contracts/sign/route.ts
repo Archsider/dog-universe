@@ -140,23 +140,35 @@ export async function GET() {
 
   const contract = await prisma.clientContract.findUnique({
     where: { clientId },
-    select: { signedAt: true, storageKey: true, version: true },
+    select: { id: true, signedAt: true, storageKey: true, version: true },
   });
 
   if (!contract) {
     return NextResponse.json({ contract: null });
   }
 
-  // Generate a fresh signed URL valid for 1 hour
+  // Generate a fresh signed URL — default 15 min (createSignedUrl default).
+  const ttlSeconds = 900;
   let downloadUrl: string | null = null;
-  try {
-    downloadUrl = await createSignedUrl(contract.storageKey);
-  } catch (err) {
-    console.error('Signed URL generation failed:', err);
-    // Return contract metadata without download URL rather than 500
+  let expiresAt: string | null = null;
+  if (contract.storageKey) {
+    try {
+      downloadUrl = await createSignedUrl(contract.storageKey, ttlSeconds);
+      expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+    } catch (err) {
+      console.error('Signed URL generation failed:', err);
+      // Return contract metadata without download URL rather than 500.
+      // Client falls back to GET /api/contracts/[id]/signed-url on demand.
+    }
   }
 
   return NextResponse.json({
-    contract: { signedAt: contract.signedAt, downloadUrl, version: contract.version },
+    contract: {
+      id: contract.id,
+      signedAt: contract.signedAt,
+      downloadUrl,
+      expiresAt,
+      version: contract.version,
+    },
   });
 }

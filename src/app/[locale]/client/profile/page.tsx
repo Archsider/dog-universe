@@ -17,8 +17,10 @@ interface UserProfile {
 }
 
 interface ContractInfo {
+  id: string;
   signedAt: string;
-  downloadUrl: string;
+  downloadUrl: string | null;
+  expiresAt: string | null;
   version: string;
 }
 
@@ -38,6 +40,8 @@ export default function ProfilePage() {
   const [form, setForm] = useState({ name: '', phone: '' });
   const [pwForm, setPwForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const [contract, setContract] = useState<ContractInfo | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [contractError, setContractError] = useState('');
 
   const labels = {
     fr: {
@@ -112,6 +116,55 @@ export default function ProfilePage() {
       setProfileError(l.error);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDownloadContract = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!contract) return;
+    const buffer = 60_000; // 60s buffer before expiry — avoids tail-end races
+    const fresh = !!(
+      contract.downloadUrl &&
+      contract.expiresAt &&
+      new Date(contract.expiresAt).getTime() > Date.now() + buffer
+    );
+    if (fresh) return; // Let browser follow the existing href in a new tab
+
+    e.preventDefault();
+    if (downloading) return;
+    setDownloading(true);
+    setContractError('');
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+
+    try {
+      const res = await fetch(`/api/contracts/${contract.id}/signed-url`, {
+        signal: controller.signal,
+      });
+      if (res.status === 401) {
+        window.location.href = `/${locale}/auth/login?next=/${locale}/client/profile`;
+        return;
+      }
+      if (!res.ok) {
+        setContractError(
+          locale === 'fr'
+            ? 'Document temporairement indisponible — réessayez dans quelques minutes.'
+            : 'Document temporarily unavailable — please retry in a few minutes.',
+        );
+        return;
+      }
+      const data = (await res.json()) as { url: string; expiresAt: string };
+      setContract({ ...contract, downloadUrl: data.url, expiresAt: data.expiresAt });
+      window.location.assign(data.url);
+    } catch {
+      setContractError(
+        locale === 'fr'
+          ? 'Document temporairement indisponible — réessayez dans quelques minutes.'
+          : 'Document temporarily unavailable — please retry in a few minutes.',
+      );
+    } finally {
+      clearTimeout(timer);
+      setDownloading(false);
     }
   };
 
@@ -195,28 +248,43 @@ export default function ProfilePage() {
           </h2>
         </div>
         {contract ? (
-          <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-green-800">
-                {locale === 'fr' ? 'Contrat signé' : 'Contract signed'}
-              </p>
-              <p className="text-xs text-green-600 mt-0.5">
-                {locale === 'fr' ? 'Le' : 'On'}{' '}
-                {new Date(contract.signedAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
-                  year: 'numeric', month: 'long', day: 'numeric',
-                })}
-                {' — '}v{contract.version}
-              </p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-green-800">
+                  {locale === 'fr' ? 'Contrat signé' : 'Contract signed'}
+                </p>
+                <p className="text-xs text-green-600 mt-0.5">
+                  {locale === 'fr' ? 'Le' : 'On'}{' '}
+                  {new Date(contract.signedAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
+                    year: 'numeric', month: 'long', day: 'numeric',
+                  })}
+                  {' — '}v{contract.version}
+                </p>
+              </div>
+              <a
+                href={contract.downloadUrl ?? '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleDownloadContract}
+                aria-busy={downloading}
+                aria-disabled={downloading}
+                className={`flex items-center gap-2 text-sm font-medium text-green-700 hover:text-green-900 underline ${downloading ? 'opacity-60 pointer-events-none' : ''}`}
+              >
+                {downloading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {locale === 'fr' ? 'Télécharger' : 'Download'}
+              </a>
             </div>
-            <a
-              href={contract.downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-sm font-medium text-green-700 hover:text-green-900 underline"
-            >
-              <Download className="h-4 w-4" />
-              {locale === 'fr' ? 'Télécharger' : 'Download'}
-            </a>
+            {contractError && (
+              <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                <AlertCircle className="h-4 w-4" />
+                {contractError}
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-sm text-gray-500">
