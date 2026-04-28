@@ -7,6 +7,7 @@ import { NotificationBell } from '@/components/shared/NotificationBell';
 import { getUnreadCount } from '@/lib/notifications';
 import { prisma } from '@/lib/prisma';
 import { ContractGate } from '@/components/contract/ContractGate';
+import { SessionWatcher } from '@/components/shared/SessionWatcher';
 
 type Params = { locale: string };
 
@@ -68,6 +69,7 @@ export default async function ClientLayout({
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             </div>
+            <SessionWatcher loginPath={`/${locale}/auth/login`} />
             <div className="relative z-10">{children}</div>
           </main>
         </div>

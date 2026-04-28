@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { AdminSidebar } from '@/components/layout/AdminSidebar';
 import { AdminNotificationBell } from '@/components/layout/AdminNotificationBell';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
+import { SessionWatcher } from '@/components/shared/SessionWatcher';
 import { prisma } from '@/lib/prisma';
 
 interface LayoutProps {
@@ -45,6 +46,7 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           </div>
+          <SessionWatcher loginPath={`/${locale}/auth/login`} />
           <div className="relative z-10">{children}</div>
         </main>
       </div>

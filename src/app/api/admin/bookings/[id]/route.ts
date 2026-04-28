@@ -509,7 +509,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         startDate: startDateFmt,
         endDate: endDateFmt,
       }, userLang, pets);
-      await sendEmail({ to: booking.client.email, subject, html });
+      sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
 
       // SMS client confirmation — accord genre/pluriel
       const dateRange = booking.serviceType === 'BOARDING' && booking.endDate
@@ -565,7 +565,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         bookingRef,
         petName: petNames,
       }, userLang, pets);
-      await sendEmail({ to: booking.client.email, subject, html });
+      sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
 
       // SMS client annulation + SMS admin alerte
       await sendSMS(

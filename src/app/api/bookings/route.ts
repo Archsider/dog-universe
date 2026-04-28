@@ -147,7 +147,7 @@ export async function POST(request: Request) {
     // Verify pets belong to this client
     if (session.user.role === 'CLIENT') {
       const pets = await prisma.pet.findMany({
-        where: { id: { in: petIds }, ownerId: session.user.id },
+        where: { id: { in: petIds }, ownerId: session.user.id, deletedAt: null },
       });
       if (pets.length !== petIds.length) {
         return NextResponse.json({ error: 'INVALID_PETS' }, { status: 400 });

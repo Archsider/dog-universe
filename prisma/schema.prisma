@@ -75,8 +75,9 @@ model Pet {
   antiparasiticProduct     String?
   antiparasiticNotes       String?
   antiparasiticDurationDays Int?    // Admin-only override (days). Null = use product default.
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // Soft-delete — null = active, non-null = archived
 
   owner         User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   vaccinations  Vaccination[]
@@ -85,6 +86,7 @@ model Pet {
   weightEntries PetWeightEntry[]
 
   @@index([ownerId])
+  @@index([deletedAt])
 }
 
 model PetWeightEntry {

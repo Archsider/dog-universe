@@ -9,7 +9,7 @@ export async function GET() {
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const pets = await prisma.pet.findMany({
-    where: { ownerId: session.user.id },
+    where: { ownerId: session.user.id, deletedAt: null },
     select: {
       id: true, ownerId: true, name: true, species: true, breed: true,
       dateOfBirth: true, gender: true, photoUrl: true,

@@ -16,7 +16,7 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
   const t = await getTranslations('pets');
 
   const pets = await prisma.pet.findMany({
-    where: { ownerId: session.user.id },
+    where: { ownerId: session.user.id, deletedAt: null },
     select: {
       id: true,
       name: true,

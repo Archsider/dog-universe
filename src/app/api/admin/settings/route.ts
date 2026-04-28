@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   boarding_dog_per_night: '120',
@@ -61,6 +62,13 @@ export async function PUT(request: Request) {
       })
     )
   );
+
+  await logAction({
+    userId: session.user.id,
+    action: LOG_ACTIONS.SETTINGS_UPDATED,
+    entityType: 'Setting',
+    details: Object.fromEntries(updates),
+  });
 
   return NextResponse.json({ ok: true });
 }

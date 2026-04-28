@@ -19,7 +19,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
   const [pets, upcomingBookings, recentInvoices, loyaltyGrade, myClaims] = await Promise.all([
     prisma.pet.findMany({
-      where: { ownerId: session.user.id },
+      where: { ownerId: session.user.id, deletedAt: null },
       select: { id: true, name: true, species: true, breed: true, photoUrl: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     }),

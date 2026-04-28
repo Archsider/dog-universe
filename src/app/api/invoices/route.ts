@@ -174,7 +174,7 @@ export async function POST(request: Request) {
         invoiceNumber,
         amount: formatMAD(amount),
       }, locale);
-      await sendEmail({ to: client.email, subject, html });
+      sendEmail({ to: client.email, subject, html }).catch(() => {});
     }
 
     await logAction({
