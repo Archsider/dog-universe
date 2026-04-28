@@ -168,6 +168,9 @@ model Booking {
   @@index([clientId])
   @@index([status])
   @@index([startDate])
+  @@index([endDate])
+  @@index([createdAt])
+  @@index([serviceType])
   @@index([deletedAt])
 }
 
@@ -180,6 +183,7 @@ model BookingPet {
   pet     Pet     @relation(fields: [petId], references: [id])
 
   @@unique([bookingId, petId])
+  @@index([petId])
   @@index([bookingId])
 }
 
@@ -312,6 +316,7 @@ model Invoice {
 
   @@index([clientId])
   @@index([status])
+  @@index([createdAt])
   @@index([supplementaryForBookingId])
 }
 
@@ -368,6 +373,8 @@ model Notification {
 
   @@index([userId])
   @@index([read])
+  @@index([createdAt])
+  @@index([userId, read]) // Hot path : compteur de notifications non lues
 }
 
 model LoyaltyGrade {
