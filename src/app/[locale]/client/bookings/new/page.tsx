@@ -150,6 +150,7 @@ export default function NewBookingPage() {
       selectAtLeastOne: 'Sélectionnez au moins un animal',
       fillAllFields: 'Veuillez remplir tous les champs obligatoires',
       checkOutAfterCheckIn: 'La date de départ doit être après la date d\'arrivée',
+      capacityFull: 'La pension est complète pour ces dates. Veuillez choisir d\'autres dates ou nous contacter.',
     },
     en: {
       title: 'New booking',
@@ -211,6 +212,7 @@ export default function NewBookingPage() {
       selectAtLeastOne: 'Select at least one pet',
       fillAllFields: 'Please fill in all required fields',
       checkOutAfterCheckIn: 'Check-out must be after check-in',
+      capacityFull: 'The boarding is fully booked for these dates. Please pick different dates or contact us.',
     },
   };
 
@@ -395,6 +397,10 @@ export default function NewBookingPage() {
         }
         if (err.error === 'INVALID_TIME_SLOT') {
           toast({ title: l.invalidTime, variant: 'destructive' });
+          return;
+        }
+        if (err.error === 'CAPACITY_EXCEEDED') {
+          toast({ title: l.capacityFull, variant: 'destructive' });
           return;
         }
         throw new Error('Failed');

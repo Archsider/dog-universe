@@ -7,6 +7,7 @@ import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
 import { bookingCreateSchema, formatZodError } from '@/lib/validation';
+import { checkBoardingCapacity } from '@/lib/capacity';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -150,6 +151,27 @@ export async function POST(request: Request) {
       });
       if (pets.length !== petIds.length) {
         return NextResponse.json({ error: 'INVALID_PETS' }, { status: 400 });
+      }
+    }
+
+    // Capacity check — boarding only; taxi has no overnight slot.
+    if (serviceType === 'BOARDING') {
+      const capacity = await checkBoardingCapacity({
+        petIds,
+        startDate: new Date(startDate),
+        endDate: endDate ? new Date(endDate) : null,
+      });
+      if (!capacity.ok) {
+        return NextResponse.json(
+          {
+            error: 'CAPACITY_EXCEEDED',
+            species: capacity.species,
+            available: capacity.available,
+            requested: capacity.requested,
+            limit: capacity.limit,
+          },
+          { status: 400 },
+        );
       }
     }
 
