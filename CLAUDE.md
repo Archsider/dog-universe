@@ -346,7 +346,7 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | Risque | Statut | Impact |
 |---|---|---|
 | Capacity `excludeBookingId` non câblé | OUVERT | Un admin qui prolonge un séjour verra sa propre réservation compter dans l'occupancy — faux positif possible. À câbler dans l'endpoint d'extension de réservation. |
-| E2E Playwright non opérationnel | OUVERT (skip gracieux) | CI passe (tests skippent via `test.skip()`), couverture e2e absente tant que secrets non configurés |
+| E2E Playwright | RÉSOLU | Secrets GitHub configurés, tests opérationnels en CI |
 | Migration `20260405_private_storage` | À vérifier | Contrats PDF privés — si pas exécutée, contrats encore publics |
 | Soft-delete User/Pet | DÉFÉRÉ | Booking soft-delete (`deletedAt`) est en place ; User/Pet délibérément déféré |
 
