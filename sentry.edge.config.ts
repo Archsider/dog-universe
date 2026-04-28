@@ -13,6 +13,15 @@ Sentry.init({
       delete event.user.email;
       delete event.user.ip_address;
     }
+    if (event.request?.headers) {
+      delete event.request.headers.cookie;
+      delete event.request.headers.Cookie;
+      delete event.request.headers.authorization;
+      delete event.request.headers.Authorization;
+    }
+    if (event.request?.cookies) {
+      delete event.request.cookies;
+    }
     return event;
   },
 });
