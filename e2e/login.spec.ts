@@ -1,7 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { getClientCreds, loginAsClient } from './helpers/auth';
+import { e2eSecretsAvailable, getClientCreds, loginAsClient } from './helpers/auth';
 
 test.describe('Login — happy path', () => {
+  test.beforeEach(() => {
+    test.skip(!e2eSecretsAvailable(), 'Secrets TEST_CLIENT_* non configurés — skip e2e login');
+  });
+
   test('se connecter en tant que CLIENT redirige vers le dashboard', async ({ page }) => {
     const creds = getClientCreds();
 

@@ -1,19 +1,28 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 export type Credentials = {
   email: string;
   password: string;
 };
 
-function requireEnv(name: string): string {
+export function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) {
-    throw new Error(
-      `Variable d'environnement ${name} manquante. ` +
-      `Renseigne-la dans .env.test (local) ou dans les secrets GitHub Actions (CI).`,
-    );
+    test.skip(true, `Secret ${name} manquant — configure-le dans .env.test (local) ou dans les secrets GitHub Actions (CI).`);
+    return ''; // unreachable after test.skip, satisfies TS
   }
   return v;
+}
+
+/** Returns true if all e2e secrets are set — use in test.skip guards. */
+export function e2eSecretsAvailable(): boolean {
+  return !!(
+    process.env.TEST_CLIENT_EMAIL &&
+    process.env.TEST_CLIENT_PASSWORD &&
+    process.env.TEST_CLIENT_NAME &&
+    process.env.TEST_ADMIN_EMAIL &&
+    process.env.TEST_ADMIN_PASSWORD
+  );
 }
 
 export function getClientCreds(): Credentials & { name: string } {

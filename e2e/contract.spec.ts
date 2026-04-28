@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { getAdminCreds, getClientCreds, resetClientContract } from './helpers/auth';
+import { e2eSecretsAvailable, getAdminCreds, getClientCreds, resetClientContract } from './helpers/auth';
 
 // Test de non-régression critique : signature de contrat de pension.
 // Cas réel : Rita a été bloquée 3h en prod après un upgrade Next.js qui a cassé
@@ -8,6 +8,8 @@ import { getAdminCreds, getClientCreds, resetClientContract } from './helpers/au
 
 test.describe('Contract signing — happy path', () => {
   test.beforeEach(async ({ request, baseURL }) => {
+    test.skip(!e2eSecretsAvailable(), 'Secrets TEST_* non configurés — skip e2e contract');
+
     // Reset du contrat avant chaque run pour rendre le test idempotent
     expect(baseURL).toBeTruthy();
     await resetClientContract(

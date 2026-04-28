@@ -107,6 +107,13 @@ jobs:
         run: npx playwright install chromium --with-deps
       - name: Run Playwright tests
         run: npx playwright test
+        env:
+          PLAYWRIGHT_BASE_URL: https://app.doguniverse.ma
+          TEST_CLIENT_EMAIL: ${{ secrets.TEST_CLIENT_EMAIL }}
+          TEST_CLIENT_PASSWORD: ${{ secrets.TEST_CLIENT_PASSWORD }}
+          TEST_CLIENT_NAME: ${{ secrets.TEST_CLIENT_NAME }}
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
       - name: Upload Playwright artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
