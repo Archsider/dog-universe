@@ -19,4 +19,15 @@ Sentry.init({
 
   // Don't send errors in development
   enabled: process.env.NODE_ENV === 'production',
+
+  // RGPD : pas d'envoi de PII (IP, headers, cookies)
+  sendDefaultPii: false,
+
+  beforeSend(event) {
+    if (event.user) {
+      delete event.user.email;
+      delete event.user.ip_address;
+    }
+    return event;
+  },
 });
