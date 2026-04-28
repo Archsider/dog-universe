@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendSMS } from '@/lib/sms';
+import { acquireCronLock } from '@/lib/cron-lock';
 
 // GET /api/cron/birthday-notifications
 // Called daily by Vercel Cron (see vercel.json) or any cron scheduler.
@@ -14,6 +15,12 @@ export async function GET(req: NextRequest) {
   }
   if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Idempotency: short-circuit if the cron already ran today.
+  const acquired = await acquireCronLock('birthday-notifications', 23 * 3600, 'daily');
+  if (!acquired) {
+    return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
 
   // Find all pets born today (day + month match regardless of year)

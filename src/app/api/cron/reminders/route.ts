@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
 import { sendSMS, sendAdminSMS, petPossessive } from '@/lib/sms';
+import { acquireCronLock } from '@/lib/cron-lock';
 
 /**
  * POST /api/cron/reminders
@@ -20,6 +21,12 @@ export async function GET(request: Request) {
   }
   if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Idempotency: short-circuit if the cron already ran today.
+  const acquired = await acquireCronLock('reminders', 23 * 3600, 'daily');
+  if (!acquired) {
+    return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
 
   const now = new Date();

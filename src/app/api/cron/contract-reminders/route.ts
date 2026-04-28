@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendSMS } from '@/lib/sms';
+import { acquireCronLock } from '@/lib/cron-lock';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
 
@@ -11,6 +12,12 @@ export async function GET(req: NextRequest) {
 
   if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Idempotency: short-circuit if the weekly cron already ran this ISO week.
+  const acquired = await acquireCronLock('contract-reminders', 6 * 24 * 3600, 'weekly');
+  if (!acquired) {
+    return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
 
   const unsigned = await prisma.user.findMany({
