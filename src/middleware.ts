@@ -86,26 +86,46 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
-  // Rate limiting — fail-open: if Upstash is unavailable, log and continue
-  // (blocking all requests due to a Redis outage would be worse than skipping rate limiting)
+  // Rate limiting — FAIL-CLOSED: if Upstash is unavailable on a rate-limited
+  // route, return 429 immediately. A security control that fails open is no
+  // control at all; we'd rather take a brief availability hit than silently
+  // remove brute-force protection during a Redis outage.
   if (limiter) {
-    try {
-      const ip =
-        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-        request.headers.get('x-real-ip') ||
-        '127.0.0.1';
+    const ip =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      '127.0.0.1';
 
-      const exactKey = RATE_LIMITED_ROUTES[path];
-      const dynamicKey = exactKey ? null : getDynamicLimitBucket(path);
-      const isAdminMutation =
-        path.startsWith('/api/admin/') && ADMIN_MUTATION_METHODS.has(request.method);
+    const exactKey = RATE_LIMITED_ROUTES[path];
+    const dynamicKey = exactKey ? null : getDynamicLimitBucket(path);
+    const isAdminMutation =
+      path.startsWith('/api/admin/') && ADMIN_MUTATION_METHODS.has(request.method);
 
-      const limitKey = exactKey ?? dynamicKey ?? (isAdminMutation ? 'adminMutation' : null);
+    const limitKey = exactKey ?? dynamicKey ?? (isAdminMutation ? 'adminMutation' : null);
 
-      // Routes exactes + dynamiques : POST seulement (mutations).
-      // Admin : toutes méthodes mutantes (déjà filtré par isAdminMutation).
-      if (limitKey && ((exactKey || dynamicKey) ? request.method === 'POST' : true)) {
-        const { success, limit, remaining, reset } = await limiter[limitKey].limit(ip);
+    // Routes exactes + dynamiques : POST seulement (mutations).
+    // Admin : toutes méthodes mutantes (déjà filtré par isAdminMutation).
+    if (limitKey && ((exactKey || dynamicKey) ? request.method === 'POST' : true)) {
+      try {
+        const result = await limiter[limitKey].limit(ip);
+
+        // Validate the response shape — a malformed payload from Upstash should
+        // never be interpreted as "allowed".
+        if (
+          !result ||
+          typeof result.success !== 'boolean' ||
+          typeof result.limit !== 'number' ||
+          typeof result.remaining !== 'number' ||
+          typeof result.reset !== 'number'
+        ) {
+          console.error('[middleware] rate-limit malformed response, fail-closed:', result);
+          return NextResponse.json(
+            { error: 'SERVICE_UNAVAILABLE' },
+            { status: 429, headers: { 'Retry-After': '60' } },
+          );
+        }
+
+        const { success, limit, remaining, reset } = result;
 
         if (!success) {
           return NextResponse.json(
@@ -121,10 +141,15 @@ export async function middleware(request: NextRequest) {
             }
           );
         }
+      } catch (err) {
+        // Upstash unreachable / timeout / unexpected error → fail-closed.
+        // Sentry picks this up via console.error in production.
+        console.error('[middleware] rate-limit check failed, fail-closed:', err);
+        return NextResponse.json(
+          { error: 'SERVICE_UNAVAILABLE' },
+          { status: 429, headers: { 'Retry-After': '60' } },
+        );
       }
-    } catch (err) {
-      // Upstash unavailable — fail-open, never block legitimate traffic over a Redis outage
-      console.error('[middleware] rate-limit check failed, skipping:', err);
     }
   }
 
