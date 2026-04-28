@@ -83,7 +83,7 @@ export function getEmailTemplate(
   type: 'booking_confirmation' | 'booking_validated' | 'booking_refused' | 'booking_completed' | 'invoice_available' | 'invoice_paid' | 'reset_password' | 'booking_reminder' | 'stay_end_reminder' | 'admin_stay_reminder' | 'stay_photo' | 'admin_message' | 'loyalty_update' | 'loyalty_claim_approved' | 'loyalty_claim_rejected' | 'contract_reminder' | 'welcome' | 'admin_new_client',
   data: Record<string, string>,
   locale: string = 'fr',
-  pets: { gender?: string | null }[] = [],
+  pets: { name?: string | null; species?: string | null; gender?: string | null }[] = [],
 ): { subject: string; html: string } {
   // Escape all user-supplied fields to prevent XSS in email HTML
   const d: Record<string, string> = {};
@@ -103,6 +103,81 @@ export function getEmailTemplate(
   const _arrived   = hasPets ? petArrived(pets)   : 'arrivé(e)';
   const _pret = !hasPets ? 'prêt(e)' : isPlural ? (allFemale ? 'prêtes' : 'prêts') : (allFemale ? 'prête' : 'prêt');
   const _recup = !hasPets ? 'récupéré(e)' : isPlural ? (allFemale ? 'récupérées' : 'récupérés') : (allFemale ? 'récupérée' : 'récupéré');
+
+  // Helpers booking_validated : noms d'animaux groupés par espèce + accord _companion avec prénoms.
+  // joinNames : "Max" / "Max et Luna" / "Max, Rex et Luna" — virgule sauf avant le dernier.
+  const joinNames = (names: string[]): string => {
+    if (names.length === 0) return '';
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]} et ${names[1]}`;
+    return `${names.slice(0, -1).join(', ')} et ${names[names.length - 1]}`;
+  };
+  const joinNamesEn = (names: string[]): string => {
+    if (names.length === 0) return '';
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]} and ${names[1]}`;
+    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  };
+
+  // _companionFr/_companionEn : pronoms accordés + prénoms (ordre d'entrée).
+  // Si aucun nom (pets vide ou tous null) → fallback sans prénom.
+  const _allNames = pets.map(p => p.name).filter((n): n is string => !!n);
+  const _companionFr = _allNames.length > 0 ? `${_companion} ${joinNames(_allNames)}` : _companion;
+  const _companionEn = _allNames.length > 0
+    ? `your companion${isPlural ? 's' : ''} ${joinNamesEn(_allNames)}`
+    : `your companion${isPlural ? 's' : ''}`;
+
+  // Ligne "Animal(aux) : ..." — groupée par espèce, chaque groupe trié alphabétiquement.
+  // 1 seul groupe → joinNames (et + virgules). Plusieurs groupes → virgules dans chaque
+  // groupe, " et " réservé pour séparer les groupes (sinon "Max et Luna et Mimi" ambigu).
+  // Espèces null → groupe "autres" sans parenthèses. Pets vide → fallback d.petName.
+  const _animalLabelFr = isPlural ? 'Animaux' : 'Animal';
+  const _animalLabelEn = isPlural ? 'Pets' : 'Pet';
+  const buildAnimalLine = (
+    speciesLabel: (sp: 'DOG' | 'CAT', plural: boolean) => string,
+    joinAcross: (parts: string[]) => string,
+  ): string => {
+    if (!hasPets) return '';
+    const sortByName = (a: { name?: string | null }, b: { name?: string | null }) =>
+      (a.name ?? '').localeCompare(b.name ?? '');
+    const dogs = pets.filter(p => p.species === 'DOG').sort(sortByName);
+    const cats = pets.filter(p => p.species === 'CAT').sort(sortByName);
+    const others = pets.filter(p => p.species !== 'DOG' && p.species !== 'CAT').sort(sortByName);
+    type GroupRaw = { names: string[]; sp: 'DOG' | 'CAT' | null; count: number };
+    const groupsRaw: GroupRaw[] = [];
+    const collect = (list: typeof pets, sp: 'DOG' | 'CAT' | null) => {
+      const names = list.map(p => p.name).filter((n): n is string => !!n);
+      if (names.length > 0) groupsRaw.push({ names, sp, count: list.length });
+    };
+    collect(dogs, 'DOG');
+    collect(cats, 'CAT');
+    collect(others, null);
+    if (groupsRaw.length === 0) return '';
+    const singleGroup = groupsRaw.length === 1;
+    const groups = groupsRaw.map(g => {
+      const joined = singleGroup ? joinAcross(g.names) : g.names.join(', ');
+      return g.sp ? `${joined} (${speciesLabel(g.sp, g.count > 1)})` : joined;
+    });
+    return joinAcross(groups);
+  };
+  const _animalLineFr = (() => {
+    const line = buildAnimalLine(
+      (sp, plural) => sp === 'DOG' ? (plural ? 'chiens' : 'chien') : (plural ? 'chats' : 'chat'),
+      joinNames,
+    );
+    return line || d.petName;
+  })();
+  const _animalLineEn = (() => {
+    const line = buildAnimalLine(
+      (sp, plural) => sp === 'DOG' ? (plural ? 'dogs' : 'dog') : (plural ? 'cats' : 'cat'),
+      joinNamesEn,
+    );
+    return line || d.petName;
+  })();
+
+  // Plage de dates booking_validated : "Du X au Y" si endDate présente, sinon "Le X".
+  const _dateRangeFr = d.endDate ? `Du ${d.startDate} au ${d.endDate}` : `Le ${d.startDate}`;
+  const _dateRangeEn = d.endDate ? `From ${d.startDate} to ${d.endDate}` : `On ${d.startDate}`;
   const baseStyle = `
     font-family: Georgia, serif;
     max-width: 600px;
@@ -159,15 +234,15 @@ export function getEmailTemplate(
       bodyFr: `
         <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
         <p>Excellente nouvelle ! Votre réservation <strong>${d.bookingRef}</strong> a été <strong style="color: #16a34a;">confirmée</strong>.</p>
-        <p>Nous attendons ${_companion} avec impatience.</p>
-        <p style="color: #6B7280; font-size: 14px;">Service : ${d.service} | Animal : ${d.petName} | Dates : ${d.dates}</p>
+        <p>Nous attendons ${_companionFr} avec impatience.</p>
+        <p style="color: #6B7280; font-size: 14px;">Service : ${d.service} | ${_animalLabelFr} : ${_animalLineFr} | Dates : ${_dateRangeFr}</p>
         <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
       `,
       bodyEn: `
         <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
         <p>Great news! Your booking <strong>${d.bookingRef}</strong> has been <strong style="color: #16a34a;">confirmed</strong>.</p>
-        <p>We look forward to welcoming your companion.</p>
-        <p style="color: #6B7280; font-size: 14px;">Service: ${d.service} | Pet: ${d.petName} | Dates: ${d.dates}</p>
+        <p>We look forward to welcoming ${_companionEn}.</p>
+        <p style="color: #6B7280; font-size: 14px;">Service: ${d.service} | ${_animalLabelEn}: ${_animalLineEn} | Dates: ${_dateRangeEn}</p>
         <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
       `,
     },

@@ -496,14 +496,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const bookingRef = booking.id.slice(0, 8).toUpperCase();
 
     if (status === 'CONFIRMED') {
-      const dates = booking.startDate.toLocaleDateString('fr-MA');
+      const fmtLocale = userLang === 'fr' ? 'fr-MA' : 'en-GB';
+      const startDateFmt = booking.startDate.toLocaleDateString(fmtLocale);
+      const endDateFmt = booking.endDate ? booking.endDate.toLocaleDateString(fmtLocale) : '';
+      const dates = endDateFmt ? `${startDateFmt} – ${endDateFmt}` : startDateFmt;
       await createBookingValidationNotification(booking.clientId, bookingRef, petNames, dates);
       const { subject, html } = getEmailTemplate('booking_validated', {
         clientName: booking.client.name ?? booking.client.email,
         bookingRef,
         service: booking.serviceType === 'BOARDING' ? (userLang === 'fr' ? 'Pension' : 'Boarding') : 'Pet Taxi',
         petName: petNames,
-        dates,
+        startDate: startDateFmt,
+        endDate: endDateFmt,
       }, userLang, pets);
       await sendEmail({ to: booking.client.email, subject, html });
 

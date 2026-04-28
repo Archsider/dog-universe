@@ -5,7 +5,6 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingValidationNotification, createBookingRefusalNotification, createBookingCompletedNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
-import { formatDateShort } from '@/lib/utils';
 import { bookingClientCancelSchema, formatZodError } from '@/lib/validation';
 
 type Params = { params: Promise<{ id: string }> };
@@ -155,12 +154,16 @@ export async function PATCH(request: Request, { params }: Params) {
   });
 
   const locale = updated.client.language ?? 'fr';
-  const petNames = updated.bookingPets.map((bp) => bp.pet.name).join(', ');
+  const pets = updated.bookingPets.map((bp) => bp.pet);
+  const petNames = pets.map((p) => p.name).join(', ');
 
   // Send notifications based on status change
   if (body.status === 'CONFIRMED') {
-    const dates = updated.startDate
-      ? `${formatDateShort(updated.startDate, locale)}${updated.endDate ? ` – ${formatDateShort(updated.endDate, locale)}` : ''}`
+    const fmtLocale = locale === 'fr' ? 'fr-MA' : 'en-GB';
+    const startDateFmt = updated.startDate ? updated.startDate.toLocaleDateString(fmtLocale) : '';
+    const endDateFmt = updated.endDate ? updated.endDate.toLocaleDateString(fmtLocale) : '';
+    const dates = startDateFmt
+      ? `${startDateFmt}${endDateFmt ? ` – ${endDateFmt}` : ''}`
       : '';
 
     await createBookingValidationNotification(updated.clientId, id, petNames, dates);
@@ -174,8 +177,9 @@ export async function PATCH(request: Request, { params }: Params) {
       bookingRef: id,
       service: serviceLabel,
       petName: petNames,
-      dates,
-    }, locale);
+      startDate: startDateFmt,
+      endDate: endDateFmt,
+    }, locale, pets);
 
     sendEmail({ to: updated.client.email, subject, html }).catch(() => {});
 
