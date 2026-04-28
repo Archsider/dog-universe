@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
@@ -7,7 +8,158 @@ import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
 import { bookingCreateSchema, formatZodError } from '@/lib/validation';
-import { checkBoardingCapacity } from '@/lib/capacity';
+import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
+
+// Sentinel error thrown inside the booking transaction when capacity is full.
+// Caught by the POST handler to convert into a 400 response.
+class CapacityExceededError extends Error {
+  constructor(public readonly capacity: CapacityCheckExceeded) {
+    super('CAPACITY_EXCEEDED');
+    this.name = 'CapacityExceededError';
+  }
+}
+
+// Wraps an interactive Prisma transaction with retry logic for P2034
+// (PostgreSQL "could not serialize access due to concurrent update").
+// Up to 3 attempts, linear backoff 50ms × attempt. After exhaustion, throws
+// Error('CONFLICT_RETRY_EXCEEDED') for the handler to map to a 503.
+async function runWithSerializableRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      // Non-conflict errors (CapacityExceededError, validation, etc.) bubble up
+      // immediately so callers can treat them as final.
+      const isConflict =
+        err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034';
+      if (!isConflict) throw err;
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 50 * attempt));
+      }
+    }
+  }
+  console.error('[bookings] serializable retry exhausted:', lastErr);
+  throw new Error('CONFLICT_RETRY_EXCEEDED');
+}
+
+interface CreateBookingTxArgs {
+  clientId: string;
+  serviceType: 'BOARDING' | 'PET_TAXI';
+  isAdmin: boolean;
+  startDate: Date;
+  endDate: Date | null;
+  arrivalTime: string | null;
+  notes: string | null;
+  totalPrice: number;
+  source: string;
+  petIds: string[];
+  // Boarding-specific
+  includeGrooming: boolean;
+  groomingSize: string | null;
+  groomingPrice: number;
+  pricePerNight: number;
+  taxiGoEnabled: boolean;
+  taxiGoDate: string | null;
+  taxiGoTime: string | null;
+  taxiGoAddress: string | null;
+  taxiReturnEnabled: boolean;
+  taxiReturnDate: string | null;
+  taxiReturnTime: string | null;
+  taxiReturnAddress: string | null;
+  taxiAddonPrice: number;
+  // Taxi standalone
+  taxiType: string;
+  // Admin-only billing extras
+  bookingItems: { description: string; quantity: number; unitPrice: number }[];
+}
+
+// Atomic booking creation. Reads (capacity check) and writes (booking,
+// service-specific detail, billing items) execute under Serializable isolation
+// so PostgreSQL aborts (P2034) any concurrent transaction that would violate
+// the capacity invariant.
+async function createBookingTx(args: CreateBookingTxArgs) {
+  return prisma.$transaction(
+    async (tx) => {
+      // Capacity check uses the same tx — its reads are part of the snapshot.
+      // BOARDING only; PET_TAXI standalone has no overnight slot to consume.
+      if (args.serviceType === 'BOARDING') {
+        const capacity = await checkBoardingCapacity(
+          { petIds: args.petIds, startDate: args.startDate, endDate: args.endDate },
+          tx,
+        );
+        if (!capacity.ok) throw new CapacityExceededError(capacity);
+      }
+
+      const booking = await tx.booking.create({
+        data: {
+          clientId: args.clientId,
+          serviceType: args.serviceType,
+          status: args.isAdmin ? 'CONFIRMED' : 'PENDING',
+          startDate: args.startDate,
+          endDate: args.endDate,
+          arrivalTime: args.arrivalTime,
+          notes: args.notes,
+          totalPrice: args.totalPrice,
+          source: args.source,
+          bookingPets: { create: args.petIds.map((petId) => ({ petId })) },
+        },
+        include: {
+          bookingPets: { include: { pet: true } },
+          client: true,
+        },
+      });
+
+      if (args.serviceType === 'BOARDING') {
+        await tx.boardingDetail.create({
+          data: {
+            bookingId: booking.id,
+            includeGrooming: args.includeGrooming,
+            groomingSize: args.groomingSize,
+            groomingPrice: args.groomingPrice,
+            pricePerNight: args.pricePerNight,
+            taxiGoEnabled: args.taxiGoEnabled,
+            taxiGoDate: args.taxiGoDate,
+            taxiGoTime: args.taxiGoTime,
+            taxiGoAddress: args.taxiGoAddress,
+            taxiReturnEnabled: args.taxiReturnEnabled,
+            taxiReturnDate: args.taxiReturnDate,
+            taxiReturnTime: args.taxiReturnTime,
+            taxiReturnAddress: args.taxiReturnAddress,
+            taxiAddonPrice: args.taxiAddonPrice,
+          },
+        });
+      } else if (args.serviceType === 'PET_TAXI') {
+        await tx.taxiDetail.create({
+          data: {
+            bookingId: booking.id,
+            taxiType: args.taxiType,
+            price: args.totalPrice > 0 ? args.totalPrice : 150,
+          },
+        });
+      }
+
+      if (args.bookingItems.length > 0) {
+        await tx.bookingItem.createMany({
+          data: args.bookingItems.map((item) => ({
+            bookingId: booking.id,
+            description: item.description.trim(),
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.quantity * item.unitPrice,
+          })),
+        });
+      }
+
+      return booking;
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 },
+  );
+}
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -154,26 +306,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // Capacity check — boarding only; taxi has no overnight slot.
-    if (serviceType === 'BOARDING') {
-      const capacity = await checkBoardingCapacity({
-        petIds,
-        startDate: new Date(startDate),
-        endDate: endDate ? new Date(endDate) : null,
-      });
-      if (!capacity.ok) {
-        return NextResponse.json(
-          {
-            error: 'CAPACITY_EXCEEDED',
-            species: capacity.species,
-            available: capacity.available,
-            requested: capacity.requested,
-            limit: capacity.limit,
-          },
-          { status: 400 },
-        );
-      }
-    }
+    // Capacity is now enforced inside the booking creation transaction below
+    // (Serializable isolation), eliminating the read-then-write race that
+    // previously allowed concurrent requests to overshoot the limit.
 
     // Booking reference: first 8 chars of UUID, uppercase — consistent across all systems
     // (computed after booking.create below — placeholder until then)
@@ -359,35 +494,38 @@ export async function POST(request: Request) {
     }
     // ── End auto-merge ────────────────────────────────────────────────────────────
 
-    const booking = await prisma.booking.create({
-      data: {
-        clientId,
-        serviceType,
-        status: isAdmin ? 'CONFIRMED' : 'PENDING',
-        startDate: new Date(startDate),
-        endDate: endDate ? new Date(endDate) : null,
-        arrivalTime: arrivalTime || null,
-        notes: notes?.trim() || null,
-        totalPrice: resolvedTotalPrice,
-        source: resolvedSource,
-        bookingPets: {
-          create: petIds.map((petId: string) => ({ petId })),
-        },
-      },
-      include: {
-        bookingPets: { include: { pet: true } },
-        client: true,
-      },
-    });
+    // ── Atomic capacity check + booking create ────────────────────────────────
+    // Wraps capacity verification, booking insert, service-specific details,
+    // and admin-defined extras into a single Serializable transaction.
+    // Retries up to 3 times with linear backoff on P2034 (serialization
+    // conflict — two concurrent transactions hit the same overlap window).
+    const validBookingItems: { description: string; quantity: number; unitPrice: number }[] =
+      isAdmin && Array.isArray(bookingItems)
+        ? bookingItems.filter(
+            (item: { description?: unknown; quantity?: unknown; unitPrice?: unknown }) =>
+              typeof item.description === 'string' &&
+              item.description.trim().length > 0 &&
+              typeof item.quantity === 'number' &&
+              item.quantity > 0 &&
+              typeof item.unitPrice === 'number' &&
+              item.unitPrice >= 0,
+          )
+        : [];
 
-    // Set booking reference using the actual ID (consistent across all systems)
-    bookingRef = booking.id.slice(0, 8).toUpperCase();
-
-    // Create service-specific details
-    if (serviceType === 'BOARDING') {
-      await prisma.boardingDetail.create({
-        data: {
-          bookingId: booking.id,
+    let booking: Awaited<ReturnType<typeof createBookingTx>>;
+    try {
+      booking = await runWithSerializableRetry(() =>
+        createBookingTx({
+          clientId,
+          serviceType,
+          isAdmin,
+          startDate: new Date(startDate),
+          endDate: endDate ? new Date(endDate) : null,
+          arrivalTime: arrivalTime || null,
+          notes: notes?.trim() || null,
+          totalPrice: resolvedTotalPrice,
+          source: resolvedSource,
+          petIds,
           includeGrooming: includeGrooming ?? false,
           groomingSize: groomingSize || null,
           groomingPrice: typeof groomingPrice === 'number' ? groomingPrice : 0,
@@ -401,41 +539,37 @@ export async function POST(request: Request) {
           taxiReturnTime: taxiReturnTime || null,
           taxiReturnAddress: taxiReturnAddress || null,
           taxiAddonPrice: typeof taxiAddonPrice === 'number' ? taxiAddonPrice : 0,
-        },
-      });
-    } else if (serviceType === 'PET_TAXI') {
-      await prisma.taxiDetail.create({
-        data: {
-          bookingId: booking.id,
           taxiType: taxiType ?? 'STANDARD',
-          price: resolvedTotalPrice > 0 ? resolvedTotalPrice : 150,
-        },
-      });
+          bookingItems: validBookingItems,
+        }),
+      );
+    } catch (err) {
+      if (err instanceof CapacityExceededError) {
+        return NextResponse.json(
+          {
+            error: 'CAPACITY_EXCEEDED',
+            species: err.capacity.species,
+            available: err.capacity.available,
+            requested: err.capacity.requested,
+            limit: err.capacity.limit,
+          },
+          { status: 400 },
+        );
+      }
+      if (err instanceof Error && err.message === 'CONFLICT_RETRY_EXCEEDED') {
+        return NextResponse.json({ error: 'CONFLICT_RETRY_EXCEEDED' }, { status: 503 });
+      }
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2028' // Transaction API timeout
+      ) {
+        return NextResponse.json({ error: 'TRANSACTION_TIMEOUT' }, { status: 503 });
+      }
+      throw err;
     }
 
-    // Persist extra admin-defined billing lines
-    if (isAdmin && Array.isArray(bookingItems) && bookingItems.length > 0) {
-      const validItems = bookingItems.filter(
-        (item: { description?: unknown; quantity?: unknown; unitPrice?: unknown }) =>
-          typeof item.description === 'string' &&
-          item.description.trim().length > 0 &&
-          typeof item.quantity === 'number' &&
-          item.quantity > 0 &&
-          typeof item.unitPrice === 'number' &&
-          item.unitPrice >= 0,
-      );
-      if (validItems.length > 0) {
-        await prisma.bookingItem.createMany({
-          data: validItems.map((item: { description: string; quantity: number; unitPrice: number }) => ({
-            bookingId: booking.id,
-            description: item.description.trim(),
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            total: item.quantity * item.unitPrice,
-          })),
-        });
-      }
-    }
+    // Set booking reference using the actual ID (consistent across all systems)
+    bookingRef = booking.id.slice(0, 8).toUpperCase();
 
     // Send notifications and emails
     const petNames = booking.bookingPets.map((bp) => bp.pet.name).join(', ');

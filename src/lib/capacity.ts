@@ -1,6 +1,11 @@
 // Capacity management — prevents over-bookings beyond physical pension limits.
 // Counts active boarding bookings overlapping a date range, by species.
+// Accepts an optional Prisma client/tx so reads stay consistent inside a
+// $transaction({ isolationLevel: Serializable }) block.
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+
+type PrismaClientLike = typeof prisma | Prisma.TransactionClient;
 
 export interface CapacityLimits {
   dogs: number;
@@ -15,11 +20,13 @@ const DEFAULT_LIMITS: CapacityLimits = {
 // Statuses that consume capacity. PENDING included on purpose: even unconfirmed
 // requests must reserve a slot to avoid the race where two clients book the
 // same window before the admin validates either one.
+// WAITLIST is intentionally NOT included — waitlisted bookings are reservations
+// of *intent*, not of a slot.
 const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] as const;
 
-export async function getCapacityLimits(): Promise<CapacityLimits> {
+export async function getCapacityLimits(client: PrismaClientLike = prisma): Promise<CapacityLimits> {
   try {
-    const rows = await prisma.setting.findMany({
+    const rows = await client.setting.findMany({
       where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
     });
     const map = Object.fromEntries(rows.map((r) => [r.key, parseInt(r.value, 10)]));
@@ -43,11 +50,12 @@ export interface OccupancyWindow {
 export async function countOverlappingPets(
   species: 'DOG' | 'CAT',
   window: OccupancyWindow,
-  options: { excludeBookingId?: string } = {},
+  options: { excludeBookingId?: string; client?: PrismaClientLike } = {},
 ): Promise<number> {
   if (!window.endDate) return 0;
+  const client = options.client ?? prisma;
 
-  const overlapping = await prisma.booking.findMany({
+  const overlapping = await client.booking.findMany({
     where: {
       serviceType: 'BOARDING',
       status: { in: [...ACTIVE_STATUSES] },
@@ -90,10 +98,15 @@ export interface CapacityCheckArgs {
 
 // Returns ok or the first species that would be exceeded. Skips taxi-only
 // bookings (no endDate) since they don't consume boarding capacity.
-export async function checkBoardingCapacity(args: CapacityCheckArgs): Promise<CapacityCheckResult> {
+// Pass `client` (a Prisma TX) when calling from inside $transaction so reads
+// participate in the same serializable snapshot as the booking insert.
+export async function checkBoardingCapacity(
+  args: CapacityCheckArgs,
+  client: PrismaClientLike = prisma,
+): Promise<CapacityCheckResult> {
   if (!args.endDate) return { ok: true };
 
-  const pets = await prisma.pet.findMany({
+  const pets = await client.pet.findMany({
     where: { id: { in: args.petIds } },
     select: { species: true },
   });
@@ -102,10 +115,14 @@ export async function checkBoardingCapacity(args: CapacityCheckArgs): Promise<Ca
 
   if (newDogs === 0 && newCats === 0) return { ok: true };
 
-  const limits = await getCapacityLimits();
+  const limits = await getCapacityLimits(client);
 
   if (newDogs > 0) {
-    const currentDogs = await countOverlappingPets('DOG', { startDate: args.startDate, endDate: args.endDate }, { excludeBookingId: args.excludeBookingId });
+    const currentDogs = await countOverlappingPets(
+      'DOG',
+      { startDate: args.startDate, endDate: args.endDate },
+      { excludeBookingId: args.excludeBookingId, client },
+    );
     const available = Math.max(0, limits.dogs - currentDogs);
     if (newDogs > available) {
       return { ok: false, species: 'DOG', available, requested: newDogs, limit: limits.dogs };
@@ -113,7 +130,11 @@ export async function checkBoardingCapacity(args: CapacityCheckArgs): Promise<Ca
   }
 
   if (newCats > 0) {
-    const currentCats = await countOverlappingPets('CAT', { startDate: args.startDate, endDate: args.endDate }, { excludeBookingId: args.excludeBookingId });
+    const currentCats = await countOverlappingPets(
+      'CAT',
+      { startDate: args.startDate, endDate: args.endDate },
+      { excludeBookingId: args.excludeBookingId, client },
+    );
     const available = Math.max(0, limits.cats - currentCats);
     if (newCats > available) {
       return { ok: false, species: 'CAT', available, requested: newCats, limit: limits.cats };
