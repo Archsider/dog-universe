@@ -12,6 +12,7 @@ import EditClientInfoForm from './EditClientInfoForm';
 import DeleteClientButton from './DeleteClientButton';
 import CreateAnimalModal from '../../animals/CreateAnimalModal';
 import HistoricalDataForm from './HistoricalDataForm';
+import RgpdAdminSection from './RgpdAdminSection';
 import AdminCreateBookingModal from '@/components/admin/AdminCreateBookingModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 
@@ -120,6 +121,16 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
               locale={locale}
             />
           </div>
+
+          {/* RGPD section — SUPERADMIN only */}
+          {session.user.role === 'SUPERADMIN' && (
+            <RgpdAdminSection
+              clientId={id}
+              clientName={client.name}
+              alreadyAnonymized={!!client.anonymizedAt}
+              locale={locale}
+            />
+          )}
 
           {/* Contract card */}
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">

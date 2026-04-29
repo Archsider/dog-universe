@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { getInitials } from '@/lib/utils';
+import RgpdSection from './RgpdSection';
 
 interface UserProfile {
   id: string;
@@ -323,6 +324,8 @@ export default function ProfilePage() {
           </Button>
         </form>
       </div>
+
+      <RgpdSection locale={locale} />
     </div>
   );
 }

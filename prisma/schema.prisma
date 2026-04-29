@@ -25,6 +25,11 @@ model User {
   // Walk-in / client de passage : pas d'accès portail, pas de fidélité, pas de notifications
   isWalkIn Boolean @default(false)
 
+  // RGPD : marque le compte comme anonymisé (droit à l'oubli). User row stays
+  // for FK integrity on Booking/Invoice (accounting), but identifiable PII
+  // is wiped at anonymization time.
+  anonymizedAt DateTime?
+
   // Historical baseline (for pre-existing clients before the app)
   historicalStays    Int    @default(0)
   historicalSpendMAD Float  @default(0)
