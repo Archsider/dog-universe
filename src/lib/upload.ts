@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import sharp from 'sharp';
 import { uploadBuffer, uploadBufferPrivate, createSignedUrl } from './supabase';
 
 // Local filesystem fallback (dev without Supabase env vars)
@@ -51,6 +52,15 @@ function getExtension(mimeType: string): string {
 
 const hasSupabase = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// Re-encode images through Sharp to strip EXIF metadata (GPS, device info, etc.).
+// GIF is passed through unchanged — animated GIF re-encoding is not supported.
+async function stripExif(buffer: Buffer, mimeType: string): Promise<Buffer> {
+  if (mimeType === 'image/jpeg') return sharp(buffer).rotate().jpeg({ quality: 85 }).toBuffer();
+  if (mimeType === 'image/png')  return sharp(buffer).png().toBuffer();
+  if (mimeType === 'image/webp') return sharp(buffer).webp({ quality: 85 }).toBuffer();
+  return buffer;
+}
+
 export async function uploadFile(
   file: File,
   uploadType: UploadType
@@ -75,6 +85,12 @@ export async function uploadFile(
     throw new Error('File content does not match its declared type.');
   }
 
+  // Strip EXIF metadata from images before storage (GPS, device info, etc.)
+  // Documents (PDF) and GIFs are passed through unchanged.
+  const processedBuffer = uploadType !== 'document'
+    ? await stripExif(buffer, detectedMime)
+    : buffer;
+
   // Use the server-detected MIME type (authoritative)
   const ext = getExtension(detectedMime);
   const filename = `${uuidv4()}${ext}`;
@@ -87,21 +103,21 @@ export async function uploadFile(
     const key = `${subfolder}/${filename}`;
     if (uploadType === 'document') {
       // Documents go to the private bucket — return a 1-hour signed URL + permanent key
-      await uploadBufferPrivate(buffer, key, detectedMime);
+      await uploadBufferPrivate(processedBuffer, key, detectedMime);
       const url = await createSignedUrl(key);
-      return { url, storageKey: key, filename, mimeType: detectedMime, size: file.size };
+      return { url, storageKey: key, filename, mimeType: detectedMime, size: processedBuffer.length };
     }
     // Pet photos and stay photos go to the public bucket
-    const url = await uploadBuffer(buffer, key, detectedMime);
-    return { url, filename, mimeType: detectedMime, size: file.size };
+    const url = await uploadBuffer(processedBuffer, key, detectedMime);
+    return { url, filename, mimeType: detectedMime, size: processedBuffer.length };
   } else {
     // Local dev fallback: write to public/uploads/
     const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './public/uploads';
     const dir = path.join(process.cwd(), UPLOAD_DIR, subfolder);
     await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, filename), buffer);
+    await writeFile(path.join(dir, filename), processedBuffer);
     const url = `/uploads/${subfolder}/${filename}`;
-    return { url, filename, mimeType: detectedMime, size: file.size };
+    return { url, filename, mimeType: detectedMime, size: processedBuffer.length };
   }
 }
 
