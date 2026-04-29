@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 
 const BEHAVIOR_OPTIONS = [
@@ -18,6 +17,8 @@ const BEHAVIOR_OPTIONS = [
   { value: 'MONITOR', fr: 'À surveiller', en: 'Needs monitoring' },
   { value: 'REACTIVE', fr: 'Réactif', en: 'Reactive' },
 ];
+
+const SELECT_CLASS = 'mt-1 block w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2';
 
 type FormState = {
   name: string; species: string; breed: string; dateOfBirth: string; gender: string;
@@ -50,7 +51,8 @@ export default function NewPetPage() {
 
   const set = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
-  const setSel = (field: keyof FormState) => (v: string) => setForm(p => ({ ...p, [field]: v }));
+  const setSel = (field: keyof FormState) => (e: React.ChangeEvent<HTMLSelectElement>) =>
+    setForm(p => ({ ...p, [field]: e.target.value }));
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -150,28 +152,20 @@ export default function NewPetPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>{t('form.species')} *</Label>
-                <Select value={form.species} onValueChange={setSel('species')}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="DOG">{t('form.speciesOptions.DOG')}</SelectItem>
-                    <SelectItem value="CAT">{t('form.speciesOptions.CAT')}</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="species">{t('form.species')} *</Label>
+                <select id="species" value={form.species} onChange={setSel('species')} className={SELECT_CLASS}>
+                  <option value="" disabled>{fr ? 'Choisir' : 'Choose'}</option>
+                  <option value="DOG">{t('form.speciesOptions.DOG')}</option>
+                  <option value="CAT">{t('form.speciesOptions.CAT')}</option>
+                </select>
               </div>
               <div>
-                <Label>{t('form.gender')}</Label>
-                <Select value={form.gender} onValueChange={setSel('gender')}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={fr ? 'Sexe' : 'Gender'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="MALE">{t('form.genderOptions.MALE')}</SelectItem>
-                    <SelectItem value="FEMALE">{t('form.genderOptions.FEMALE')}</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="gender">{t('form.gender')}</Label>
+                <select id="gender" value={form.gender} onChange={setSel('gender')} className={SELECT_CLASS}>
+                  <option value="" disabled>{fr ? 'Sexe' : 'Gender'}</option>
+                  <option value="MALE">{t('form.genderOptions.MALE')}</option>
+                  <option value="FEMALE">{t('form.genderOptions.FEMALE')}</option>
+                </select>
               </div>
             </div>
 
@@ -192,16 +186,12 @@ export default function NewPetPage() {
                 <Input id="weight" type="number" min="0" step="0.1" value={form.weight} onChange={set('weight')} className="mt-1" placeholder="4.5" />
               </div>
               <div>
-                <Label>{fr ? 'Statut reproductif' : 'Reproductive status'}</Label>
-                <Select value={form.isNeutered} onValueChange={setSel('isNeutered')}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="true">{fr ? 'Stérilisé(e) / Castré(e)' : 'Neutered / Spayed'}</SelectItem>
-                    <SelectItem value="false">{fr ? 'Non stérilisé(e)' : 'Not neutered'}</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="isNeutered">{fr ? 'Statut reproductif' : 'Reproductive status'}</Label>
+                <select id="isNeutered" value={form.isNeutered} onChange={setSel('isNeutered')} className={SELECT_CLASS}>
+                  <option value="" disabled>{fr ? 'Choisir' : 'Choose'}</option>
+                  <option value="true">{fr ? 'Stérilisé(e) / Castré(e)' : 'Neutered / Spayed'}</option>
+                  <option value="false">{fr ? 'Non stérilisé(e)' : 'Not neutered'}</option>
+                </select>
               </div>
             </div>
 
@@ -260,17 +250,13 @@ export default function NewPetPage() {
               { field: 'behaviorWithHumans' as const, label: fr ? 'Avec les humains' : 'With humans' },
             ].map(({ field, label }) => (
               <div key={field}>
-                <Label>{label}</Label>
-                <Select value={form[field]} onValueChange={setSel(field)}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {BEHAVIOR_OPTIONS.map(o => (
-                      <SelectItem key={o.value} value={o.value}>{fr ? o.fr : o.en}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor={field}>{label}</Label>
+                <select id={field} value={form[field]} onChange={setSel(field)} className={SELECT_CLASS}>
+                  <option value="" disabled>{fr ? 'Choisir' : 'Choose'}</option>
+                  {BEHAVIOR_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{fr ? o.fr : o.en}</option>
+                  ))}
+                </select>
               </div>
             ))}
           </section>
