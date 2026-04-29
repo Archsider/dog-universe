@@ -25,6 +25,16 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: 'INVALID_ENTITY_TYPE' }, { status: 400 });
   }
 
+  if (entityType === 'PET') {
+    if (!entityId) {
+      return NextResponse.json({ error: 'MISSING_ENTITY_ID' }, { status: 400 });
+    }
+    const pet = await prisma.pet.findFirst({ where: { id: entityId, ownerId: id } });
+    if (!pet) {
+      return NextResponse.json({ error: 'PET_NOT_FOUND' }, { status: 404 });
+    }
+  }
+
   const note = await prisma.adminNote.create({
     data: {
       entityType,
