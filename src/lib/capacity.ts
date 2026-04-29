@@ -4,6 +4,7 @@
 // $transaction({ isolationLevel: Serializable }) block.
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { Redis } from '@upstash/redis';
 
 type PrismaClientLike = typeof prisma | Prisma.TransactionClient;
 
@@ -24,16 +25,75 @@ const DEFAULT_LIMITS: CapacityLimits = {
 // of *intent*, not of a slot.
 const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] as const;
 
+// ── Redis cache helpers ───────────────────────────────────────────────────────
+
+let _redis: Redis | null | undefined;
+
+function getRedis(): Redis | null {
+  if (_redis !== undefined) return _redis;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) { _redis = null; return null; }
+  _redis = new Redis({ url, token });
+  return _redis;
+}
+
+const CACHE_KEY = 'cache:capacity:limits';
+const CACHE_TTL = 300; // 5 minutes
+
+/** Invalidates the capacity limits cache. Call after admin saves capacity settings. */
+export async function invalidateCapacityCache(): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  try {
+    await redis.del(CACHE_KEY);
+  } catch {
+    // Non-critical — cache will expire naturally
+  }
+}
+
+// ── Core functions ────────────────────────────────────────────────────────────
+
 export async function getCapacityLimits(client: PrismaClientLike = prisma): Promise<CapacityLimits> {
+  // Only cache when using the default singleton (not inside a transaction snapshot)
+  if (client === prisma) {
+    const redis = getRedis();
+    if (redis) {
+      try {
+        const cached = await redis.get<CapacityLimits | string>(CACHE_KEY);
+        if (cached != null) {
+          const parsed = typeof cached === 'string'
+            ? (JSON.parse(cached) as CapacityLimits)
+            : cached;
+          if (typeof parsed?.dogs === 'number' && typeof parsed?.cats === 'number') {
+            return parsed;
+          }
+        }
+      } catch {
+        // Redis down — fall through to DB
+      }
+    }
+  }
+
   try {
     const rows = await client.setting.findMany({
       where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
     });
     const map = Object.fromEntries(rows.map((r) => [r.key, parseInt(r.value, 10)]));
-    return {
+    const limits: CapacityLimits = {
       dogs: Number.isFinite(map.capacity_dog) ? map.capacity_dog : DEFAULT_LIMITS.dogs,
       cats: Number.isFinite(map.capacity_cat) ? map.capacity_cat : DEFAULT_LIMITS.cats,
     };
+
+    // Warm cache (best-effort, only outside transactions)
+    if (client === prisma) {
+      const redis = getRedis();
+      if (redis) {
+        redis.set(CACHE_KEY, JSON.stringify(limits), { ex: CACHE_TTL }).catch(() => {});
+      }
+    }
+
+    return limits;
   } catch {
     return { ...DEFAULT_LIMITS };
   }

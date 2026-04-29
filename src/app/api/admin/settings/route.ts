@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { invalidateCapacityCache } from '@/lib/capacity';
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   boarding_dog_per_night: '120',
@@ -69,6 +70,12 @@ export async function PUT(request: Request) {
     entityType: 'Setting',
     details: Object.fromEntries(updates),
   });
+
+  // Invalidate capacity cache if any capacity key was updated
+  const hasCapacityUpdate = updates.some(([k]) => k === 'capacity_dog' || k === 'capacity_cat');
+  if (hasCapacityUpdate) {
+    await invalidateCapacityCache();
+  }
 
   return NextResponse.json({ ok: true });
 }
