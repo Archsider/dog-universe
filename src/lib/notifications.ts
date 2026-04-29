@@ -20,6 +20,7 @@ export type NotificationType =
   | 'NEW_CLIENT_REGISTRATION'   // admin receives when a new client registers
   | 'EXTENSION_REQUEST'         // admin receives when a client requests a stay extension
   | 'ADDON_REQUEST'             // admin receives when a client requests an additional service on a booking
+  | 'TAXI_HEARTBEAT_LOST'       // admin receives when no GPS heartbeat for >5 min on an active taxi trip
   | 'BOOKING_EXTENDED'          // client receives when stay is extended (admin direct or approved)
   | 'BOOKING_NO_SHOW'           // client receives when booking is marked NO_SHOW by admin
   | 'BOOKING_WAITLISTED'        // client receives when booking is queued on the waitlist
@@ -433,6 +434,24 @@ export async function getUnreadCount(userId: string): Promise<number> {
 }
 
 // ─── Extension request notifications ─────────────────────────────────────────
+
+// ─── Taxi heartbeat alerts ───────────────────────────────────────────────────
+
+export async function notifyAdminsTaxiHeartbeatLost(args: {
+  bookingId: string;
+  bookingRef: string;
+  clientName: string;
+  petNames: string;
+}) {
+  return createAdminNotifications({
+    type: 'TAXI_HEARTBEAT_LOST',
+    titleFr: 'Taxi : signal GPS perdu',
+    titleEn: 'Taxi: GPS signal lost',
+    messageFr: `⚠️ Pas de signal GPS depuis 5 min — ${args.clientName} / ${args.petNames} / Réservation ${args.bookingRef}`,
+    messageEn: `⚠️ No GPS signal for 5 min — ${args.clientName} / ${args.petNames} / Booking ${args.bookingRef}`,
+    metadata: { bookingId: args.bookingId, bookingRef: args.bookingRef },
+  });
+}
 
 // ─── Addon request notifications ─────────────────────────────────────────────
 

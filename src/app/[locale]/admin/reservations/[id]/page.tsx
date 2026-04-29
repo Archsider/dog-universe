@@ -13,6 +13,7 @@ import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import StayPhotosSection from './StayPhotosSection';
 import AdminMessageSection from './AdminMessageSection';
 import AddonRequestsSection from './AddonRequestsSection';
+import TaxiHeartbeatIndicator from './TaxiHeartbeatIndicator';
 import ExtendBookingSection from './ExtendBookingSection';
 import MergeBookingsSection from './MergeBookingsSection';
 import EditDatesSection from './EditDatesSection';
@@ -596,6 +597,9 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                   {locale === 'fr' ? 'Suivi du transport' : 'Transport tracking'}
                 </h3>
                 <TaxiTimeline trip={standaloneTrip} locale={locale} />
+                {booking.status === 'IN_PROGRESS' && (
+                  <TaxiHeartbeatIndicator bookingId={booking.id} locale={locale} />
+                )}
                 {rawStandalone && (
                   <TaxiTrackingButton
                     taxiTripId={rawStandalone.id}

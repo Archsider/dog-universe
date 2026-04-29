@@ -14,9 +14,53 @@ import {
   type EmailJobData, type SmsJobData,
 } from '@/lib/queues/index';
 import { processEmailJob, processSmsJob } from '@/workers/processors';
+import { prisma } from '@/lib/prisma';
+import { getLastHeartbeat, tryClaimAlertSlot } from '@/lib/taxi-heartbeat';
+import { notifyAdminsTaxiHeartbeatLost } from '@/lib/notifications';
 
 const MAX_JOBS_PER_QUEUE = 10;
 const WORKER_TIMEOUT_MS  = 55_000;
+
+// Scans STANDALONE PET_TAXI bookings currently IN_PROGRESS and fires an alert
+// to admins for each one whose Redis heartbeat key has expired. Dedup latch
+// (taxi:alert:{bookingId} EX 3600) prevents repeat alerts within 1 h.
+// Fail-open: any error is logged and swallowed — never breaks the cron.
+async function checkTaxiHeartbeats(): Promise<{ scanned: number; alerted: number }> {
+  let scanned = 0;
+  let alerted = 0;
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: { serviceType: 'PET_TAXI', status: 'IN_PROGRESS', deletedAt: null },
+      select: {
+        id: true,
+        client: { select: { name: true, email: true } },
+        bookingPets: { select: { pet: { select: { name: true } } } },
+      },
+    });
+    scanned = bookings.length;
+
+    for (const b of bookings) {
+      const last = await getLastHeartbeat(b.id);
+      if (last !== null) continue; // signal alive within TTL window
+
+      const claimed = await tryClaimAlertSlot(b.id);
+      if (!claimed) continue; // already alerted this hour, or Redis unavailable
+
+      const clientName = b.client?.name ?? b.client?.email ?? 'Client';
+      const petNames = b.bookingPets.map(bp => bp.pet.name).join(', ') || '—';
+      const bookingRef = b.id.slice(0, 8).toUpperCase();
+      try {
+        await notifyAdminsTaxiHeartbeatLost({ bookingId: b.id, bookingRef, clientName, petNames });
+        alerted++;
+      } catch (err) {
+        console.error('[taxi-heartbeat] notifyAdmins failed for booking', b.id, err);
+      }
+    }
+  } catch (err) {
+    console.error('[taxi-heartbeat] checkTaxiHeartbeats failed:', err);
+  }
+  return { scanned, alerted };
+}
 
 type QueueResult = { processed: number; failed: number };
 
@@ -83,8 +127,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Heartbeat scan runs even when BullMQ is not configured — it uses the
+  // separate Upstash REST client and is independent of the queue infra.
+  const heartbeatResult = await checkTaxiHeartbeats();
+
   if (!isBullMQConfigured()) {
-    return NextResponse.json({ skipped: true, reason: 'UPSTASH_REDIS_HOST not configured' });
+    return NextResponse.json({ skipped: 'queues', reason: 'UPSTASH_REDIS_HOST not configured', heartbeat: heartbeatResult });
   }
 
   const results: Record<string, QueueResult> = {};
@@ -96,8 +144,8 @@ export async function GET(request: NextRequest) {
     ]);
   } catch (err) {
     console.error('[workers/process] Worker error:', err);
-    return NextResponse.json({ error: 'WORKER_ERROR' }, { status: 500 });
+    return NextResponse.json({ error: 'WORKER_ERROR', heartbeat: heartbeatResult }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, results });
+  return NextResponse.json({ ok: true, results, heartbeat: heartbeatResult });
 }
