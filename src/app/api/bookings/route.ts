@@ -14,6 +14,7 @@ import { enqueueEmail, enqueueSms } from '@/lib/queues/index';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
 import { bookingCreateSchema, formatZodError } from '@/lib/validation';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
+import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
 
 // Sentinel error thrown inside the booking transaction when capacity is full.
 // Caught by the POST handler to convert into a 400 response.
@@ -225,6 +226,24 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Idempotency-Key gate (optional header). If present, the same key cannot
+  // create two bookings within 24h — defends against client retries and
+  // double-clicks creating duplicate stays. Absent header = legacy behaviour.
+  try {
+    const idem = await tryAcquireIdempotency(request, 'bookings:create');
+    if (!idem.acquired) {
+      return NextResponse.json(
+        { error: 'DUPLICATE_REQUEST', message: 'Idempotency-Key replay detected.' },
+        { status: 409 },
+      );
+    }
+  } catch (err) {
+    if (err instanceof IdempotencyKeyInvalidError) {
+      return NextResponse.json({ error: 'IDEMPOTENCY_KEY_INVALID' }, { status: 400 });
+    }
+    throw err;
+  }
 
   try {
     // Validation de FORME via Zod (types, enums, longueurs).

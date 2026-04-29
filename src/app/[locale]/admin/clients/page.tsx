@@ -42,7 +42,6 @@ export default async function AdminClientsPage(props: PageProps) {
       include: {
         loyaltyGrade: true,
         _count: { select: { pets: true, bookings: true } },
-        invoices: { where: { status: 'PAID' }, select: { amount: true } },
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -50,6 +49,19 @@ export default async function AdminClientsPage(props: PageProps) {
     }),
     prisma.user.count({ where }),
   ]);
+
+  // Aggregate paid revenue at the DB layer (instead of fetching every invoice
+  // row per client and summing in JS — the previous pattern was O(N×invoices)
+  // memory for a list view that only displays a single sum per row).
+  const clientIds = clients.map((c) => c.id);
+  const revenueRows = clientIds.length === 0 ? [] : await prisma.invoice.groupBy({
+    by: ['clientId'],
+    where: { status: 'PAID', clientId: { in: clientIds } },
+    _sum: { amount: true },
+  });
+  const revenueByClient = new Map<string, number>(
+    revenueRows.map((r) => [r.clientId, r._sum.amount ?? 0]),
+  );
 
   const filteredClients = gradeFilter ? clients.filter(c => c.loyaltyGrade?.grade === gradeFilter) : clients;
 
@@ -122,7 +134,7 @@ export default async function AdminClientsPage(props: PageProps) {
           {/* Mobile: stacked cards */}
           <div className="md:hidden space-y-4">
             {filteredClients.map(client => {
-              const totalRevenue = client.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+              const totalRevenue = revenueByClient.get(client.id) ?? 0;
               const grade = (client.loyaltyGrade?.grade || 'BRONZE') as keyof typeof TIER_STYLES;
               const tier = TIER_STYLES[grade];
               const gradeDisplay = grade.charAt(0) + grade.slice(1).toLowerCase();
@@ -201,7 +213,7 @@ export default async function AdminClientsPage(props: PageProps) {
                 </thead>
                 <tbody>
                   {filteredClients.map(client => {
-                    const totalRevenue = client.invoices.reduce((sum, inv) => sum + inv.amount, 0);
+                    const totalRevenue = revenueByClient.get(client.id) ?? 0;
                     const grade = (client.loyaltyGrade?.grade || 'BRONZE') as keyof typeof TIER_STYLES;
                     const tier = TIER_STYLES[grade];
                     const gradeDisplay = grade.charAt(0) + grade.slice(1).toLowerCase();

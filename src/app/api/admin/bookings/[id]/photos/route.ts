@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { uploadFile } from '@/lib/upload';
 import { createStayPhotoNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -83,7 +84,22 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   const { photoId } = await request.json();
   if (!photoId) return NextResponse.json({ error: 'photoId required' }, { status: 400 });
 
-  await prisma.stayPhoto.delete({ where: { id: photoId, bookingId: id } });
+  // Capture URL before delete so the audit log can record what was removed.
+  const photo = await prisma.stayPhoto.findFirst({
+    where: { id: photoId, bookingId: id },
+    select: { id: true, url: true, caption: true },
+  });
+  if (!photo) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  await prisma.stayPhoto.delete({ where: { id: photoId } });
+
+  await logAction({
+    userId: session.user.id,
+    action: LOG_ACTIONS.STAY_PHOTO_DELETED,
+    entityType: 'StayPhoto',
+    entityId: photoId,
+    details: { bookingId: id, url: photo.url, caption: photo.caption ?? null },
+  });
 
   return NextResponse.json({ success: true });
 }
