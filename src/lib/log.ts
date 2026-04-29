@@ -69,5 +69,6 @@ export const LOG_ACTIONS = {
 
   // RGPD
   RGPD_EXPORT: 'RGPD_EXPORT',
+  RGPD_ANONYMIZE: 'RGPD_ANONYMIZE',
   RGPD_PURGE: 'RGPD_PURGE',
 } as const;
