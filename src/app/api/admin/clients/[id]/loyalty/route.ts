@@ -3,7 +3,8 @@ import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createLoyaltyUpdateNotification } from '@/lib/notifications';
-import { isUpgrade, invalidateLoyaltyCache } from '@/lib/loyalty';
+import { isUpgrade } from '@/lib/loyalty';
+import { invalidateLoyaltyCache } from '@/lib/loyalty-server';
 import { gradeOverrideSchema, formatZodError } from '@/lib/validation';
 
 type Params = { params: Promise<{ id: string }> };
