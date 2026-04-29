@@ -2,11 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { useLocale } from 'next-intl';
-import { User, Lock, Loader2, CheckCircle, AlertCircle, Eye, EyeOff, FileText, Download } from 'lucide-react';
+import { signOut } from 'next-auth/react';
+import {
+  User, Lock, Loader2, CheckCircle, AlertCircle, Eye, EyeOff,
+  FileText, Download, Shield, Trash2,
+} from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { getInitials } from '@/lib/utils';
 
 interface UserProfile {
@@ -43,6 +51,14 @@ export default function ProfilePage() {
   const [downloading, setDownloading] = useState(false);
   const [contractError, setContractError] = useState('');
 
+  // ── RGPD: data export + account anonymization ─────────────────────────────
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   const labels = {
     fr: {
       title: 'Mon profil',
@@ -62,6 +78,28 @@ export default function ProfilePage() {
       passwordMismatch: 'Les mots de passe ne correspondent pas',
       passwordTooShort: 'Le mot de passe doit contenir au moins 8 caractères',
       error: 'Une erreur s\'est produite',
+      // Privacy / RGPD
+      privacy: 'Confidentialité & données personnelles',
+      privacyDesc: 'Conformément au RGPD et à la loi 09-08, vous pouvez exporter vos données ou demander la suppression de votre compte.',
+      exportData: 'Télécharger mes données',
+      exporting: 'Préparation…',
+      exportDesc: 'Téléchargez un fichier JSON contenant toutes vos informations : profil, animaux, réservations, factures, fidélité.',
+      deleteAccount: 'Supprimer mon compte',
+      deleteDesc: 'Anonymise définitivement votre compte. Les factures et réservations passées sont conservées 10 ans pour obligation comptable, mais elles ne pourront plus être reliées à vous.',
+      deleteIrreversible: 'Cette action est irréversible.',
+      deleteConfirmTitle: 'Confirmer la suppression du compte',
+      deleteConfirmIntro: 'Pour confirmer, tapez',
+      deleteConfirmWord: 'SUPPRIMER',
+      deleteConfirmHint: 'puis cliquez sur Supprimer définitivement.',
+      deleteWhatHappens: 'Ce qui sera supprimé :',
+      deleteListErased: 'Votre nom, email, téléphone et mot de passe sont effacés ; vos animaux sont archivés.',
+      deleteListKept: 'Vos réservations et factures restent en base, anonymisées (obligation comptable).',
+      deleteListLogout: 'Vous serez immédiatement déconnecté·e.',
+      deleteCancel: 'Annuler',
+      deleteConfirm: 'Supprimer définitivement',
+      deleting: 'Suppression…',
+      deleteActiveBookings: 'Vous avez des réservations en cours. Annulez-les ou attendez leur fin avant de supprimer votre compte.',
+      deleteAlreadyDone: 'Ce compte est déjà anonymisé.',
     },
     en: {
       title: 'My profile',
@@ -81,6 +119,28 @@ export default function ProfilePage() {
       passwordMismatch: 'Passwords do not match',
       passwordTooShort: 'Password must be at least 8 characters',
       error: 'An error occurred',
+      // Privacy / RGPD
+      privacy: 'Privacy & personal data',
+      privacyDesc: 'Under GDPR and Moroccan law 09-08 you can export your data or request account deletion.',
+      exportData: 'Download my data',
+      exporting: 'Preparing…',
+      exportDesc: 'Download a JSON file containing all your information: profile, pets, bookings, invoices, loyalty.',
+      deleteAccount: 'Delete my account',
+      deleteDesc: 'Permanently anonymizes your account. Past invoices and bookings are kept for 10 years (accounting obligation) but can no longer be linked to you.',
+      deleteIrreversible: 'This action is irreversible.',
+      deleteConfirmTitle: 'Confirm account deletion',
+      deleteConfirmIntro: 'To confirm, type',
+      deleteConfirmWord: 'DELETE',
+      deleteConfirmHint: 'then click Delete permanently.',
+      deleteWhatHappens: 'What will be deleted:',
+      deleteListErased: 'Your name, email, phone and password are erased; pets are archived.',
+      deleteListKept: 'Bookings and invoices remain in the database, anonymized (accounting obligation).',
+      deleteListLogout: 'You will be logged out immediately.',
+      deleteCancel: 'Cancel',
+      deleteConfirm: 'Delete permanently',
+      deleting: 'Deleting…',
+      deleteActiveBookings: 'You have active bookings. Cancel them or wait until they finish before deleting your account.',
+      deleteAlreadyDone: 'This account is already anonymized.',
     },
   };
 
@@ -165,6 +225,66 @@ export default function ProfilePage() {
     } finally {
       clearTimeout(timer);
       setDownloading(false);
+    }
+  };
+
+  // Streams the export blob to the browser. Doing it via fetch (rather than a
+  // plain anchor) lets us surface 401 / 5xx as in-page errors instead of an
+  // ugly browser download dialog showing JSON.
+  const handleExportData = async () => {
+    if (exporting) return;
+    setExportError('');
+    setExporting(true);
+    try {
+      const res = await fetch('/api/user/export');
+      if (res.status === 401) {
+        window.location.href = `/${locale}/auth/login?next=/${locale}/client/profile`;
+        return;
+      }
+      if (!res.ok) throw new Error('export_failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dog-universe-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError(l.error);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const expectedConfirmWord = l.deleteConfirmWord;
+
+  const handleDeleteAccount = async () => {
+    if (deleting) return;
+    if (deleteConfirm.trim().toUpperCase() !== expectedConfirmWord) return;
+    setDeleteError('');
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/user/anonymize', { method: 'POST' });
+      if (res.ok) {
+        // tokenVersion was bumped server-side — current JWT is already invalid.
+        // signOut clears the cookie and redirects to login.
+        await signOut({ callbackUrl: `/${locale}/auth/login` });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data.error === 'ACTIVE_BOOKINGS') {
+        setDeleteError(l.deleteActiveBookings);
+      } else if (res.status === 409 && data.error === 'ALREADY_ANONYMIZED') {
+        setDeleteError(l.deleteAlreadyDone);
+      } else {
+        setDeleteError(l.error);
+      }
+    } catch {
+      setDeleteError(l.error);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -323,6 +443,137 @@ export default function ProfilePage() {
           </Button>
         </form>
       </div>
+
+      {/* Privacy / RGPD section */}
+      <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+        <div className="flex items-center gap-2 mb-2">
+          <Shield className="h-5 w-5 text-gold-500" />
+          <h2 className="font-semibold text-charcoal">{l.privacy}</h2>
+        </div>
+        <p className="text-sm text-gray-500 mb-5">{l.privacyDesc}</p>
+
+        {/* Export */}
+        <div className="border border-gray-200 rounded-lg p-4 mb-3">
+          <div className="flex items-start gap-3">
+            <Download className="h-5 w-5 text-gold-500 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-charcoal">{l.exportData}</p>
+              <p className="text-xs text-gray-500 mt-1">{l.exportDesc}</p>
+              {exportError && (
+                <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> {exportError}
+                </p>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportData}
+              disabled={exporting}
+            >
+              {exporting && <Loader2 className="h-3 w-3 animate-spin mr-2" />}
+              {exporting ? l.exporting : l.exportData}
+            </Button>
+          </div>
+        </div>
+
+        {/* Delete account */}
+        <div className="border border-red-200 bg-red-50/40 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Trash2 className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-900">{l.deleteAccount}</p>
+              <p className="text-xs text-red-700/80 mt-1">{l.deleteDesc}</p>
+              <p className="text-xs font-semibold text-red-800 mt-2">{l.deleteIrreversible}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setDeleteConfirm('');
+                setDeleteError('');
+                setDeleteOpen(true);
+              }}
+              className="border-red-300 text-red-700 hover:bg-red-100 hover:text-red-800"
+            >
+              {l.deleteAccount}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteOpen} onOpenChange={(o) => !deleting && setDeleteOpen(o)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-900 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5" />
+              {l.deleteConfirmTitle}
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-600 pt-2">
+              {l.deleteIrreversible}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 text-sm">
+            <p className="font-medium text-charcoal">{l.deleteWhatHappens}</p>
+            <ul className="space-y-1.5 text-gray-700 list-disc list-inside text-xs">
+              <li>{l.deleteListErased}</li>
+              <li>{l.deleteListKept}</li>
+              <li>{l.deleteListLogout}</li>
+            </ul>
+
+            <div className="pt-2">
+              <Label htmlFor="confirm-delete" className="text-xs">
+                {l.deleteConfirmIntro}{' '}
+                <span className="font-mono font-bold text-red-700">{expectedConfirmWord}</span>{' '}
+                {l.deleteConfirmHint}
+              </Label>
+              <Input
+                id="confirm-delete"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                className="mt-1 font-mono"
+                autoComplete="off"
+                disabled={deleting}
+                placeholder={expectedConfirmWord}
+              />
+            </div>
+
+            {deleteError && (
+              <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-md">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+            >
+              {l.deleteCancel}
+            </Button>
+            <Button
+              type="button"
+              onClick={handleDeleteAccount}
+              disabled={
+                deleting ||
+                deleteConfirm.trim().toUpperCase() !== expectedConfirmWord
+              }
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              {deleting ? l.deleting : l.deleteConfirm}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
