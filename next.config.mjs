@@ -57,6 +57,31 @@ const nextConfig = {
       './public/logo_rgba.png',
     ],
   },
+  // Exclude build-time and unused packages from every Lambda's traced bundle
+  // (Vercel hard limit: 250 MB unzipped). These are either build-only
+  // (sentry-cli binary, plugins) or dev-only (playwright) or leak in through
+  // dynamic fs reads (.git, .next/cache).
+  outputFileTracingExcludes: {
+    '*': [
+      // Git objects dragged in by dynamic fs reads — never needed at runtime
+      '.git/**',
+      // webpack build cache — build artefact, not runtime
+      '.next/cache/**',
+      // Sentry build-time binaries and plugins (source maps are uploaded, not bundled)
+      'node_modules/@sentry/cli/**',
+      'node_modules/@sentry/cli-*/**',
+      'node_modules/@sentry/bundler-plugin-core/**',
+      'node_modules/@sentry/webpack-plugin/**',
+      'node_modules/@sentry/babel-plugin-component-annotate/**',
+      // Unused — listed in deps but never imported
+      'node_modules/@bull-board/**',
+      // Dev / test only
+      'node_modules/playwright/**',
+      'node_modules/playwright-core/**',
+      'node_modules/@playwright/**',
+      'node_modules/.cache/**',
+    ],
+  },
   async headers() {
     return [
       {
