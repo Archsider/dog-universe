@@ -35,7 +35,15 @@ const nextConfig = {
       },
     ],
   },
-  serverExternalPackages: ['@react-pdf/renderer', 'sharp'],
+  serverExternalPackages: [
+    '@react-pdf/renderer',
+    'sharp',
+    // Heavy server-only packages — kept external to stay under Vercel 250 MB limit
+    '@prisma/client',
+    'ioredis',
+    'bullmq',
+    'opossum',
+  ],
   // Force Vercel/Next File Tracer à inclure les assets utilisés via fs.readFileSync
   // dans le bundle des lambdas serverless — sans ça, les fichiers de public/private
   // ne sont PAS copiés dans /var/task et toute lecture runtime échoue avec ENOENT
