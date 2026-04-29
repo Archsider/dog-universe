@@ -3,6 +3,7 @@ import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { calculateSuggestedGrade } from '@/lib/loyalty';
+import { invalidateLoyaltyCache } from '@/lib/loyalty-server';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -72,6 +73,13 @@ export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params;
   const body = await request.json();
 
+  // Privilege escalation guard: this endpoint may only mutate CLIENT users.
+  // Without this, an ADMIN could PATCH a SUPERADMIN's email/phone/name.
+  const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+  if (!target || target.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   const updateData: Record<string, unknown> = {};
   if (body.name !== undefined) {
     const name = String(body.name).trim().slice(0, 255);
@@ -124,6 +132,7 @@ export async function PATCH(request: Request, { params }: Params) {
         update: { grade: suggestedGrade },
         create: { clientId: id, grade: suggestedGrade },
       });
+      await invalidateLoyaltyCache(id);
     }
   }
 

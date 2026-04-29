@@ -199,6 +199,8 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
   if (notifyGrade !== null) {
     const g = notifyGrade as NotifyGradeIntent;
     const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
+    const { invalidateLoyaltyCache } = await import('@/lib/loyalty-server');
+    await invalidateLoyaltyCache(g.clientId);
     await createLoyaltyUpdateNotification(
       g.clientId,
       g.grade as Parameters<typeof createLoyaltyUpdateNotification>[1],
