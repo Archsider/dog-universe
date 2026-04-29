@@ -29,13 +29,16 @@ export function SessionWatcher({ loginPath }: { loginPath: string }) {
       }
     };
 
-    window.addEventListener('focus', check);
-    document.addEventListener('visibilitychange', () => {
+    const onVisibility = () => {
       if (document.visibilityState === 'visible') check();
-    });
+    };
+
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [loginPath, router]);
 
