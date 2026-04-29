@@ -57,6 +57,25 @@ const nextConfig = {
       './public/logo_rgba.png',
     ],
   },
+  // Exclude build-time and unused packages from every Lambda's traced bundle
+  // (Vercel hard limit: 250 MB unzipped).  These are either build-only
+  // (sentry-cli binary, plugins) or dev-only (playwright) or pulled in via
+  // package.json but never imported (bull-board).
+  outputFileTracingExcludes: {
+    '*': [
+      'node_modules/@sentry/cli/**',
+      'node_modules/@sentry/cli-*/**',
+      'node_modules/@sentry/bundler-plugin-core/**',
+      'node_modules/@sentry/webpack-plugin/**',
+      'node_modules/@sentry/babel-plugin-component-annotate/**',
+      'node_modules/@bull-board/**',
+      'node_modules/playwright/**',
+      'node_modules/playwright-core/**',
+      'node_modules/@playwright/**',
+      'node_modules/.cache/**',
+      '**/*.map',
+    ],
+  },
   async headers() {
     return [
       {
