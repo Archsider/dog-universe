@@ -92,15 +92,23 @@ export function getEmailTemplate(
     d[key] = (key === 'resetUrl' || key === 'loginUrl') ? val : escapeHtml(val ?? '');
   }
 
+  // Pet names from DB are user-controlled — must be HTML-escaped before
+  // injection into email templates (XSS via name like `<script>...</script>`).
+  // Species/gender are server-controlled enums, no escaping needed.
+  const safePets = pets.map(p => ({
+    ...p,
+    name: p.name ? escapeHtml(p.name) : p.name,
+  }));
+
   // Genre / pluriel — fallback masculin singulier si pets vide.
   // Seuls les helpers réellement utilisés par les templates ci-dessous sont calculés.
-  const hasPets = pets.length > 0;
-  const allFemale = hasPets && pets.every(p => p.gender === 'FEMALE');
-  const isPlural = pets.length > 1;
-  const _companion = hasPets ? petCompanion(pets) : 'votre compagnon';
+  const hasPets = safePets.length > 0;
+  const allFemale = hasPets && safePets.every(p => p.gender === 'FEMALE');
+  const isPlural = safePets.length > 1;
+  const _companion = hasPets ? petCompanion(safePets) : 'votre compagnon';
   const _CompanionCap = _companion.charAt(0).toUpperCase() + _companion.slice(1);
-  const _verbPres  = hasPets ? petVerb(pets, 'present') : 'est';
-  const _arrived   = hasPets ? petArrived(pets)   : 'arrivé(e)';
+  const _verbPres  = hasPets ? petVerb(safePets, 'present') : 'est';
+  const _arrived   = hasPets ? petArrived(safePets)   : 'arrivé(e)';
   const _pret = !hasPets ? 'prêt(e)' : isPlural ? (allFemale ? 'prêtes' : 'prêts') : (allFemale ? 'prête' : 'prêt');
   const _recup = !hasPets ? 'récupéré(e)' : isPlural ? (allFemale ? 'récupérées' : 'récupérés') : (allFemale ? 'récupérée' : 'récupéré');
 
@@ -121,7 +129,7 @@ export function getEmailTemplate(
 
   // _companionFr/_companionEn : pronoms accordés + prénoms (ordre d'entrée).
   // Si aucun nom (pets vide ou tous null) → fallback sans prénom.
-  const _allNames = pets.map(p => p.name).filter((n): n is string => !!n);
+  const _allNames = safePets.map(p => p.name).filter((n): n is string => !!n);
   const _companionFr = _allNames.length > 0 ? `${_companion} ${joinNames(_allNames)}` : _companion;
   const _companionEn = _allNames.length > 0
     ? `your companion${isPlural ? 's' : ''} ${joinNamesEn(_allNames)}`
@@ -140,12 +148,12 @@ export function getEmailTemplate(
     if (!hasPets) return '';
     const sortByName = (a: { name?: string | null }, b: { name?: string | null }) =>
       (a.name ?? '').localeCompare(b.name ?? '');
-    const dogs = pets.filter(p => p.species === 'DOG').sort(sortByName);
-    const cats = pets.filter(p => p.species === 'CAT').sort(sortByName);
-    const others = pets.filter(p => p.species !== 'DOG' && p.species !== 'CAT').sort(sortByName);
+    const dogs = safePets.filter(p => p.species === 'DOG').sort(sortByName);
+    const cats = safePets.filter(p => p.species === 'CAT').sort(sortByName);
+    const others = safePets.filter(p => p.species !== 'DOG' && p.species !== 'CAT').sort(sortByName);
     type GroupRaw = { names: string[]; sp: 'DOG' | 'CAT' | null; count: number };
     const groupsRaw: GroupRaw[] = [];
-    const collect = (list: typeof pets, sp: 'DOG' | 'CAT' | null) => {
+    const collect = (list: typeof safePets, sp: 'DOG' | 'CAT' | null) => {
       const names = list.map(p => p.name).filter((n): n is string => !!n);
       if (names.length > 0) groupsRaw.push({ names, sp, count: list.length });
     };

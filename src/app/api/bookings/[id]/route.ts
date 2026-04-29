@@ -135,9 +135,26 @@ export async function PATCH(request: Request, { params }: Params) {
   if (body.status) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
   if (body.cancellationReason !== undefined) updateData.cancellationReason = body.cancellationReason;
-  if (body.totalPrice !== undefined) updateData.totalPrice = body.totalPrice;
-  if (body.startDate) updateData.startDate = new Date(body.startDate);
-  if (body.endDate) updateData.endDate = new Date(body.endDate);
+  if (body.totalPrice !== undefined) {
+    const price = Number(body.totalPrice);
+    // Reject NaN, Infinity, negative, and absurd values (max 1 000 000 MAD).
+    // Without these checks, an admin typo or bad client request can yield
+    // negative invoices or overflow rounding when computing payments.
+    if (!Number.isFinite(price) || price < 0 || price > 1_000_000) {
+      return NextResponse.json({ error: 'INVALID_TOTAL_PRICE' }, { status: 400 });
+    }
+    updateData.totalPrice = Math.round(price * 100) / 100;
+  }
+  if (body.startDate) {
+    const d = new Date(body.startDate);
+    if (isNaN(d.getTime())) return NextResponse.json({ error: 'Invalid startDate' }, { status: 400 });
+    updateData.startDate = d;
+  }
+  if (body.endDate) {
+    const d = new Date(body.endDate);
+    if (isNaN(d.getTime())) return NextResponse.json({ error: 'Invalid endDate' }, { status: 400 });
+    updateData.endDate = d;
+  }
   if (body.arrivalTime !== undefined) updateData.arrivalTime = body.arrivalTime;
 
   // Validate date ordering

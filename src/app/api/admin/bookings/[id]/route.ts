@@ -716,6 +716,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             where: { clientId: booking.clientId },
             data: { grade: suggestedGrade },
           });
+          const { invalidateLoyaltyCache } = await import('@/lib/loyalty-server');
+          await invalidateLoyaltyCache(booking.clientId);
           await createLoyaltyUpdateNotification(booking.clientId, suggestedGrade, booking.client.language || 'fr');
         }
       } catch { /* non-blocking */ }
