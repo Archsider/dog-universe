@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { deleteFromPrivateStorage } from '@/lib/supabase';
+import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 // DELETE /api/admin/contracts/[id] — delete a contract (forces client to re-sign)
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -13,7 +14,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const contract = await prisma.clientContract.findUnique({
     where: { id: id },
-    select: { id: true, storageKey: true },
+    select: { id: true, clientId: true, storageKey: true, signedAt: true, version: true },
   });
 
   if (!contract) {
@@ -30,6 +31,19 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   }
 
   await prisma.clientContract.delete({ where: { id: id } });
+
+  await logAction({
+    userId: session.user.id,
+    action: LOG_ACTIONS.CONTRACT_DELETED,
+    entityType: 'ClientContract',
+    entityId: id,
+    details: {
+      clientId: contract.clientId,
+      version: contract.version,
+      signedAt: contract.signedAt.toISOString(),
+      storageKey: contract.storageKey,
+    },
+  });
 
   return NextResponse.json({ success: true });
 }

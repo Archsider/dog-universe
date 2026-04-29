@@ -52,15 +52,22 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(60, '60 m'),
       prefix: 'rl:taxi-stream',
     }),
+    // RGPD ops (export + anonymize): 5 per hour per IP — these are expensive
+    // (full DB read or transactional write) and abusable for DoS/scraping.
+    rgpd: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, '60 m'),
+      prefix: 'rl:rgpd',
+    }),
   };
 }
 
 const limiter = getRatelimiter();
 
-const RATE_LIMITED_ROUTES: Record<
-  string,
-  'auth' | 'passwordReset' | 'bookings' | 'uploads'
-> = {
+// Bucket name for routes that should be rate-limited only on POST (default).
+type ExactBucket = 'auth' | 'passwordReset' | 'bookings' | 'uploads';
+
+const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
   '/api/auth/signin': 'auth',
   '/api/auth/callback/credentials': 'auth',
   '/api/register': 'auth',
@@ -72,6 +79,12 @@ const RATE_LIMITED_ROUTES: Record<
 };
 
 type DynamicBucket = 'uploads' | 'auth' | 'passwordReset' | 'bookings' | 'taxiStream';
+
+// Routes rate-limited regardless of HTTP method (e.g. expensive GETs).
+const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd'> = {
+  '/api/user/export': 'rgpd',     // GET — full DB read
+  '/api/user/anonymize': 'rgpd',  // POST — transactional write
+};
 
 // Routes dynamiques (avec [params]) — match par suffixe de path
 function getDynamicLimitBucket(path: string): DynamicBucket | null {
@@ -113,18 +126,26 @@ export async function middleware(request: NextRequest) {
       '127.0.0.1';
 
     const exactKey = RATE_LIMITED_ROUTES[path];
-    const dynamicKey = exactKey ? null : getDynamicLimitBucket(path);
+    const anyMethodKey = exactKey ? null : RATE_LIMITED_ROUTES_ANY_METHOD[path];
+    const dynamicKey = (exactKey || anyMethodKey) ? null : getDynamicLimitBucket(path);
     const isAdminMutation =
       path.startsWith('/api/admin/') && ADMIN_MUTATION_METHODS.has(request.method);
 
-    const limitKey = exactKey ?? dynamicKey ?? (isAdminMutation ? 'adminMutation' : null);
+    const limitKey =
+      exactKey ?? anyMethodKey ?? dynamicKey ?? (isAdminMutation ? 'adminMutation' : null);
 
-    // Routes exactes + dynamiques (mutation) : POST seulement.
+    // Routes exactes (mutation) : POST seulement.
     // taxiStream : GET (long-lived SSE connection — rate-limit per open).
+    // RGPD any-method routes : toute méthode (GET export inclus).
+    // Autres dynamiques : POST seulement.
     // Admin : toutes méthodes mutantes (déjà filtré par isAdminMutation).
-    const dynamicAllowsThisMethod =
-      dynamicKey === 'taxiStream' ? request.method === 'GET' : request.method === 'POST';
-    if (limitKey && (exactKey ? request.method === 'POST' : dynamicKey ? dynamicAllowsThisMethod : true)) {
+    const methodAllowed =
+      exactKey ? request.method === 'POST' :
+      anyMethodKey ? true :
+      dynamicKey === 'taxiStream' ? request.method === 'GET' :
+      dynamicKey ? request.method === 'POST' :
+      true; // admin mutation
+    if (limitKey && methodAllowed) {
       try {
         const result = await limiter[limitKey].limit(ip);
 
