@@ -384,7 +384,7 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 |---|---|---|
 | Capacity `excludeBookingId` non câblé | OUVERT | Un admin qui prolonge un séjour verra sa propre réservation compter dans l'occupancy — faux positif possible. À câbler dans l'endpoint d'extension de réservation. |
 | E2E Playwright | RÉSOLU | Secrets GitHub configurés, tests opérationnels en CI |
-| Migration `20260405_private_storage` | À vérifier | Contrats PDF privés — si pas exécutée, contrats encore publics |
+| Migration `20260405_private_storage` | CODE OK — BUCKET À VÉRIFIER | Code-side confirmé : `uploadBufferPrivate` + `createSignedUrl` utilisés, `pdfUrl String?` nullable, aucun appel `getPublicUrl` sur contrats. Risque résiduel : bucket `uploads-private` absent de Supabase → upload échoue en 500 (pas de régression silencieuse vers public). Vérification manuelle Supabase : `SELECT COUNT(*) FROM "ClientContract" WHERE "pdfUrl" IS NOT NULL;` doit retourner 0 (aucun contrat legacy public). |
 | Soft-delete User/Pet | DÉFÉRÉ | Booking soft-delete (`deletedAt`) est en place ; User/Pet délibérément déféré |
 
 ---
