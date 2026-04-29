@@ -83,7 +83,19 @@ export default function ExtendBookingSection({ booking, locale }: ExtendBookingS
       });
       const data = await res.json();
       if (!res.ok) {
-        toast({ title: data.error ?? 'Erreur', variant: 'destructive' });
+        if (data.error === 'CAPACITY_EXCEEDED') {
+          const speciesLabel = locale === 'fr'
+            ? (data.species === 'DOG' ? 'chiens' : 'chats')
+            : (data.species === 'DOG' ? 'dogs' : 'cats');
+          toast({
+            title: locale === 'fr'
+              ? `Pension complète — ${data.available} place(s) dispo. pour les ${speciesLabel}.`
+              : `Pension full — ${data.available} slot(s) available for ${speciesLabel}.`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({ title: data.error ?? 'Erreur', variant: 'destructive' });
+        }
         return;
       }
       if (opts.rejectExtension) {

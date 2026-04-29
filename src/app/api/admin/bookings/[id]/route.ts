@@ -16,6 +16,7 @@ import {
   petVerb, petArrived, petChouchoute,
 } from '@/lib/sms';
 import { enqueueEmail, enqueueSms } from '@/lib/queues/index';
+import { checkBoardingCapacity } from '@/lib/capacity';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -177,6 +178,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const newEndDate = booking.endDate ?? booking.startDate;
+
+    // Capacity check for the extension window (period originalBooking.endDate → newEndDate).
+    // excludeBookingId prevents the original booking from counting against itself
+    // (its endDate equals the extension startDate, so the overlap predicate fires).
+    const extCapacity1 = await checkBoardingCapacity({
+      petIds: originalBooking.bookingPets.map(bp => bp.pet.id),
+      startDate: originalBooking.endDate ?? originalBooking.startDate,
+      endDate: newEndDate,
+      excludeBookingId: originalBooking.id,
+    });
+    if (!extCapacity1.ok) {
+      return NextResponse.json({ error: 'CAPACITY_EXCEEDED', ...extCapacity1 }, { status: 400 });
+    }
 
     // Recalculate new total based on the full merged duration (not a naive sum)
     // The extension booking is created with totalPrice:0 and no invoice, so summing would
@@ -432,6 +446,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     if (booking.endDate && newEndDate <= booking.endDate) {
       return NextResponse.json({ error: 'New end date must be after current end date' }, { status: 400 });
+    }
+
+    // Capacity check for the extension window (booking.endDate → newEndDate).
+    // excludeBookingId prevents the booking from counting against itself
+    // (its current endDate equals the extension startDate, triggering the overlap predicate).
+    const extCapacity2 = await checkBoardingCapacity({
+      petIds: booking.bookingPets.map(bp => bp.pet.id),
+      startDate: booking.endDate ?? booking.startDate,
+      endDate: newEndDate,
+      excludeBookingId: id,
+    });
+    if (!extCapacity2.ok) {
+      return NextResponse.json({ error: 'CAPACITY_EXCEEDED', ...extCapacity2 }, { status: 400 });
     }
 
     const newNights = Math.floor((newEndDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24));

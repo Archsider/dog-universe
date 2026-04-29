@@ -106,7 +106,19 @@ export default function ReservationActions({ booking, locale }: Props) {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast({ title: data.error ?? (isFr ? 'Erreur lors de l\'approbation' : 'Approval error'), variant: 'destructive' });
+        if (data.error === 'CAPACITY_EXCEEDED') {
+          const speciesLabel = isFr
+            ? (data.species === 'DOG' ? 'chiens' : 'chats')
+            : (data.species === 'DOG' ? 'dogs' : 'cats');
+          toast({
+            title: isFr
+              ? `Pension complète — ${data.available} place(s) dispo. pour les ${speciesLabel}.`
+              : `Pension full — ${data.available} slot(s) available for ${speciesLabel}.`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({ title: data.error ?? (isFr ? 'Erreur lors de l\'approbation' : 'Approval error'), variant: 'destructive' });
+        }
         return;
       }
       toast({ title: isFr ? 'Extension approuvée — réservations fusionnées.' : 'Extension approved — bookings merged.' });
