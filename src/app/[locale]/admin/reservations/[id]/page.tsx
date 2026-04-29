@@ -12,6 +12,7 @@ import DeleteBookingButton from './DeleteBookingButton';
 import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import StayPhotosSection from './StayPhotosSection';
 import AdminMessageSection from './AdminMessageSection';
+import AddonRequestsSection from './AddonRequestsSection';
 import ExtendBookingSection from './ExtendBookingSection';
 import MergeBookingsSection from './MergeBookingsSection';
 import EditDatesSection from './EditDatesSection';
@@ -80,7 +81,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
     relation: 'before' | 'after';
   };
 
-  // ── 6 queries indépendantes en parallèle ──────────────────────────────────
+  // ── 7 queries indépendantes en parallèle ──────────────────────────────────
   const [
     supplementaryInvoice,
     pendingExtensionBooking,
@@ -88,6 +89,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
     before,
     after,
     bookingMessages,
+    addonRequestNotifs,
   ] = await Promise.all([
     prisma.invoice.findFirst({
       where: {
@@ -142,7 +144,41 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       orderBy: { createdAt: 'asc' },
       select: { id: true, messageFr: true, messageEn: true, createdAt: true },
     }),
+    // Distinct addon requests for this booking — each request is a unique metadata blob
+    // (same JSON across all admin notifications for that request thanks to a per-request UUID).
+    prisma.notification.findMany({
+      where: { type: 'ADDON_REQUEST', metadata: { contains: `"bookingId":"${id}"` } },
+      distinct: ['metadata'],
+      orderBy: { createdAt: 'desc' },
+      select: { metadata: true, createdAt: true },
+    }),
   ]);
+
+  // Parse addon request metadata
+  type ParsedAddonRequest = {
+    requestId: string;
+    serviceType: 'PET_TAXI' | 'TOILETTAGE' | 'AUTRE';
+    message: string;
+    createdAt: string;
+  };
+  const addonRequests: ParsedAddonRequest[] = addonRequestNotifs
+    .map((n): ParsedAddonRequest | null => {
+      if (!n.metadata) return null;
+      try {
+        const parsed: unknown = JSON.parse(n.metadata);
+        if (typeof parsed !== 'object' || parsed === null) return null;
+        const meta = parsed as Record<string, unknown>;
+        const serviceType = meta.serviceType;
+        if (serviceType !== 'PET_TAXI' && serviceType !== 'TOILETTAGE' && serviceType !== 'AUTRE') return null;
+        return {
+          requestId: typeof meta.requestId === 'string' ? meta.requestId : `${n.createdAt.getTime()}`,
+          serviceType,
+          message: typeof meta.message === 'string' ? meta.message : '',
+          createdAt: n.createdAt.toISOString(),
+        };
+      } catch { return null; }
+    })
+    .filter((x): x is ParsedAddonRequest => x !== null);
 
   const adjacentBookings: AdjacentBooking[] = [];
   if (before) {
@@ -646,6 +682,15 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
           )}
           {!isPendingExtension && (
             <AdminMessageSection bookingId={booking.id} locale={locale} initialMessages={bookingMessages} />
+          )}
+          {!isPendingExtension && (
+            <AddonRequestsSection
+              bookingRef={booking.id.slice(0, 8).toUpperCase()}
+              clientName={booking.client.name}
+              clientPhone={booking.client.phone}
+              requests={addonRequests}
+              locale={locale}
+            />
           )}
         </div>
       </div>

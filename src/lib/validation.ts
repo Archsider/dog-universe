@@ -123,6 +123,12 @@ export const bookingExtensionRequestSchema = z.object({
   note: z.string().max(500).optional().nullable(),
 });
 
+// Demande d'addon (Pet Taxi / Toilettage / Autre) sur une réservation existante
+export const addonRequestSchema = z.object({
+  serviceType: z.enum(['PET_TAXI', 'TOILETTAGE', 'AUTRE']),
+  message: z.string().max(500).optional(),
+});
+
 // PATCH booking côté CLIENT — seul le statut CANCELLED est autorisé
 export const bookingClientCancelSchema = z.object({
   status: z.literal('CANCELLED'),

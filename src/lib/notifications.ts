@@ -19,6 +19,7 @@ export type NotificationType =
   | 'LOYALTY_CLAIM_PENDING'     // admin receives when a client submits a claim
   | 'NEW_CLIENT_REGISTRATION'   // admin receives when a new client registers
   | 'EXTENSION_REQUEST'         // admin receives when a client requests a stay extension
+  | 'ADDON_REQUEST'             // admin receives when a client requests an additional service on a booking
   | 'BOOKING_EXTENDED'          // client receives when stay is extended (admin direct or approved)
   | 'BOOKING_NO_SHOW'           // client receives when booking is marked NO_SHOW by admin
   | 'BOOKING_WAITLISTED'        // client receives when booking is queued on the waitlist
@@ -432,6 +433,42 @@ export async function getUnreadCount(userId: string): Promise<number> {
 }
 
 // ─── Extension request notifications ─────────────────────────────────────────
+
+// ─── Addon request notifications ─────────────────────────────────────────────
+
+const ADDON_LABELS: Record<string, { fr: string; en: string }> = {
+  PET_TAXI:   { fr: 'Pet Taxi',    en: 'Pet Taxi' },
+  TOILETTAGE: { fr: 'Toilettage',  en: 'Grooming' },
+  AUTRE:      { fr: 'Autre',       en: 'Other' },
+};
+
+export async function notifyAdminsAddonRequest(args: {
+  bookingId: string;
+  bookingRef: string;
+  clientName: string;
+  petNames: string;
+  serviceType: 'PET_TAXI' | 'TOILETTAGE' | 'AUTRE';
+  message: string;
+  requestId: string;
+}) {
+  const labels = ADDON_LABELS[args.serviceType];
+  const messageSuffixFr = args.message ? ` — « ${args.message} »` : '';
+  const messageSuffixEn = args.message ? ` — "${args.message}"` : '';
+  return createAdminNotifications({
+    type: 'ADDON_REQUEST',
+    titleFr: `Demande d'addon — ${labels.fr}`,
+    titleEn: `Addon request — ${labels.en}`,
+    messageFr: `${args.clientName} demande ${labels.fr} pour ${args.petNames} (réf. ${args.bookingRef})${messageSuffixFr}`,
+    messageEn: `${args.clientName} requests ${labels.en} for ${args.petNames} (ref. ${args.bookingRef})${messageSuffixEn}`,
+    metadata: {
+      bookingId: args.bookingId,
+      bookingRef: args.bookingRef,
+      requestId: args.requestId,
+      serviceType: args.serviceType,
+      message: args.message,
+    },
+  });
+}
 
 export async function notifyAdminsExtensionRequest(
   bookingRef: string,

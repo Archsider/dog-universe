@@ -36,7 +36,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, userRole = 'ADMIN' }: { pendingCount?: number; pendingClaimsCount?: number; userRole?: string }) {
+export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRequestCount = 0, userRole = 'ADMIN' }: { pendingCount?: number; pendingClaimsCount?: number; addonRequestCount?: number; userRole?: string }) {
   const t = useTranslations('nav.admin');
   const locale = useLocale();
   const pathname = usePathname();
@@ -102,6 +102,14 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, userRol
               {isReservations && pendingCount > 0 && (
                 <span className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-amber-500 text-white text-xs font-bold">
                   {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
+              )}
+              {isReservations && addonRequestCount > 0 && (
+                <span
+                  title="Addon requests"
+                  className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-gold-500 text-white text-xs font-bold"
+                >
+                  {addonRequestCount > 99 ? '99+' : addonRequestCount}
                 </span>
               )}
               {isLoyalty && pendingClaimsCount > 0 && (

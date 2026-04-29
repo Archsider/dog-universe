@@ -14,6 +14,7 @@ import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import CancelBookingButton from '../../history/CancelBookingButton';
 import AutoRefresh from '@/components/shared/AutoRefresh';
 import RequestExtensionButton from './RequestExtensionButton';
+import RequestAddonButton from './RequestAddonButton';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
@@ -495,6 +496,23 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
             ))}
           </div>
         </div>
+
+        {/* Addon request (Pet Taxi / Grooming / Other) — only for active bookings */}
+        {['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && (
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-3">
+            <div>
+              <p className="font-semibold text-charcoal text-sm">
+                {locale === 'fr' ? 'Un service en plus ?' : 'Need an extra service?'}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {locale === 'fr'
+                  ? 'Pet Taxi, toilettage ou autre — nous vous contactons rapidement.'
+                  : 'Pet Taxi, grooming or other — we\'ll get back to you shortly.'}
+              </p>
+            </div>
+            <RequestAddonButton bookingId={booking.id} locale={locale} />
+          </div>
+        )}
 
         {/* Pricing */}
         {(booking.boardingDetail || booking.taxiDetail) && (

@@ -17,14 +17,17 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
   if (!session?.user) redirect(`/${locale}/auth/login`);
   if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/client/dashboard`);
 
-  const [pendingCount, pendingClaimsCount] = await Promise.all([
+  const [pendingCount, pendingClaimsCount, addonRequestCount] = await Promise.all([
     prisma.booking.count({ where: { status: 'PENDING', deletedAt: null } }),
     prisma.loyaltyBenefitClaim.count({ where: { status: 'PENDING' } }),
+    prisma.notification.count({
+      where: { userId: session.user.id, type: 'ADDON_REQUEST', read: false },
+    }),
   ]);
 
   return (
     <div className="min-h-screen bg-ivory-50 flex">
-      <AdminSidebar pendingCount={pendingCount} pendingClaimsCount={pendingClaimsCount} userRole={session.user.role} />
+      <AdminSidebar pendingCount={pendingCount} pendingClaimsCount={pendingClaimsCount} addonRequestCount={addonRequestCount} userRole={session.user.role} />
       <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
         {/* Top bar */}
         <header className="sticky top-0 z-30 h-16 bg-white border-b border-ivory-200 flex items-center justify-between px-4 lg:px-6">
