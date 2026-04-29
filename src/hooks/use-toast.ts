@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 
 export type ToastVariant = 'default' | 'destructive' | 'success';
 
@@ -46,14 +46,13 @@ function removeToast(id: string) {
 export function useToast(): ToastState {
   const [toasts, setToasts] = useState<Toast[]>(currentToasts);
 
-  const listener = useCallback((updated: Toast[]) => {
-    setToasts(updated);
-  }, []);
-
-  // Subscribe on mount
-  if (!toastListeners.includes(listener)) {
+  useEffect(() => {
+    const listener = (updated: Toast[]) => setToasts(updated);
     toastListeners.push(listener);
-  }
+    return () => {
+      toastListeners = toastListeners.filter((l) => l !== listener);
+    };
+  }, []);
 
   return {
     toasts,
