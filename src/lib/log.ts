@@ -66,4 +66,8 @@ export const LOG_ACTIONS = {
 
   // Pets
   PET_SOFT_DELETED: 'PET_SOFT_DELETED',
+
+  // RGPD
+  RGPD_EXPORT: 'RGPD_EXPORT',
+  RGPD_PURGE: 'RGPD_PURGE',
 } as const;
