@@ -199,6 +199,37 @@ Définis dans `vercel.json`, tous à **08h00 UTC** :
 **Protection :** header `x-cron-secret` vérifié contre `CRON_SECRET` (déjà défini sur Vercel).
 Vercel l'injecte automatiquement via `Authorization: Bearer` pour ses propres crons.
 
+### Worker BullMQ (depuis 2026-04-29)
+| Route | Fréquence | Rôle |
+|---|---|---|
+| `/api/workers/process` | Chaque minute | Dépile et traite les jobs email + SMS des queues BullMQ |
+
+Architecture asynchrone :
+- `POST /api/bookings` et `PATCH /api/admin/bookings/[id]` → `enqueueEmail()` / `enqueueSms()` (non-bloquant)
+- Si Redis down au moment de l'enqueue → fallback direct (sendEmail / sendSMS)
+- Le cron `/api/workers/process` crée des Workers BullMQ éphémères, traite max 10 jobs/queue en 55 s, puis close
+- Jobs épuisant leurs 3 tentatives → archivés dans la queue `dlq` (Dead Letter Queue)
+- Monitoring : `/admin/queues` (SUPERADMIN uniquement) — compteurs + rejouer les jobs échoués
+
+**IORedis vs @upstash/redis :**
+- `@upstash/redis` (REST HTTP) → cron-lock uniquement
+- `ioredis` (TCP) → BullMQ uniquement — requiert `UPSTASH_REDIS_HOST` + `UPSTASH_REDIS_PASSWORD`
+
+**Fichiers clés BullMQ :**
+```
+src/lib/redis-bullmq.ts          — connexion IORedis (singleton + isBullMQConfigured())
+src/lib/queues/index.ts          — Queue singletons + enqueueEmail() / enqueueSms()
+src/workers/processors.ts        — processEmailJob() / processSmsJob()
+src/app/api/workers/process/route.ts  — cron endpoint (Worker éphémère + DLQ)
+src/app/api/admin/queues/route.ts     — GET stats / POST retry (SUPERADMIN)
+src/app/[locale]/admin/queues/page.tsx — UI monitoring (SUPERADMIN)
+```
+
+**Variables d'env BullMQ requises en production :**
+- `UPSTASH_REDIS_HOST` — hostname TCP Upstash (différent de l'URL REST)
+- `UPSTASH_REDIS_PORT` — port TLS Upstash (défaut 6379)
+- `UPSTASH_REDIS_PASSWORD` — mot de passe Upstash TCP
+
 ### Idempotence Redis (depuis 2026-04-28)
 Chaque cron est protégé par `acquireCronLock()` de `src/lib/cron-lock.ts` :
 - Lock key : `cron:{name}:{period}` — `YYYY-MM-DD` (daily) ou `YYYY-Www` (weekly, ISO)
@@ -327,9 +358,15 @@ Fichier : `prisma/migrations/20260428_capacity_defaults/migration.sql`
 Note : les clés existent déjà avec valeur `'50'` dans `DEFAULT_SETTINGS` du code → ce seed évite le fallback hardcodé de 50.
 
 ### 2. Variables d'env Vercel à ajouter
-- `UPSTASH_REDIS_REST_URL` — URL REST Upstash
-- `UPSTASH_REDIS_REST_TOKEN` — token Upstash
+- `UPSTASH_REDIS_REST_URL` — URL REST Upstash (cron-lock)
+- `UPSTASH_REDIS_REST_TOKEN` — token Upstash (cron-lock)
 Sans ces vars, le cron-lock est fail-open (crons s'exécutent, déduplication DB seule).
+
+**BullMQ (TCP, différent des vars REST ci-dessus) :**
+- `UPSTASH_REDIS_HOST` — hostname TCP Upstash (ex: `polished-xxx.upstash.io`)
+- `UPSTASH_REDIS_PORT` — port TLS (défaut `6379`)
+- `UPSTASH_REDIS_PASSWORD` — password TCP Upstash
+Sans ces vars, BullMQ est désactivé → les emails/SMS sont envoyés directement (fallback).
 
 ### 3. Secrets GitHub pour E2E Playwright
 Ajouter dans Settings → Secrets and variables → Actions :
@@ -419,6 +456,26 @@ Phrase principale : Nous attendons {_companionFr} avec impatience.
 - `buildAnimalLine` : virgule intra-groupe si multi-espèces (évite `"Max et Luna (chiens) et Mimi (chat)"` ambigu)
 - Noms animaux **non échappés** via `escapeHtml` — accents/tirets marocains OK
 - `fmtLocale = 'fr-MA' | 'en-GB'` pour `toLocaleDateString` — cohérent avec le reste du codebase (Maroc, jour en premier)
+
+### 2026-04-29 — Session BullMQ async job queues
+
+**1 commit sur `claude/fix-kanban-pet-taxi-status-7UzR7` :**
+
+**`feat(bullmq): async job queues + bull board monitoring`** —
+- `src/lib/redis-bullmq.ts` : connexion IORedis singleton pour BullMQ (TCP Upstash, ≠ REST). Options requises : `maxRetriesPerRequest: null`, `enableReadyCheck: false`, `enableOfflineQueue: false`. `isBullMQConfigured()` pour fail-safe.
+- `src/lib/queues/index.ts` : Queue singletons `email`/`sms`/`dlq`. Helpers `enqueueEmail()` et `enqueueSms()` avec fallback direct si Redis down. JobId pattern `${bookingId}:${type}` pour déduplication.
+- `src/workers/processors.ts` : `processEmailJob()` + `processSmsJob()` (routing via `to === 'ADMIN'`).
+- `src/app/api/workers/process/route.ts` : cron toutes les minutes — Workers BullMQ éphémères (max 10 jobs/queue, 55s timeout). DLQ archiving dans le handler `worker.on('failed')`.
+- `src/app/api/admin/queues/route.ts` : GET stats (SUPERADMIN) + POST retry.
+- `src/app/[locale]/admin/queues/page.tsx` + `QueueMonitorClient.tsx` : UI monitoring avec compteurs, jobs échoués, bouton "Rejouer".
+- `vercel.json` : ajout du cron `* * * * *` pour `/api/workers/process`.
+- Intégration dans `POST /api/bookings` et `PATCH /api/admin/bookings/[id]` : tous les `sendEmail().catch()` / `sendSMS().catch()` / `sendAdminSMS().catch()` remplacés par `enqueueEmail()` / `enqueueSms()`.
+
+**Décisions techniques :**
+- IORedis TCP (pas REST) obligatoire pour BullMQ — Lua scripts + MULTI/EXEC non supportés par l'API REST Upstash
+- Fail-open à l'enqueue (fallback direct) mais fail-closed à l'exécution (retry 3× + DLQ)
+- Workers éphémères (créés/fermés par le cron) plutôt que workers persistants (incompatible Vercel serverless)
+- `SmsJobData.to: string | null` — null skip silencieux (cohérent avec `sendSMS(null)` → `return false`)
 
 ### 2026-04-28 — Session capacité + sécurité + cron idempotence
 

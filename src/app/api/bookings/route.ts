@@ -10,6 +10,7 @@ import {
 } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
+import { enqueueEmail, enqueueSms } from '@/lib/queues/index';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
 import { bookingCreateSchema, formatZodError } from '@/lib/validation';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
@@ -636,16 +637,17 @@ export async function POST(request: Request) {
         booking.id
       ).catch(() => {});
 
-      // SMS admin — nouvelle réservation
+      // SMS admin — nouvelle réservation (queued, with direct-send fallback)
       const clientLabel = booking.client.name ?? booking.client.email;
       const dateRangeSMS = booking.serviceType === 'BOARDING' && booking.endDate
         ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
         : `le ${formatDateFR(booking.startDate)}`;
-      sendAdminSMS(
-        `🔔 Nouvelle réservation : ${clientLabel} pour ${petNames} ${dateRangeSMS}.`
+      enqueueSms(
+        { to: 'ADMIN', message: `🔔 Nouvelle réservation : ${clientLabel} pour ${petNames} ${dateRangeSMS}.` },
+        `${booking.id}:admin-new-booking-sms`,
       ).catch(() => {});
 
-      // Email admin — loop tous les admins en DB (multi-admin scalable)
+      // Email admin — loop tous les admins en DB (queued, with direct-send fallback)
       (async () => {
         try {
           const esc = (s: string) => s
@@ -664,7 +666,7 @@ export async function POST(request: Request) {
           const dateRangeHtmlEn = booking.serviceType === 'BOARDING' && booking.endDate
             ? `from <strong>${formatDateFR(booking.startDate)}</strong> to <strong>${formatDateFR(booking.endDate)}</strong>`
             : `on <strong>${formatDateFR(booking.startDate)}</strong>`;
-          await Promise.all(admins.map(admin => {
+          await Promise.all(admins.map((admin, idx) => {
             const isFr = (admin.language ?? 'fr') === 'fr';
             const subject = isFr
               ? `🔔 Nouvelle réservation — ${clientLabel}`
@@ -690,8 +692,10 @@ export async function POST(request: Request) {
                  </ul>
                  <p><a href="${appUrl}/en/admin/reservations/${booking.id}">Review and confirm</a></p>
                  <p>— Dog Universe CRM</p>`;
-            return sendEmail({ to: admin.email, subject, html })
-              .catch(err => console.error('[Email] Admin new booking failed:', err));
+            return enqueueEmail(
+              { to: admin.email, subject, html },
+              `${booking.id}:admin-new-booking-email-${idx}`,
+            ).catch(err => console.error('[Email] Admin new booking enqueue failed:', err));
           }));
         } catch (err) {
           console.error('[Email] Admin new booking loop failed:', err);
@@ -710,7 +714,7 @@ export async function POST(request: Request) {
       petName: petNames,
     }, locale);
 
-    sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
+    enqueueEmail({ to: booking.client.email, subject, html }, `${booking.id}:booking-confirmation-email`).catch(() => {});
 
     await logAction({
       userId: session.user.id,
