@@ -9,7 +9,11 @@ import 'leaflet/dist/leaflet.css';
 // Tuiles OpenStreetMap (whitelisted dans CSP middleware) — pas d'API key requise.
 const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-const POLL_MS = 3000;
+// Fallback poll interval (used only if the SSE stream cannot be established
+// — old browsers, blocked proxies, repeated server errors).
+const FALLBACK_POLL_MS = 10_000;
+// Threshold before we give up on SSE and switch to fallback polling.
+const SSE_MAX_RECONNECT_ATTEMPTS = 3;
 
 // Composants Leaflet : SSR off (Leaflet utilise window/document).
 const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
@@ -43,6 +47,7 @@ export default function TrackPage() {
   const [carIcon, setCarIcon] = useState<LeafletDivIcon | null>(null);
   // Polling : setTimeout récursif (plus fiable que setInterval pour les requêtes lentes)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
   // Refs impératifs Leaflet — la prop "position" du Marker peut ne pas
   // se réactualiser correctement en mode dynamic-import. On déplace le
   // marker et recentre la carte via setLatLng / flyTo à chaque update.
@@ -65,39 +70,125 @@ export default function TrackPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Fetch + polling récursif via setTimeout (plus fiable que setInterval)
+  // Stratégie en deux étages :
+  //  1. SSE (`/api/taxi/{token}/stream`) — push temps réel, EventSource gère
+  //     la reconnexion auto. Au-delà de SSE_MAX_RECONNECT_ATTEMPTS échecs
+  //     consécutifs (server errors, CSP, navigateur sans support), bascule.
+  //  2. Fallback polling 10 s sur l'endpoint REST historique
+  //     `/api/taxi-tracking/{token}` (toujours dispo).
+  // Premier fetch REST une fois pour récupérer clientName/petNames + état
+  // initial avant que le stream ne livre des positions.
   useEffect(() => {
     if (!token) return;
     let aborted = false;
 
-    const poll = async () => {
+    // Initial REST fetch: récupère le nom client/animaux (le stream ne les
+    // envoie pas) + statut "active". Si 404 → notfound, on s'arrête.
+    const fetchOnce = async () => {
       try {
         const res = await fetch(`/api/taxi-tracking/${token}`, { cache: 'no-store' });
-        if (aborted) return;
-        if (res.status === 404) {
-          setStatus('notfound');
-          return; // pas de re-schedule
-        }
-        if (!res.ok) {
-          setStatus('error');
-        } else {
-          const json = (await res.json()) as TrackResponse;
-          if (aborted) return;
-          setData(json);
-          setStatus(json.active ? 'ok' : 'inactive');
-        }
+        if (aborted) return false;
+        if (res.status === 404) { setStatus('notfound'); return false; }
+        if (!res.ok) { setStatus('error'); return false; }
+        const json = (await res.json()) as TrackResponse;
+        if (aborted) return false;
+        setData(json);
+        setStatus(json.active ? 'ok' : 'inactive');
+        return json.active === true;
       } catch {
         if (!aborted) setStatus('error');
-      }
-      if (!aborted) {
-        timeoutRef.current = setTimeout(poll, POLL_MS);
+        return false;
       }
     };
 
-    poll();
+    const startFallbackPolling = () => {
+      const tick = async () => {
+        if (aborted) return;
+        try {
+          const res = await fetch(`/api/taxi-tracking/${token}`, { cache: 'no-store' });
+          if (aborted) return;
+          if (res.status === 404) { setStatus('notfound'); return; }
+          if (res.ok) {
+            const json = (await res.json()) as TrackResponse;
+            if (!aborted) {
+              setData((prev) => ({ ...prev, ...json }));
+              setStatus(json.active ? 'ok' : 'inactive');
+            }
+          }
+        } catch { /* swallow — try again next tick */ }
+        if (!aborted) {
+          timeoutRef.current = setTimeout(tick, FALLBACK_POLL_MS);
+        }
+      };
+      void tick();
+    };
+
+    const startSse = () => {
+      if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
+        startFallbackPolling();
+        return;
+      }
+      let consecutiveErrors = 0;
+      const es = new EventSource(`/api/taxi/${token}/stream`);
+      eventSourceRef.current = es;
+
+      es.addEventListener('connected', () => { consecutiveErrors = 0; });
+
+      es.addEventListener('location', (ev) => {
+        if (aborted) return;
+        try {
+          const payload = JSON.parse((ev as MessageEvent).data) as {
+            lat: number; lng: number; timestamp: number;
+            heading?: number | null; speed?: number | null;
+          };
+          setData((prev) => ({
+            ...prev,
+            active: true,
+            lastLocation: {
+              lat: payload.lat,
+              lng: payload.lng,
+              heading: payload.heading ?? null,
+              speed: payload.speed ?? null,
+              createdAt: new Date(payload.timestamp).toISOString(),
+            },
+          }));
+          setStatus('ok');
+        } catch { /* malformed event — ignore */ }
+      });
+
+      es.addEventListener('completed', () => {
+        if (aborted) return;
+        setData((prev) => ({ ...prev, active: false }));
+        setStatus('inactive');
+        es.close();
+      });
+
+      es.onerror = () => {
+        consecutiveErrors += 1;
+        // EventSource will auto-reconnect; only escalate to polling fallback
+        // when the connection has failed repeatedly. Server-side soft-timeouts
+        // (~54 s) are normal reconnects and won't accumulate errors here.
+        if (consecutiveErrors >= SSE_MAX_RECONNECT_ATTEMPTS) {
+          es.close();
+          eventSourceRef.current = null;
+          if (!aborted) startFallbackPolling();
+        }
+      };
+    };
+
+    void (async () => {
+      const isActive = await fetchOnce();
+      if (aborted) return;
+      if (isActive) startSse();
+    })();
+
     return () => {
       aborted = true;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
     };
   }, [token]);
 

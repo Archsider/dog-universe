@@ -42,6 +42,16 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(300, '60 m'),
       prefix: 'rl:admin',
     }),
+    // Public taxi SSE stream: 60 connection-opens per hour per IP. Each
+    // connection is short-lived (~55 s) and reconnects via EventSource;
+    // this caps at roughly one fresh connect per minute, which is plenty
+    // for legitimate viewers and stops a clever attacker from hammering
+    // the stream endpoint.
+    taxiStream: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(60, '60 m'),
+      prefix: 'rl:taxi-stream',
+    }),
   };
 }
 
@@ -61,11 +71,17 @@ const RATE_LIMITED_ROUTES: Record<
   '/api/uploads': 'uploads',
 };
 
+type DynamicBucket = 'uploads' | 'auth' | 'passwordReset' | 'bookings' | 'taxiStream';
+
 // Routes dynamiques (avec [params]) — match par suffixe de path
-function getDynamicLimitBucket(path: string): 'uploads' | 'auth' | 'passwordReset' | 'bookings' | null {
+function getDynamicLimitBucket(path: string): DynamicBucket | null {
   // /api/pets/{petId}/vaccinations/extract — upload + parsing PDF coûteux
   if (path.startsWith('/api/pets/') && path.endsWith('/vaccinations/extract')) {
     return 'uploads';
+  }
+  // /api/taxi/{token}/stream — public SSE endpoint, 60 opens/h per IP
+  if (path.startsWith('/api/taxi/') && path.endsWith('/stream')) {
+    return 'taxiStream';
   }
   return null;
 }
@@ -103,9 +119,12 @@ export async function middleware(request: NextRequest) {
 
     const limitKey = exactKey ?? dynamicKey ?? (isAdminMutation ? 'adminMutation' : null);
 
-    // Routes exactes + dynamiques : POST seulement (mutations).
+    // Routes exactes + dynamiques (mutation) : POST seulement.
+    // taxiStream : GET (long-lived SSE connection — rate-limit per open).
     // Admin : toutes méthodes mutantes (déjà filtré par isAdminMutation).
-    if (limitKey && ((exactKey || dynamicKey) ? request.method === 'POST' : true)) {
+    const dynamicAllowsThisMethod =
+      dynamicKey === 'taxiStream' ? request.method === 'GET' : request.method === 'POST';
+    if (limitKey && (exactKey ? request.method === 'POST' : dynamicKey ? dynamicAllowsThisMethod : true)) {
       try {
         const result = await limiter[limitKey].limit(ip);
 
