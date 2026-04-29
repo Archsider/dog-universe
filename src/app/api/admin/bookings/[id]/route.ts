@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { createBookingValidationNotification, createBookingRefusalNotification, createBookingInProgressNotification, createBookingCompletedNotification } from '@/lib/notifications';
+import {
+  createBookingValidationNotification,
+  createBookingRefusalNotification,
+  createBookingInProgressNotification,
+  createBookingCompletedNotification,
+  createBookingNoShowNotification,
+  promoteWaitlistedBooking,
+} from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import {
   sendSMS, sendAdminSMS, formatDateFR,
@@ -41,7 +48,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const body = await request.json();
   const { status, notes } = body;
 
-  const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS', 'CANCELLED', 'REJECTED', 'COMPLETED', 'PENDING_EXTENSION'];
+  const VALID_STATUSES = [
+    'PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS',
+    'CANCELLED', 'REJECTED', 'COMPLETED', 'NO_SHOW',
+    'WAITLIST', 'PENDING_EXTENSION',
+  ];
   if (status && !VALID_STATUSES.includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
@@ -57,6 +68,29 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     },
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // ── Status transition guards ──────────────────────────────────────────────
+  // NO_SHOW : seulement depuis CONFIRMED ou IN_PROGRESS (pas depuis PENDING,
+  // CANCELLED, COMPLETED, WAITLIST, etc. — un séjour non confirmé ne peut
+  // pas être un "no-show", il est juste annulé).
+  if (status === 'NO_SHOW' && !['CONFIRMED', 'IN_PROGRESS'].includes(booking.status)) {
+    return NextResponse.json(
+      { error: 'INVALID_TRANSITION', message: 'NO_SHOW only from CONFIRMED or IN_PROGRESS' },
+      { status: 400 },
+    );
+  }
+  // WAITLIST : un booking déjà sur liste d'attente ne peut sortir que vers
+  // PENDING (promotion manuelle) ou CANCELLED (le client se désiste).
+  if (
+    status &&
+    booking.status === 'WAITLIST' &&
+    !['PENDING', 'CANCELLED', 'WAITLIST'].includes(status)
+  ) {
+    return NextResponse.json(
+      { error: 'INVALID_TRANSITION', message: 'From WAITLIST only PENDING or CANCELLED' },
+      { status: 400 },
+    );
+  }
 
   // ── Patch BoardingDetail fields (taxi return / taxi go) ───────────────────
   if (body.patchBoardingDetail !== undefined) {
@@ -559,33 +593,74 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         details: { from: booking.status, to: status },
       });
     } else if (status === 'REJECTED' || status === 'CANCELLED') {
-      await createBookingRefusalNotification(booking.clientId, bookingRef);
-      const { subject, html } = getEmailTemplate('booking_refused', {
-        clientName: booking.client.name ?? booking.client.email,
-        bookingRef,
-        petName: petNames,
-      }, userLang, pets);
-      sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
+      // Si le booking annulé était sur WAITLIST, il n'a jamais consommé de
+      // place — pas la peine d'envoyer le SMS / email "annulation" ni de
+      // déclencher la promotion d'un autre WAITLIST. On log juste.
+      const wasActiveSlot = booking.status !== 'WAITLIST';
 
-      // SMS client annulation + SMS admin alerte
-      await sendSMS(
-        booking.client.phone,
-        `Bonjour ${firstName}, votre réservation pour ${petNames} a été annulée. Nous restons disponibles. — Dog Universe`,
-      );
-      const adminDateRange = booking.serviceType === 'BOARDING' && booking.endDate
-        ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
-        : ` le ${formatDateFR(booking.startDate)}`;
-      await sendAdminSMS(
-        `⚠️ Annulation : ${petNames} de ${booking.client.name}${adminDateRange}.`,
-      );
+      if (wasActiveSlot) {
+        await createBookingRefusalNotification(booking.clientId, bookingRef);
+        const { subject, html } = getEmailTemplate('booking_refused', {
+          clientName: booking.client.name ?? booking.client.email,
+          bookingRef,
+          petName: petNames,
+        }, userLang, pets);
+        sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
+
+        // SMS client annulation + SMS admin alerte
+        await sendSMS(
+          booking.client.phone,
+          `Bonjour ${firstName}, votre réservation pour ${petNames} a été annulée. Nous restons disponibles. — Dog Universe`,
+        );
+        const adminDateRange = booking.serviceType === 'BOARDING' && booking.endDate
+          ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
+          : ` le ${formatDateFR(booking.startDate)}`;
+        await sendAdminSMS(
+          `⚠️ Annulation : ${petNames} de ${booking.client.name}${adminDateRange}.`,
+        );
+      }
 
       await logAction({
         userId: session.user.id,
         action: status === 'REJECTED' ? LOG_ACTIONS.BOOKING_REJECTED : LOG_ACTIONS.BOOKING_CANCELLED,
         entityType: 'Booking',
         entityId: id,
-        details: { from: booking.status, to: status },
+        details: { from: booking.status, to: status, wasWaitlist: !wasActiveSlot },
       });
+
+      // Une place se libère sur ces dates → promouvoir le 1er WAITLIST
+      // (createdAt ASC) qui chevauche la fenêtre. Non bloquant.
+      if (wasActiveSlot && booking.serviceType === 'BOARDING' && booking.endDate) {
+        promoteWaitlistedBooking({
+          startDate: booking.startDate,
+          endDate: booking.endDate,
+        }).catch((err) => console.error('[bookings] waitlist promotion failed:', err));
+      }
+    } else if (status === 'NO_SHOW') {
+      // Client absent sans préavis. Notification informative, pas d'email
+      // formel (l'admin contactera directement si nécessaire). Log dédié
+      // sous BOOKING_CANCELLED car NO_SHOW est sémantiquement une non-venue.
+      await createBookingNoShowNotification(booking.clientId, bookingRef, petNames);
+
+      await sendAdminSMS(
+        `🚫 No Show : ${petNames} de ${booking.client.name} (réf. ${bookingRef}).`,
+      );
+
+      await logAction({
+        userId: session.user.id,
+        action: LOG_ACTIONS.BOOKING_CANCELLED,
+        entityType: 'Booking',
+        entityId: id,
+        details: { from: booking.status, to: 'NO_SHOW' },
+      });
+
+      // NO_SHOW libère aussi la place — promouvoir le 1er WAITLIST.
+      if (booking.serviceType === 'BOARDING' && booking.endDate) {
+        promoteWaitlistedBooking({
+          startDate: booking.startDate,
+          endDate: booking.endDate,
+        }).catch((err) => console.error('[bookings] waitlist promotion failed:', err));
+      }
     } else if (status === 'COMPLETED') {
       const hasGrooming = booking.boardingDetail?.includeGrooming ?? false;
       await createBookingCompletedNotification(

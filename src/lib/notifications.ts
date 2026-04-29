@@ -19,7 +19,10 @@ export type NotificationType =
   | 'LOYALTY_CLAIM_PENDING'     // admin receives when a client submits a claim
   | 'NEW_CLIENT_REGISTRATION'   // admin receives when a new client registers
   | 'EXTENSION_REQUEST'         // admin receives when a client requests a stay extension
-  | 'BOOKING_EXTENDED';         // client receives when stay is extended (admin direct or approved)
+  | 'BOOKING_EXTENDED'          // client receives when stay is extended (admin direct or approved)
+  | 'BOOKING_NO_SHOW'           // client receives when booking is marked NO_SHOW by admin
+  | 'BOOKING_WAITLISTED'        // client receives when booking is queued on the waitlist
+  | 'BOOKING_WAITLIST_PROMOTED'; // client receives when waitlisted booking is promoted to PENDING
 
 interface CreateNotificationData {
   userId: string;
@@ -477,4 +480,102 @@ export async function createExtensionRejectedNotification(
     messageEn: `Your extension request for booking ${bookingRef} could not be approved. Please contact us for more details.`,
     metadata: { bookingRef },
   });
+}
+
+// Booking marked as NO_SHOW by admin — informational message to the client.
+// NO_SHOW bookings do NOT count toward loyalty (totalStays filter is on
+// status='COMPLETED'), so we don't need to deduct anything explicitly.
+export async function createBookingNoShowNotification(
+  clientId: string,
+  bookingRef: string,
+  petName: string,
+) {
+  return createNotification({
+    userId: clientId,
+    type: 'BOOKING_NO_SHOW',
+    titleFr: 'Réservation marquée comme No Show',
+    titleEn: 'Booking marked as No Show',
+    messageFr: `Votre réservation pour ${petName} (réf. ${bookingRef}) a été marquée No Show suite à une absence non signalée. Contactez-nous pour toute question.`,
+    messageEn: `Your booking for ${petName} (ref. ${bookingRef}) was marked No Show due to unreported absence. Please contact us if you have any questions.`,
+    metadata: { bookingRef },
+  });
+}
+
+// Client booked when boarding is full → automatically placed on the waitlist.
+export async function createBookingWaitlistedNotification(
+  clientId: string,
+  bookingRef: string,
+  petName: string,
+) {
+  return createNotification({
+    userId: clientId,
+    type: 'BOOKING_WAITLISTED',
+    titleFr: "Inscription sur liste d'attente",
+    titleEn: 'Added to waitlist',
+    messageFr: `La pension est complète sur ces dates. ${petName} (réf. ${bookingRef}) est en liste d'attente — nous vous contactons dès qu'une place se libère.`,
+    messageEn: `The boarding is full for these dates. ${petName} (ref. ${bookingRef}) is on the waitlist — we'll reach out as soon as a slot opens up.`,
+    metadata: { bookingRef },
+  });
+}
+
+// A slot opened up and this client's waitlisted booking has been promoted
+// to PENDING — they need to wait for admin confirmation as usual.
+export async function createWaitlistPromotedNotification(
+  clientId: string,
+  bookingRef: string,
+  petName: string,
+) {
+  return createNotification({
+    userId: clientId,
+    type: 'BOOKING_WAITLIST_PROMOTED',
+    titleFr: "Une place s'est libérée !",
+    titleEn: 'A slot just opened up!',
+    messageFr: `Bonne nouvelle : une place s'est libérée pour ${petName} (réf. ${bookingRef}). Votre réservation est maintenant en attente de confirmation.`,
+    messageEn: `Good news: a slot is now available for ${petName} (ref. ${bookingRef}). Your booking is now pending confirmation.`,
+    metadata: { bookingRef },
+  });
+}
+
+// Promotes the oldest WAITLIST booking that overlaps the given window to
+// PENDING and notifies its owner. Called whenever capacity is freed
+// (CANCELLED, REJECTED, NO_SHOW). Returns the promoted booking id, or null
+// if no waitlisted booking matched.
+//
+// Only the FIRST candidate is promoted — multiple WAITLIST entries on the
+// same dates are processed FIFO (createdAt ASC). If after promotion the
+// capacity is still partially full, subsequent transitions will pick up
+// the next ones.
+export async function promoteWaitlistedBooking(args: {
+  startDate: Date;
+  endDate: Date | null;
+}): Promise<string | null> {
+  if (!args.endDate) return null;
+
+  const { prisma } = await import('@/lib/prisma');
+  const candidate = await prisma.booking.findFirst({
+    where: {
+      status: 'WAITLIST',
+      serviceType: 'BOARDING',
+      deletedAt: null,
+      startDate: { lte: args.endDate },
+      endDate: { gte: args.startDate, not: null },
+    },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      bookingPets: { include: { pet: { select: { name: true } } } },
+    },
+  });
+
+  if (!candidate) return null;
+
+  await prisma.booking.update({
+    where: { id: candidate.id },
+    data: { status: 'PENDING' },
+  });
+
+  const petNames = candidate.bookingPets.map((bp) => bp.pet.name).join(', ') || 'votre animal';
+  const bookingRef = candidate.id.slice(0, 8).toUpperCase();
+  await createWaitlistPromotedNotification(candidate.clientId, bookingRef, petNames);
+
+  return candidate.id;
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Package, Car, MapPin, Clock, CalendarDays, ChevronRight, ArrowRight, Loader2 } from 'lucide-react';
+import { Package, Car, MapPin, Clock, CalendarDays, ChevronRight, ArrowRight, Loader2, UserX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 export interface KanbanBooking {
@@ -24,6 +24,7 @@ interface Props {
 }
 
 const BOARDING_COLS = [
+  { status: 'WAITLIST',    label: { fr: "Liste d'attente",      en: 'Waitlist' },          color: 'bg-orange-50 border-orange-200', dot: 'bg-orange-400' },
   { status: 'PENDING',     label: { fr: 'Demande reçue',       en: 'Request received' },  color: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-400' },
   { status: 'CONFIRMED',   label: { fr: 'Séjour confirmé',      en: 'Stay confirmed' },    color: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-400' },
   { status: 'IN_PROGRESS', label: { fr: 'Dans nos murs',        en: 'Currently staying' }, color: 'bg-green-50  border-green-200',  dot: 'bg-green-400' },
@@ -40,6 +41,7 @@ const TAXI_COLS = [
 
 // Centralisation des transitions par pipeline
 const BOARDING_NEXT_STATUS: Record<string, string> = {
+  WAITLIST:    'PENDING',     // promotion manuelle depuis liste d'attente
   PENDING:     'CONFIRMED',
   CONFIRMED:   'IN_PROGRESS', // Boarding n'a pas d'étape AT_PICKUP
   IN_PROGRESS: 'COMPLETED',
@@ -54,6 +56,7 @@ const TAXI_NEXT_STATUS: Record<string, string> = {
 
 const ACTION_LABELS: Record<'BOARDING' | 'PET_TAXI', Record<string, { fr: string; en: string }>> = {
   BOARDING: {
+    WAITLIST:    { fr: 'Promouvoir en attente',       en: 'Promote to pending' },
     PENDING:     { fr: 'Confirmer le séjour',        en: 'Confirm stay' },
     CONFIRMED:   { fr: 'Marquer dans nos murs',       en: 'Mark as staying' },
     IN_PROGRESS: { fr: 'Clôturer le séjour',          en: 'Close stay' },
@@ -65,6 +68,10 @@ const ACTION_LABELS: Record<'BOARDING' | 'PET_TAXI', Record<string, { fr: string
     IN_PROGRESS: { fr: 'Arrivé à destination',         en: 'Mark arrived' },
   },
 };
+
+// Statuts pour lesquels un bouton "No Show" est pertinent — uniquement si
+// le séjour est confirmé ou en cours, jamais sur PENDING ou WAITLIST.
+const NO_SHOW_ELIGIBLE_STATUSES = new Set(['CONFIRMED', 'IN_PROGRESS']);
 
 function parseAddresses(notes: string | null): { departure: string | null; arrival: string | null } {
   if (!notes) return { departure: null, arrival: null };
@@ -137,6 +144,66 @@ function ActionButton({
   );
 }
 
+function NoShowButton({
+  bookingId,
+  currentStatus,
+  locale,
+  onStatusChange,
+}: {
+  bookingId: string;
+  currentStatus: string;
+  locale: string;
+  onStatusChange: (id: string, newStatus: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  if (!NO_SHOW_ELIGIBLE_STATUSES.has(currentStatus)) return null;
+
+  const label = locale === 'fr' ? 'No Show' : 'No Show';
+  const confirmMsg =
+    locale === 'fr'
+      ? "Marquer cette réservation comme No Show ? Cette action libère la place et ne compte pas dans les séjours du client."
+      : "Mark this booking as No Show? This frees the slot and is not counted toward the client's stays.";
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm(confirmMsg)) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'NO_SHOW' }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      onStatusChange(bookingId, 'NO_SHOW');
+      toast({
+        title: locale === 'fr' ? 'Marqué No Show' : 'Marked No Show',
+        variant: 'success',
+      });
+    } catch {
+      toast({ title: locale === 'fr' ? 'Erreur' : 'Error', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 hover:border-red-300 transition-all disabled:opacity-50"
+    >
+      {loading ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <UserX className="h-3 w-3 flex-shrink-0" />
+      )}
+      <span>{label}</span>
+    </button>
+  );
+}
+
 function BoardingCard({
   b,
   locale,
@@ -169,6 +236,12 @@ function BoardingCard({
         bookingId={b.id}
         currentStatus={b.status}
         pipeline="BOARDING"
+        locale={locale}
+        onStatusChange={onStatusChange}
+      />
+      <NoShowButton
+        bookingId={b.id}
+        currentStatus={b.status}
         locale={locale}
         onStatusChange={onStatusChange}
       />
@@ -230,6 +303,12 @@ function TaxiCard({
         bookingId={b.id}
         currentStatus={b.status}
         pipeline="PET_TAXI"
+        locale={locale}
+        onStatusChange={onStatusChange}
+      />
+      <NoShowButton
+        bookingId={b.id}
+        currentStatus={b.status}
         locale={locale}
         onStatusChange={onStatusChange}
       />

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, ArrowRight, Settings2, Check, X } from 'lucide-react';
+import { Loader2, ArrowRight, Settings2, Check, X, UserX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface Props {
@@ -43,6 +43,8 @@ const STATUS_LABELS: Record<string, { fr: string; en: string }> = {
   COMPLETED:         { fr: 'Terminé',                 en: 'Completed' },
   CANCELLED:         { fr: 'Annulé',                  en: 'Cancelled' },
   REJECTED:          { fr: 'Refusé',                  en: 'Rejected' },
+  NO_SHOW:           { fr: 'No Show',                 en: 'No Show' },
+  WAITLIST:          { fr: "Liste d'attente",         en: 'Waitlist' },
   PENDING_EXTENSION: { fr: 'Extension en attente',    en: 'Extension pending' },
 };
 
@@ -53,6 +55,7 @@ export default function ReservationActions({ booking, locale }: Props) {
   const [loadingForce, setLoadingForce] = useState(false);
   const [loadingApprove, setLoadingApprove] = useState(false);
   const [loadingReject, setLoadingReject] = useState(false);
+  const [loadingNoShow, setLoadingNoShow] = useState(false);
   const [showForce, setShowForce] = useState(false);
   const router = useRouter();
   const isFr = locale === 'fr';
@@ -62,6 +65,15 @@ export default function ReservationActions({ booking, locale }: Props) {
   const nextStatus = nextStatusMap[currentStatus];
   const actionLabel = nextStatus ? ACTION_LABELS[pipeline]?.[currentStatus] : null;
   const isPendingExtension = currentStatus === 'PENDING_EXTENSION';
+  const canMarkNoShow = currentStatus === 'CONFIRMED' || currentStatus === 'IN_PROGRESS';
+
+  const handleNoShow = async () => {
+    const confirmMsg = isFr
+      ? "Marquer cette réservation comme No Show ? Cette action libère la place et ne compte pas dans les séjours du client."
+      : "Mark this booking as No Show? This frees the slot and is not counted toward the client's stays.";
+    if (!window.confirm(confirmMsg)) return;
+    await patchStatus('NO_SHOW', setLoadingNoShow);
+  };
 
   const patchStatus = async (status: string, setLoading: (v: boolean) => void) => {
     setLoading(true);
@@ -213,6 +225,23 @@ export default function ReservationActions({ booking, locale }: Props) {
                 : (pipeline === 'PET_TAXI' ? 'Transport completed' : 'Stay completed — no further action'))
             : (isFr ? 'Statut final atteint' : 'Final status reached')}
         </p>
+      )}
+
+      {/* No Show — disponible uniquement depuis CONFIRMED ou IN_PROGRESS */}
+      {canMarkNoShow && (
+        <Button
+          onClick={handleNoShow}
+          disabled={loadingNoShow}
+          variant="outline"
+          className="w-full flex items-center gap-2 border-red-200 text-red-700 hover:bg-red-50"
+        >
+          {loadingNoShow ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <UserX className="h-4 w-4" />
+          )}
+          {isFr ? 'Marquer No Show' : 'Mark as No Show'}
+        </Button>
       )}
 
       {/* Section forçage manuel (secondaire) */}

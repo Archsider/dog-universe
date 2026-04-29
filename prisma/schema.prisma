@@ -138,7 +138,7 @@ model Booking {
   id          String   @id @default(cuid())
   clientId    String
   serviceType String   // "BOARDING" | "PET_TAXI"
-  status      String   @default("PENDING") // "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED"
+  status      String   @default("PENDING") // "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "CANCELLED" | "REJECTED" | "COMPLETED" | "NO_SHOW" | "WAITLIST" | "PENDING_EXTENSION"
   startDate   DateTime
   endDate     DateTime?
   arrivalTime String?

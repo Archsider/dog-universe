@@ -3,7 +3,11 @@ import { Prisma } from '@prisma/client';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { createBookingConfirmationNotification, notifyAdminsNewBooking } from '@/lib/notifications';
+import {
+  createBookingConfirmationNotification,
+  notifyAdminsNewBooking,
+  createBookingWaitlistedNotification,
+} from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
@@ -51,6 +55,11 @@ interface CreateBookingTxArgs {
   clientId: string;
   serviceType: 'BOARDING' | 'PET_TAXI';
   isAdmin: boolean;
+  // When capacity is full and waitlistFallback === true, the booking is
+  // created with status='WAITLIST' instead of throwing CAPACITY_EXCEEDED.
+  // Used for client self-service (no error 400, just queue them up).
+  // Admins keep the explicit error to surface the conflict.
+  waitlistFallback: boolean;
   startDate: Date;
   endDate: Date | null;
   arrivalTime: string | null;
@@ -87,19 +96,36 @@ async function createBookingTx(args: CreateBookingTxArgs) {
     async (tx) => {
       // Capacity check uses the same tx — its reads are part of the snapshot.
       // BOARDING only; PET_TAXI standalone has no overnight slot to consume.
+      let waitlisted = false;
       if (args.serviceType === 'BOARDING') {
         const capacity = await checkBoardingCapacity(
           { petIds: args.petIds, startDate: args.startDate, endDate: args.endDate },
           tx,
         );
-        if (!capacity.ok) throw new CapacityExceededError(capacity);
+        if (!capacity.ok) {
+          if (args.waitlistFallback) {
+            waitlisted = true;
+          } else {
+            throw new CapacityExceededError(capacity);
+          }
+        }
       }
+
+      // Status resolution:
+      // - WAITLIST  → capacity was full and waitlistFallback === true
+      // - CONFIRMED → admin-created booking (manual entry, capacity OK)
+      // - PENDING   → client-created booking awaiting validation
+      const resolvedStatus = waitlisted
+        ? 'WAITLIST'
+        : args.isAdmin
+          ? 'CONFIRMED'
+          : 'PENDING';
 
       const booking = await tx.booking.create({
         data: {
           clientId: args.clientId,
           serviceType: args.serviceType,
-          status: args.isAdmin ? 'CONFIRMED' : 'PENDING',
+          status: resolvedStatus,
           startDate: args.startDate,
           endDate: args.endDate,
           arrivalTime: args.arrivalTime,
@@ -512,6 +538,12 @@ export async function POST(request: Request) {
           )
         : [];
 
+    // CLIENT path : si la pension est complète, basculer automatiquement en
+    // WAITLIST plutôt que de retourner CAPACITY_EXCEEDED. ADMIN garde l'erreur
+    // 400 explicite pour pouvoir réagir (proposer d'autres dates, contacter
+    // un autre client en WAITLIST, etc.).
+    const waitlistFallback = !isAdmin && serviceType === 'BOARDING';
+
     let booking: Awaited<ReturnType<typeof createBookingTx>>;
     try {
       booking = await runWithSerializableRetry(() =>
@@ -519,6 +551,7 @@ export async function POST(request: Request) {
           clientId,
           serviceType,
           isAdmin,
+          waitlistFallback,
           startDate: new Date(startDate),
           endDate: endDate ? new Date(endDate) : null,
           arrivalTime: arrivalTime || null,
@@ -575,11 +608,22 @@ export async function POST(request: Request) {
     const petNames = booking.bookingPets.map((bp) => bp.pet.name).join(', ');
     const locale = booking.client.language ?? 'fr';
 
-    await createBookingConfirmationNotification(
-      booking.clientId,
-      bookingRef,
-      petNames
-    );
+    // WAITLIST gets a different notification ("you're queued") instead of the
+    // standard confirmation. The booking will receive the regular confirmation
+    // pipeline if/when it gets promoted to PENDING by the waitlist watcher.
+    if (booking.status === 'WAITLIST') {
+      await createBookingWaitlistedNotification(
+        booking.clientId,
+        bookingRef,
+        petNames,
+      );
+    } else {
+      await createBookingConfirmationNotification(
+        booking.clientId,
+        bookingRef,
+        petNames
+      );
+    }
 
     // Notify admins when a client (not admin) creates a booking
     if (!isAdmin) {
