@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
 
   const clients = await prisma.user.findMany({
     where,
+    orderBy: { createdAt: 'desc' },
     select: { id: true, name: true, email: true, language: true },
     take: 200,
   });

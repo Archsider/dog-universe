@@ -43,6 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       type: 'ADDON_REQUEST',
       metadata: { contains: `"bookingId":"${id}"` },
     },
+    orderBy: { createdAt: 'desc' },
     select: { metadata: true },
     take: 30,
   });
