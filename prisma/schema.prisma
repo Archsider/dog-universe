@@ -35,9 +35,6 @@ model User {
   historicalSpendMAD Float  @default(0)
   historicalNote     String?
 
-  // RGPD: anonymization timestamp (null = active user; set = soft-anonymized)
-  anonymizedAt DateTime?
-
   pets          Pet[]
   bookings      Booking[]
   invoices      Invoice[]
