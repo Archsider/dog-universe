@@ -68,13 +68,13 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = baseClient;
 const extendedClient = baseClient.$extends({
   query: {
     $allModels: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async $allOperations({ model, operation, args, query }: any) {
+      async $allOperations({ model, operation, args, query }: { model: string; operation: string; args: Record<string, unknown>; query: (a: Record<string, unknown>) => Promise<unknown> }) {
         if (!SOFT_DELETE_MODELS.has(model)) return query(args);
 
         if (READ_OPS.has(operation)) {
-          if (!('deletedAt' in (args.where ?? {}))) {
-            args.where = { ...(args.where ?? {}), deletedAt: null };
+          const w = (args.where ?? {}) as Record<string, unknown>;
+          if (!('deletedAt' in w)) {
+            args.where = { ...w, deletedAt: null };
           }
           if (args.include) args.include = injectIncludes(args.include as Record<string, unknown>);
           return query(args);
@@ -84,16 +84,15 @@ const extendedClient = baseClient.$extends({
           // Convert to findFirst so we can attach the extra deletedAt filter.
           // Use baseClient to avoid re-triggering this extension on the new call.
           const newOp = operation === 'findUnique' ? 'findFirst' : 'findFirstOrThrow';
-          if (!('deletedAt' in (args.where ?? {}))) {
-            args.where = { ...(args.where ?? {}), deletedAt: null };
+          const w = (args.where ?? {}) as Record<string, unknown>;
+          if (!('deletedAt' in w)) {
+            args.where = { ...w, deletedAt: null };
           }
           if (args.include) args.include = injectIncludes(args.include as Record<string, unknown>);
           if (model === 'Pet') {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return (baseClient.pet as any)[newOp](args);
+            return (baseClient.pet as unknown as Record<string, (a: unknown) => Promise<unknown>>)[newOp](args);
           }
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          return (baseClient.booking as any)[newOp](args);
+          return (baseClient.booking as unknown as Record<string, (a: unknown) => Promise<unknown>>)[newOp](args);
         }
 
         return query(args);
