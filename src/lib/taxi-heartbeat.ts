@@ -35,7 +35,7 @@ export async function recordHeartbeat(bookingId: string): Promise<void> {
   try {
     await redis.set(heartbeatKey(bookingId), String(Date.now()), { ex: HEARTBEAT_TTL_SECONDS });
   } catch (err) {
-    console.error('[taxi-heartbeat] recordHeartbeat failed:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-heartbeat', message: 'recordHeartbeat failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }
 
@@ -49,7 +49,7 @@ export async function getLastHeartbeat(bookingId: string): Promise<number | null
     const ts = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
     return Number.isFinite(ts) ? ts : null;
   } catch (err) {
-    console.error('[taxi-heartbeat] getLastHeartbeat failed:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-heartbeat', message: 'getLastHeartbeat failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return null;
   }
 }
@@ -64,7 +64,7 @@ export async function tryClaimAlertSlot(bookingId: string): Promise<boolean> {
     const result = await redis.set(alertKey(bookingId), '1', { nx: true, ex: ALERT_DEDUP_TTL_SECONDS });
     return result === 'OK';
   } catch (err) {
-    console.error('[taxi-heartbeat] tryClaimAlertSlot failed:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-heartbeat', message: 'tryClaimAlertSlot failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return false;
   }
 }
@@ -79,6 +79,6 @@ export async function clearHeartbeat(bookingId: string): Promise<void> {
   try {
     await redis.del(heartbeatKey(bookingId), alertKey(bookingId));
   } catch (err) {
-    console.error('[taxi-heartbeat] clearHeartbeat failed:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-heartbeat', message: 'clearHeartbeat failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }

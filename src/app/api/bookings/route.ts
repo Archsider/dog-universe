@@ -51,7 +51,7 @@ async function runWithSerializableRetry<T>(
       }
     }
   }
-  console.error('[bookings] serializable retry exhausted:', lastErr);
+  console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'serializable retry exhausted', error: lastErr instanceof Error ? lastErr.message : String(lastErr), timestamp: new Date().toISOString() }));
   throw new Error('CONFLICT_RETRY_EXCEEDED');
 }
 
@@ -199,7 +199,7 @@ export async function GET(request: Request) {
   const status = searchParams.get('status');
   const clientId = searchParams.get('clientId');
 
-  const where: Record<string, unknown> = { deletedAt: null };
+  const where: Record<string, unknown> = { deletedAt: null }; // soft-delete: required — no global extension (Edge Runtime incompatible)
 
   if (session.user.role === 'CLIENT') {
     where.clientId = session.user.id;
@@ -347,7 +347,7 @@ export async function POST(request: Request) {
     // Verify pets belong to this client
     if (session.user.role === 'CLIENT') {
       const pets = await prisma.pet.findMany({
-        where: { id: { in: petIds }, ownerId: session.user.id, deletedAt: null },
+        where: { id: { in: petIds }, ownerId: session.user.id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       });
       if (pets.length !== petIds.length) {
         return NextResponse.json({ error: 'INVALID_PETS' }, { status: 400 });
@@ -462,7 +462,7 @@ export async function POST(request: Request) {
           status: { notIn: ['CANCELLED', 'REJECTED', 'COMPLETED'] },
           endDate: { gte: dayBeforeStart, lte: dayBeforeEnd },
           bookingPets: { some: { petId: { in: petIds } } },
-          deletedAt: null,
+          deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
         },
         include: {
           invoice: true,
@@ -724,10 +724,10 @@ export async function POST(request: Request) {
             return enqueueEmail(
               { to: admin.email, subject, html },
               `${booking.id}:admin-new-booking-email-${idx}`,
-            ).catch(err => console.error('[Email] Admin new booking enqueue failed:', err));
+            ).catch(err => console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin new booking enqueue failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() })));
           }));
         } catch (err) {
-          console.error('[Email] Admin new booking loop failed:', err);
+          console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin new booking notification loop failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
         }
         },
       ).catch(() => {});
@@ -763,7 +763,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...booking, bookingRef }, { status: 201 });
   } catch (error) {
-    console.error('Create booking error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'Create booking error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

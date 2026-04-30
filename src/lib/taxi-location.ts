@@ -41,7 +41,7 @@ export async function recordLocation(bookingId: string, snap: TaxiLocationSnapsh
   try {
     await redis.set(locationKey(bookingId), JSON.stringify(snap), { ex: TTL_SECONDS });
   } catch (err) {
-    console.error('[taxi-location] recordLocation failed:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'recordLocation failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }
 
@@ -58,7 +58,7 @@ export async function getLocation(bookingId: string): Promise<TaxiLocationSnapsh
     if (typeof parsed?.lat !== 'number' || typeof parsed?.lng !== 'number') return null;
     return parsed;
   } catch (err) {
-    console.error('[taxi-location] getLocation failed:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'getLocation failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return null;
   }
 }
@@ -70,6 +70,6 @@ export async function clearLocation(bookingId: string): Promise<void> {
   try {
     await redis.del(locationKey(bookingId));
   } catch (err) {
-    console.error('[taxi-location] clearLocation failed:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'clearLocation failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }

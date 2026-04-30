@@ -47,7 +47,7 @@ export async function GET() {
     ]);
     return NextResponse.json({ configured: true, queues: [emailStats, smsStats, dlqStats] });
   } catch (err) {
-    console.error('[admin/queues] stats error:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'admin-queues', message: 'queue stats error', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'REDIS_ERROR' }, { status: 503 });
   }
 }
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     await job.retry('failed');
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error('[admin/queues] retry error:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'admin-queues', message: 'job retry error', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'RETRY_FAILED' }, { status: 500 });
   }
 }

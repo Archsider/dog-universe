@@ -45,7 +45,7 @@ export async function GET(_req: Request, { params }: Params) {
   try {
     url = await createSignedUrl(contract.storageKey, SIGNED_URL_TTL_SECONDS);
   } catch (err) {
-    console.error('[contracts/signed-url] Supabase error:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'contracts', message: 'Supabase signed-url error', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return NextResponse.json(
       { error: 'Storage temporarily unavailable' },
       { status: 503 },

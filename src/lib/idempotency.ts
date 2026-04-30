@@ -81,7 +81,7 @@ export async function tryAcquireIdempotency(
     const result = await redis.set(redisKey, '1', { nx: true, ex: ttlSeconds });
     return { acquired: result === 'OK', redisAvailable: true };
   } catch (err) {
-    console.error(`[idempotency] Redis SET failed for ${redisKey}, failing open:`, err);
+    console.error(JSON.stringify({ level: 'error', service: 'idempotency', message: 'Redis SET failed, failing open', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return { acquired: true, redisAvailable: false };
   }
 }

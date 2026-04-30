@@ -73,14 +73,14 @@ export async function GET(req: NextRequest) {
           messageEn: 'Your Dog Universe contract is pending signature.',
           read: false,
         },
-      }).catch(err => console.error('[Notif] Contract reminder trace failed:', err));
+      }).catch(err => console.error(JSON.stringify({ level: 'error', service: 'cron-contract-reminders', message: 'contract reminder notification trace failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() })));
 
       sent++;
     } catch (e) {
-      console.error(`contract-reminders cron: failed for ${client.email.replace(/(.{2}).*(@.*)/, '$1***$2')}:`, e);
+      console.error(JSON.stringify({ level: 'error', service: 'cron-contract-reminders', message: 'contract reminder failed for client', clientId: client.id, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() }));
     }
   }
 
-  console.log(`contract-reminders cron: sent ${sent}/${unsigned.length} (skipped ${skipped})`);
+  // debug log removed (contract-reminders summary)
   return NextResponse.json({ sent, skipped, total: unsigned.length });
 }

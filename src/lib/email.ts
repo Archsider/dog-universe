@@ -61,11 +61,8 @@ export async function sendEmail({
       text: text ?? html.replace(/<[^>]*>/g, ''),
     });
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('📧 Email sent:', nodemailer.getTestMessageUrl(info));
-    }
   } catch (error) {
-    console.error('Failed to send email:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'email', message: 'Failed to send email', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     // Don't throw - email failures shouldn't break the main flow
   }
 }

@@ -23,7 +23,7 @@ export async function logAction(data: LogActionData): Promise<void> {
     });
   } catch (error) {
     // Logs should never break the main flow
-    console.error('Failed to write action log:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'action-log', message: 'Failed to write action log', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
   }
 }
 

@@ -47,7 +47,7 @@ export async function POST(request: Request, { params }: Params) {
 
     return NextResponse.json(document, { status: 201 });
   } catch (error) {
-    console.error('Upload document error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Upload document error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

@@ -53,11 +53,11 @@ async function checkTaxiHeartbeats(): Promise<{ scanned: number; alerted: number
         await notifyAdminsTaxiHeartbeatLost({ bookingId: b.id, bookingRef, clientName, petNames });
         alerted++;
       } catch (err) {
-        console.error('[taxi-heartbeat] notifyAdmins failed for booking', b.id, err);
+        console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'notifyAdmins failed for taxi heartbeat', bookingId: b.id, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
       }
     }
   } catch (err) {
-    console.error('[taxi-heartbeat] checkTaxiHeartbeats failed:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'checkTaxiHeartbeats failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
   return { scanned, alerted };
 }
@@ -94,7 +94,7 @@ async function runWorker<T>(
           failedAt: new Date().toISOString(),
         });
       } catch (dlqErr) {
-        console.error('[dlq] Failed to archive dead job:', dlqErr);
+        console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'Failed to archive dead job to DLQ', error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr), timestamp: new Date().toISOString() }));
       }
     }
   });
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
       runWorker<SmsJobData>(QUEUE_SMS, processSmsJob),
     ]);
   } catch (err) {
-    console.error('[workers/process] Worker error:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'Worker error', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'WORKER_ERROR', heartbeat: heartbeatResult }, { status: 500 });
   }
 

@@ -83,12 +83,7 @@ export async function POST(req: NextRequest) {
           stack: err.stack?.split('\n').slice(0, 5).join('\n'),
         }
       : { raw: String(err) };
-    console.error('[contracts/sign] PDF_GENERATION_FAILED', JSON.stringify({
-      clientId,
-      signatureLength: signatureDataUrl.length,
-      cwd: process.cwd(),
-      err: errInfo,
-    }));
+    console.error(JSON.stringify({ level: 'error', service: 'contracts', message: 'PDF_GENERATION_FAILED', clientId, signatureLength: signatureDataUrl.length, err: errInfo, timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'PDF_GENERATION_FAILED' }, { status: 500 });
   }
 
@@ -96,7 +91,7 @@ export async function POST(req: NextRequest) {
   try {
     await uploadBufferPrivate(pdfBuffer, storageKey, 'application/pdf');
   } catch (err) {
-    console.error('[contracts/sign] STORAGE_UPLOAD_FAILED:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'contracts', message: 'STORAGE_UPLOAD_FAILED', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'STORAGE_UPLOAD_FAILED' }, { status: 500 });
   }
 
@@ -124,7 +119,7 @@ export async function POST(req: NextRequest) {
     downloadUrl = await createSignedUrl(storageKey);
   } catch (err) {
     // Contract is saved — signed URL failure is non-critical, client can retrieve it later
-    console.error('[contracts/sign] Signed URL generation failed after contract save:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'contracts', message: 'Signed URL generation failed after contract save', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 
   return NextResponse.json({ success: true, downloadUrl });
@@ -156,7 +151,7 @@ export async function GET() {
       downloadUrl = await createSignedUrl(contract.storageKey, ttlSeconds);
       expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
     } catch (err) {
-      console.error('Signed URL generation failed:', err);
+      console.error(JSON.stringify({ level: 'error', service: 'contracts', message: 'Signed URL generation failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
       // Return contract metadata without download URL rather than 500.
       // Client falls back to GET /api/contracts/[id]/signed-url on demand.
     }

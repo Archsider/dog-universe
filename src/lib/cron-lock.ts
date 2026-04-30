@@ -60,7 +60,7 @@ export async function acquireCronLock(
     // Upstash returns 'OK' when set succeeded, null when NX prevented the write.
     return result === 'OK';
   } catch (err) {
-    console.error(`[cron-lock] Redis SET failed for ${key}, failing open:`, err);
+    console.error(JSON.stringify({ level: 'error', service: 'cron-lock', message: 'Redis SET failed, failing open', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return true;
   }
 }

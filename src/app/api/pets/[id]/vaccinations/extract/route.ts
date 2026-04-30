@@ -191,7 +191,7 @@ export async function POST(request: Request, { params }: Params) {
       _extractionNote: extraction?.confidenceNote ?? null,
     }, { status: 201 });
   } catch (error) {
-    console.error('Vaccination extraction error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Vaccination extraction error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

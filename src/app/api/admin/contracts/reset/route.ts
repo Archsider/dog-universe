@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     try {
       await deleteFromPrivateStorage(contract.storageKey);
     } catch (e) {
-      console.warn('Could not delete contract file from storage:', e);
+      console.warn(JSON.stringify({ level: 'warn', service: 'admin-contracts', message: 'Could not delete contract file from storage', error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() }));
     }
   }
 

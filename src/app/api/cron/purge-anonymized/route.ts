@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
-    console.error('CRON_SECRET is not configured — cron endpoint is unprotected');
+    console.error(JSON.stringify({ level: 'error', service: 'cron-purge', message: 'CRON_SECRET is not configured — cron endpoint is unprotected', timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
   if (authHeader !== `Bearer ${cronSecret}`) {
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
         try {
           await deleteFromPrivateStorage(contract.storageKey);
         } catch (storageErr) {
-          console.error(`[purge-anonymized] storage delete failed for ${userId}:`, storageErr);
+          console.error(JSON.stringify({ level: 'error', service: 'cron-purge', message: 'storage delete failed', userId, error: storageErr instanceof Error ? storageErr.message : String(storageErr), timestamp: new Date().toISOString() }));
           // Continue — DB row will still be deleted; orphaned storage key is acceptable
         }
       }
@@ -115,7 +115,7 @@ export async function GET(request: Request) {
 
       purged += 1;
     } catch (err) {
-      console.error(`[purge-anonymized] failed for user ${userId}:`, err);
+      console.error(JSON.stringify({ level: 'error', service: 'cron-purge', message: 'purge failed for user', userId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
       errors.push(userId);
     }
   }

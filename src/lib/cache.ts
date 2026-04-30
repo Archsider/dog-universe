@@ -31,7 +31,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     const raw = await redis.get<T>(key);
     return raw ?? null;
   } catch (err) {
-    console.error(`[cache] GET ${key} failed:`, err);
+    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'GET failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return null;
   }
 }
@@ -42,7 +42,7 @@ export async function cacheSet<T>(key: string, value: T, ttlSeconds: number): Pr
   try {
     await redis.set(key, value, { ex: ttlSeconds });
   } catch (err) {
-    console.error(`[cache] SET ${key} failed:`, err);
+    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'SET failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }
 
@@ -52,7 +52,7 @@ export async function cacheDel(key: string): Promise<void> {
   try {
     await redis.del(key);
   } catch (err) {
-    console.error(`[cache] DEL ${key} failed:`, err);
+    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'DEL failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }
 

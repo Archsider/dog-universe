@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(pet, { status: 201 });
   } catch (error) {
-    console.error('Create pet error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Create pet error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

@@ -54,7 +54,7 @@ export async function GET(req: Request, { params }: Params) {
       },
     });
   } catch (error) {
-    console.error('PDF generation error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'invoice', message: 'PDF generation error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'PDF generation failed' }, { status: 500 });
   }
 }

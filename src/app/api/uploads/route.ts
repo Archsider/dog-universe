@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const result = await uploadFile(file, uploadType);
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    console.error('Upload error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'upload', message: 'Upload error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: String(error) }, { status: 400 });
   }
 }

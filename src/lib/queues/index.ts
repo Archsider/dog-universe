@@ -100,14 +100,14 @@ export function getDlqQueue(): Queue<unknown> {
 export async function enqueueEmail(data: EmailJobData, jobId?: string): Promise<void> {
   const masked = maskEmail(data.to);
   if (!isBullMQConfigured()) {
-    await sendEmail(data).catch((e) => console.error(`[email] direct send failed (to=${masked}):`, e instanceof Error ? e.message : e));
+    await sendEmail(data).catch((e) => console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'email direct send failed', masked, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() })));
     return;
   }
   try {
     await getEmailQueue().add('send', data, jobId ? { ...EMAIL_JOB_OPTIONS, jobId } : EMAIL_JOB_OPTIONS);
   } catch (err) {
-    console.error('[queue] email enqueue failed, falling back to direct send:', err instanceof Error ? err.message : err);
-    await sendEmail(data).catch((e) => console.error(`[email] direct send failed (to=${masked}):`, e instanceof Error ? e.message : e));
+    console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'email enqueue failed, falling back to direct send', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    await sendEmail(data).catch((e) => console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'email direct send failed', masked, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() })));
   }
 }
 
@@ -115,14 +115,14 @@ export async function enqueueSms(data: SmsJobData, jobId?: string): Promise<void
   const masked = data.to && data.to !== 'ADMIN' ? maskPhone(data.to) : (data.to ?? 'null');
   if (!isBullMQConfigured()) {
     const fn = data.to === 'ADMIN' ? sendAdminSMS(data.message) : sendSMS(data.to, data.message);
-    await fn.catch((e) => console.error(`[sms] direct send failed (to=${masked}):`, e instanceof Error ? e.message : e));
+    await fn.catch((e) => console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'sms direct send failed', masked, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() })));
     return;
   }
   try {
     await getSmsQueue().add('send', data, jobId ? { ...SMS_JOB_OPTIONS, jobId } : SMS_JOB_OPTIONS);
   } catch (err) {
-    console.error('[queue] sms enqueue failed, falling back to direct send:', err instanceof Error ? err.message : err);
+    console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'sms enqueue failed, falling back to direct send', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     const fallback = data.to === 'ADMIN' ? sendAdminSMS(data.message) : sendSMS(data.to, data.message);
-    await fallback.catch((e) => console.error(`[sms] direct send failed (to=${masked}):`, e instanceof Error ? e.message : e));
+    await fallback.catch((e) => console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'sms direct send failed', masked, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() })));
   }
 }

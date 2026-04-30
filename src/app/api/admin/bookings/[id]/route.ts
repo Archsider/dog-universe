@@ -28,7 +28,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: id, deletedAt: null },
+    where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     include: {
       client: { select: { id: true, name: true, email: true, phone: true } },
       bookingPets: { include: { pet: true } },
@@ -62,7 +62,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: id, deletedAt: null },
+    where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     include: {
       client: true,
       bookingPets: { include: { pet: true } },
@@ -171,7 +171,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const originalBooking = await prisma.booking.findFirst({
-      where: { id: booking.extensionForBookingId, deletedAt: null },
+      where: { id: booking.extensionForBookingId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       include: { invoice: true, bookingPets: { include: { pet: true } }, boardingDetail: true, client: true },
     });
 
@@ -675,7 +675,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         promoteWaitlistedBooking({
           startDate: booking.startDate,
           endDate: booking.endDate,
-        }).catch((err) => console.error('[bookings] waitlist promotion failed:', err));
+        }).catch((err) => console.error(JSON.stringify({ level: 'error', service: 'admin-booking', message: 'waitlist promotion failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() })));
       }
     } else if (status === 'NO_SHOW') {
       // Client absent sans préavis. Notification informative, pas d'email
@@ -701,7 +701,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         promoteWaitlistedBooking({
           startDate: booking.startDate,
           endDate: booking.endDate,
-        }).catch((err) => console.error('[bookings] waitlist promotion failed:', err));
+        }).catch((err) => console.error(JSON.stringify({ level: 'error', service: 'admin-booking', message: 'waitlist promotion failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() })));
       }
     } else if (status === 'COMPLETED') {
       const hasGrooming = booking.boardingDetail?.includeGrooming ?? false;
@@ -738,7 +738,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         const { calculateSuggestedGrade } = await import('@/lib/loyalty');
         const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
         const [totalStays, totalPaid, currentGrade] = await Promise.all([
-          prisma.booking.count({ where: { clientId: booking.clientId, status: 'COMPLETED', deletedAt: null } }),
+          prisma.booking.count({ where: { clientId: booking.clientId, status: 'COMPLETED', deletedAt: null } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
           prisma.invoice.aggregate({ where: { clientId: booking.clientId, status: 'PAID' }, _sum: { amount: true } }),
           prisma.loyaltyGrade.findUnique({ where: { clientId: booking.clientId } }),
         ]);
@@ -809,7 +809,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: id, deletedAt: null },
+    where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     include: { invoice: { select: { id: true, status: true, invoiceNumber: true } } },
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });

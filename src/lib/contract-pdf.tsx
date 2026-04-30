@@ -19,13 +19,13 @@ try {
   const buf = fs.readFileSync(path.join(process.cwd(), 'public', 'logo_rgba.png'));
   LOGO_DATA_URL = `data:image/png;base64,${buf.toString('base64')}`;
 } catch (err) {
-  console.error('[contract-pdf] logo_rgba.png introuvable:', err);
+  console.error(JSON.stringify({ level: 'error', service: 'contract-pdf', message: 'logo_rgba.png not found', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
 }
 try {
   const buf = fs.readFileSync(path.join(process.cwd(), 'private', 'stamp.png'));
   STAMP_DATA_URL = `data:image/png;base64,${buf.toString('base64')}`;
 } catch (err) {
-  console.error('[contract-pdf] stamp.png introuvable:', err);
+  console.error(JSON.stringify({ level: 'error', service: 'contract-pdf', message: 'stamp.png not found', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
 }
 
 const styles = StyleSheet.create({

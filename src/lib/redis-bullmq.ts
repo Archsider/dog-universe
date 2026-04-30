@@ -41,7 +41,7 @@ export function getBullMQConnection(): IORedis {
   });
 
   _connection.on('error', (err) => {
-    console.error('[bullmq-redis] connection error:', err.message);
+    console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'Redis connection error', error: err.message, timestamp: new Date().toISOString() }));
   });
 
   return _connection;
@@ -75,7 +75,7 @@ export function createPubSubConnection(): IORedis | null {
   });
 
   conn.on('error', (err) => {
-    console.error('[pubsub-redis] connection error:', err.message);
+    console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'PubSub Redis connection error', error: err.message, timestamp: new Date().toISOString() }));
   });
 
   return conn;

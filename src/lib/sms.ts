@@ -21,7 +21,7 @@ export async function sendSMS(
   const password = env.SMS_GATEWAY_PASSWORD
 
   if (!url || !username || !password) {
-    console.warn('[SMS] Missing env vars — SMS skipped')
+    console.warn(JSON.stringify({ level: 'warn', service: 'sms', message: 'Missing env vars — SMS skipped', timestamp: new Date().toISOString() }))
     return false
   }
 
@@ -41,11 +41,11 @@ export async function sendSMS(
     })
     if (!res.ok) {
       const errBody = await res.text().catch(() => '')
-      console.error('[SMS] Gateway error:', res.status, errBody)
+      console.error(JSON.stringify({ level: 'error', service: 'sms', message: 'Gateway error', status: res.status, body: errBody, timestamp: new Date().toISOString() }))
     }
     return res.ok
   } catch (err) {
-    console.error('[SMS] Send failed:', err)
+    console.error(JSON.stringify({ level: 'error', service: 'sms', message: 'Send failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }))
     return false
   }
 }

@@ -24,12 +24,12 @@ const BREAKER_OPTIONS: CircuitBreaker.Options = {
 function makeDlqFallback(label: string) {
   return async (...args: unknown[]) => {
     const data = args[0];
-    console.error(`[circuit:${label}] open — job moved to DLQ`);
+    console.error(JSON.stringify({ level: 'error', service: 'circuit-breaker', message: 'circuit open — job moved to DLQ', circuit: label, timestamp: new Date().toISOString() }));
     if (isBullMQConfigured()) {
       try {
         await getDlqQueue().add(`${label}-circuit-open`, { data, reason: 'CIRCUIT_OPEN' });
       } catch (err) {
-        console.error(`[circuit:${label}] DLQ add failed:`, err);
+        console.error(JSON.stringify({ level: 'error', service: 'circuit-breaker', message: 'DLQ add failed', circuit: label, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
       }
     }
   };
@@ -49,9 +49,9 @@ export function getEmailBreaker(
   _emailBreaker = new CircuitBreaker<[EmailJobData], void>(sendEmail, BREAKER_OPTIONS);
 
   _emailBreaker.fallback(makeDlqFallback('email'));
-  _emailBreaker.on('open',     () => console.error('[circuit:email] OPEN'));
-  _emailBreaker.on('halfOpen', () => console.warn('[circuit:email] HALF-OPEN'));
-  _emailBreaker.on('close',    () => console.log('[circuit:email] CLOSED — recovered'));
+  _emailBreaker.on('open',     () => console.error(JSON.stringify({ level: 'error', service: 'circuit-breaker', message: 'circuit OPEN', circuit: 'email', timestamp: new Date().toISOString() })));
+  _emailBreaker.on('halfOpen', () => console.warn(JSON.stringify({ level: 'warn', service: 'circuit-breaker', message: 'circuit HALF-OPEN', circuit: 'email', timestamp: new Date().toISOString() })));
+  _emailBreaker.on('close',    () => console.warn(JSON.stringify({ level: 'warn', service: 'circuit-breaker', message: 'circuit CLOSED — recovered', circuit: 'email', timestamp: new Date().toISOString() })));
 
   return _emailBreaker;
 }
@@ -68,9 +68,9 @@ export function getSmsBreaker(
   _smsBreaker = new CircuitBreaker<[SmsJobData], void>(sendSms, BREAKER_OPTIONS);
 
   _smsBreaker.fallback(makeDlqFallback('sms'));
-  _smsBreaker.on('open',     () => console.error('[circuit:sms] OPEN'));
-  _smsBreaker.on('halfOpen', () => console.warn('[circuit:sms] HALF-OPEN'));
-  _smsBreaker.on('close',    () => console.log('[circuit:sms] CLOSED — recovered'));
+  _smsBreaker.on('open',     () => console.error(JSON.stringify({ level: 'error', service: 'circuit-breaker', message: 'circuit OPEN', circuit: 'sms', timestamp: new Date().toISOString() })));
+  _smsBreaker.on('halfOpen', () => console.warn(JSON.stringify({ level: 'warn', service: 'circuit-breaker', message: 'circuit HALF-OPEN', circuit: 'sms', timestamp: new Date().toISOString() })));
+  _smsBreaker.on('close',    () => console.warn(JSON.stringify({ level: 'warn', service: 'circuit-breaker', message: 'circuit CLOSED — recovered', circuit: 'sms', timestamp: new Date().toISOString() })));
 
   return _smsBreaker;
 }

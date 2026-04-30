@@ -51,7 +51,7 @@ export async function consumeExportSlot(
     }
     return { ok: true, remaining: Math.max(0, EXPORT_DAILY_LIMIT - count) };
   } catch (err) {
-    console.error('[rgpd] consumeExportSlot failed, failing open:', err);
+    console.error(JSON.stringify({ level: 'error', service: 'rgpd', message: 'consumeExportSlot failed, failing open', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return { ok: true, remaining: EXPORT_DAILY_LIMIT - 1 };
   }
 }

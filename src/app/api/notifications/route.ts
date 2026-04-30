@@ -60,7 +60,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(notification, { status: 201 });
   } catch (error) {
-    console.error('Send notification error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Send notification error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

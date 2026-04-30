@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     // Always return success to prevent email enumeration
     return NextResponse.json({ message: 'ok' });
   } catch (error) {
-    console.error('Reset password error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'reset-password', message: 'Reset password error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ message: 'ok' }); // Still return ok
   }
 }
@@ -75,7 +75,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ message: 'ok' });
   } catch (error) {
-    console.error('Reset password PUT error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'reset-password', message: 'Reset password PUT error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

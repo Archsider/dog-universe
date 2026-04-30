@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error('CRON_SECRET is not configured — cron endpoint is unprotected');
+    console.error(JSON.stringify({ level: 'error', service: 'cron-reminders', message: 'CRON_SECRET is not configured — cron endpoint is unprotected', timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
   if (authHeader !== `Bearer ${cronSecret}`) {

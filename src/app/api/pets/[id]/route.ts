@@ -121,7 +121,7 @@ export async function PATCH(_req: Request, { params }: Params) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    console.error('Update pet error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Update pet error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

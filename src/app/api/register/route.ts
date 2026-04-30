@@ -83,7 +83,7 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json({ error: 'EMAIL_TAKEN', message: 'Email already in use' }, { status: 409 });
     }
-    console.error('Register error:', error);
+    console.error(JSON.stringify({ level: 'error', service: 'register', message: 'Register error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
     return NextResponse.json({ error: 'INTERNAL_ERROR', message: 'An error occurred' }, { status: 500 });
   }
 }

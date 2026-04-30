@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: null },
+    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     include: {
       client: { select: { id: true, name: true, email: true, language: true } },
       bookingPets: { include: { pet: true } },
@@ -42,7 +42,7 @@ export async function PATCH(request: Request, { params }: Params) {
   const body = await request.json();
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: null },
+    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     include: {
       client: true,
       bookingPets: { include: { pet: true } },
@@ -111,11 +111,11 @@ export async function PATCH(request: Request, { params }: Params) {
               metadata: JSON.stringify({ bookingId: id }),
               read: false,
             },
-          }).catch(err => console.error('[Notif] Admin cancel failed:', err)),
+          }).catch(err => console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin cancel notification failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }))),
         ),
       );
     } catch (err) {
-      console.error('[Notif] Admin lookup failed on client cancel:', err);
+      console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin lookup failed on client cancel', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     }
 
     return NextResponse.json(updated);

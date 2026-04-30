@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       await sendEmail({ to: client.email, subject, html });
       sent++;
     } catch (e) {
-      console.error(`Failed to send contract reminder to ${client.email.replace(/(.{2}).*(@.*)/, '$1***$2')}:`, e);
+      console.error(JSON.stringify({ level: 'error', service: 'admin-contracts', message: 'Failed to send contract reminder', clientId: client.id, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() }));
     }
   }
 
