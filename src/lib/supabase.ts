@@ -103,3 +103,16 @@ export async function createSignedUrl(
   }
   return data.signedUrl;
 }
+
+// ─── Health check ──────────────────────────────────────────────────────────
+
+/** List buckets as a lightweight liveness probe. Returns false if unconfigured or on error. */
+export async function checkStorageHealth(): Promise<boolean> {
+  try {
+    const client = getSupabaseAdmin();
+    const { error } = await client.storage.listBuckets();
+    return !error;
+  } catch {
+    return false;
+  }
+}
