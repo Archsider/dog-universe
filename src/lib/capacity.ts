@@ -177,40 +177,45 @@ export async function checkBoardingCapacity(
 ): Promise<CapacityCheckResult> {
   if (!args.endDate) return { ok: true };
 
-  const pets = await client.pet.findMany({
-    where: { id: { in: args.petIds } },
-    select: { species: true },
-  });
-  const newDogs = pets.filter((p) => p.species === 'DOG').length;
-  const newCats = pets.filter((p) => p.species === 'CAT').length;
+  return Sentry.startSpan(
+    { name: 'capacity.checkBoardingCapacity', op: 'db' },
+    async () => {
+      const pets = await client.pet.findMany({
+        where: { id: { in: args.petIds } },
+        select: { species: true },
+      });
+      const newDogs = pets.filter((p) => p.species === 'DOG').length;
+      const newCats = pets.filter((p) => p.species === 'CAT').length;
 
-  if (newDogs === 0 && newCats === 0) return { ok: true };
+      if (newDogs === 0 && newCats === 0) return { ok: true };
 
-  const limits = await getCapacityLimits(client);
+      const limits = await getCapacityLimits(client);
 
-  if (newDogs > 0) {
-    const currentDogs = await countOverlappingPets(
-      'DOG',
-      { startDate: args.startDate, endDate: args.endDate },
-      { excludeBookingId: args.excludeBookingId, client },
-    );
-    const available = Math.max(0, limits.dogs - currentDogs);
-    if (newDogs > available) {
-      return { ok: false, species: 'DOG', available, requested: newDogs, limit: limits.dogs };
-    }
-  }
+      if (newDogs > 0) {
+        const currentDogs = await countOverlappingPets(
+          'DOG',
+          { startDate: args.startDate, endDate: args.endDate },
+          { excludeBookingId: args.excludeBookingId, client },
+        );
+        const available = Math.max(0, limits.dogs - currentDogs);
+        if (newDogs > available) {
+          return { ok: false, species: 'DOG', available, requested: newDogs, limit: limits.dogs };
+        }
+      }
 
-  if (newCats > 0) {
-    const currentCats = await countOverlappingPets(
-      'CAT',
-      { startDate: args.startDate, endDate: args.endDate },
-      { excludeBookingId: args.excludeBookingId, client },
-    );
-    const available = Math.max(0, limits.cats - currentCats);
-    if (newCats > available) {
-      return { ok: false, species: 'CAT', available, requested: newCats, limit: limits.cats };
-    }
-  }
+      if (newCats > 0) {
+        const currentCats = await countOverlappingPets(
+          'CAT',
+          { startDate: args.startDate, endDate: args.endDate },
+          { excludeBookingId: args.excludeBookingId, client },
+        );
+        const available = Math.max(0, limits.cats - currentCats);
+        if (newCats > available) {
+          return { ok: false, species: 'CAT', available, requested: newCats, limit: limits.cats };
+        }
+      }
 
-  return { ok: true };
+      return { ok: true };
+    },
+  );
 }

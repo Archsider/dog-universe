@@ -665,13 +665,18 @@ export async function POST(request: Request) {
       const dateRangeSMS = booking.serviceType === 'BOARDING' && booking.endDate
         ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
         : `le ${formatDateFR(booking.startDate)}`;
-      enqueueSms(
-        { to: 'ADMIN', message: `🔔 Nouvelle réservation : ${clientLabel} pour ${petNames} ${dateRangeSMS}.` },
-        `${booking.id}:admin-new-booking-sms`,
+      Sentry.startSpan(
+        { name: 'booking.enqueueAdminSms', op: 'queue' },
+        () => enqueueSms(
+          { to: 'ADMIN', message: `🔔 Nouvelle réservation : ${clientLabel} pour ${petNames} ${dateRangeSMS}.` },
+          `${booking.id}:admin-new-booking-sms`,
+        ),
       ).catch(() => {});
 
       // Email admin — loop tous les admins en DB (queued, with direct-send fallback)
-      (async () => {
+      Sentry.startSpan(
+        { name: 'booking.enqueueAdminEmails', op: 'queue' },
+        async () => {
         try {
           const esc = (s: string) => s
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -723,7 +728,8 @@ export async function POST(request: Request) {
         } catch (err) {
           console.error('[Email] Admin new booking loop failed:', err);
         }
-      })();
+        },
+      ).catch(() => {});
     }
 
     const serviceName = serviceType === 'BOARDING'
