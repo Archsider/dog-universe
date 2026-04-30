@@ -671,3 +671,31 @@ L'extension Prisma `$extends` de soft-delete globale a été **revertée** (comm
 - **Photos invisibles** : causé par écriture filesystem sur Vercel (éphémère). Résolu par branchement sur Supabase Storage.
 - **Prisma sans DB locale** : la DB locale (`localhost:5432`) est inaccessible dans l'environnement de travail. Solution : `prisma generate` fonctionne sans connexion, migrations créées manuellement en SQL.
 - **`loyaltyBenefitClaim` non reconnu par Prisma** : après ajout du modèle au schema, toujours relancer `npx prisma generate` (sans connexion DB) pour régénérer le client TypeScript.
+
+---
+
+### 2026-04-30 — Session Phase 3 perf + audit sécurité
+
+**3 commits sur `main` :**
+
+1. **`perf(phase3)`** — Optimisations Prisma et RSC :
+   - `admin/bookings/[id]` : 2 boucles `for await invoiceItem.update()` → `Promise.all` (dates edit + extension approve)
+   - `admin/clients/[id]` GET : include 4 niveaux (`bookings→bookingPets→pet`) remplacé par `select` ciblé + caps `take:100/200`
+   - `admin/notifications/page.tsx` : converti en Server Component (Prisma direct, 0 waterfall) + `AdminNotificationsClient.tsx` pour les interactions
+   - `admin/profile/page.tsx` : converti en Server Component + `AdminProfileClient.tsx` pour les formulaires
+
+2. **`fix(security)` — 3 caps `take()` manquants** :
+   - `invoices/export` : `take: 10_000` (DoS mémoire sur export illimité)
+   - `pets/[id]/weight-history` : `take: 500`
+   - `taxi-trips/[id]/tracking` : `take: 500` sur le batch cleanup GPS
+
+**Décisions techniques :**
+- **Admin pages RSC** : pattern systématique désormais — `page.tsx` Server Component (auth + Prisma), `*Client.tsx` pour les parties interactives. Évite le spinner + waterfall useEffect.
+- **Audit sécurité** : CRITICAL/HIGH majoritairement faux positifs (loyalty claims GET avait déjà le check ADMIN/SUPERADMIN, revenue-summary avait déjà `take:120`). Seuls 3 caps `take()` manquants confirmés réels.
+- **Promise.all dans transactions Prisma** : safe — le client `tx` supporte les opérations concurrentes dans une transaction interactive.
+
+**Nouveaux fichiers :**
+```
+src/app/[locale]/admin/notifications/AdminNotificationsClient.tsx
+src/app/[locale]/admin/profile/AdminProfileClient.tsx
+```
