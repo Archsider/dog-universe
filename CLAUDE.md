@@ -238,6 +238,58 @@ Chaque cron est protégé par `acquireCronLock()` de `src/lib/cron-lock.ts` :
 - Défense en profondeur : déduplication par-entité dans le DB reste en place
 - Variables d'env requises : `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`
 
+### Idempotency-Key sur POST /api/bookings (depuis 2026-04-30)
+- `src/lib/idempotency.ts` — `tryAcquireIdempotency(request, scope, ttl?)` SET NX EX 24h
+- Header optionnel `Idempotency-Key: <8-128 chars [A-Za-z0-9_\-]>`
+- Première requête → `{ acquired: true }` ; replay dans la fenêtre TTL → 409 `DUPLICATE_REQUEST`
+- **Fail-open** : Redis down → laisse passer (perte de double-booking < perte de booking)
+- Pattern Stripe : permet aux clients de retry sans risque de duplicata
+
+### Cache Redis + unstable_cache (depuis 2026-04-30)
+`src/lib/cache.ts` — couche unique Upstash REST, fail-open systémique :
+- `cacheReadThrough(key, ttl, loader)` — read-through avec fallback DB
+- `CacheKeys.{capacityLimits, loyaltyGrade(userId), notifCount(userId)}` — clés centralisées
+- `CacheTTL.{capacityLimits: 300, loyaltyGrade: 300, notifCount: 30}`
+
+**Hot paths cachés :**
+| Donnée | TTL | Mécanisme | Invalidation |
+|---|---|---|---|
+| `capacity_dog/cat` settings | 5 min | Redis | `invalidateCapacityCache()` après update Setting |
+| `LoyaltyGrade` per userId | 5 min | Redis | `invalidateLoyaltyCache(userId)` sur upsert/override |
+| `Notification` unread count per userId | 30 s | Redis | auto via `createNotification` ; manuel sur PATCH read |
+| Admin pendingCount + claimsCount | 30 s | `unstable_cache` tag `admin-counts` | `revalidateTag('admin-counts')` sur POST/PATCH bookings + claims |
+
+**Décisions :**
+- `getCapacityLimits(client)` bypass cache si `client !== prisma` (lecture en `$transaction` Serializable doit lire la DB pour participer au snapshot)
+- `addonRequestCount` admin (per-userId) NON caché : index `(userId, read)` déjà rapide
+- `tx.notification.create` (dans `admin/loyalty/claims [id] PATCH`) bypass `createNotification` → invalidation manuelle après commit
+
+### Rate-limiting composite IP+userId (depuis 2026-04-30)
+`src/middleware.ts` — bucket key composite quand un user est authentifié :
+```ts
+let bucketKey = ip;
+try {
+  const session = await auth();
+  if (session?.user?.id) bucketKey = `u:${session.user.id}`;
+} catch { /* fail-safe : keep IP */ }
+```
+- User authentifié → limite par `userId` (préfixe `u:` pour éviter collision IP/cuid)
+- Anonyme → limite par IP
+- `auth()` failure → fallback IP, jamais bloquant
+- Empêche un user authentifié de bypasser via VPN / réseau mobile
+
+**Buckets actifs :**
+| Bucket | Limite | Routes |
+|---|---|---|
+| `auth` | 10 / 15 min | signin, register, callback |
+| `passwordReset` | 5 / 60 min | reset-password, profile/password |
+| `bookings` | 20 / 60 min | POST /api/bookings |
+| `uploads` | 30 / 60 min | uploads, contracts/sign, vaccinations/extract |
+| `adminMutation` | 300 / 60 min | tout `/api/admin/*` mutating method |
+| `taxiStream` | 60 / 60 min | GET /api/taxi/{token}/stream (SSE) |
+| `rgpd` | 5 / 60 min | /api/user/export (GET), /api/user/anonymize (POST) |
+| `addonRequest` | 10 / 60 min | POST /api/bookings/{id}/addon-request |
+
 ### Logique anniversaire
 - Requête SQL raw `EXTRACT(MONTH)` + `EXTRACT(DAY)` sur `Pet.dateOfBirth`
 - Déduplication : pas de double envoi si déjà envoyé aujourd'hui pour ce pet
@@ -324,7 +376,7 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ---
 
-## VERSIONS STACK (2026-04-28)
+## VERSIONS STACK (2026-04-30)
 
 | Package | Version |
 |---|---|
@@ -382,10 +434,11 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 
 | Risque | Statut | Impact |
 |---|---|---|
-| Capacity `excludeBookingId` non câblé | OUVERT | Un admin qui prolonge un séjour verra sa propre réservation compter dans l'occupancy — faux positif possible. À câbler dans l'endpoint d'extension de réservation. |
+| Capacity `excludeBookingId` non câblé | RÉSOLU (`4d7524e`) | Câblé sur les deux chemins d'extension admin |
 | E2E Playwright | RÉSOLU | Secrets GitHub configurés, tests opérationnels en CI |
 | Migration `20260405_private_storage` | CODE OK — BUCKET À VÉRIFIER | Code-side confirmé : `uploadBufferPrivate` + `createSignedUrl` utilisés, `pdfUrl String?` nullable, aucun appel `getPublicUrl` sur contrats. Risque résiduel : bucket `uploads-private` absent de Supabase → upload échoue en 500 (pas de régression silencieuse vers public). Vérification manuelle Supabase : `SELECT COUNT(*) FROM "ClientContract" WHERE "pdfUrl" IS NOT NULL;` doit retourner 0 (aucun contrat legacy public). |
 | Soft-delete User/Pet | DÉFÉRÉ | Booking soft-delete (`deletedAt`) est en place ; User/Pet délibérément déféré |
+| Sentry instrumentation API | OUVERT | Aucun `Sentry.startSpan()` sur les hot paths (`POST /api/bookings`, `PATCH /api/admin/bookings/[id]`) — observabilité limitée sur la latence DB |
 
 ---
 
@@ -443,6 +496,37 @@ Phrase principale : Nous attendons {_companionFr} avec impatience.
 ---
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
+
+### 2026-04-30 — Session audits sécurité P0→P4 + cache + addon-request fix
+
+**8 commits sur `main` :**
+
+1. **`e002cce` `fc13917` fix(build)** — Vercel 250 MB Lambda limit : `serverExternalPackages: ['ioredis', 'bullmq', 'opossum', '@prisma/client', '@react-pdf/renderer', 'sharp']` + `outputFileTracingExcludes` (`.git/**`, `.next/cache/**`, sentry CLI plugins, playwright). Diagnostic via analyse locale des `.nft.json` : root cause = `.git/objects` tracé dans chaque Lambda.
+
+2. **`3c97136` fix(security) P0 (4 fixes)** — Privilege escalation guard sur `PATCH /api/admin/clients/[id]` (vérifie `target.role === 'CLIENT'` avant mutation, sinon ADMIN pouvait PATCH un SUPERADMIN). XSS sur noms d'animaux dans `email.ts` (escapeHtml appliqué via `safePets` dans helpers). Validation `totalPrice` dans `PATCH /api/bookings/[id]` (range 0–1M, NaN guard). `invalidateLoyaltyCache(userId)` câblé sur les 3 chemins de mutation grade.
+
+3. **`045c04b` fix(p1) (5 fixes)** — Audit logs sur DELETE photo + DELETE contract (`STAY_PHOTO_DELETED`, `CONTRACT_DELETED` avec snapshot URL/storageKey/version). Atomicité `prisma.$transaction` sur claim approval (status update + notification commit ensemble, email post-commit fire-and-forget). Rate-limit `rgpd` bucket (5/h) sur `/api/user/export` + `/api/user/anonymize` via `RATE_LIMITED_ROUTES_ANY_METHOD`. N+1 fix sur `/admin/clients` (Prisma `groupBy` sur invoices PAID + Map<clientId, total>). `Idempotency-Key` sur POST /api/bookings (Stripe pattern, SET NX EX 24h, 409 sur replay).
+
+4. **`ede2149` fix(p2) (10 fixes)** — `deletedAt: null` sur pets (admin clients GET + list). Cap `findMany` : loyalty claims (200), invoices (200), stay photos (500), admin notes (100), revenue summaries (120), contract remind (200). Masquage email dans logs contract-remind. Validation longueur 5000 chars sur `messageFr`/`messageEn` (POST notifications). `logAction(NOTIFICATION_SENT)` sur création message admin.
+
+5. **`3ec7b07` `13e7e66` fix(addon-request)** — Bug : section "Demandes de services supplémentaires" absente sur fiche admin malgré badge sidebar. Cause : `distinct: ['metadata']` + `orderBy: { createdAt: 'desc' }` invalide en Prisma 5 + PostgreSQL (DISTINCT ON exige fields distinct en tête de ORDER BY). Fix final : query par `userId: session.user.id` + `type: 'ADDON_REQUEST'` (index userId, fast), parse + filter par `meta.bookingId === id` en JS (indépendant du format JSON), déduplication par `requestId` via Set. Logs diagnostiques conditionnels (`raw > 0 && parsed === 0` → dump compteurs + sample metadata).
+
+6. **`ad8761d` perf(cache)** — `src/lib/cache.ts` (Upstash REST, fail-open). Cache câblé : capacity limits (5 min, bypass tx), loyalty grade per userId (5 min), notif unread count per userId (30 s, auto-invalidate via `createNotification`), admin pending+claims counts via `unstable_cache` tag `admin-counts` (30 s). Invalidation : `revalidateTag('admin-counts')` sur POST/PATCH bookings + claims, `invalidateNotifCount(userId)` sur PATCH /read et /read-all + dans le tx.notification.create de admin/loyalty/claims [id].
+
+7. **`fcd2c66` fix(p3-p4) (6 fixes)** — Mask email cron contract-reminders. Bucket `addonRequest` (10/h) dans middleware. Runtime guard `typeof === 'object'` + `meta.bookingId === id` avant cast Record dans rate-limit check addon-request. Composite rate-limit key IP+userId : `auth()` dans middleware → `u:{userId}` si session, sinon IP, try/catch fail-safe. Mask email/phone + log `err.message` dans `lib/queues/index.ts` (PII safe). Zod schemas (`emailJobSchema`, `smsJobSchema`) dans workers/processors → throw → BullMQ retry × 3 → DLQ si payload corrompu.
+
+**Décisions techniques :**
+- **Cherry-pick stratégie** : feature branch `claude/fix-kanban-pet-taxi-status-7UzR7` divergeait de main avec 9 conflits. Au lieu de merge, cherry-pick sélectif des P0+P1 vers main + création stub `loyalty-server.ts` no-op (remplacé plus tard par cache réel dans `ad8761d`).
+- **`distinct + orderBy` Prisma 5** : abandonné au profit de query simple + déduplication JS. Plus robuste, indépendant du format de sérialisation JSON.
+- **Per-user rate-limit** : `auth()` dans middleware accepté malgré coût (1 décryptage JWT par requête rate-limited), justifié par fix d'un vrai bypass (VPN/IP rotation).
+- **Cache `getCapacityLimits(client)`** : signature préservée pour bypass cache si appelé dans `$transaction` Serializable (snapshot consistency requis).
+
+**Skippés avec justification :**
+- Soft-delete User : déféré dans CLAUDE.md (cohérence)
+- ContractModal ESC handler : intentionnel, le gate force la signature
+- error.tsx per-segment admin : déjà `/admin/error.tsx`, per-route over-engineering pour P3
+- Dialog aria-label fallback : Radix gère via `DialogTitle`, fallback générique `"Dialog"` pire que rien
+- Sentry `startSpan` sur API routes : ouvert dans RISQUES CONNUS, séparé en P4
 
 ### 2026-04-28 — Session email template + E2E CI fix
 
