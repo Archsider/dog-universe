@@ -68,6 +68,13 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(10, '60 m'),
       prefix: 'rl:addon-req',
     }),
+    // Health endpoint: 60 per minute per IP — generous for monitoring probes,
+    // tight enough to prevent scraping the uptime signal as a side-channel.
+    health: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(60, '1 m'),
+      prefix: 'rl:health',
+    }),
   };
 }
 
@@ -90,9 +97,10 @@ const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
 type DynamicBucket = 'uploads' | 'auth' | 'passwordReset' | 'bookings' | 'taxiStream' | 'addonRequest';
 
 // Routes rate-limited regardless of HTTP method (e.g. expensive GETs).
-const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd'> = {
+const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'health'> = {
   '/api/user/export': 'rgpd',     // GET — full DB read
   '/api/user/anonymize': 'rgpd',  // POST — transactional write
+  '/api/health': 'health',        // GET — uptime probe, 60/min per IP
 };
 
 // Routes dynamiques (avec [params]) — match par suffixe de path

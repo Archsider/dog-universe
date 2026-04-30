@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createLoyaltyUpdateNotification } from '@/lib/notifications';
 import { isUpgrade } from '@/lib/loyalty';
+import { invalidateLoyaltyCache } from '@/lib/loyalty-server';
 import { gradeOverrideSchema, formatZodError } from '@/lib/validation';
 
 type Params = { params: Promise<{ id: string }> };
@@ -52,6 +53,8 @@ export async function PUT(request: Request, { params }: Params) {
     entityId: id,
     details: { previousGrade: currentGrade?.grade, newGrade: grade, override: true },
   });
+
+  await invalidateLoyaltyCache(id);
 
   return NextResponse.json(updated);
 }

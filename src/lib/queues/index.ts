@@ -33,11 +33,26 @@ export const QUEUE_EMAIL = 'email';
 export const QUEUE_SMS   = 'sms';
 export const QUEUE_DLQ   = 'dlq';
 
-// ── Shared job options ────────────────────────────────────────────────────────
+// ── Per-queue job options (exponential backoff, provider-tuned) ───────────────
+//
+// Email: 4 attempts, 1-min base delay → retries at ~1 min, ~2 min, ~4 min.
+//   Resend outages typically resolve within a few minutes.
+//
+// SMS: 3 attempts, 5-min base delay → retries at ~5 min, ~10 min.
+//   SMS providers are slower to recover; fewer attempts avoids duplicate sends.
+//
+// DLQ: no retry — tombstone for manual inspection and replay.
 
-const DEFAULT_JOB_OPTIONS: JobsOptions = {
+const EMAIL_JOB_OPTIONS: JobsOptions = {
+  attempts: 4,
+  backoff: { type: 'exponential', delay: 60_000 }, // 1 min → 2 min → 4 min → DLQ
+  removeOnComplete: { count: 200 },
+  removeOnFail: { count: 500 },
+};
+
+const SMS_JOB_OPTIONS: JobsOptions = {
   attempts: 3,
-  backoff: { type: 'exponential', delay: 2_000 },
+  backoff: { type: 'exponential', delay: 300_000 }, // 5 min → 10 min → DLQ
   removeOnComplete: { count: 200 },
   removeOnFail: { count: 500 },
 };
@@ -52,7 +67,7 @@ export function getEmailQueue(): Queue<EmailJobData> {
   if (!_emailQueue) {
     _emailQueue = new Queue<EmailJobData>(QUEUE_EMAIL, {
       connection: getBullMQConnection(),
-      defaultJobOptions: DEFAULT_JOB_OPTIONS,
+      defaultJobOptions: EMAIL_JOB_OPTIONS,
     });
   }
   return _emailQueue;
@@ -62,7 +77,7 @@ export function getSmsQueue(): Queue<SmsJobData> {
   if (!_smsQueue) {
     _smsQueue = new Queue<SmsJobData>(QUEUE_SMS, {
       connection: getBullMQConnection(),
-      defaultJobOptions: DEFAULT_JOB_OPTIONS,
+      defaultJobOptions: SMS_JOB_OPTIONS,
     });
   }
   return _smsQueue;
@@ -89,7 +104,7 @@ export async function enqueueEmail(data: EmailJobData, jobId?: string): Promise<
     return;
   }
   try {
-    await getEmailQueue().add('send', data, jobId ? { ...DEFAULT_JOB_OPTIONS, jobId } : DEFAULT_JOB_OPTIONS);
+    await getEmailQueue().add('send', data, jobId ? { ...EMAIL_JOB_OPTIONS, jobId } : EMAIL_JOB_OPTIONS);
   } catch (err) {
     console.error('[queue] email enqueue failed, falling back to direct send:', err instanceof Error ? err.message : err);
     await sendEmail(data).catch((e) => console.error(`[email] direct send failed (to=${masked}):`, e instanceof Error ? e.message : e));
@@ -104,7 +119,7 @@ export async function enqueueSms(data: SmsJobData, jobId?: string): Promise<void
     return;
   }
   try {
-    await getSmsQueue().add('send', data, jobId ? { ...DEFAULT_JOB_OPTIONS, jobId } : DEFAULT_JOB_OPTIONS);
+    await getSmsQueue().add('send', data, jobId ? { ...SMS_JOB_OPTIONS, jobId } : SMS_JOB_OPTIONS);
   } catch (err) {
     console.error('[queue] sms enqueue failed, falling back to direct send:', err instanceof Error ? err.message : err);
     const fallback = data.to === 'ADMIN' ? sendAdminSMS(data.message) : sendSMS(data.to, data.message);

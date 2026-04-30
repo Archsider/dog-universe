@@ -5,6 +5,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { cacheReadThrough, cacheDel, CacheKeys, CacheTTL } from '@/lib/cache';
+import * as Sentry from '@sentry/nextjs';
 
 type PrismaClientLike = typeof prisma | Prisma.TransactionClient;
 
@@ -26,18 +27,23 @@ const DEFAULT_LIMITS: CapacityLimits = {
 const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] as const;
 
 async function readLimitsFromDb(client: PrismaClientLike): Promise<CapacityLimits> {
-  try {
-    const rows = await client.setting.findMany({
-      where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
-    });
-    const map = Object.fromEntries(rows.map((r) => [r.key, parseInt(r.value, 10)]));
-    return {
-      dogs: Number.isFinite(map.capacity_dog) ? map.capacity_dog : DEFAULT_LIMITS.dogs,
-      cats: Number.isFinite(map.capacity_cat) ? map.capacity_cat : DEFAULT_LIMITS.cats,
-    };
-  } catch {
-    return { ...DEFAULT_LIMITS };
-  }
+  return Sentry.startSpan(
+    { name: 'capacity.getCapacityLimits', op: 'db' },
+    async () => {
+      try {
+        const rows = await client.setting.findMany({
+          where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
+        });
+        const map = Object.fromEntries(rows.map((r) => [r.key, parseInt(r.value, 10)]));
+        return {
+          dogs: Number.isFinite(map.capacity_dog) ? map.capacity_dog : DEFAULT_LIMITS.dogs,
+          cats: Number.isFinite(map.capacity_cat) ? map.capacity_cat : DEFAULT_LIMITS.cats,
+        };
+      } catch {
+        return { ...DEFAULT_LIMITS };
+      }
+    },
+  );
 }
 
 // When called inside a $transaction (client !== prisma), MUST read from DB so
@@ -73,28 +79,33 @@ export async function countOverlappingPets(
   if (!window.endDate) return 0;
   const client = options.client ?? prisma;
 
-  const overlapping = await client.booking.findMany({
-    where: {
-      serviceType: 'BOARDING',
-      status: { in: [...ACTIVE_STATUSES] },
-      startDate: { lte: window.endDate },
-      endDate: { gte: window.startDate, not: null },
-      ...(options.excludeBookingId ? { id: { not: options.excludeBookingId } } : {}),
-    },
-    select: {
-      bookingPets: {
-        select: { pet: { select: { species: true } } },
-      },
-    },
-  });
+  return Sentry.startSpan(
+    { name: 'capacity.countOverlappingPets', op: 'db' },
+    async () => {
+      const overlapping = await client.booking.findMany({
+        where: {
+          serviceType: 'BOARDING',
+          status: { in: [...ACTIVE_STATUSES] },
+          startDate: { lte: window.endDate! },
+          endDate: { gte: window.startDate, not: null },
+          ...(options.excludeBookingId ? { id: { not: options.excludeBookingId } } : {}),
+        },
+        select: {
+          bookingPets: {
+            select: { pet: { select: { species: true } } },
+          },
+        },
+      });
 
-  let count = 0;
-  for (const booking of overlapping) {
-    for (const bp of booking.bookingPets) {
-      if (bp.pet.species === species) count += 1;
-    }
-  }
-  return count;
+      let count = 0;
+      for (const booking of overlapping) {
+        for (const bp of booking.bookingPets) {
+          if (bp.pet.species === species) count += 1;
+        }
+      }
+      return count;
+    },
+  );
 }
 
 export type CapacityCheckOk = { ok: true };
@@ -124,40 +135,45 @@ export async function checkBoardingCapacity(
 ): Promise<CapacityCheckResult> {
   if (!args.endDate) return { ok: true };
 
-  const pets = await client.pet.findMany({
-    where: { id: { in: args.petIds } },
-    select: { species: true },
-  });
-  const newDogs = pets.filter((p) => p.species === 'DOG').length;
-  const newCats = pets.filter((p) => p.species === 'CAT').length;
+  return Sentry.startSpan(
+    { name: 'capacity.checkBoardingCapacity', op: 'db' },
+    async () => {
+      const pets = await client.pet.findMany({
+        where: { id: { in: args.petIds } },
+        select: { species: true },
+      });
+      const newDogs = pets.filter((p) => p.species === 'DOG').length;
+      const newCats = pets.filter((p) => p.species === 'CAT').length;
 
-  if (newDogs === 0 && newCats === 0) return { ok: true };
+      if (newDogs === 0 && newCats === 0) return { ok: true };
 
-  const limits = await getCapacityLimits(client);
+      const limits = await getCapacityLimits(client);
 
-  if (newDogs > 0) {
-    const currentDogs = await countOverlappingPets(
-      'DOG',
-      { startDate: args.startDate, endDate: args.endDate },
-      { excludeBookingId: args.excludeBookingId, client },
-    );
-    const available = Math.max(0, limits.dogs - currentDogs);
-    if (newDogs > available) {
-      return { ok: false, species: 'DOG', available, requested: newDogs, limit: limits.dogs };
-    }
-  }
+      if (newDogs > 0) {
+        const currentDogs = await countOverlappingPets(
+          'DOG',
+          { startDate: args.startDate, endDate: args.endDate },
+          { excludeBookingId: args.excludeBookingId, client },
+        );
+        const available = Math.max(0, limits.dogs - currentDogs);
+        if (newDogs > available) {
+          return { ok: false, species: 'DOG', available, requested: newDogs, limit: limits.dogs };
+        }
+      }
 
-  if (newCats > 0) {
-    const currentCats = await countOverlappingPets(
-      'CAT',
-      { startDate: args.startDate, endDate: args.endDate },
-      { excludeBookingId: args.excludeBookingId, client },
-    );
-    const available = Math.max(0, limits.cats - currentCats);
-    if (newCats > available) {
-      return { ok: false, species: 'CAT', available, requested: newCats, limit: limits.cats };
-    }
-  }
+      if (newCats > 0) {
+        const currentCats = await countOverlappingPets(
+          'CAT',
+          { startDate: args.startDate, endDate: args.endDate },
+          { excludeBookingId: args.excludeBookingId, client },
+        );
+        const available = Math.max(0, limits.cats - currentCats);
+        if (newCats > available) {
+          return { ok: false, species: 'CAT', available, requested: newCats, limit: limits.cats };
+        }
+      }
 
-  return { ok: true };
+      return { ok: true };
+    },
+  );
 }

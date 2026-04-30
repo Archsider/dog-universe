@@ -16,6 +16,7 @@ import { bookingCreateSchema, formatZodError } from '@/lib/validation';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
 import { revalidateTag } from 'next/cache';
+import * as Sentry from '@sentry/nextjs';
 
 // Sentinel error thrown inside the booking transaction when capacity is full.
 // Caught by the POST handler to convert into a 400 response.
@@ -567,35 +568,38 @@ export async function POST(request: Request) {
 
     let booking: Awaited<ReturnType<typeof createBookingTx>>;
     try {
-      booking = await runWithSerializableRetry(() =>
-        createBookingTx({
-          clientId,
-          serviceType,
-          isAdmin,
-          waitlistFallback,
-          startDate: new Date(startDate),
-          endDate: endDate ? new Date(endDate) : null,
-          arrivalTime: arrivalTime || null,
-          notes: notes?.trim() || null,
-          totalPrice: resolvedTotalPrice,
-          source: resolvedSource,
-          petIds,
-          includeGrooming: includeGrooming ?? false,
-          groomingSize: groomingSize || null,
-          groomingPrice: typeof groomingPrice === 'number' ? groomingPrice : 0,
-          pricePerNight: resolvedPricePerNight,
-          taxiGoEnabled: taxiGoEnabled ?? false,
-          taxiGoDate: taxiGoDate || null,
-          taxiGoTime: taxiGoTime || null,
-          taxiGoAddress: taxiGoAddress || null,
-          taxiReturnEnabled: taxiReturnEnabled ?? false,
-          taxiReturnDate: taxiReturnDate || null,
-          taxiReturnTime: taxiReturnTime || null,
-          taxiReturnAddress: taxiReturnAddress || null,
-          taxiAddonPrice: typeof taxiAddonPrice === 'number' ? taxiAddonPrice : 0,
-          taxiType: taxiType ?? 'STANDARD',
-          bookingItems: validBookingItems,
-        }),
+      booking = await Sentry.startSpan(
+        { name: 'booking.create', op: 'db' },
+        () => runWithSerializableRetry(() =>
+          createBookingTx({
+            clientId,
+            serviceType,
+            isAdmin,
+            waitlistFallback,
+            startDate: new Date(startDate),
+            endDate: endDate ? new Date(endDate) : null,
+            arrivalTime: arrivalTime || null,
+            notes: notes?.trim() || null,
+            totalPrice: resolvedTotalPrice,
+            source: resolvedSource,
+            petIds,
+            includeGrooming: includeGrooming ?? false,
+            groomingSize: groomingSize || null,
+            groomingPrice: typeof groomingPrice === 'number' ? groomingPrice : 0,
+            pricePerNight: resolvedPricePerNight,
+            taxiGoEnabled: taxiGoEnabled ?? false,
+            taxiGoDate: taxiGoDate || null,
+            taxiGoTime: taxiGoTime || null,
+            taxiGoAddress: taxiGoAddress || null,
+            taxiReturnEnabled: taxiReturnEnabled ?? false,
+            taxiReturnDate: taxiReturnDate || null,
+            taxiReturnTime: taxiReturnTime || null,
+            taxiReturnAddress: taxiReturnAddress || null,
+            taxiAddonPrice: typeof taxiAddonPrice === 'number' ? taxiAddonPrice : 0,
+            taxiType: taxiType ?? 'STANDARD',
+            bookingItems: validBookingItems,
+          }),
+        ),
       );
     } catch (err) {
       if (err instanceof CapacityExceededError) {
@@ -662,13 +666,18 @@ export async function POST(request: Request) {
       const dateRangeSMS = booking.serviceType === 'BOARDING' && booking.endDate
         ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
         : `le ${formatDateFR(booking.startDate)}`;
-      enqueueSms(
-        { to: 'ADMIN', message: `🔔 Nouvelle réservation : ${clientLabel} pour ${petNames} ${dateRangeSMS}.` },
-        `${booking.id}:admin-new-booking-sms`,
+      Sentry.startSpan(
+        { name: 'booking.enqueueAdminSms', op: 'queue' },
+        () => enqueueSms(
+          { to: 'ADMIN', message: `🔔 Nouvelle réservation : ${clientLabel} pour ${petNames} ${dateRangeSMS}.` },
+          `${booking.id}:admin-new-booking-sms`,
+        ),
       ).catch(() => {});
 
       // Email admin — loop tous les admins en DB (queued, with direct-send fallback)
-      (async () => {
+      Sentry.startSpan(
+        { name: 'booking.enqueueAdminEmails', op: 'queue' },
+        async () => {
         try {
           const esc = (s: string) => s
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -720,7 +729,8 @@ export async function POST(request: Request) {
         } catch (err) {
           console.error('[Email] Admin new booking loop failed:', err);
         }
-      })();
+        },
+      ).catch(() => {});
     }
 
     const serviceName = serviceType === 'BOARDING'
@@ -734,7 +744,10 @@ export async function POST(request: Request) {
       petName: petNames,
     }, locale);
 
-    enqueueEmail({ to: booking.client.email, subject, html }, `${booking.id}:booking-confirmation-email`).catch(() => {});
+    Sentry.startSpan(
+      { name: 'booking.enqueueNotifications', op: 'queue' },
+      () => enqueueEmail({ to: booking.client.email, subject, html }, `${booking.id}:booking-confirmation-email`),
+    ).catch(() => {});
 
     await logAction({
       userId: session.user.id,

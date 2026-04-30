@@ -50,3 +50,33 @@ export function getBullMQConnection(): IORedis {
 export function isBullMQConfigured(): boolean {
   return Boolean(process.env.UPSTASH_REDIS_HOST && process.env.UPSTASH_REDIS_PASSWORD);
 }
+
+// Creates a fresh IORedis connection suitable for Pub/Sub use.
+// IMPORTANT: each call returns a NEW connection — never share a subscriber
+// connection between callers. Redis pub/sub mode prevents regular commands
+// on the same connection (including BullMQ's Lua scripts).
+// Uses lazyConnect so callers can attach error handlers before connecting.
+export function createPubSubConnection(): IORedis | null {
+  if (!isBullMQConfigured()) return null;
+
+  const host = process.env.UPSTASH_REDIS_HOST!;
+  const port = parseInt(process.env.UPSTASH_REDIS_PORT ?? '6379', 10);
+  const password = process.env.UPSTASH_REDIS_PASSWORD!;
+
+  const conn = new IORedis({
+    host,
+    port,
+    password,
+    tls: { rejectUnauthorized: false },
+    maxRetriesPerRequest: 1,
+    enableReadyCheck: false,
+    enableOfflineQueue: false,
+    lazyConnect: true,
+  });
+
+  conn.on('error', (err) => {
+    console.error('[pubsub-redis] connection error:', err.message);
+  });
+
+  return conn;
+}

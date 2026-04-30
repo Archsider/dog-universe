@@ -90,3 +90,18 @@ export const CacheTTL = {
   loyaltyGrade: 300,      // 5 min — recomputed on booking COMPLETED
   notifCount: 30,         // 30 s — bell badge can lag briefly
 } as const;
+
+// ─── Health check ──────────────────────────────────────────────────────────
+
+/** Ping Redis with a write+read round-trip. Returns false if unconfigured or on error. */
+export async function checkRedisHealth(): Promise<boolean> {
+  const redis = getRedis();
+  if (!redis) return false;
+  try {
+    await redis.set('health:ping', '1', { ex: 30 });
+    const val = await redis.get<string>('health:ping');
+    return val === '1';
+  } catch {
+    return false;
+  }
+}
