@@ -7,6 +7,7 @@
 // manual inspection via the /admin/queues monitoring page.
 import { NextRequest, NextResponse } from 'next/server';
 import { Worker } from 'bullmq';
+import { Redis } from '@upstash/redis';
 import { getBullMQConnection, isBullMQConfigured } from '@/lib/redis-bullmq';
 import {
   QUEUE_EMAIL, QUEUE_SMS, QUEUE_DLQ,
@@ -16,7 +17,64 @@ import {
 import { processEmailJob, processSmsJob } from '@/workers/processors';
 import { prisma } from '@/lib/prisma';
 import { getLastHeartbeat, tryClaimAlertSlot } from '@/lib/taxi-heartbeat';
-import { notifyAdminsTaxiHeartbeatLost } from '@/lib/notifications';
+import { notifyAdminsTaxiHeartbeatLost, createNotification } from '@/lib/notifications';
+
+// Upstash REST client used solely for the DLQ alert dedup latch (SET NX EX).
+// Reuses the same env pattern as src/lib/cache.ts. Fail-open: any error in
+// the alerting path is swallowed so the worker loop is never broken.
+let _alertRedis: Redis | null | undefined;
+function getAlertRedis(): Redis | null {
+  if (_alertRedis !== undefined) return _alertRedis;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) { _alertRedis = null; return null; }
+  _alertRedis = new Redis({ url, token });
+  return _alertRedis;
+}
+
+// Notify all SUPERADMINs that a job has exhausted its retries and was archived
+// to the DLQ. Dedup: at most one alert per (jobType, hourUTC) via SET NX EX 3600.
+// Wrapped in a try/catch — alerting failures must NEVER break the worker loop.
+async function alertDlqJob(params: {
+  jobType: 'email' | 'sms';
+  bookingId: string;
+  jobId: string | undefined;
+  failedReason: string;
+}): Promise<void> {
+  try {
+    const { jobType, bookingId, jobId, failedReason } = params;
+    const currentHourISO = new Date().toISOString().slice(0, 13); // e.g. 2026-04-30T08
+    const dedupKey = `dlq:alert:${jobType}:${currentHourISO}`;
+
+    const redis = getAlertRedis();
+    if (!redis) return; // No Redis → can't dedup safely; skip alert.
+    const acquired = await redis.set(dedupKey, '1', { nx: true, ex: 3600 });
+    if (acquired !== 'OK') return; // Another worker already alerted this hour.
+
+    const superadmins = await prisma.user.findMany({
+      where: { role: 'SUPERADMIN' },
+      select: { id: true },
+    });
+
+    for (const sa of superadmins) {
+      try {
+        await createNotification({
+          userId: sa.id,
+          type: 'ADMIN_MESSAGE',
+          titleFr: 'Job en échec définitif',
+          titleEn: 'Job failed permanently',
+          messageFr: `⚠️ Job ${jobType} échoué après 3 tentatives — booking ${bookingId}`,
+          messageEn: `⚠️ ${jobType} job failed after 3 retries — booking ${bookingId}`,
+          metadata: { jobType, bookingId, jobId: jobId ?? 'unknown', failedReason },
+        });
+      } catch (err) {
+        console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'DLQ alert createNotification failed', userId: sa.id, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+      }
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'alertDlqJob failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+  }
+}
 
 const MAX_JOBS_PER_QUEUE = 10;
 const WORKER_TIMEOUT_MS  = 55_000;
@@ -96,6 +154,16 @@ async function runWorker<T>(
       } catch (dlqErr) {
         console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'Failed to archive dead job to DLQ', error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr), timestamp: new Date().toISOString() }));
       }
+
+      // Fire-and-forget SUPERADMIN alert (deduped per hour per jobType).
+      const jobType: 'email' | 'sms' =
+        queueName === QUEUE_EMAIL ? 'email' :
+        queueName === QUEUE_SMS   ? 'sms'   :
+        'email'; // unreachable: only email/sms workers run
+      const rawData = (job.data ?? {}) as Record<string, unknown>;
+      const bookingIdRaw = rawData.bookingId;
+      const bookingId = typeof bookingIdRaw === 'string' && bookingIdRaw.length > 0 ? bookingIdRaw : 'unknown';
+      void alertDlqJob({ jobType, bookingId, jobId: job.id, failedReason: err.message });
     }
   });
 

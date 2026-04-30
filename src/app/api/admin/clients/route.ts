@@ -3,6 +3,7 @@ import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { decodeCursor, encodeCursor, parseLimit } from '@/lib/pagination';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -13,8 +14,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('search') ?? '';
   const grade = searchParams.get('grade') ?? '';
-  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
-  const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') ?? '50')), 100);
+  const limit = parseLimit(searchParams.get('limit'));
+  const cursorRaw = searchParams.get('cursor');
+  const decoded = cursorRaw ? decodeCursor(cursorRaw) : null;
+  if (cursorRaw && !decoded) {
+    return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400 });
+  }
 
   const where: Record<string, unknown> = { role: 'CLIENT' };
 
@@ -30,34 +35,46 @@ export async function GET(request: Request) {
     where.loyaltyGrade = { grade };
   }
 
-  const [clients, total] = await Promise.all([
-    prisma.user.findMany({
-      where,
-      include: {
-        pets: { where: { deletedAt: null }, select: { id: true, name: true } }, // soft-delete: required — no global extension (Edge Runtime incompatible)
-        loyaltyGrade: true,
-        _count: {
-          select: { bookings: true },
-        },
-        invoices: {
-          where: { status: 'PAID' },
-          select: { amount: true },
-        },
-        bookings: {
-          where: { status: 'COMPLETED' },
-          orderBy: { startDate: 'desc' },
-          take: 1,
-          select: { startDate: true, endDate: true },
-        },
+  if (decoded) {
+    where.AND = [
+      {
+        OR: [
+          { createdAt: { lt: decoded.createdAt } },
+          { createdAt: decoded.createdAt, id: { lt: decoded.id } },
+        ],
       },
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    prisma.user.count({ where }),
-  ]);
+    ];
+  }
 
-  const clientsWithRevenue = clients.map((client) => {
+  const items = await prisma.user.findMany({
+    where,
+    include: {
+      pets: { where: { deletedAt: null }, select: { id: true, name: true } }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      loyaltyGrade: true,
+      _count: {
+        select: { bookings: true },
+      },
+      invoices: {
+        where: { status: 'PAID' },
+        select: { amount: true },
+      },
+      bookings: {
+        where: { status: 'COMPLETED' },
+        orderBy: { startDate: 'desc' },
+        take: 1,
+        select: { startDate: true, endDate: true },
+      },
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+
+  const hasMore = items.length > limit;
+  const page = hasMore ? items.slice(0, limit) : items;
+  const last = page[page.length - 1];
+  const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
+
+  const data = page.map((client) => {
     // Explicitly exclude passwordHash via destructuring (safer than `undefined` override)
     const { passwordHash: _pw, ...safeClient } = client;
     return {
@@ -68,7 +85,7 @@ export async function GET(request: Request) {
     };
   });
 
-  return NextResponse.json({ clients: clientsWithRevenue, total, page, limit });
+  return NextResponse.json({ data, nextCursor, hasMore });
 }
 
 export async function POST(request: Request) {

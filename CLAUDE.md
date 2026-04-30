@@ -297,6 +297,31 @@ try {
 
 ---
 
+## ANTHROPIC API
+
+### Usage actuel
+- **Extraction automatique de documents de vaccination** (vignettes, carnets, passeports animaux, certificats vétérinaires) — formats supportés : PDF, JPEG, PNG, WebP, GIF
+- **Endpoint** : `src/app/api/pets/[id]/vaccinations/extract/route.ts` (POST) — appel via `callClaudeExtraction(base64, mimeType)`
+- **Modèle utilisé** : `claude-haiku-4-5-20251001` (`max_tokens: 512`)
+- **Variable d'env** : `ANTHROPIC_API_KEY` (si absente → fallback gracieux : DRAFT vaccination créée avec champs vides, l'utilisateur remplit manuellement)
+- **Sortie** : JSON `{ vaccineType, date, nextDueDate, comment, confidence: HIGH|MEDIUM|LOW, confidenceNote }` → stocké en `Vaccination` status `DRAFT`
+- **Idempotence** : si un DRAFT existe déjà pour `(petId, sourceDocumentId)`, l'endpoint le retourne sans rappeler l'API
+
+### Règle PII (RGPD)
+**Ne jamais inclure de données personnelles client dans les prompts.**
+- OK : contenu du document (nom du vaccin, dates, numéro de lot, fabricant, nom du vétérinaire/clinique présent sur le document)
+- NON : nom du client (propriétaire), email, téléphone, adresse, ID client/animal en clair, métadonnées DB
+- Le PDF/image est traité comme un document opaque — le prompt (`EXTRACTION_PROMPT`) est une constante statique sans interpolation. Seuls le binaire base64 + ce prompt sont envoyés. Aucune donnée provenant de `User` ou `Pet` ne transite par l'API.
+
+### Best practices
+- Toujours valider/sanitizer la réponse JSON avant insertion DB (strip markdown fences, `JSON.parse` dans try/catch — actuellement parse simple ; envisager un `Zod parse` pour durcir)
+- Catch error + log structuré (`console.error(JSON.stringify({ level: 'error', service: 'pet', message: '...', error, timestamp }))`)
+- Fallback gracieux : tout échec (API down, parse JSON, mime non supporté) → `extraction = null` → DRAFT vide créé quand même (jamais de 500 visible client pour cause d'extraction)
+- Le `fileUrl` est résolu via `createSignedUrl(storageKey)` (bucket privé) à chaque appel pour éviter l'expiration 1h des URL signées
+- Endpoint protégé par rate-limit `uploads` (30 / 60 min) + auth (owner ou ADMIN/SUPERADMIN)
+
+---
+
 ## RÈGLES FORMULAIRES ANIMAUX
 
 **`dateOfBirth` est OBLIGATOIRE** sur tous les formulaires (client et admin) depuis la session du 2026-03-08.
@@ -495,17 +520,11 @@ Phrase principale : Nous attendons {_companionFr} avec impatience.
 
 ---
 
-## HISTORIQUE ET DÉCISIONS CLÉS
+## HISTORIQUE
 
-### Soft-delete — filtres explicites deletedAt (depuis 2026-04-28)
+L'historique complet des sessions de travail et décisions techniques (sécurité, perf, architecture) est consigné dans [HISTORY.md](./HISTORY.md).
 
-L'extension Prisma `$extends` de soft-delete globale a été **revertée** (commit `3477025`) car elle est incompatible avec Vercel Edge Runtime.
-
-**Cause** : `middleware.ts → auth.ts → prisma.ts` — cette chaîne s'exécute dans l'Edge Runtime de Vercel qui ne supporte pas les API Node.js utilisées par `$extends()`. Résultat en prod : `MIDDLEWARE_INVOCATION_FAILED` sur toutes les pages.
-
-**Solution** : 57 filtres `{ deletedAt: null }` explicites dans les `findMany` / `findFirst` sur les modèles `User`, `Pet`, `Booking`. Ces filtres sont **intentionnels et obligatoires** — ne jamais les supprimer.
-
-**Helper** : `notDeleted()` dans `src/lib/prisma-soft.ts` pour les nouveaux appels.
+**Décision-clé toujours active : Soft-delete via filtres explicites `deletedAt: null`**
 
 ---
 
@@ -694,8 +713,4 @@ L'extension Prisma `$extends` de soft-delete globale a été **revertée** (comm
 - **Audit sécurité** : CRITICAL/HIGH majoritairement faux positifs (loyalty claims GET avait déjà le check ADMIN/SUPERADMIN, revenue-summary avait déjà `take:120`). Seuls 3 caps `take()` manquants confirmés réels.
 - **Promise.all dans transactions Prisma** : safe — le client `tx` supporte les opérations concurrentes dans une transaction interactive.
 
-**Nouveaux fichiers :**
-```
-src/app/[locale]/admin/notifications/AdminNotificationsClient.tsx
-src/app/[locale]/admin/profile/AdminProfileClient.tsx
-```
+L'extension Prisma `$extends` de soft-delete a été revertée (commit `3477025`) car incompatible avec le Vercel Edge Runtime (`middleware.ts → auth.ts → prisma.ts` ⇒ `MIDDLEWARE_INVOCATION_FAILED`). Solution conservée : 57 filtres `{ deletedAt: null }` explicites dans les `findMany` / `findFirst` sur `User`, `Pet`, `Booking`. Ces filtres sont **intentionnels et obligatoires** — ne jamais les supprimer. Helper `notDeleted()` dans `src/lib/prisma-soft.ts` pour les nouveaux appels.
