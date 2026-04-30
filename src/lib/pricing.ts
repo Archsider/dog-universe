@@ -13,10 +13,6 @@ export const GROOMING_PRICES = {
   LARGE: 150,
 } as const;
 
-export const BOARDING_DOG_SINGLE = 120;
-export const BOARDING_DOG_LONG_STAY = 100;
-export const BOARDING_DOG_MULTI = 100;
-export const BOARDING_CAT = 70;
 export const TAXI_ADDON_PRICE = 150;
 
 export interface PricingSettings {

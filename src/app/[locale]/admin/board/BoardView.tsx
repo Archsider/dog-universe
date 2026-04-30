@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   PawPrint, Car, Home, ArrowRight, ArrowLeft, Scissors, Loader2, MapPin, Clock,
@@ -188,8 +189,7 @@ function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href:
         <div className="flex items-start gap-2 sm:gap-3 lg:gap-4">
           <div className="relative w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-[10px] overflow-hidden bg-[#F5E6CC] flex items-center justify-center flex-shrink-0">
             {firstPet?.photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={firstPet.photoUrl} alt={firstPet.name} className="w-full h-full object-cover" />
+              <Image src={firstPet.photoUrl} alt={firstPet.name} width={48} height={48} className="w-full h-full object-cover" />
             ) : (
               <span className="text-[10px] sm:text-xs font-bold text-[#8B6A2F]">{getInitials(b.clientName)}</span>
             )}
@@ -616,8 +616,7 @@ function TaxiKanbanCard({
         <div className="flex items-start gap-2 sm:gap-3 lg:gap-4">
           <div className="relative w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-[10px] overflow-hidden bg-[#F5E6CC] flex items-center justify-center flex-shrink-0">
             {firstPet?.photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={firstPet.photoUrl} alt={firstPet.name} className="w-full h-full object-cover" />
+              <Image src={firstPet.photoUrl} alt={firstPet.name} width={48} height={48} className="w-full h-full object-cover" />
             ) : (
               <span className="text-[10px] sm:text-xs font-bold text-[#8B6A2F]">{getInitials(b.clientName)}</span>
             )}

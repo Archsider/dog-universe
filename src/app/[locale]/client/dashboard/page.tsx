@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
+import Image from 'next/image';
 import { MemberCard } from '@/components/shared/MemberCard';
 import { Grade } from '@/lib/loyalty';
 import { PawPrint, Calendar, FileText, History, CheckCircle, AlertCircle } from 'lucide-react';
@@ -85,6 +86,25 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
   const serviceLabels: Record<string, Record<string, string>> = {
     fr: { BOARDING: 'Pension', PET_TAXI: 'Taxi animalier' },
     en: { BOARDING: 'Boarding', PET_TAXI: 'Pet Taxi' },
+  };
+
+  const dashboardStats = [
+    { label: t('stats.pets'), value: pets.length, gold: false },
+    { label: t('stats.totalStays'), value: totalStays, gold: false },
+    { label: t('stats.totalSpent'), value: formatMAD(totalSpent._sum.amount ?? 0), gold: true },
+  ];
+
+  const quickActions = [
+    { href: `/${locale}/client/bookings/new`, label: t('quickActions.book'), icon: Calendar },
+    { href: `/${locale}/client/pets`, label: t('quickActions.myPets'), icon: PawPrint },
+    { href: `/${locale}/client/invoices`, label: t('quickActions.invoices'), icon: FileText },
+    { href: `/${locale}/client/history`, label: t('quickActions.history'), icon: History },
+  ];
+
+  const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
+    CONFIRMED: { bg: '#EAF7EF', color: '#1A7A45' },
+    PENDING: { bg: '#FEF3E2', color: '#B45309' },
+    COMPLETED: { bg: '#F0EFFE', color: '#5B4FCF' },
   };
 
   return (
@@ -231,8 +251,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
                 >
                   <div className="h-10 w-10 rounded-full border-[1.5px] border-[#C4974A] bg-[rgba(196,151,74,0.08)] flex items-center justify-center flex-shrink-0 overflow-hidden">
                     {pet.photoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={pet.photoUrl} alt={pet.name} className="h-10 w-10 rounded-full object-cover" />
+                      <Image src={pet.photoUrl} alt={pet.name} width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
                     ) : (
                       <PawPrint className="h-5 w-5 text-[#C4974A]" />
                     )}

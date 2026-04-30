@@ -2,6 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import Image from 'next/image';
 import { PawPrint, ChevronRight } from 'lucide-react';
 import { calculateAge } from '@/lib/utils';
 import CreateAnimalModal from './CreateAnimalModal';
@@ -92,7 +93,7 @@ export default async function AdminAnimalsPage(props: PageProps) {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-gold-50 flex items-center justify-center overflow-hidden flex-shrink-0">
-                          {pet.photoUrl ? <img src={pet.photoUrl} alt={pet.name} className="w-8 h-8 object-cover rounded-full" /> : <PawPrint className="h-4 w-4 text-gold-400" />}
+                          {pet.photoUrl ? <Image src={pet.photoUrl} alt={pet.name} width={32} height={32} className="w-8 h-8 object-cover rounded-full" /> : <PawPrint className="h-4 w-4 text-gold-400" />}
                         </div>
                         <div>
                           <p className="font-medium text-sm text-charcoal">{pet.name}</p>

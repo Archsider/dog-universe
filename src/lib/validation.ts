@@ -2,8 +2,6 @@
 // Pattern : importer le schéma → `schema.safeParse(body)` → 400 si !success.
 import { z } from 'zod';
 
-export type ZodSchema<T> = z.ZodType<T>;
-
 // ─── Auth / profil ─────────────────────────────────────────────────────────
 
 export const passwordChangeSchema = z.object({

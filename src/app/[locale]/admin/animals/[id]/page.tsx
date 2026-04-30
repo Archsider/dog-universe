@@ -2,6 +2,7 @@ import { auth } from '../../../../../../auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ArrowLeft, PawPrint, Calendar, ShieldCheck, ShieldAlert, ShieldOff, ShieldQuestion, Edit } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDate, getBookingStatusColor, getAntiparasiticDurationDays } from '@/lib/utils';
@@ -116,7 +117,7 @@ export default async function AdminAnimalDetailPage({ params }: PageProps) {
         <Link href={`/${locale}/admin/animals`} className="text-gray-400 hover:text-charcoal"><ArrowLeft className="h-5 w-5" /></Link>
         <div className="flex items-center gap-3 flex-1">
           <div className="w-14 h-14 rounded-full bg-gold-100 flex items-center justify-center overflow-hidden">
-            {pet.photoUrl ? <img src={pet.photoUrl} alt={pet.name} className="w-14 h-14 object-cover" /> : <PawPrint className="h-7 w-7 text-gold-400" />}
+            {pet.photoUrl ? <Image src={pet.photoUrl} alt={pet.name} width={56} height={56} className="w-14 h-14 object-cover" /> : <PawPrint className="h-7 w-7 text-gold-400" />}
           </div>
           <div>
             <h1 className="text-xl font-serif font-bold text-charcoal">{pet.name}</h1>
