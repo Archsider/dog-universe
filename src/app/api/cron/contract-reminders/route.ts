@@ -29,20 +29,25 @@ export async function GET(req: NextRequest) {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+  // Batch dedup: load all CONTRACT_REMINDER notifications sent in the last 7 days
+  // for these clients in a single query, then check in-memory — avoids N findFirst calls.
+  const clientIds = unsigned.map(u => u.id);
+  const recentReminders = await prisma.notification.findMany({
+    where: {
+      userId: { in: clientIds },
+      type: 'CONTRACT_REMINDER',
+      createdAt: { gte: sevenDaysAgo },
+    },
+    select: { userId: true },
+  });
+  const alreadyRemindedUserIds = new Set(recentReminders.map(n => n.userId));
+
   let sent = 0;
   let skipped = 0;
   for (const client of unsigned) {
     try {
       // Skip si un rappel a déjà été envoyé dans les 7 derniers jours.
-      const recentReminder = await prisma.notification.findFirst({
-        where: {
-          userId: client.id,
-          type: 'CONTRACT_REMINDER',
-          createdAt: { gte: sevenDaysAgo },
-        },
-        select: { id: true },
-      });
-      if (recentReminder) { skipped++; continue; }
+      if (alreadyRemindedUserIds.has(client.id)) { skipped++; continue; }
 
       const locale = client.language ?? 'fr';
       const loginUrl = `${APP_URL}/${locale}/auth/login`;

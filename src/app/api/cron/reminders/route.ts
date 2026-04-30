@@ -69,20 +69,30 @@ export async function GET(request: Request) {
     },
   });
 
+  // Batch dedup: load all STAY_REMINDER notifications sent today for these clients
+  // in a single query, then check in-memory — avoids N individual findFirst calls.
+  const startClientIds = startBookings.map(b => b.clientId);
+  const existingStartReminders = await prisma.notification.findMany({
+    where: {
+      userId: { in: startClientIds },
+      type: 'STAY_REMINDER',
+      createdAt: { gte: todayStart },
+    },
+    select: { metadata: true },
+  });
+  const notifiedStartBookingIds = new Set<string>();
+  for (const n of existingStartReminders) {
+    try {
+      const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+      if (typeof meta.bookingId === 'string') notifiedStartBookingIds.add(meta.bookingId);
+    } catch { /* ignore malformed metadata */ }
+  }
+
   for (const booking of startBookings) {
     try {
       // Déduplication : si une notif STAY_REMINDER pour cette booking
       // a déjà été créée aujourd'hui, on saute (évite double envoi sur retry cron).
-      const alreadySent = await prisma.notification.findFirst({
-        where: {
-          userId: booking.clientId,
-          type: 'STAY_REMINDER',
-          metadata: { contains: `"bookingId":"${booking.id}"` },
-          createdAt: { gte: todayStart },
-        },
-        select: { id: true },
-      });
-      if (alreadySent) { skipped++; continue; }
+      if (notifiedStartBookingIds.has(booking.id)) { skipped++; continue; }
 
       const locale = booking.client.language ?? 'fr';
       const pets = booking.bookingPets.map(bp => bp.pet);
@@ -173,19 +183,29 @@ export async function GET(request: Request) {
     },
   });
 
+  // Batch dedup: load all STAY_END_REMINDER notifications sent today for these clients
+  // in a single query, then check in-memory — avoids N individual findFirst calls.
+  const endClientIds = endBookings.map(b => b.clientId);
+  const existingEndReminders = await prisma.notification.findMany({
+    where: {
+      userId: { in: endClientIds },
+      type: 'STAY_END_REMINDER',
+      createdAt: { gte: todayStart },
+    },
+    select: { metadata: true },
+  });
+  const notifiedEndBookingIds = new Set<string>();
+  for (const n of existingEndReminders) {
+    try {
+      const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+      if (typeof meta.bookingId === 'string') notifiedEndBookingIds.add(meta.bookingId);
+    } catch { /* ignore malformed metadata */ }
+  }
+
   for (const booking of endBookings) {
     try {
       // Déduplication : skip si une notif STAY_END_REMINDER existe déjà aujourd'hui.
-      const alreadySent = await prisma.notification.findFirst({
-        where: {
-          userId: booking.clientId,
-          type: 'STAY_END_REMINDER',
-          metadata: { contains: `"bookingId":"${booking.id}"` },
-          createdAt: { gte: todayStart },
-        },
-        select: { id: true },
-      });
-      if (alreadySent) { skipped++; continue; }
+      if (notifiedEndBookingIds.has(booking.id)) { skipped++; continue; }
 
       const locale = booking.client.language ?? 'fr';
       const pets = booking.bookingPets.map(bp => bp.pet);

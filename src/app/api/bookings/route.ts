@@ -199,6 +199,10 @@ export async function GET(request: Request) {
   const status = searchParams.get('status');
   const clientId = searchParams.get('clientId');
 
+  // Pagination — defaults to first 50 results; clients can request up to 50 per page.
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
+  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)));
+
   const where: Record<string, unknown> = { deletedAt: null }; // soft-delete: required — no global extension (Edge Runtime incompatible)
 
   if (session.user.role === 'CLIENT') {
@@ -220,6 +224,8 @@ export async function GET(request: Request) {
       invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
     },
     orderBy: { startDate: 'desc' },
+    take: limit,
+    skip: (page - 1) * limit,
   });
 
   return NextResponse.json(bookings);

@@ -126,9 +126,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     // Create TaxiTrip for each enabled taxi leg (idempotent — skip if already exists)
     const bd = await prisma.boardingDetail.findUnique({ where: { bookingId: id } });
+
+    // Fetch both taxi trips in parallel to avoid two sequential round-trips.
+    const [outboundTrip, returnTrip] = await Promise.all([
+      prisma.taxiTrip.findFirst({ where: { bookingId: id, tripType: 'OUTBOUND' } }),
+      prisma.taxiTrip.findFirst({ where: { bookingId: id, tripType: 'RETURN' } }),
+    ]);
+
     if (bd?.taxiGoEnabled) {
-      const exists = await prisma.taxiTrip.findFirst({ where: { bookingId: id, tripType: 'OUTBOUND' } });
-      if (!exists) {
+      if (!outboundTrip) {
         const t = await prisma.taxiTrip.create({
           data: { bookingId: id, tripType: 'OUTBOUND', status: 'PLANNED',
                   date: bd.taxiGoDate ?? undefined, time: bd.taxiGoTime ?? undefined,
@@ -137,14 +143,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         await prisma.taxiStatusHistory.create({ data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: session.user.id } });
       } else {
         await prisma.taxiTrip.update({
-          where: { id: exists.id },
+          where: { id: outboundTrip.id },
           data: { date: bd.taxiGoDate ?? undefined, time: bd.taxiGoTime ?? undefined, address: bd.taxiGoAddress ?? undefined },
         });
       }
     }
     if (bd?.taxiReturnEnabled) {
-      const exists = await prisma.taxiTrip.findFirst({ where: { bookingId: id, tripType: 'RETURN' } });
-      if (!exists) {
+      if (!returnTrip) {
         const t = await prisma.taxiTrip.create({
           data: { bookingId: id, tripType: 'RETURN', status: 'PLANNED',
                   date: bd.taxiReturnDate ?? undefined, time: bd.taxiReturnTime ?? undefined,
@@ -153,14 +158,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         await prisma.taxiStatusHistory.create({ data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: session.user.id } });
       } else {
         await prisma.taxiTrip.update({
-          where: { id: exists.id },
+          where: { id: returnTrip.id },
           data: { date: bd.taxiReturnDate ?? undefined, time: bd.taxiReturnTime ?? undefined, address: bd.taxiReturnAddress ?? undefined },
         });
       }
     }
 
-    const updated = await prisma.boardingDetail.findUnique({ where: { bookingId: id } });
-    return NextResponse.json({ message: 'boarding_detail_patched', boardingDetail: updated });
+    // Reuse the already-fetched boardingDetail — no second DB round-trip needed.
+    return NextResponse.json({ message: 'boarding_detail_patched', boardingDetail: bd });
   }
   // ── End patchBoardingDetail ───────────────────────────────────────────────
 
@@ -361,6 +366,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         // Update pension InvoiceItems to reflect the new night count
         const invoiceItems = await tx.invoiceItem.findMany({
           where: { invoiceId: booking.invoice.id },
+          select: { id: true, description: true, unitPrice: true },
         });
         for (const item of invoiceItems) {
           const d = item.description.toLowerCase();
@@ -483,6 +489,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         // Update pension InvoiceItems to reflect the new night count
         const invoiceItems = await prisma.invoiceItem.findMany({
           where: { invoiceId: booking.invoice.id },
+          select: { id: true, description: true, unitPrice: true },
         });
         for (const item of invoiceItems) {
           const d = item.description.toLowerCase();
