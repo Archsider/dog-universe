@@ -40,7 +40,7 @@ export default function CreateAnimalModal({ locale, defaultOwnerId }: Props) {
       try {
         const res = await fetch('/api/admin/clients?limit=200');
         const data = await res.json();
-        setClients(data.clients ?? []);
+        setClients(data.data ?? []);
       } finally {
         setLoadingClients(false);
       }

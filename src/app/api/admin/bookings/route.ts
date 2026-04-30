@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { decodeCursor, encodeCursor, parseLimit } from '@/lib/pagination';
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -11,9 +12,12 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
   const serviceType = searchParams.get('type');
-  const page = parseInt(searchParams.get('page') || '1');
-  const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
-  const skip = (page - 1) * limit;
+  const limit = parseLimit(searchParams.get('limit'));
+  const cursorRaw = searchParams.get('cursor');
+  const decoded = cursorRaw ? decodeCursor(cursorRaw) : null;
+  if (cursorRaw && !decoded) {
+    return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400 });
+  }
 
   const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REJECTED'];
   const VALID_SERVICE_TYPES = ['BOARDING', 'PET_TAXI'];
@@ -22,22 +26,34 @@ export async function GET(request: NextRequest) {
   if (status && VALID_STATUSES.includes(status)) where.status = status;
   if (serviceType && VALID_SERVICE_TYPES.includes(serviceType)) where.serviceType = serviceType;
 
-  const [bookings, total] = await Promise.all([
-    prisma.booking.findMany({
-      where,
-      include: {
-        client: { select: { id: true, name: true, email: true } },
-        bookingPets: { include: { pet: true } },
-        boardingDetail: true,
-        taxiDetail: true,
-        invoice: { select: { id: true, invoiceNumber: true, amount: true, status: true } },
+  if (decoded) {
+    where.AND = [
+      {
+        OR: [
+          { createdAt: { lt: decoded.createdAt } },
+          { createdAt: decoded.createdAt, id: { lt: decoded.id } },
+        ],
       },
-      orderBy: { startDate: 'desc' },
-      skip,
-      take: limit,
-    }),
-    prisma.booking.count({ where }),
-  ]);
+    ];
+  }
 
-  return NextResponse.json({ bookings, total, page, limit });
+  const items = await prisma.booking.findMany({
+    where,
+    include: {
+      client: { select: { id: true, name: true, email: true } },
+      bookingPets: { include: { pet: true } },
+      boardingDetail: true,
+      taxiDetail: true,
+      invoice: { select: { id: true, invoiceNumber: true, amount: true, status: true } },
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+
+  const hasMore = items.length > limit;
+  const data = hasMore ? items.slice(0, limit) : items;
+  const last = data[data.length - 1];
+  const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
+
+  return NextResponse.json({ data, nextCursor, hasMore });
 }
