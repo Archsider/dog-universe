@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
   const activeBooking = await prisma.booking.findFirst({
     where: {
       clientId: targetUserId,
-      deletedAt: null,
+      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       status: { in: [...BLOCKING_STATUSES] },
     },
     select: { id: true, status: true, startDate: true },
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
 
     // Soft-delete pets (already-archived stay archived)
     await tx.pet.updateMany({
-      where: { ownerId: targetUserId, deletedAt: null },
+      where: { ownerId: targetUserId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       data: { deletedAt: now },
     });
 

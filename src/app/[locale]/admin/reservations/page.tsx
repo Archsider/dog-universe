@@ -26,7 +26,7 @@ export default async function AdminReservationsPage(props: PageProps) {
   const skip = (page - 1) * limit;
 
   const where: Record<string, unknown> = {
-    deletedAt: null,
+    deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
     ...(status && { status }),
     ...(type && { serviceType: type }),
   };
@@ -55,7 +55,7 @@ export default async function AdminReservationsPage(props: PageProps) {
 
     const raw = await prisma.booking.findMany({
       where: {
-        deletedAt: null,
+        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
         OR: [
           { status: { in: ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'] } },
           { status: 'COMPLETED', updatedAt: { gte: sevenDaysAgo } },

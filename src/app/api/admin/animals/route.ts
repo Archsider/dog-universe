@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
   const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') ?? '50')), 100);
 
-  const where: Record<string, unknown> = { deletedAt: null };
+  const where: Record<string, unknown> = { deletedAt: null }; // soft-delete: required — no global extension (Edge Runtime incompatible)
 
   if (search) {
     where.OR = [

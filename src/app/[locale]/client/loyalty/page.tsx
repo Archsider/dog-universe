@@ -26,7 +26,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
       orderBy: { claimedAt: 'desc' },
     }),
     prisma.booking.count({
-      where: { clientId: session.user.id, status: 'COMPLETED', serviceType: 'BOARDING', deletedAt: null },
+      where: { clientId: session.user.id, status: 'COMPLETED', serviceType: 'BOARDING', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     }),
   ]);
 

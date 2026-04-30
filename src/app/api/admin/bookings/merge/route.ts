@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
   const [bookingA, bookingB] = await Promise.all([
     prisma.booking.findFirst({
-      where: { id: targetBookingId, deletedAt: null },
+      where: { id: targetBookingId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       include: {
         invoice: true,
         boardingDetail: true,
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       },
     }),
     prisma.booking.findFirst({
-      where: { id: sourceBookingId, deletedAt: null },
+      where: { id: sourceBookingId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       include: {
         invoice: true,
         boardingDetail: true,

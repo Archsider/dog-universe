@@ -625,7 +625,7 @@ export async function promoteWaitlistedBooking(args: {
     where: {
       status: 'WAITLIST',
       serviceType: 'BOARDING',
-      deletedAt: null,
+      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       startDate: { lte: args.endDate },
       endDate: { gte: args.startDate, not: null },
     },

@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: Params) {
     where: { id, role: 'CLIENT' },
     include: {
       pets: {
-        where: { deletedAt: null },
+        where: { deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
         select: {
           id: true, ownerId: true, name: true, species: true, breed: true,
           dateOfBirth: true, gender: true, photoUrl: true, weight: true,
@@ -124,7 +124,7 @@ export async function PATCH(request: Request, { params }: Params) {
       const user = await prisma.user.findUnique({ where: { id }, select: { historicalStays: true, historicalSpendMAD: true } });
       const [totalPaid, completedStays] = await Promise.all([
         prisma.invoice.aggregate({ where: { clientId: id, status: 'PAID' }, _sum: { amount: true } }),
-        prisma.booking.count({ where: { clientId: id, status: 'COMPLETED', deletedAt: null } }),
+        prisma.booking.count({ where: { clientId: id, status: 'COMPLETED', deletedAt: null } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
       ]);
       const totalStays = completedStays + (user?.historicalStays ?? 0);
       const totalRevenue = (totalPaid._sum.amount ?? 0) + (user?.historicalSpendMAD ?? 0);

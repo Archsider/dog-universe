@@ -13,7 +13,7 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const pet = await prisma.pet.findUnique({ where: { id, deletedAt: null } });
+  const pet = await prisma.pet.findUnique({ where: { id, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   // Block deletion if pet has active or upcoming bookings

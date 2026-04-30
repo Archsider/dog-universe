@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'asc' },
     }),
     prisma.booking.findMany({
-      where: { clientId: targetUserId, deletedAt: null },
+      where: { clientId: targetUserId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       select: {
         id: true, serviceType: true, status: true,
         startDate: true, endDate: true, arrivalTime: true,

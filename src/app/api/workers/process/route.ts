@@ -30,7 +30,7 @@ async function checkTaxiHeartbeats(): Promise<{ scanned: number; alerted: number
   let alerted = 0;
   try {
     const bookings = await prisma.booking.findMany({
-      where: { serviceType: 'PET_TAXI', status: 'IN_PROGRESS', deletedAt: null },
+      where: { serviceType: 'PET_TAXI', status: 'IN_PROGRESS', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       select: {
         id: true,
         client: { select: { name: true, email: true } },

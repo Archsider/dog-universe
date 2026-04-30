@@ -59,7 +59,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     totalCashCollected(thisMonthStart, thisMonthEnd),
     totalCashCollected(lastMonthStart, lastMonthEnd),
     prisma.booking.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       include: {
         client: { select: { name: true, email: true } },
         bookingPets: { include: { pet: { select: { name: true } } } },
@@ -71,7 +71,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     cashByMonth(currentYear),
     prisma.booking.groupBy({
       by: ['clientId'],
-      where: { deletedAt: null },
+      where: { deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       _count: { clientId: true },
       having: { clientId: { _count: { gt: 1 } } },
     }),
@@ -92,7 +92,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
       where: {
         status: { in: ['CONFIRMED', 'COMPLETED', 'IN_PROGRESS'] },
         invoice: null,
-        deletedAt: null,
+        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       },
     }),
     prisma.booking.findMany({
@@ -100,7 +100,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
         serviceType: 'BOARDING',
         status: { in: ['CONFIRMED', 'PENDING'] },
         startDate: { gte: todayStart, lte: todayEnd },
-        deletedAt: null,
+        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       },
       include: {
         client: { select: { name: true } },
@@ -113,7 +113,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
         serviceType: 'BOARDING',
         status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
         endDate: { gte: todayStart, lte: todayEnd },
-        deletedAt: null,
+        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       },
       include: {
         client: { select: { name: true } },

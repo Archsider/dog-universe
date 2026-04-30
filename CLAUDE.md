@@ -497,6 +497,18 @@ Phrase principale : Nous attendons {_companionFr} avec impatience.
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### Soft-delete — filtres explicites deletedAt (depuis 2026-04-28)
+
+L'extension Prisma `$extends` de soft-delete globale a été **revertée** (commit `3477025`) car elle est incompatible avec Vercel Edge Runtime.
+
+**Cause** : `middleware.ts → auth.ts → prisma.ts` — cette chaîne s'exécute dans l'Edge Runtime de Vercel qui ne supporte pas les API Node.js utilisées par `$extends()`. Résultat en prod : `MIDDLEWARE_INVOCATION_FAILED` sur toutes les pages.
+
+**Solution** : 57 filtres `{ deletedAt: null }` explicites dans les `findMany` / `findFirst` sur les modèles `User`, `Pet`, `Booking`. Ces filtres sont **intentionnels et obligatoires** — ne jamais les supprimer.
+
+**Helper** : `notDeleted()` dans `src/lib/prisma-soft.ts` pour les nouveaux appels.
+
+---
+
 ### 2026-04-30 — Session audits sécurité P0→P4 + cache + addon-request fix
 
 **8 commits sur `main` :**

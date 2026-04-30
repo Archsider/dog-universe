@@ -16,7 +16,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { requestedEndDate, note } = parsed.data;
 
   const booking = await prisma.booking.findFirst({
-    where: { id: id, deletedAt: null },
+    where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     include: { bookingPets: { include: { pet: true } } },
   });
 

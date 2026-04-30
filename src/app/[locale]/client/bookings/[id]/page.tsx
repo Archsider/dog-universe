@@ -129,7 +129,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
   if (!session?.user) redirect(`/${locale}/auth/login`);
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: null },
+    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     include: {
       bookingPets: { include: { pet: true } },
       boardingDetail: true,

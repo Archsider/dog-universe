@@ -43,7 +43,7 @@ export default async function HistoryPage(props: PageProps) {
   const bookings = await prisma.booking.findMany({
     where: {
       clientId: session.user.id,
-      deletedAt: null,
+      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       ...(statusFilter && {
       status: statusFilter === 'CANCELLED'
         ? { in: ['CANCELLED', 'REJECTED'] as const }
@@ -61,7 +61,7 @@ export default async function HistoryPage(props: PageProps) {
   });
 
   const allBookings = await prisma.booking.findMany({
-    where: { clientId: session.user.id, deletedAt: null },
+    where: { clientId: session.user.id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { status: true },
   });
   const counts: Record<string, number> = {};

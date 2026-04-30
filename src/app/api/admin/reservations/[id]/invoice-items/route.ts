@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: null },
+    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     include: {
       bookingPets: { include: { pet: { select: { id: true, name: true, species: true } } } },
       boardingDetail: true,
