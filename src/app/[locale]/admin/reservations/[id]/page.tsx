@@ -145,15 +145,17 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       orderBy: { createdAt: 'asc' },
       select: { id: true, messageFr: true, messageEn: true, createdAt: true },
     }),
-    // Addon requests for this booking — each request creates one notification per admin
-    // (same requestId in metadata). We fetch all and deduplicate by requestId in JS.
-    // Note: distinct:['metadata'] + orderBy on another field is unreliable in Prisma 5
-    // (requires distinct fields to lead orderBy for PostgreSQL DISTINCT ON).
+    // Addon requests for this booking. We DON'T filter on metadata in the DB
+    // (substring match on a JSON-stringified blob is fragile — any whitespace
+    // or escape difference and the row is silently skipped). Instead: pull
+    // recent ADDON_REQUEST rows for the current admin (userId index → fast,
+    // each request notifies every admin so this admin's view is complete),
+    // then parse and filter by bookingId in JS.
     prisma.notification.findMany({
-      where: { type: 'ADDON_REQUEST', metadata: { contains: `"bookingId":"${id}"` } },
+      where: { userId: session.user.id, type: 'ADDON_REQUEST' },
       orderBy: { createdAt: 'desc' },
       select: { metadata: true, createdAt: true },
-      take: 30,
+      take: 100,
     }),
   ]);
 
@@ -165,22 +167,29 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
     createdAt: string;
   };
   const seenRequestIds = new Set<string>();
+  let parseFailures = 0;
+  let bookingIdMismatches = 0;
   const addonRequests: ParsedAddonRequest[] = addonRequestNotifs
     .map((n): ParsedAddonRequest | null => {
-      if (!n.metadata) return null;
+      if (!n.metadata) { parseFailures++; return null; }
       try {
         const parsed: unknown = JSON.parse(n.metadata);
-        if (typeof parsed !== 'object' || parsed === null) return null;
+        if (typeof parsed !== 'object' || parsed === null) { parseFailures++; return null; }
         const meta = parsed as Record<string, unknown>;
+        // Filter by bookingId in JS (not via DB contains — see fetch comment).
+        if (meta.bookingId !== id) { bookingIdMismatches++; return null; }
         const serviceType = meta.serviceType;
-        if (serviceType !== 'PET_TAXI' && serviceType !== 'TOILETTAGE' && serviceType !== 'AUTRE') return null;
+        if (serviceType !== 'PET_TAXI' && serviceType !== 'TOILETTAGE' && serviceType !== 'AUTRE') {
+          parseFailures++;
+          return null;
+        }
         return {
           requestId: typeof meta.requestId === 'string' ? meta.requestId : `${n.createdAt.getTime()}`,
           serviceType,
           message: typeof meta.message === 'string' ? meta.message : '',
           createdAt: n.createdAt.toISOString(),
         };
-      } catch { return null; }
+      } catch { parseFailures++; return null; }
     })
     .filter((x): x is ParsedAddonRequest => {
       if (x === null) return false;
@@ -188,6 +197,19 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       seenRequestIds.add(x.requestId);
       return true;
     });
+
+  // Diagnostic log — visible in Vercel Functions logs. Lets us see, for any
+  // booking where the section is unexpectedly empty, whether the issue is
+  // (a) no notifs in DB, (b) parse failures, or (c) bookingId mismatch.
+  if (addonRequestNotifs.length > 0 && addonRequests.length === 0) {
+    console.log('[addon-requests] empty result for booking', id.slice(0, 8), {
+      raw: addonRequestNotifs.length,
+      parsed: addonRequests.length,
+      parseFailures,
+      bookingIdMismatches,
+      sampleMetadata: addonRequestNotifs[0]?.metadata?.slice(0, 200),
+    });
+  }
 
   const adjacentBookings: AdjacentBooking[] = [];
   if (before) {
