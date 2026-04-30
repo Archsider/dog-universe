@@ -119,11 +119,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     });
 
-    // Cleanup : ne garder que les MAX_LOCATIONS_PER_TRIP plus récentes
+    // Cleanup : ne garder que les MAX_LOCATIONS_PER_TRIP plus récentes (batch 500 max pour éviter DoS)
     const stale = await prisma.taxiLocation.findMany({
       where: { taxiTripId: id },
       orderBy: { createdAt: 'desc' },
       skip: MAX_LOCATIONS_PER_TRIP,
+      take: 500,
       select: { id: true },
     });
     if (stale.length > 0) {

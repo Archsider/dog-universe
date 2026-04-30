@@ -16,6 +16,7 @@ export async function GET(_req: Request, { params }: Params) {
   const entries = await prisma.petWeightEntry.findMany({
     where: { petId: id },
     orderBy: { measuredAt: 'desc' },
+    take: 500,
   });
 
   return NextResponse.json(entries);

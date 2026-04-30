@@ -109,6 +109,7 @@ export async function GET(request: Request) {
       items: { select: { category: true, total: true } },
     },
     orderBy: { issuedAt: 'desc' },
+    take: 10_000,
   });
 
   const headers = [
