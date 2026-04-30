@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { createAdminMessageNotification } from '@/lib/notifications';
+import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -36,11 +37,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
     }
 
+    if (typeof messageFr !== 'string' || messageFr.length > 5000) {
+      return NextResponse.json({ error: 'MESSAGE_TOO_LONG' }, { status: 400 });
+    }
+    if (messageEn !== undefined && (typeof messageEn !== 'string' || messageEn.length > 5000)) {
+      return NextResponse.json({ error: 'MESSAGE_TOO_LONG' }, { status: 400 });
+    }
+
     const notification = await createAdminMessageNotification(
       userId,
       messageFr,
       messageEn ?? messageFr
     );
+
+    await logAction({
+      userId: session.user.id,
+      action: LOG_ACTIONS.NOTIFICATION_SENT,
+      entityType: 'User',
+      entityId: userId,
+      details: { messageFr: messageFr.slice(0, 200) },
+    });
 
     return NextResponse.json(notification, { status: 201 });
   } catch (error) {

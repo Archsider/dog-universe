@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
   const clients = await prisma.user.findMany({
     where,
     select: { id: true, name: true, email: true, language: true },
+    take: 200,
   });
 
   if (clients.length === 0) {
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
       await sendEmail({ to: client.email, subject, html });
       sent++;
     } catch (e) {
-      console.error(`Failed to send contract reminder to ${client.email}:`, e);
+      console.error(`Failed to send contract reminder to ${client.email.replace(/(.{2}).*(@.*)/, '$1***$2')}:`, e);
     }
   }
 

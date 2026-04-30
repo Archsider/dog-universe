@@ -18,6 +18,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const photos = await prisma.stayPhoto.findMany({
     where: { bookingId: id },
     orderBy: { createdAt: 'desc' },
+    take: 500,
   });
 
   return NextResponse.json(photos);

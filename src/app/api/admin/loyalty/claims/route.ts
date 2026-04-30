@@ -15,6 +15,7 @@ export async function GET() {
       reviewer: { select: { name: true } },
     },
     orderBy: { claimedAt: 'desc' },
+    take: 200,
   });
 
   return NextResponse.json(claims);

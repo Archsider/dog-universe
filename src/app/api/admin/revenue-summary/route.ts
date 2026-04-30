@@ -20,6 +20,7 @@ export async function GET() {
   const summaries = await prisma.monthlyRevenueSummary.findMany({
     orderBy: [{ year: 'desc' }, { month: 'desc' }],
     include: { author: { select: { name: true } } },
+    take: 120,
   });
 
   return NextResponse.json(summaries);

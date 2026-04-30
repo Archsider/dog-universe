@@ -38,6 +38,7 @@ export async function GET(request: Request) {
       items: true,
     },
     orderBy: { issuedAt: 'desc' },
+    take: 200,
   });
 
   return NextResponse.json(invoices);

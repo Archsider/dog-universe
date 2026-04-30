@@ -19,6 +19,7 @@ export async function GET(_req: Request, { params }: Params) {
     where: { id, role: 'CLIENT' },
     include: {
       pets: {
+        where: { deletedAt: null },
         select: {
           id: true, ownerId: true, name: true, species: true, breed: true,
           dateOfBirth: true, gender: true, photoUrl: true, weight: true,
@@ -54,6 +55,7 @@ export async function GET(_req: Request, { params }: Params) {
     where: { entityType: 'CLIENT', entityId: id },
     include: { author: { select: { name: true } } },
     orderBy: { createdAt: 'desc' },
+    take: 100,
   });
 
   const { passwordHash: _pw, ...safeClient } = client;

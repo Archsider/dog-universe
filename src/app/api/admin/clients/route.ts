@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     prisma.user.findMany({
       where,
       include: {
-        pets: { select: { id: true, name: true } },
+        pets: { where: { deletedAt: null }, select: { id: true, name: true } },
         loyaltyGrade: true,
         _count: {
           select: { bookings: true },
