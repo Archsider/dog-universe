@@ -509,6 +509,44 @@ L'extension Prisma `$extends` de soft-delete globale a été **revertée** (comm
 
 ---
 
+### 2026-04-30 — Session perf + observabilité + soft-delete revert
+
+**~25 commits sur `main` + branche `claude/work-in-progress-8MYIG` :**
+
+1. **`a0739f1` fix(dashboard)** — Double-comptage de `MonthlyRevenueSummary` dans le chart admin retiré.
+
+2. **`e11b2cf` → `3477025` saga soft-delete `$extends`** — Tentative d'extension Prisma globale pour soft-delete (`e11b2cf`), corrections TS/ESLint (`303557e`), guard runtime Node.js (`e120b69`), puis **revert complet** (`3477025`) : `$extends` incompatible avec Vercel Edge Runtime (`middleware.ts → auth.ts → prisma.ts`) → `MIDDLEWARE_INVOCATION_FAILED` en prod. Solution conservée : 57 filtres `{ deletedAt: null }` explicites + helper `notDeleted()` dans `src/lib/prisma-soft.ts`.
+
+3. **`f623bca` test(lib)** — Tests unitaires Vitest sur `cache`, `idempotency`, `capacity`, `loyalty`, `prisma-soft` (119 tests au total).
+
+4. **`974dd1f` feat(health)** — `GET /api/health` : checks DB (Prisma `$queryRaw SELECT 1`), Redis (Upstash REST `PING`), Storage (Supabase bucket list). Retourne `{ status, checks: { db, redis, storage } }` — 200 si tout OK, 503 sinon.
+
+5. **`d77aa18` `34ec46a` perf(sentry)** — `Sentry.startSpan()` instrumentation sur hot paths : `POST /api/bookings`, `PATCH /api/admin/bookings/[id]`, `checkBoardingCapacity`, création notifications admin. Closes le risque "Sentry instrumentation API" précédemment ouvert.
+
+6. **`5727848` refactor(logs)** — Logs JSON structurés dans `lib/` et `api/` (`{ level, msg, ...ctx }`) — facilite parsing Sentry/Vercel logs.
+
+7. **`1d60202` docs(soft-delete)** — Helper `prisma-soft.ts` documenté + commentaires sur les filtres `deletedAt: null` critiques + tests d'intégration.
+
+8. **`251282f` fix(schema)** — Champ `anonymizedAt` dupliqué dans le schema Prisma après merge — supprimé.
+
+9. **Phase perf React/Prisma (`1662cc8` → `3c67f3e`) :**
+   - `9418525` deps : retrait `react-hook-form`, `@hookform/resolvers`, `date-fns-tz` (inutilisés).
+   - `e38630e` deps : ajout `@vercel/speed-insights`.
+   - `1662cc8` `a42c263` `2f102af` : migration `<img>` → `next/image` (client pets, dashboard, NotificationBell), extraction tableaux/styles inline, `useCallback` dans `NotificationBell`.
+   - `e2a209d` perf(prisma) : N+1 fix sur crons (rappels J-1, contrats), pagination explicite, selects ciblés, batch `taxiTrip` fetches.
+   - `4da4d93` perf : `Promise.all` sur updates invoices, includes shallow, server-side data fetch pour pages admin.
+   - `3c67f3e` security : ajout caps `take()` sur les `findMany` non bornés restants (DoS DB).
+
+10. **`81482a6` `74f5554` `bff8d6a` chore(skills)** — Installation `vercel-labs/agent-skills` (7 skills) + `frontend-design` + `skills-lock.json`.
+
+11. **`3cef9b4` chore** — `.gitignore` : exclure `.claude/` (worktrees agents).
+
+**Décisions techniques :**
+- **Soft-delete `$extends` abandonné définitivement** : marqué dans CLAUDE.md comme intentionnel, ne pas retenter sans découpler `middleware → prisma`.
+- **Edge Runtime constraint** : tout code chargé via `middleware.ts` doit être Edge-compatible (pas de `node:` API, pas de `$extends`, pas de `bullmq`/`ioredis`).
+- **`take()` partout** : politique DoS — aucun `findMany` ne doit être unbounded en production.
+- **Sentry spans** : préférés aux logs ad-hoc pour la latence DB/queue (visualisation tracing native).
+
 ### 2026-04-30 — Session audits sécurité P0→P4 + cache + addon-request fix
 
 **8 commits sur `main` :**
