@@ -65,41 +65,48 @@ const baseClient =
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = baseClient;
 
-const extendedClient = baseClient.$extends({
-  query: {
-    $allModels: {
-      async $allOperations({ model, operation, args, query }: { model: string; operation: string; args: Record<string, unknown>; query: (a: Record<string, unknown>) => Promise<unknown> }) {
-        if (!SOFT_DELETE_MODELS.has(model)) return query(args);
+// $extends uses Node.js-only internals — skip entirely in Vercel Edge Runtime
+// (middleware → auth → prisma import chain). API routes run Node.js and get
+// the full extension; Edge only needs session JWT validation, no DB writes.
+const isEdgeRuntime = typeof (globalThis as Record<string, unknown>).EdgeRuntime === 'string';
 
-        if (READ_OPS.has(operation)) {
-          const w = (args.where ?? {}) as Record<string, unknown>;
-          if (!('deletedAt' in w)) {
-            args.where = { ...w, deletedAt: null };
-          }
-          if (args.include) args.include = injectIncludes(args.include as Record<string, unknown>);
-          return query(args);
-        }
+const extendedClient = isEdgeRuntime
+  ? baseClient
+  : baseClient.$extends({
+      query: {
+        $allModels: {
+          async $allOperations({ model, operation, args, query }: { model: string; operation: string; args: Record<string, unknown>; query: (a: Record<string, unknown>) => Promise<unknown> }) {
+            if (!SOFT_DELETE_MODELS.has(model)) return query(args);
 
-        if (UNIQUE_OPS.has(operation)) {
-          // Convert to findFirst so we can attach the extra deletedAt filter.
-          // Use baseClient to avoid re-triggering this extension on the new call.
-          const newOp = operation === 'findUnique' ? 'findFirst' : 'findFirstOrThrow';
-          const w = (args.where ?? {}) as Record<string, unknown>;
-          if (!('deletedAt' in w)) {
-            args.where = { ...w, deletedAt: null };
-          }
-          if (args.include) args.include = injectIncludes(args.include as Record<string, unknown>);
-          if (model === 'Pet') {
-            return (baseClient.pet as unknown as Record<string, (a: unknown) => Promise<unknown>>)[newOp](args);
-          }
-          return (baseClient.booking as unknown as Record<string, (a: unknown) => Promise<unknown>>)[newOp](args);
-        }
+            if (READ_OPS.has(operation)) {
+              const w = (args.where ?? {}) as Record<string, unknown>;
+              if (!('deletedAt' in w)) {
+                args.where = { ...w, deletedAt: null };
+              }
+              if (args.include) args.include = injectIncludes(args.include as Record<string, unknown>);
+              return query(args);
+            }
 
-        return query(args);
+            if (UNIQUE_OPS.has(operation)) {
+              // Convert to findFirst so we can attach the extra deletedAt filter.
+              // Use baseClient to avoid re-triggering this extension on the new call.
+              const newOp = operation === 'findUnique' ? 'findFirst' : 'findFirstOrThrow';
+              const w = (args.where ?? {}) as Record<string, unknown>;
+              if (!('deletedAt' in w)) {
+                args.where = { ...w, deletedAt: null };
+              }
+              if (args.include) args.include = injectIncludes(args.include as Record<string, unknown>);
+              if (model === 'Pet') {
+                return (baseClient.pet as unknown as Record<string, (a: unknown) => Promise<unknown>>)[newOp](args);
+              }
+              return (baseClient.booking as unknown as Record<string, (a: unknown) => Promise<unknown>>)[newOp](args);
+            }
+
+            return query(args);
+          },
+        },
       },
-    },
-  },
-});
+    });
 
 // Cast back to PrismaClient so existing code that types parameters as
 // PrismaClient or TransactionClient remains compatible (the extension only
