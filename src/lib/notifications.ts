@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { sendEmail, getEmailTemplate } from './email';
+import { cacheReadThrough, cacheDel, CacheKeys, CacheTTL } from './cache';
 
 export type NotificationType =
   | 'BOOKING_CONFIRMATION'
@@ -37,7 +38,7 @@ interface CreateNotificationData {
 }
 
 export async function createNotification(data: CreateNotificationData) {
-  return prisma.notification.create({
+  const created = await prisma.notification.create({
     data: {
       userId: data.userId,
       type: data.type,
@@ -49,6 +50,10 @@ export async function createNotification(data: CreateNotificationData) {
       read: false,
     },
   });
+  // Invalidate the cached unread count so the recipient's bell badge
+  // reflects the new notification within their next request.
+  await invalidateNotifCount(data.userId);
+  return created;
 }
 
 export async function createBookingConfirmationNotification(
@@ -428,9 +433,17 @@ export async function notifyAdminsNewLoyaltyClaim(
 }
 
 export async function getUnreadCount(userId: string): Promise<number> {
-  return prisma.notification.count({
-    where: { userId, read: false },
-  });
+  return cacheReadThrough<number>(
+    CacheKeys.notifCount(userId),
+    CacheTTL.notifCount,
+    () => prisma.notification.count({ where: { userId, read: false } }),
+  );
+}
+
+/** Invalidate the cached unread-count for a user. Call after creating a
+ *  notification for them or after they mark one as read. */
+export async function invalidateNotifCount(userId: string): Promise<void> {
+  await cacheDel(CacheKeys.notifCount(userId));
 }
 
 // ─── Extension request notifications ─────────────────────────────────────────

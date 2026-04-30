@@ -17,6 +17,7 @@ import {
 } from '@/lib/sms';
 import { enqueueEmail, enqueueSms } from '@/lib/queues/index';
 import { checkBoardingCapacity } from '@/lib/capacity';
+import { revalidateTag } from 'next/cache';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -788,6 +789,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       });
     }
   }
+
+  // Status transition may move the booking out of (or into) PENDING — bust
+  // the admin-counts cache so the sidebar badge reflects the new state.
+  revalidateTag('admin-counts');
 
   return NextResponse.json(updated);
 }

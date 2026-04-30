@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { invalidateNotifCount } from '@/lib/notifications';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -17,5 +18,6 @@ export async function POST(_req: Request, { params }: Params) {
   }
 
   await prisma.notification.update({ where: { id }, data: { read: true } });
+  await invalidateNotifCount(session.user.id);
   return NextResponse.json({ message: 'ok' });
 }

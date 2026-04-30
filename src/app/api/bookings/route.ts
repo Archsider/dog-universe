@@ -15,6 +15,7 @@ import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, cal
 import { bookingCreateSchema, formatZodError } from '@/lib/validation';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
+import { revalidateTag } from 'next/cache';
 
 // Sentinel error thrown inside the booking transaction when capacity is full.
 // Caught by the POST handler to convert into a 400 response.
@@ -742,6 +743,10 @@ export async function POST(request: Request) {
       entityId: booking.id,
       details: { bookingRef, serviceType, totalPrice },
     });
+
+    // New booking → admin pending count changes; bust the cache so admins
+    // see the new request on their next layout render.
+    revalidateTag('admin-counts');
 
     return NextResponse.json({ ...booking, bookingRef }, { status: 201 });
   } catch (error) {

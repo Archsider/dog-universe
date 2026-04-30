@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { revalidateTag } from 'next/cache';
+import { invalidateNotifCount } from '@/lib/notifications';
 
 // PATCH /api/admin/loyalty/claims/[id] — approve or reject a claim
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -72,6 +74,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     locale,
   );
   sendEmail({ to: claim.client.email, subject, html }).catch(() => {});
+
+  // Notification was inserted via tx.notification.create (bypassing the
+  // createNotification helper that auto-invalidates), so do it manually here.
+  await invalidateNotifCount(claim.clientId);
+  // Claim moved out of PENDING → admin claims badge changes.
+  revalidateTag('admin-counts');
 
   return NextResponse.json(claim);
 }

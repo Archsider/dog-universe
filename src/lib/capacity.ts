@@ -4,6 +4,7 @@
 // $transaction({ isolationLevel: Serializable }) block.
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { cacheReadThrough, cacheDel, CacheKeys, CacheTTL } from '@/lib/cache';
 
 type PrismaClientLike = typeof prisma | Prisma.TransactionClient;
 
@@ -24,7 +25,7 @@ const DEFAULT_LIMITS: CapacityLimits = {
 // of *intent*, not of a slot.
 const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] as const;
 
-export async function getCapacityLimits(client: PrismaClientLike = prisma): Promise<CapacityLimits> {
+async function readLimitsFromDb(client: PrismaClientLike): Promise<CapacityLimits> {
   try {
     const rows = await client.setting.findMany({
       where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
@@ -37,6 +38,23 @@ export async function getCapacityLimits(client: PrismaClientLike = prisma): Prom
   } catch {
     return { ...DEFAULT_LIMITS };
   }
+}
+
+// When called inside a $transaction (client !== prisma), MUST read from DB so
+// the limits participate in the same Serializable snapshot as the booking
+// insert. Outside a tx, reads go through the 5-min Redis cache.
+export async function getCapacityLimits(client: PrismaClientLike = prisma): Promise<CapacityLimits> {
+  if (client !== prisma) return readLimitsFromDb(client);
+  return cacheReadThrough<CapacityLimits>(
+    CacheKeys.capacityLimits(),
+    CacheTTL.capacityLimits,
+    () => readLimitsFromDb(prisma),
+  );
+}
+
+/** Invalidate after any update to `capacity_dog` / `capacity_cat` settings. */
+export async function invalidateCapacityCache(): Promise<void> {
+  await cacheDel(CacheKeys.capacityLimits());
 }
 
 export interface OccupancyWindow {

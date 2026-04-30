@@ -5,6 +5,7 @@ import { GRADE_BENEFITS, Grade } from '@/lib/loyalty';
 import { notifyAdminsNewLoyaltyClaim } from '@/lib/notifications';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { revalidateTag } from 'next/cache';
 
 let ratelimit: Ratelimit | null = null;
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
@@ -81,6 +82,9 @@ export async function POST(req: NextRequest) {
       claim.id
     ))
     .catch(() => {});
+
+  // New PENDING claim → admin claims badge changes.
+  revalidateTag('admin-counts');
 
   return NextResponse.json(claim, { status: 201 });
 }

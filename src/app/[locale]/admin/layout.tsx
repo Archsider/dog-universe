@@ -1,10 +1,28 @@
 import { auth } from '../../../../auth';
 import { redirect } from 'next/navigation';
+import { unstable_cache } from 'next/cache';
 import { AdminSidebar } from '@/components/layout/AdminSidebar';
 import { AdminNotificationBell } from '@/components/layout/AdminNotificationBell';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { SessionWatcher } from '@/components/shared/SessionWatcher';
 import { prisma } from '@/lib/prisma';
+
+// Global counts (same value for every admin) — wrapped in unstable_cache
+// with a shared tag so any booking/claim mutation can invalidate via
+// revalidateTag('admin-counts'). Per-admin counts (addon requests) stay
+// uncached: they're userId-scoped and the (userId, read) index keeps them
+// cheap.
+const getGlobalAdminCounts = unstable_cache(
+  async () => {
+    const [pendingCount, pendingClaimsCount] = await Promise.all([
+      prisma.booking.count({ where: { status: 'PENDING', deletedAt: null } }),
+      prisma.loyaltyBenefitClaim.count({ where: { status: 'PENDING' } }),
+    ]);
+    return { pendingCount, pendingClaimsCount };
+  },
+  ['admin-global-counts'],
+  { tags: ['admin-counts'], revalidate: 30 },
+);
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -17,13 +35,13 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
   if (!session?.user) redirect(`/${locale}/auth/login`);
   if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/client/dashboard`);
 
-  const [pendingCount, pendingClaimsCount, addonRequestCount] = await Promise.all([
-    prisma.booking.count({ where: { status: 'PENDING', deletedAt: null } }),
-    prisma.loyaltyBenefitClaim.count({ where: { status: 'PENDING' } }),
+  const [globalCounts, addonRequestCount] = await Promise.all([
+    getGlobalAdminCounts(),
     prisma.notification.count({
       where: { userId: session.user.id, type: 'ADDON_REQUEST', read: false },
     }),
   ]);
+  const { pendingCount, pendingClaimsCount } = globalCounts;
 
   return (
     <div className="min-h-screen bg-ivory-50 flex">
