@@ -38,14 +38,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Rate limit : 3 demandes max par réservation. Chaque demande crée N notifications
   // (une par admin) avec une metadata identique (incluant requestId unique).
   // distinct: ['metadata'] regroupe en 1 ligne par demande distincte.
-  const distinctRequests = await prisma.notification.findMany({
+  const allAddonNotifs = await prisma.notification.findMany({
     where: {
       type: 'ADDON_REQUEST',
       metadata: { contains: `"bookingId":"${id}"` },
     },
-    distinct: ['metadata'],
     select: { metadata: true },
+    take: 30,
   });
+  const distinctRequestIds = new Set(
+    allAddonNotifs
+      .map((n) => {
+        try {
+          const m = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+          return typeof m.requestId === 'string' ? m.requestId : null;
+        } catch { return null; }
+      })
+      .filter((x): x is string => x !== null)
+  );
+  const distinctRequests = [...distinctRequestIds];
   if (distinctRequests.length >= MAX_REQUESTS_PER_BOOKING) {
     return NextResponse.json({ error: 'TOO_MANY_REQUESTS' }, { status: 429 });
   }

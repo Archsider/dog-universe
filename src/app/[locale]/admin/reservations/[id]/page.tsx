@@ -145,13 +145,15 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       orderBy: { createdAt: 'asc' },
       select: { id: true, messageFr: true, messageEn: true, createdAt: true },
     }),
-    // Distinct addon requests for this booking — each request is a unique metadata blob
-    // (same JSON across all admin notifications for that request thanks to a per-request UUID).
+    // Addon requests for this booking — each request creates one notification per admin
+    // (same requestId in metadata). We fetch all and deduplicate by requestId in JS.
+    // Note: distinct:['metadata'] + orderBy on another field is unreliable in Prisma 5
+    // (requires distinct fields to lead orderBy for PostgreSQL DISTINCT ON).
     prisma.notification.findMany({
       where: { type: 'ADDON_REQUEST', metadata: { contains: `"bookingId":"${id}"` } },
-      distinct: ['metadata'],
       orderBy: { createdAt: 'desc' },
       select: { metadata: true, createdAt: true },
+      take: 30,
     }),
   ]);
 
@@ -162,6 +164,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
     message: string;
     createdAt: string;
   };
+  const seenRequestIds = new Set<string>();
   const addonRequests: ParsedAddonRequest[] = addonRequestNotifs
     .map((n): ParsedAddonRequest | null => {
       if (!n.metadata) return null;
@@ -179,7 +182,12 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
         };
       } catch { return null; }
     })
-    .filter((x): x is ParsedAddonRequest => x !== null);
+    .filter((x): x is ParsedAddonRequest => {
+      if (x === null) return false;
+      if (seenRequestIds.has(x.requestId)) return false;
+      seenRequestIds.add(x.requestId);
+      return true;
+    });
 
   const adjacentBookings: AdjacentBooking[] = [];
   if (before) {
