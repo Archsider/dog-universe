@@ -48,7 +48,6 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     bookingsWithoutInvoice,
     todayCheckIns,
     todayCheckOuts,
-    historicalSummaries,
     thisMonthHistorical,
     lastMonthHistorical,
     thisBilled,
@@ -121,9 +120,6 @@ export default async function AdminDashboardPage({ params }: PageProps) {
         bookingPets: { include: { pet: { select: { name: true, species: true } } } },
       },
     }),
-    prisma.monthlyRevenueSummary.findMany({
-      select: { year: true, month: true, boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
-    }).catch(() => [] as { year: number; month: number; boardingRevenue: number; groomingRevenue: number; taxiRevenue: number; otherRevenue: number }[]),
     prisma.monthlyRevenueSummary.findFirst({
       where: { year: thisMonthStart.getFullYear(), month: thisMonthStart.getMonth() + 1 },
       select: { boardingRevenue: true, groomingRevenue: true, taxiRevenue: true, otherRevenue: true },
@@ -188,17 +184,6 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     const entry = yr === currentYear ? currentYearMonthly[mo] : lastYearMonthly[mo];
     chartData.push({ month: key, boarding: entry.boarding, taxi: entry.taxi, grooming: entry.grooming, croquettes: entry.croquettes });
   }
-  historicalSummaries.forEach(s => {
-    const d = new Date(s.year, s.month - 1, 1);
-    const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
-    const existing = chartData.find(c => c.month === key);
-    if (existing) {
-      existing.boarding += s.boardingRevenue;
-      existing.grooming += s.groomingRevenue;
-      existing.taxi += s.taxiRevenue;
-      existing.croquettes += s.otherRevenue;
-    }
-  });
 
   const loyalClients = loyalClientsGroups.length;
   const pendingInvoicesAmount = pendingInvoicesAgg._sum.amount ?? 0;
