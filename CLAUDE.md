@@ -297,6 +297,31 @@ try {
 
 ---
 
+## ANTHROPIC API
+
+### Usage actuel
+- **Extraction automatique de documents de vaccination** (vignettes, carnets, passeports animaux, certificats vétérinaires) — formats supportés : PDF, JPEG, PNG, WebP, GIF
+- **Endpoint** : `src/app/api/pets/[id]/vaccinations/extract/route.ts` (POST) — appel via `callClaudeExtraction(base64, mimeType)`
+- **Modèle utilisé** : `claude-haiku-4-5-20251001` (`max_tokens: 512`)
+- **Variable d'env** : `ANTHROPIC_API_KEY` (si absente → fallback gracieux : DRAFT vaccination créée avec champs vides, l'utilisateur remplit manuellement)
+- **Sortie** : JSON `{ vaccineType, date, nextDueDate, comment, confidence: HIGH|MEDIUM|LOW, confidenceNote }` → stocké en `Vaccination` status `DRAFT`
+- **Idempotence** : si un DRAFT existe déjà pour `(petId, sourceDocumentId)`, l'endpoint le retourne sans rappeler l'API
+
+### Règle PII (RGPD)
+**Ne jamais inclure de données personnelles client dans les prompts.**
+- OK : contenu du document (nom du vaccin, dates, numéro de lot, fabricant, nom du vétérinaire/clinique présent sur le document)
+- NON : nom du client (propriétaire), email, téléphone, adresse, ID client/animal en clair, métadonnées DB
+- Le PDF/image est traité comme un document opaque — le prompt (`EXTRACTION_PROMPT`) est une constante statique sans interpolation. Seuls le binaire base64 + ce prompt sont envoyés. Aucune donnée provenant de `User` ou `Pet` ne transite par l'API.
+
+### Best practices
+- Toujours valider/sanitizer la réponse JSON avant insertion DB (strip markdown fences, `JSON.parse` dans try/catch — actuellement parse simple ; envisager un `Zod parse` pour durcir)
+- Catch error + log structuré (`console.error(JSON.stringify({ level: 'error', service: 'pet', message: '...', error, timestamp }))`)
+- Fallback gracieux : tout échec (API down, parse JSON, mime non supporté) → `extraction = null` → DRAFT vide créé quand même (jamais de 500 visible client pour cause d'extraction)
+- Le `fileUrl` est résolu via `createSignedUrl(storageKey)` (bucket privé) à chaque appel pour éviter l'expiration 1h des URL signées
+- Endpoint protégé par rate-limit `uploads` (30 / 60 min) + auth (owner ou ADMIN/SUPERADMIN)
+
+---
+
 ## RÈGLES FORMULAIRES ANIMAUX
 
 **`dateOfBirth` est OBLIGATOIRE** sur tous les formulaires (client et admin) depuis la session du 2026-03-08.
