@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import * as Sentry from '@sentry/nextjs';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import {
   createBookingValidationNotification,
@@ -514,13 +515,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
   // ── End extension handling ────────────────────────────────────────────────────
 
-  const updated = await prisma.booking.update({
-    where: { id: id },
-    data: {
-      ...(status && { status }),
-      ...(notes !== undefined && { notes }),
-    },
-  });
+  const updated = await Sentry.startSpan(
+    { name: 'booking.statusUpdate', op: 'db' },
+    () => prisma.booking.update({
+      where: { id: id },
+      data: {
+        ...(status && { status }),
+        ...(notes !== undefined && { notes }),
+      },
+    }),
+  );
 
   // Send notifications on status change
   if (status && status !== booking.status) {

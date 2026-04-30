@@ -5,6 +5,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { Redis } from '@upstash/redis';
+import * as Sentry from '@sentry/nextjs';
 
 type PrismaClientLike = typeof prisma | Prisma.TransactionClient;
 
@@ -76,14 +77,19 @@ export async function getCapacityLimits(client: PrismaClientLike = prisma): Prom
   }
 
   try {
-    const rows = await client.setting.findMany({
-      where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
-    });
-    const map = Object.fromEntries(rows.map((r) => [r.key, parseInt(r.value, 10)]));
-    const limits: CapacityLimits = {
-      dogs: Number.isFinite(map.capacity_dog) ? map.capacity_dog : DEFAULT_LIMITS.dogs,
-      cats: Number.isFinite(map.capacity_cat) ? map.capacity_cat : DEFAULT_LIMITS.cats,
-    };
+    const limits = await Sentry.startSpan(
+      { name: 'capacity.getCapacityLimits', op: 'db' },
+      async () => {
+        const rows = await client.setting.findMany({
+          where: { key: { in: ['capacity_dog', 'capacity_cat'] } },
+        });
+        const map = Object.fromEntries(rows.map((r) => [r.key, parseInt(r.value, 10)]));
+        return {
+          dogs: Number.isFinite(map.capacity_dog) ? map.capacity_dog : DEFAULT_LIMITS.dogs,
+          cats: Number.isFinite(map.capacity_cat) ? map.capacity_cat : DEFAULT_LIMITS.cats,
+        };
+      },
+    );
 
     // Warm cache (best-effort, only outside transactions)
     if (client === prisma) {
@@ -115,28 +121,33 @@ export async function countOverlappingPets(
   if (!window.endDate) return 0;
   const client = options.client ?? prisma;
 
-  const overlapping = await client.booking.findMany({
-    where: {
-      serviceType: 'BOARDING',
-      status: { in: [...ACTIVE_STATUSES] },
-      startDate: { lte: window.endDate },
-      endDate: { gte: window.startDate, not: null },
-      ...(options.excludeBookingId ? { id: { not: options.excludeBookingId } } : {}),
-    },
-    select: {
-      bookingPets: {
-        select: { pet: { select: { species: true } } },
-      },
-    },
-  });
+  return Sentry.startSpan(
+    { name: 'capacity.countOverlappingPets', op: 'db' },
+    async () => {
+      const overlapping = await client.booking.findMany({
+        where: {
+          serviceType: 'BOARDING',
+          status: { in: [...ACTIVE_STATUSES] },
+          startDate: { lte: window.endDate! },
+          endDate: { gte: window.startDate, not: null },
+          ...(options.excludeBookingId ? { id: { not: options.excludeBookingId } } : {}),
+        },
+        select: {
+          bookingPets: {
+            select: { pet: { select: { species: true } } },
+          },
+        },
+      });
 
-  let count = 0;
-  for (const booking of overlapping) {
-    for (const bp of booking.bookingPets) {
-      if (bp.pet.species === species) count += 1;
-    }
-  }
-  return count;
+      let count = 0;
+      for (const booking of overlapping) {
+        for (const bp of booking.bookingPets) {
+          if (bp.pet.species === species) count += 1;
+        }
+      }
+      return count;
+    },
+  );
 }
 
 export type CapacityCheckOk = { ok: true };
