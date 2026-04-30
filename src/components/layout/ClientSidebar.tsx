@@ -17,8 +17,20 @@ import {
   X,
   Gift,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
+
+const MARRAKECH_LABEL_STYLE: CSSProperties = {
+  position: 'absolute',
+  top: '8px',
+  left: '12px',
+  fontSize: '8px',
+  letterSpacing: '3px',
+  textTransform: 'uppercase',
+  color: 'rgba(196,151,74,0.8)',
+  fontWeight: '600',
+  zIndex: 10,
+};
 
 interface NavItem {
   href: string;
@@ -106,19 +118,7 @@ export function ClientSidebar({ userName, unreadCount = 0 }: ClientSidebarProps)
             background: '#0E0C08',
           }}
         >
-          <span
-            style={{
-              position: 'absolute',
-              top: '8px',
-              left: '12px',
-              fontSize: '8px',
-              letterSpacing: '3px',
-              textTransform: 'uppercase',
-              color: 'rgba(196,151,74,0.8)',
-              fontWeight: '600',
-              zIndex: 10,
-            }}
-          >
+          <span style={MARRAKECH_LABEL_STYLE}>
             Marrakech
           </span>
           {/* eslint-disable-next-line @next/next/no-img-element */}

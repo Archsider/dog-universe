@@ -120,10 +120,13 @@ export function MemberCard({
   const claimMap = new Map(claims.map((c) => [c.benefitKey, c]));
 
   const divider = isPlatinum ? 'border-white/10' : 'border-black/6';
+  const platinumBoxShadow = isPlatinum
+    ? '0 20px 60px rgba(212,175,55,0.15), 0 4px 20px rgba(0,0,0,0.4)'
+    : undefined;
 
   return (
     <div className={`relative rounded-2xl border-2 ${style.bg} ${style.border} shadow-2xl overflow-hidden`}
-      style={{ boxShadow: isPlatinum ? '0 20px 60px rgba(212,175,55,0.15), 0 4px 20px rgba(0,0,0,0.4)' : undefined }}>
+      style={{ boxShadow: platinumBoxShadow }}>
 
       {/* Shimmer diagonal stripe */}
       <div className={`absolute inset-0 bg-gradient-to-r ${style.shimmer} opacity-60 pointer-events-none`}

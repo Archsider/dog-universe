@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
@@ -10,24 +10,24 @@ export function NotificationBell() {
   const locale = useLocale();
   const [unreadCount, setUnreadCount] = useState(0);
 
-  useEffect(() => {
-    const fetchCount = async () => {
-      try {
-        const res = await fetch('/api/notifications/count');
-        if (res.ok) {
-          const data = await res.json();
-          setUnreadCount(data.count ?? 0);
-        }
-      } catch {
-        // silently fail
+  const fetchCount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/notifications/count');
+      if (res.ok) {
+        const data = await res.json();
+        setUnreadCount(data.count ?? 0);
       }
-    };
+    } catch {
+      // silently fail
+    }
+  }, []);
 
+  useEffect(() => {
     fetchCount();
     // Poll every 60 seconds
     const interval = setInterval(fetchCount, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchCount]);
 
   return (
     <Link

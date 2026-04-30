@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useLocale } from 'next-intl';
 import { ArrowLeft, ArrowRight, Check, PawPrint, Car, Package, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -496,7 +497,7 @@ export default function NewBookingPage() {
                   >
                     <div className="w-12 h-12 rounded-full bg-gold-100 flex items-center justify-center overflow-hidden flex-shrink-0">
                       {pet.photoUrl ? (
-                        <img src={pet.photoUrl} alt={pet.name} className="w-12 h-12 object-cover" />
+                        <Image src={pet.photoUrl} alt={pet.name} width={48} height={48} className="w-12 h-12 object-cover" />
                       ) : (
                         <PawPrint className="h-6 w-6 text-gold-400" />
                       )}
