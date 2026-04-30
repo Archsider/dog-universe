@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
+import Image from 'next/image';
 import { PawPrint, Plus } from 'lucide-react';
 import { calculateAge, formatDateShort } from '@/lib/utils';
 
@@ -80,7 +81,7 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
               <div className="flex items-center gap-4 mb-4">
                 <div className="h-16 w-16 rounded-full bg-gold-50 border-2 border-gold-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
                   {pet.photoUrl ? (
-                    <img src={pet.photoUrl} alt={pet.name} className="h-16 w-16 object-cover rounded-full" />
+                    <Image src={pet.photoUrl} alt={pet.name} width={64} height={64} className="h-16 w-16 object-cover rounded-full" />
                   ) : (
                     <PawPrint className="h-7 w-7 text-gold-400" />
                   )}

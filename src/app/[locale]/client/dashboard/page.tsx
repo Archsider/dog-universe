@@ -175,11 +175,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
       {/* Stats — premium cards */}
       <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: t('stats.pets'), value: pets.length, gold: false },
-          { label: t('stats.totalStays'), value: totalStays, gold: false },
-          { label: t('stats.totalSpent'), value: formatMAD(totalSpent._sum.amount ?? 0), gold: true },
-        ].map((stat, i) => (
+        {dashboardStats.map((stat, i) => (
           <div
             key={i}
             className="bg-white border border-[rgba(196,151,74,0.15)] rounded-2xl p-5 shadow-[0_4px_20px_rgba(196,151,74,0.08)] hover:shadow-[0_8px_32px_rgba(196,151,74,0.14)] transition-shadow duration-300"
@@ -198,12 +194,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           {locale === 'fr' ? 'Actions rapides' : 'Quick Actions'}
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { href: `/${locale}/client/bookings/new`, label: t('quickActions.book'), icon: Calendar },
-            { href: `/${locale}/client/pets`, label: t('quickActions.myPets'), icon: PawPrint },
-            { href: `/${locale}/client/invoices`, label: t('quickActions.invoices'), icon: FileText },
-            { href: `/${locale}/client/history`, label: t('quickActions.history'), icon: History },
-          ].map((action) => {
+          {quickActions.map((action) => {
             const Icon = action.icon;
             return (
               <Link
@@ -287,11 +278,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           ) : (
             <div className="space-y-3">
               {upcomingBookings.map((booking) => {
-                const statusStyle =
-                  booking.status === 'CONFIRMED' ? { bg: '#EAF7EF', color: '#1A7A45' }
-                  : booking.status === 'PENDING' ? { bg: '#FEF3E2', color: '#B45309' }
-                  : booking.status === 'COMPLETED' ? { bg: '#F0EFFE', color: '#5B4FCF' }
-                  : { bg: '#F5F5F5', color: '#6B6B6B' };
+                const statusStyle = STATUS_STYLES[booking.status] ?? { bg: '#F5F5F5', color: '#6B6B6B' };
                 return (
                   <Link
                     key={booking.id}

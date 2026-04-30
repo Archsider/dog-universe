@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ArrowLeft, PawPrint, Edit } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -131,7 +132,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
         <div className="flex-1 flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-gold-100 flex items-center justify-center overflow-hidden flex-shrink-0">
             {pet.photoUrl ? (
-              <img src={pet.photoUrl} alt={pet.name} className="h-10 w-10 rounded-full object-cover" />
+              <Image src={pet.photoUrl} alt={pet.name} width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
             ) : (
               <PawPrint className="h-5 w-5 text-gold-500" />
             )}
