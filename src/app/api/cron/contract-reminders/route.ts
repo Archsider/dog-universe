@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
 
       sent++;
     } catch (e) {
-      console.error(`contract-reminders cron: failed for ${client.email}:`, e);
+      console.error(`contract-reminders cron: failed for ${client.email.replace(/(.{2}).*(@.*)/, '$1***$2')}:`, e);
     }
   }
 

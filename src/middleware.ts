@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { auth } from '../auth';
 
 // Rate limiting is only active when Upstash env vars are set (production).
 // In development (no vars), all requests pass through.
@@ -59,6 +60,14 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(5, '60 m'),
       prefix: 'rl:rgpd',
     }),
+    // Addon requests (PET_TAXI / TOILETTAGE / AUTRE on an existing booking):
+    // 10 per hour per IP. The route already caps 3 per booking; this prevents
+    // an attacker from spam-creating bookings just to spam addon-request.
+    addonRequest: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, '60 m'),
+      prefix: 'rl:addon-req',
+    }),
   };
 }
 
@@ -78,7 +87,7 @@ const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
   '/api/uploads': 'uploads',
 };
 
-type DynamicBucket = 'uploads' | 'auth' | 'passwordReset' | 'bookings' | 'taxiStream';
+type DynamicBucket = 'uploads' | 'auth' | 'passwordReset' | 'bookings' | 'taxiStream' | 'addonRequest';
 
 // Routes rate-limited regardless of HTTP method (e.g. expensive GETs).
 const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd'> = {
@@ -95,6 +104,10 @@ function getDynamicLimitBucket(path: string): DynamicBucket | null {
   // /api/taxi/{token}/stream — public SSE endpoint, 60 opens/h per IP
   if (path.startsWith('/api/taxi/') && path.endsWith('/stream')) {
     return 'taxiStream';
+  }
+  // /api/bookings/{id}/addon-request — client adds extra service to a booking
+  if (path.startsWith('/api/bookings/') && path.endsWith('/addon-request')) {
+    return 'addonRequest';
   }
   return null;
 }
@@ -147,7 +160,19 @@ export async function middleware(request: NextRequest) {
       true; // admin mutation
     if (limitKey && methodAllowed) {
       try {
-        const result = await limiter[limitKey].limit(ip);
+        // Prefer per-user limit when authenticated: rotating IPs (VPN, mobile
+        // network) shouldn't let a logged-in client/admin bypass the bucket.
+        // Fall back to IP for anonymous traffic. We only call auth() when
+        // we're actually going to rate-limit, so non-rate-limited routes
+        // pay no auth() cost.
+        let bucketKey = ip;
+        try {
+          const session = await auth();
+          if (session?.user?.id) bucketKey = `u:${session.user.id}`;
+        } catch {
+          // auth() failure → keep IP key (fail-safe, never block on it)
+        }
+        const result = await limiter[limitKey].limit(bucketKey);
 
         // Validate the response shape — a malformed payload from Upstash should
         // never be interpreted as "allowed".

@@ -3,6 +3,15 @@ import { getBullMQConnection, isBullMQConfigured } from '@/lib/redis-bullmq';
 import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
 
+// PII-safe error logger: masks email recipients in error messages so a queue
+// outage doesn't dump client addresses into Sentry / Vercel logs.
+function maskEmail(addr: string): string {
+  return addr.replace(/(.{2}).*(@.*)/, '$1***$2');
+}
+function maskPhone(num: string): string {
+  return num.length <= 4 ? '***' : `${num.slice(0, 4)}****${num.slice(-2)}`;
+}
+
 // ── Job data types ────────────────────────────────────────────────────────────
 
 export interface EmailJobData {
@@ -74,29 +83,31 @@ export function getDlqQueue(): Queue<unknown> {
 // the API response is never blocked by queue infrastructure being down.
 
 export async function enqueueEmail(data: EmailJobData, jobId?: string): Promise<void> {
+  const masked = maskEmail(data.to);
   if (!isBullMQConfigured()) {
-    await sendEmail(data).catch((e) => console.error('[email] direct send failed:', e));
+    await sendEmail(data).catch((e) => console.error(`[email] direct send failed (to=${masked}):`, e instanceof Error ? e.message : e));
     return;
   }
   try {
     await getEmailQueue().add('send', data, jobId ? { ...DEFAULT_JOB_OPTIONS, jobId } : DEFAULT_JOB_OPTIONS);
   } catch (err) {
-    console.error('[queue] email enqueue failed, falling back to direct send:', err);
-    await sendEmail(data).catch((e) => console.error('[email] direct send failed:', e));
+    console.error('[queue] email enqueue failed, falling back to direct send:', err instanceof Error ? err.message : err);
+    await sendEmail(data).catch((e) => console.error(`[email] direct send failed (to=${masked}):`, e instanceof Error ? e.message : e));
   }
 }
 
 export async function enqueueSms(data: SmsJobData, jobId?: string): Promise<void> {
+  const masked = data.to && data.to !== 'ADMIN' ? maskPhone(data.to) : (data.to ?? 'null');
   if (!isBullMQConfigured()) {
     const fn = data.to === 'ADMIN' ? sendAdminSMS(data.message) : sendSMS(data.to, data.message);
-    await fn.catch((e) => console.error('[sms] direct send failed:', e));
+    await fn.catch((e) => console.error(`[sms] direct send failed (to=${masked}):`, e instanceof Error ? e.message : e));
     return;
   }
   try {
     await getSmsQueue().add('send', data, jobId ? { ...DEFAULT_JOB_OPTIONS, jobId } : DEFAULT_JOB_OPTIONS);
   } catch (err) {
-    console.error('[queue] sms enqueue failed, falling back to direct send:', err);
+    console.error('[queue] sms enqueue failed, falling back to direct send:', err instanceof Error ? err.message : err);
     const fallback = data.to === 'ADMIN' ? sendAdminSMS(data.message) : sendSMS(data.to, data.message);
-    await fallback.catch((e) => console.error('[sms] direct send failed:', e));
+    await fallback.catch((e) => console.error(`[sms] direct send failed (to=${masked}):`, e instanceof Error ? e.message : e));
   }
 }

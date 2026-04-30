@@ -50,7 +50,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     allAddonNotifs
       .map((n) => {
         try {
-          const m = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+          const parsed: unknown = JSON.parse(n.metadata ?? '{}');
+          // Runtime guard before treating as Record — DB-side `contains` filter
+          // is a substring match on a JSON blob; never trust its shape.
+          if (typeof parsed !== 'object' || parsed === null) return null;
+          const m = parsed as Record<string, unknown>;
+          if (m.bookingId !== id) return null; // belt-and-suspenders vs. substring-match collision
           return typeof m.requestId === 'string' ? m.requestId : null;
         } catch { return null; }
       })
