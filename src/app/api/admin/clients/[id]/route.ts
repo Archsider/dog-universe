@@ -31,16 +31,18 @@ export async function GET(_req: Request, { params }: Params) {
       loyaltyGrade: true,
       bookings: {
         include: {
-          bookingPets: { include: { pet: true } },
+          bookingPets: { select: { pet: { select: { id: true, name: true, species: true, photoUrl: true } } } },
           boardingDetail: true,
           taxiDetail: true,
           invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
         },
         orderBy: { startDate: 'desc' },
+        take: 100,
       },
       invoices: {
-        include: { items: true },
+        include: { items: { select: { id: true, description: true, quantity: true, unitPrice: true, total: true, category: true } } },
         orderBy: { issuedAt: 'desc' },
+        take: 200,
       },
     },
   });

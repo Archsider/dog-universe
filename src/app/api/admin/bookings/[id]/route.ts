@@ -368,16 +368,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           where: { invoiceId: booking.invoice.id },
           select: { id: true, description: true, unitPrice: true },
         });
-        for (const item of invoiceItems) {
-          const d = item.description.toLowerCase();
-          const isPensionItem = (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi');
-          if (isPensionItem && item.unitPrice > 0) {
-            await tx.invoiceItem.update({
+        await Promise.all(
+          invoiceItems
+            .filter(item => {
+              const d = item.description.toLowerCase();
+              return (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi') && item.unitPrice > 0;
+            })
+            .map(item => tx.invoiceItem.update({
               where: { id: item.id },
               data: { quantity: newNights, total: newNights * item.unitPrice },
-            });
-          }
-        }
+            }))
+        );
 
         const newPaidAmount = booking.invoice.paidAmount;
         const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
@@ -491,16 +492,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           where: { invoiceId: booking.invoice.id },
           select: { id: true, description: true, unitPrice: true },
         });
-        for (const item of invoiceItems) {
-          const d = item.description.toLowerCase();
-          const isPensionItem = (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi');
-          if (isPensionItem && item.unitPrice > 0) {
-            await prisma.invoiceItem.update({
+        await Promise.all(
+          invoiceItems
+            .filter(item => {
+              const d = item.description.toLowerCase();
+              return (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi') && item.unitPrice > 0;
+            })
+            .map(item => prisma.invoiceItem.update({
               where: { id: item.id },
               data: { quantity: newNights, total: newNights * item.unitPrice },
-            });
-          }
-        }
+            }))
+        );
 
         const newPaidAmount = booking.invoice.paidAmount;
         const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
