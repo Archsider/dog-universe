@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/purge-anonymized",
       "schedule": "0 2 1 * *"
+    },
+    {
+      "path": "/api/cron/dlq-watch",
+      "schedule": "0 9 * * 1"
     }
   ]
 }

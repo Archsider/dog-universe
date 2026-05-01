@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
@@ -59,7 +60,9 @@ export async function POST(req: NextRequest) {
     undefined;
 
   const signedAt = new Date();
-  const storageKey = `contracts/${clientId}.pdf`;
+  // Unique storage key — prevents race condition on simultaneous sign calls
+  // and provides an audit trail for each signing attempt.
+  const storageKey = `contracts/${clientId}/${Date.now()}-${randomUUID().slice(0, 8)}.pdf`;
 
   // Generate PDF — strict mode : si ça échoue, on remonte une erreur propre
   // au client (qui pourra réessayer). Le ClientContract n'est créé que si

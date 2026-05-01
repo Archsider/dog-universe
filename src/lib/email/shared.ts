@@ -40,6 +40,18 @@ function sanitizeSmtpHeader(value: string): string {
   return value.replace(/[\r\n]/g, '');
 }
 
+// Validate and sanitize email addresses — strips CRLF injection and enforces
+// a basic format check to catch obviously malformed addresses early (before
+// the SMTP layer rejects them with an opaque provider error).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function sanitizeEmail(addr: string): string {
+  const cleaned = addr.replace(/[\r\n]/g, '');
+  if (!EMAIL_RE.test(cleaned)) {
+    throw new Error(`Invalid email address: ${cleaned.slice(0, 50)}`);
+  }
+  return cleaned;
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -55,7 +67,7 @@ export async function sendEmail({
     const transport = await getTransporter();
     const info = await transport.sendMail({
       from: process.env.EMAIL_FROM ?? '"Dog Universe" <noreply@doguniverse.ma>',
-      to: sanitizeSmtpHeader(to),
+      to: sanitizeEmail(to),
       subject: sanitizeSmtpHeader(subject),
       html,
       text: text ?? html.replace(/<[^>]*>/g, ''),
