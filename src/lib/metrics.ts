@@ -6,16 +6,40 @@ export function deltaPercent(cur: number, prev: number): number {
   return prev === 0 ? 0 : Math.round(((cur - prev) / prev) * 1000) / 10;
 }
 
-// ItemCategory → display key. Returns null for OTHER (never silently absorbed).
-// Internal helper — pas exporté (3 utilisations dans ce fichier uniquement).
+// ItemCategory → display key.
+// Falls back to description-based inference for items created before category was
+// required (those were persisted with category=OTHER by the invoice creation route).
 function categoryKey(
   cat: string,
+  description?: string,
 ): 'boarding' | 'taxi' | 'grooming' | 'croquettes' | null {
   if (cat === 'BOARDING') return 'boarding';
   if (cat === 'PET_TAXI') return 'taxi';
   if (cat === 'GROOMING') return 'grooming';
   if (cat === 'PRODUCT') return 'croquettes';
+  if (description) {
+    const d = description.toLowerCase();
+    if (d.includes('pension') || d.includes('boarding') || d.includes('nuit') || d.includes('hébergement')) return 'boarding';
+    if (d.includes('taxi') || d.includes('transport') || d.includes('aller') || d.includes('retour')) return 'taxi';
+    if (d.includes('toilettage') || d.includes('grooming') || d.includes('soin') || d.includes('bain') || d.includes('coupe')) return 'grooming';
+    if (d.includes('croquette') || d.includes('kibble') || d.includes('nourriture') || d.includes('royal') || d.includes('grain')) return 'croquettes';
+  }
   return null;
+}
+
+// Public counterpart returning the canonical ItemCategory (uppercase) so callers
+// outside metrics.ts (e.g. the analytics drill-down) can re-categorize legacy
+// OTHER rows using the same description heuristics as the revenue charts.
+export function inferItemCategory(
+  cat: string,
+  description?: string,
+): 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' {
+  const k = categoryKey(cat, description);
+  if (k === 'boarding') return 'BOARDING';
+  if (k === 'taxi') return 'PET_TAXI';
+  if (k === 'grooming') return 'GROOMING';
+  if (k === 'croquettes') return 'PRODUCT';
+  return 'OTHER';
 }
 
 // ── Cash family ───────────────────────────────────────────────────────────────
@@ -56,7 +80,7 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
     select: {
       amount: true,
       paymentDate: true,
-      invoice: { select: { items: { select: { category: true, total: true } } } },
+      invoice: { select: { items: { select: { category: true, description: true, total: true } } } },
     },
   });
 
@@ -76,7 +100,7 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
     if (itemsTotal === 0) continue;
     const frac = pmt.amount / itemsTotal;
     for (const item of pmt.invoice.items) {
-      const k = categoryKey(item.category);
+      const k = categoryKey(item.category, item.description);
       if (k) monthly[m][k] += item.total * frac;
     }
   }
@@ -134,10 +158,34 @@ export async function billedByCategory(
       payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
     select: {
-      items:    { select: { category: true, unitPrice: true, quantity: true } },
+      id:            true,
+      invoiceNumber: true,
+      status:        true,
+      items:    { select: { category: true, description: true, unitPrice: true, quantity: true } },
       payments: { select: { amount: true, paymentDate: true } },
     },
   });
+
+  // DIAGNOSTIC — remove after root-cause confirmed
+  console.error(JSON.stringify({
+    level: 'diag',
+    service: 'metrics.billedByCategory',
+    period: { start: start.toISOString(), end: end.toISOString() },
+    invoiceCount: invoices.length,
+    invoices: invoices.map(inv => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      status: inv.status,
+      payments: inv.payments.map(p => ({ amount: p.amount, paymentDate: p.paymentDate })),
+      items: inv.items.map(it => ({
+        description: it.description,
+        category: it.category,
+        resolvedKey: categoryKey(it.category, it.description),
+        unitPrice: it.unitPrice,
+        quantity: it.quantity,
+      })),
+    })),
+  }));
 
   const result: CategoryBreakdown = {
     boarding: 0, taxi: 0, grooming: 0, croquettes: 0, other: 0,
@@ -152,7 +200,7 @@ export async function billedByCategory(
     for (const pmt of periodPayments) {
       const frac = pmt.amount / itemsTotal;
       for (const item of inv.items) {
-        const k = categoryKey(item.category);
+        const k = categoryKey(item.category, item.description);
         const val = item.unitPrice * item.quantity;
         if (k) result[k] += val * frac;
         else    result.other += val * frac;
@@ -201,7 +249,7 @@ export async function volumeByCategory(
       status: { in: ['PAID', 'PARTIALLY_PAID'] },
       payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
-    select: { items: { select: { category: true, unitPrice: true, quantity: true } } },
+    select: { items: { select: { category: true, description: true, unitPrice: true, quantity: true } } },
   });
 
   const result: CategoryBreakdown = {
@@ -220,7 +268,7 @@ export async function volumeByCategory(
     let counted = false;
     for (const item of inv.items) {
       if (item.unitPrice * item.quantity === 0) continue;
-      const k = categoryKey(item.category);
+      const k = categoryKey(item.category, item.description);
       if (k) result[k]++;
       else result.other++;
       counted = true;
