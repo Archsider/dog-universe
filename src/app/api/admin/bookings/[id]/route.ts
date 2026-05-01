@@ -297,6 +297,119 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
   // ── End patchBoardingDetail ───────────────────────────────────────────────
 
+  // ── Add booking items (croquettes / extras) with invoice auto-sync ────────
+  // Generic addon path: admin adds custom line(s) to an existing booking and,
+  // if a linked invoice exists, the corresponding InvoiceItem(s) are created
+  // automatically with the same category. Used for PRODUCT / OTHER items
+  // (croquettes, supplements, etc.) for which there's no dedicated UI like
+  // EditTaxiAddonSection / EditGroomingSection.
+  if (Array.isArray(body.addBookingItems) && body.addBookingItems.length > 0) {
+    const VALID_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER'] as const;
+    type ItemCategory = typeof VALID_CATEGORIES[number];
+    interface IncomingItem {
+      description: string;
+      quantity: number;
+      unitPrice: number;
+      category?: ItemCategory;
+    }
+
+    const validated: IncomingItem[] = [];
+    for (const raw of body.addBookingItems as unknown[]) {
+      if (typeof raw !== 'object' || raw === null) {
+        return NextResponse.json({ error: 'INVALID_ITEM' }, { status: 400 });
+      }
+      const it = raw as Record<string, unknown>;
+      if (typeof it.description !== 'string' || !it.description.trim()) {
+        return NextResponse.json({ error: 'INVALID_ITEM_DESCRIPTION' }, { status: 400 });
+      }
+      if (typeof it.quantity !== 'number' || !Number.isInteger(it.quantity) || it.quantity <= 0) {
+        return NextResponse.json({ error: 'INVALID_ITEM_QUANTITY' }, { status: 400 });
+      }
+      if (typeof it.unitPrice !== 'number' || !isFinite(it.unitPrice) || it.unitPrice < 0) {
+        return NextResponse.json({ error: 'INVALID_ITEM_PRICE' }, { status: 400 });
+      }
+      if (it.category !== undefined && (typeof it.category !== 'string' || !VALID_CATEGORIES.includes(it.category as ItemCategory))) {
+        return NextResponse.json({ error: 'INVALID_ITEM_CATEGORY' }, { status: 400 });
+      }
+      validated.push({
+        description: it.description.trim().slice(0, 200),
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        category: (it.category as ItemCategory | undefined) ?? 'OTHER',
+      });
+    }
+
+    const invoice = booking.invoice;
+    const syncInvoice = invoice && invoice.status !== 'CANCELLED';
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Create BookingItem rows (durable record on the booking).
+      await tx.bookingItem.createMany({
+        data: validated.map(it => ({
+          bookingId: id,
+          description: it.description,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          total: it.quantity * it.unitPrice,
+          category: it.category ?? 'OTHER',
+        })),
+      });
+
+      if (syncInvoice && invoice) {
+        // 2. Create matching InvoiceItem rows so they appear on the linked invoice.
+        await tx.invoiceItem.createMany({
+          data: validated.map(it => ({
+            invoiceId: invoice.id,
+            description: it.description,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            total: it.quantity * it.unitPrice,
+            category: it.category ?? 'OTHER',
+          })),
+        });
+
+        // 3. Recompute invoice + booking totals from the resulting items.
+        const after = await tx.invoiceItem.findMany({
+          where: { invoiceId: invoice.id },
+          select: { total: true },
+        });
+        const newAmount = after.reduce((s, it) => s + it.total, 0);
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: { amount: newAmount, version: { increment: 1 } },
+        });
+        await tx.booking.update({
+          where: { id },
+          data: { totalPrice: newAmount, version: { increment: 1 } },
+        });
+      }
+    });
+
+    if (syncInvoice && invoice) {
+      const { allocatePayments } = await import('@/lib/payments');
+      await allocatePayments(invoice.id);
+    }
+
+    await logAction({
+      userId: session.user.id,
+      action: 'BOOKING_ITEMS_ADDED',
+      entityType: 'Booking',
+      entityId: id,
+      details: {
+        count: validated.length,
+        invoiceSynced: !!syncInvoice,
+        items: validated.map(it => ({ description: it.description, total: it.quantity * it.unitPrice, category: it.category })),
+      },
+    });
+
+    return NextResponse.json({
+      message: 'booking_items_added',
+      count: validated.length,
+      invoiceSynced: !!syncInvoice,
+    });
+  }
+  // ── End addBookingItems ───────────────────────────────────────────────────
+
   // ── PENDING_EXTENSION: Approve (merge into original) ──────────────────────
   if (body.approveExtension && booking.status === 'PENDING_EXTENSION') {
     if (!booking.extensionForBookingId) {
