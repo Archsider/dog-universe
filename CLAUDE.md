@@ -416,7 +416,7 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 | Zod | 3.23.8 |
 | @sentry/nextjs | (configuré server + edge + client + instrumentation-client) |
 | Playwright | configuré, skip gracieux si secrets absents (`test.skip()` dans `beforeEach`) |
-| Vitest | 4.1.5 (119 tests unitaires) |
+| Vitest | 4.1.5 (217+ tests unitaires) |
 
 **Pattern Next.js 15 params** : toujours `params: Promise<{ locale: string }>` + `const { locale } = await params` (async — pattern obligatoire sur main).
 
@@ -437,16 +437,10 @@ Note : les clés existent déjà avec valeur `'50'` dans `DEFAULT_SETTINGS` du c
 ### 1.bis. Migration SQL Supabase — optimistic lock (version column)
 Exécuter `prisma/migrations/20260501_optimistic_lock/migration.sql` sur Supabase. Ajoute `version INTEGER NOT NULL DEFAULT 0` à `Booking` et `Invoice` pour contrôle de concurrence optimiste. `PATCH /api/admin/bookings/[id]` et `PATCH /api/invoices/[id]` acceptent un champ `version` optionnel dans le body : si présent et différent de la version actuelle en DB → 409 `VERSION_CONFLICT` (`{ error, message, currentVersion }`). Si `version` absent → comportement legacy préservé (rétrocompat — les callers existants ne sont pas cassés). Toutes les mutations (booking PATCH final + edit-dates + extensions, invoice PATCH full-edit + legacy, et `allocatePayments` dans `src/lib/payments.ts`) incrémentent `version` atomiquement via `{ increment: 1 }`.
 
-### 2. Variables d'env Vercel à ajouter
-- `UPSTASH_REDIS_REST_URL` — URL REST Upstash (cron-lock)
-- `UPSTASH_REDIS_REST_TOKEN` — token Upstash (cron-lock)
-Sans ces vars, le cron-lock est fail-open (crons s'exécutent, déduplication DB seule).
-
-**BullMQ (TCP, différent des vars REST ci-dessus) :**
-- `UPSTASH_REDIS_HOST` — hostname TCP Upstash (ex: `polished-xxx.upstash.io`)
-- `UPSTASH_REDIS_PORT` — port TLS (défaut `6379`)
-- `UPSTASH_REDIS_PASSWORD` — password TCP Upstash
-Sans ces vars, BullMQ est désactivé → les emails/SMS sont envoyés directement (fallback).
+### 2. Variables d'env Vercel — ✅ CONFIGURÉES (2026-05-01)
+Toutes les variables Vercel sont en place :
+- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` (cron-lock)
+- `UPSTASH_REDIS_HOST` / `UPSTASH_REDIS_PORT` / `UPSTASH_REDIS_PASSWORD` (BullMQ TCP)
 
 ### 3. Secrets GitHub pour E2E Playwright
 Ajouter dans Settings → Secrets and variables → Actions :
@@ -465,8 +459,8 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | Capacity `excludeBookingId` non câblé | RÉSOLU (`4d7524e`) | Câblé sur les deux chemins d'extension admin |
 | E2E Playwright | RÉSOLU | Secrets GitHub configurés, tests opérationnels en CI |
 | Migration `20260405_private_storage` | CODE OK — BUCKET À VÉRIFIER | Code-side confirmé : `uploadBufferPrivate` + `createSignedUrl` utilisés, `pdfUrl String?` nullable, aucun appel `getPublicUrl` sur contrats. Risque résiduel : bucket `uploads-private` absent de Supabase → upload échoue en 500 (pas de régression silencieuse vers public). Vérification manuelle Supabase : `SELECT COUNT(*) FROM "ClientContract" WHERE "pdfUrl" IS NOT NULL;` doit retourner 0 (aucun contrat legacy public). |
-| Soft-delete User/Pet | DÉFÉRÉ | Booking soft-delete (`deletedAt`) est en place ; User/Pet délibérément déféré |
-| Sentry instrumentation API | OUVERT | Aucun `Sentry.startSpan()` sur les hot paths (`POST /api/bookings`, `PATCH /api/admin/bookings/[id]`) — observabilité limitée sur la latence DB |
+| Soft-delete User/Pet | RÉSOLU (`0dcf7c8`) | `deletedAt` ajouté à `User` + `Pet`, 28 fichiers filtrés, DELETE → soft-delete — migration SQL à exécuter sur Supabase |
+| Sentry instrumentation API | RÉSOLU (`21bdccd`) | `Sentry.startSpan()` câblé sur POST /api/bookings + PATCH /api/admin/bookings/[id] avec attributs serviceType/petCount/bookingId |
 
 ---
 
