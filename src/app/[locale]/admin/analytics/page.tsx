@@ -2,7 +2,6 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
-import dynamic from 'next/dynamic';
 import {
   totalCashCollected,
   cashByMonth,
@@ -12,13 +11,9 @@ import {
   deltaPercent,
   newClientsCount,
 } from '@/lib/metrics';
-
-const AnalyticsCharts = dynamic(() => import('./AnalyticsCharts'), {
-  ssr: false,
-  loading: () => (
-    <div className="h-64 animate-pulse bg-gray-100 rounded-xl" />
-  ),
-});
+// AnalyticsCharts is a 'use client' component that already lazy-loads its
+// Recharts sub-components internally via next/dynamic — no outer wrapper needed.
+import AnalyticsCharts from './AnalyticsCharts';
 
 interface PageProps { params: Promise<{ locale: string }> }
 
