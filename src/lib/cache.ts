@@ -7,13 +7,14 @@
 // — that would be classic cache-poisoning / cross-user data leak.
 
 import { Redis } from '@upstash/redis';
+import { env } from '@/lib/env';
 
 let cached: Redis | null | undefined;
 
 function getRedis(): Redis | null {
   if (cached !== undefined) return cached;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = env.UPSTASH_REDIS_REST_URL;
+  const token = env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) {
     cached = null;
     return null;

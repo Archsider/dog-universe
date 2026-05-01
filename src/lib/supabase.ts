@@ -1,11 +1,12 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { env } from '@/lib/env';
 
 let _client: SupabaseClient | null = null;
 
 function getSupabaseAdmin(): SupabaseClient {
   if (!_client) {
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const url = env.SUPABASE_URL;
+    const key = env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) throw new Error('Supabase env vars not configured');
     _client = createClient(url, key, { auth: { persistSession: false } });
   }
@@ -13,14 +14,14 @@ function getSupabaseAdmin(): SupabaseClient {
 }
 
 /** Public bucket — for photos (pets/, stays/). Files served via getPublicUrl(). */
-const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'uploads';
+const bucket = env.SUPABASE_STORAGE_BUCKET;
 
 /**
  * Private bucket — for sensitive files (contracts/, documents/).
  * Must be set to PRIVATE in Supabase Dashboard (or via SQL migration).
  * Files are served via createSignedUrl() only — never via getPublicUrl().
  */
-const privateBucket = process.env.SUPABASE_PRIVATE_STORAGE_BUCKET ?? 'uploads-private';
+const privateBucket = env.SUPABASE_PRIVATE_STORAGE_BUCKET;
 
 // ─── Public bucket (photos) ────────────────────────────────────────────────
 

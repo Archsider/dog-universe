@@ -70,6 +70,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate
+      - name: Run database migrations
+        # Skips gracefully when DATABASE_URL secret is absent (forks, PRs without secrets).
+        if: ${{ secrets.DATABASE_URL != '' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy
       - run: npm run build
 
   security:

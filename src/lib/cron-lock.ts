@@ -13,6 +13,7 @@
 //   per-row dedup inside each cron prevents user-visible duplicates.
 import { Redis } from '@upstash/redis';
 import { getISOWeek, getISOWeekYear } from 'date-fns';
+import { env } from '@/lib/env';
 
 export type CronPeriod = 'daily' | 'weekly';
 
@@ -20,8 +21,8 @@ let cachedRedis: Redis | null | undefined;
 
 function getRedis(): Redis | null {
   if (cachedRedis !== undefined) return cachedRedis;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = env.UPSTASH_REDIS_REST_URL;
+  const token = env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) {
     cachedRedis = null;
     return null;

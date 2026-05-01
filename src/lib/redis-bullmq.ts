@@ -13,15 +13,16 @@
 //   enableOfflineQueue: false   — Fail fast when Redis is unreachable instead of buffering
 //                                 indefinitely (keeps Vercel function timeouts short).
 import IORedis from 'ioredis';
+import { env } from '@/lib/env';
 
 let _connection: IORedis | null = null;
 
 export function getBullMQConnection(): IORedis {
   if (_connection) return _connection;
 
-  const host = process.env.UPSTASH_REDIS_HOST;
-  const port = parseInt(process.env.UPSTASH_REDIS_PORT ?? '6379', 10);
-  const password = process.env.UPSTASH_REDIS_PASSWORD;
+  const host = env.UPSTASH_REDIS_HOST;
+  const port = env.UPSTASH_REDIS_PORT ?? 6379;
+  const password = env.UPSTASH_REDIS_PASSWORD;
 
   if (!host || !password) {
     throw new Error(
@@ -49,5 +50,5 @@ export function getBullMQConnection(): IORedis {
 }
 
 export function isBullMQConfigured(): boolean {
-  return Boolean(process.env.UPSTASH_REDIS_HOST && process.env.UPSTASH_REDIS_PASSWORD);
+  return Boolean(env.UPSTASH_REDIS_HOST && env.UPSTASH_REDIS_PASSWORD);
 }
