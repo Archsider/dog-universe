@@ -29,6 +29,7 @@ interface Snapshot {
   timestamp: number;
   heading?: number | null;
   speed?: number | null;
+  distanceKm?: number;
 }
 
 export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
@@ -65,7 +66,7 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
       try {
         const res = await fetch(`/api/taxi-tracking/${trackingToken}`, { cache: 'no-store' });
         if (!aborted && res.ok) {
-          const json = await res.json() as { lastLocation?: { lat: number; lng: number; heading: number | null; speed: number | null; createdAt: string } | null };
+          const json = await res.json() as { distanceKm?: number; lastLocation?: { lat: number; lng: number; heading: number | null; speed: number | null; createdAt: string } | null };
           if (json.lastLocation) {
             setSnap({
               lat: json.lastLocation.lat,
@@ -73,6 +74,7 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
               timestamp: new Date(json.lastLocation.createdAt).getTime(),
               heading: json.lastLocation.heading,
               speed: json.lastLocation.speed,
+              distanceKm: json.distanceKm,
             });
           }
         }
@@ -85,7 +87,7 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
         try {
           const res = await fetch(`/api/taxi-tracking/${trackingToken}`, { cache: 'no-store' });
           if (!aborted && res.ok) {
-            const json = await res.json() as { lastLocation?: { lat: number; lng: number; heading: number | null; speed: number | null; createdAt: string } | null };
+            const json = await res.json() as { distanceKm?: number; lastLocation?: { lat: number; lng: number; heading: number | null; speed: number | null; createdAt: string } | null };
             if (json.lastLocation) {
               setSnap({
                 lat: json.lastLocation.lat,
@@ -93,6 +95,7 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
                 timestamp: new Date(json.lastLocation.createdAt).getTime(),
                 heading: json.lastLocation.heading,
                 speed: json.lastLocation.speed,
+                distanceKm: json.distanceKm,
               });
             }
           }
@@ -167,9 +170,18 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
             : (isFr ? 'Polling 10s' : 'Polling 10s')}
           <span className="ml-2">{isFr ? 'Mis à jour' : 'Updated'} {updatedAt}</span>
         </span>
-        {typeof snap.speed === 'number' && snap.speed >= 0 && (
-          <span>{Math.round(snap.speed * 3.6)} km/h</span>
-        )}
+        <span className="flex items-center gap-3">
+          {typeof snap.distanceKm === 'number' && snap.distanceKm > 0 && (
+            <span className="font-medium text-[#C4974A]">
+              {snap.distanceKm >= 10
+                ? `${snap.distanceKm.toFixed(1)} km`
+                : `${snap.distanceKm.toFixed(2)} km`}
+            </span>
+          )}
+          {typeof snap.speed === 'number' && snap.speed >= 0 && (
+            <span>{Math.round(snap.speed * 3.6)} km/h</span>
+          )}
+        </span>
       </div>
     </div>
   );

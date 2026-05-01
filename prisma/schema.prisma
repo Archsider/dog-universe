@@ -260,6 +260,7 @@ model TaxiTrip {
   // GPS tracking — controlled per-trip by admin
   trackingActive Boolean @default(false)
   trackingToken  String? @unique  // public token, allows client tracking without auth
+  distanceKm     Float   @default(0) // cumulative trip distance (haversine, incremented on each GPS push)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

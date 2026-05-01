@@ -10,6 +10,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     where: { trackingToken: token },
     select: {
       trackingActive: true,
+      distanceKm: true,
       booking: {
         select: {
           client: { select: { name: true } },
@@ -44,6 +45,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
 
   return NextResponse.json({
     active: true,
+    distanceKm: trip.distanceKm,
     lastLocation: last
       ? {
           lat: last.latitude,

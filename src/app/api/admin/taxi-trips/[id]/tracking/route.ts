@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { sendSMS } from '@/lib/sms';
-import { recordLocation, clearLocation } from '@/lib/taxi-location';
+import { recordLocation, clearLocation, haversineKm } from '@/lib/taxi-location';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
 const MAX_LOCATIONS_PER_TRIP = 50;
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const trip = await prisma.taxiTrip.findUnique({
     where: { id: id },
-    select: { id: true, bookingId: true, trackingActive: true, trackingToken: true },
+    select: { id: true, bookingId: true, trackingActive: true, trackingToken: true, distanceKm: true },
   });
   if (!trip) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -92,12 +92,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // ── stop ───────────────────────────────────────────────────────────────
   if (body.action === 'stop') {
-    await prisma.taxiTrip.update({
+    const stopped = await prisma.taxiTrip.update({
       where: { id: id },
       data: { trackingActive: false },
+      select: { distanceKm: true },
     });
     await clearLocation(trip.bookingId);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, distanceKm: stopped.distanceKm });
   }
 
   // ── location ───────────────────────────────────────────────────────────
@@ -108,6 +109,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { latitude, longitude, heading, speed, accuracy } = body;
     if (!isValidLat(latitude) || !isValidLng(longitude)) {
       return NextResponse.json({ error: 'INVALID_COORDINATES' }, { status: 400 });
+    }
+
+    // Compute distance delta from the previous GPS point (noise-filtered at 10 m).
+    const prev = await prisma.taxiLocation.findFirst({
+      where: { taxiTripId: id },
+      orderBy: { createdAt: 'desc' },
+      select: { latitude: true, longitude: true },
+    });
+
+    let deltaKm = 0;
+    if (prev) {
+      const d = haversineKm(prev.latitude, prev.longitude, latitude, longitude);
+      if (d >= 0.01) deltaKm = d; // ignore < 10 m (GPS drift)
     }
 
     await prisma.taxiLocation.create({
@@ -121,6 +135,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     });
 
+    // Increment cumulative distance atomically.
+    let updatedDistanceKm = trip.distanceKm;
+    if (deltaKm > 0) {
+      const updated = await prisma.taxiTrip.update({
+        where: { id: id },
+        data: { distanceKm: { increment: deltaKm } },
+        select: { distanceKm: true },
+      });
+      updatedDistanceKm = updated.distanceKm;
+    }
+
     // Critical: SSE stream at /api/taxi/[token]/stream reads positions from
     // Redis (not Postgres) — without this, viewers never see updates. The
     // recordLocation helper also publishes on the channel for any future
@@ -131,6 +156,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       timestamp: Date.now(),
       heading: isValidNumber(heading) ? heading : null,
       speed: isValidNumber(speed) ? speed : null,
+      distanceKm: updatedDistanceKm,
     });
 
     // Cleanup : ne garder que les MAX_LOCATIONS_PER_TRIP plus récentes (batch 500 max pour éviter DoS)
