@@ -35,9 +35,21 @@ export async function POST(request: Request) {
     const normalized = digits.startsWith('212') ? digits.slice(3) : digits.replace(/^0/, '');
 
     if (normalized.length >= 8) {
+      // SECURITY (P2): explicit `select` — never echo passwordHash / tokenVersion / loyalty internals
+      // back to the admin client. Even though admins are trusted, leaking the (placeholder) hash
+      // widens the blast radius of any future XSS in the admin UI and shows up in browser devtools.
+      const safeWalkInSelect = {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        role: true,
+        isWalkIn: true,
+      };
       // 1. Correspondance exacte sur le numéro normalisé (évite toute collision)
       const exactMatch = await prisma.user.findFirst({
         where: { isWalkIn: true, phone: { endsWith: normalized }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        select: safeWalkInSelect,
       });
       if (exactMatch) return NextResponse.json(exactMatch);
 
@@ -47,6 +59,7 @@ export async function POST(request: Request) {
       if (normalized.length > 8) {
         const fuzzyMatch = await prisma.user.findFirst({
           where: { isWalkIn: true, phone: { endsWith: tail }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+          select: safeWalkInSelect,
         });
         if (fuzzyMatch) return NextResponse.json(fuzzyMatch);
       }

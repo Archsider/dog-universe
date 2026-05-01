@@ -13,10 +13,15 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { messageFr, messageEn } = await request.json();
-  if (!messageFr?.trim()) {
+  const { messageFr: rawFr, messageEn: rawEn } = await request.json();
+  if (typeof rawFr !== 'string' || !rawFr.trim()) {
     return NextResponse.json({ error: 'Message required' }, { status: 400 });
   }
+  if (rawEn !== undefined && rawEn !== null && typeof rawEn !== 'string') {
+    return NextResponse.json({ error: 'Invalid message' }, { status: 400 });
+  }
+  const messageFr = rawFr.slice(0, 5000);
+  const messageEn = typeof rawEn === 'string' ? rawEn.slice(0, 5000) : rawEn;
 
   const booking = await prisma.booking.findFirst({
     where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)

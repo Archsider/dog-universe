@@ -48,7 +48,9 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json(document, { status: 201 });
   } catch (error) {
     console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Upload document error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    // SECURITY (P2): never echo raw error message to the client — would leak filesystem paths,
+    // stack traces, and internal library internals (info disclosure / fingerprinting aid).
+    return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }
 

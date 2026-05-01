@@ -116,6 +116,13 @@ export function getDynamicLimitBucket(path: string): DynamicBucket | null {
   if (path.startsWith('/api/bookings/') && path.endsWith('/addon-request')) {
     return 'addonRequest';
   }
+  // SECURITY (P2): /api/bookings/{id}/extension-request — creates a PENDING_EXTENSION
+  // booking row (DB write) and notifies all admins on each call. Reuse the addonRequest
+  // bucket (10/h per user) — same threat model: client-driven booking creation, abused
+  // both routes can spam admin notifications and bloat the booking table.
+  if (path.startsWith('/api/bookings/') && path.endsWith('/extension-request')) {
+    return 'addonRequest';
+  }
   return null;
 }
 
