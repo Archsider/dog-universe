@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   }
 
   const unsigned = await prisma.user.findMany({
-    where: { role: 'CLIENT', deletedAt: null, contract: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: { role: 'CLIENT', deletedAt: null, isWalkIn: false, contract: null }, // soft-delete: required — no global extension (Edge Runtime incompatible). Walk-in clients have no portal access — skip.
     select: { id: true, name: true, email: true, language: true, phone: true },
   });
 

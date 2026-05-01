@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
   const where = {
     role: 'CLIENT' as const,
     deletedAt: null as null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    isWalkIn: false, // Walk-in clients have no portal — never invite to sign.
     contract: null,
     ...(clientId ? { id: clientId } : {}),
   };

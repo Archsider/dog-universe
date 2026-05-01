@@ -48,10 +48,15 @@ export async function POST(req: NextRequest) {
 
   const client = await prisma.user.findFirst({
     where: { id: clientId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
-    select: { name: true, email: true },
+    select: { name: true, email: true, isWalkIn: true },
   });
   if (!client) {
     return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+  }
+  // Defense in depth: walk-in clients can't even reach this route (auth.ts blocks
+  // login), but if anything ever changes, refuse signing for walk-in accounts.
+  if (client.isWalkIn) {
+    return NextResponse.json({ error: 'WALK_IN_NOT_ALLOWED' }, { status: 403 });
   }
 
   const ipAddress =

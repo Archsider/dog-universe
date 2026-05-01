@@ -33,6 +33,20 @@ interface CustomLine {
   unitPrice: number;
 }
 
+interface WalkInPet {
+  name: string;
+  species: 'DOG' | 'CAT';
+  dateOfBirth: string;
+}
+
+const WALK_IN = '__WALK_IN__';
+
+function todayMinusYears(years: number): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - years);
+  return d.toISOString().slice(0, 10);
+}
+
 interface Props {
   locale: string;
   preselectedClientId?: string;
@@ -70,6 +84,14 @@ export default function AdminCreateBookingModal({
   const [clientPets, setClientPets] = useState<Pet[]>(preselectedPets ?? []);
   const [loadingPets, setLoadingPets] = useState(false);
   const [selectedPetIds, setSelectedPetIds] = useState<string[]>([]);
+
+  // ── Walk-in (no portal account, created on-the-fly) ────────────────────────
+  const [walkInName, setWalkInName] = useState('');
+  const [walkInPhone, setWalkInPhone] = useState('');
+  const [walkInPets, setWalkInPets] = useState<WalkInPet[]>([
+    { name: '', species: 'DOG', dateOfBirth: todayMinusYears(3) },
+  ]);
+  const isWalkIn = clientId === WALK_IN;
 
   // ── Service type ───────────────────────────────────────────────────────────
   const [serviceType, setServiceType] = useState<'BOARDING' | 'PET_TAXI'>('BOARDING');
@@ -116,6 +138,11 @@ export default function AdminCreateBookingModal({
   // ── Load pets when client changes ──────────────────────────────────────────
   useEffect(() => {
     if (!clientId || preselectedClientId) return;
+    if (clientId === WALK_IN) {
+      setClientPets([]);
+      setSelectedPetIds([]);
+      return;
+    }
     setLoadingPets(true);
     setSelectedPetIds([]);
     fetch(`/api/admin/clients/${clientId}`)
@@ -128,10 +155,15 @@ export default function AdminCreateBookingModal({
   // ── Derived values ─────────────────────────────────────────────────────────
   const nights = useMemo(() => calcNights(startDate, endDate), [startDate, endDate]);
 
-  const selectedPets = useMemo(
-    () => clientPets.filter(p => selectedPetIds.includes(p.id)),
-    [clientPets, selectedPetIds],
-  );
+  const selectedPets = useMemo(() => {
+    if (isWalkIn) {
+      // Pricing logic only needs id + name + species — synthesize from walk-in entries.
+      return walkInPets
+        .filter(p => p.name.trim().length > 0)
+        .map((p, i) => ({ id: `walkin-${i}`, name: p.name.trim(), species: p.species }));
+    }
+    return clientPets.filter(p => selectedPetIds.includes(p.id));
+  }, [isWalkIn, walkInPets, clientPets, selectedPetIds]);
 
   const autoLines = useMemo(() => {
     if (serviceType === 'BOARDING') {
@@ -184,6 +216,9 @@ export default function AdminCreateBookingModal({
   const reset = () => {
     if (!preselectedClientId) { setClientId(''); setClientPets([]); }
     setSelectedPetIds([]);
+    setWalkInName('');
+    setWalkInPhone('');
+    setWalkInPets([{ name: '', species: 'DOG', dateOfBirth: todayMinusYears(3) }]);
     setServiceType('BOARDING');
     setStartDate(todayIso());
     setEndDate('');
@@ -213,7 +248,17 @@ export default function AdminCreateBookingModal({
       toast({ title: fr ? 'Sélectionnez un client' : 'Select a client', variant: 'destructive' });
       return;
     }
-    if (selectedPetIds.length === 0) {
+    if (isWalkIn) {
+      if (!walkInName.trim()) {
+        toast({ title: fr ? 'Nom du client de passage requis' : 'Walk-in client name required', variant: 'destructive' });
+        return;
+      }
+      const validWalkInPets = walkInPets.filter(p => p.name.trim().length > 0 && p.dateOfBirth);
+      if (validWalkInPets.length === 0) {
+        toast({ title: fr ? 'Ajoutez au moins un animal (nom + date de naissance)' : 'Add at least one pet (name + date of birth)', variant: 'destructive' });
+        return;
+      }
+    } else if (selectedPetIds.length === 0) {
       toast({ title: fr ? 'Sélectionnez au moins un animal' : 'Select at least one pet', variant: 'destructive' });
       return;
     }
@@ -238,10 +283,46 @@ export default function AdminCreateBookingModal({
 
     setLoading(true);
     try {
+      // Walk-in: create the User + pets first, then submit the booking with
+      // the resolved IDs. Two sequential POSTs so we get clean error messages
+      // if either step fails (vs. one fat endpoint that hides the failure mode).
+      let resolvedClientId = clientId;
+      let resolvedPetIds = selectedPetIds;
+      if (isWalkIn) {
+        const wiRes = await fetch('/api/admin/walkin-clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: walkInName.trim(), phone: walkInPhone.trim() || null }),
+        });
+        if (!wiRes.ok) {
+          throw new Error(fr ? 'Création client de passage échouée' : 'Walk-in client creation failed');
+        }
+        const wiClient = await wiRes.json() as { id: string };
+        resolvedClientId = wiClient.id;
+
+        const validWalkInPets = walkInPets.filter(p => p.name.trim().length > 0 && p.dateOfBirth);
+        const petsRes = await fetch(`/api/admin/clients/${resolvedClientId}/pets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pets: validWalkInPets.map(p => ({
+              name: p.name.trim(),
+              species: p.species,
+              dateOfBirth: p.dateOfBirth,
+            })),
+          }),
+        });
+        if (!petsRes.ok) {
+          throw new Error(fr ? 'Création des animaux échouée' : 'Pet creation failed');
+        }
+        const petsPayload = await petsRes.json() as { pets: { id: string }[] };
+        resolvedPetIds = petsPayload.pets.map(p => p.id);
+      }
+
       const body: Record<string, unknown> = {
-        clientId,
+        clientId: resolvedClientId,
         serviceType,
-        petIds: selectedPetIds,
+        petIds: resolvedPetIds,
         startDate: serviceType === 'PET_TAXI' ? taxiDate : startDate,
         endDate: serviceType === 'BOARDING' ? endDate : null,
         arrivalTime: serviceType === 'PET_TAXI' ? taxiTime : null,
@@ -349,6 +430,7 @@ export default function AdminCreateBookingModal({
                       className="w-full border border-gray-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-gold-400 bg-white"
                     >
                       <option value="">{fr ? '— Sélectionner un client —' : '— Select a client —'}</option>
+                      <option value={WALK_IN}>➕ {fr ? 'Nouveau client de passage' : 'New walk-in client'}</option>
                       {clients.map(c => (
                         <option key={c.id} value={c.id}>{c.name} ({c.email})</option>
                       ))}
@@ -360,7 +442,97 @@ export default function AdminCreateBookingModal({
                   </div>
                 )}
 
-                {clientId && (
+                {isWalkIn && (
+                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-3">
+                    <p className="text-xs text-amber-700">
+                      {fr
+                        ? 'Client de passage — pas de portail, pas de fidélité, pas de notifications.'
+                        : 'Walk-in client — no portal access, no loyalty, no notifications.'}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 block mb-1">{fr ? 'Nom *' : 'Name *'}</label>
+                        <input
+                          type="text"
+                          value={walkInName}
+                          onChange={e => setWalkInName(e.target.value)}
+                          placeholder={fr ? 'Nom du passager' : 'Walk-in name'}
+                          maxLength={100}
+                          className="w-full border border-amber-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-amber-400 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 block mb-1">{fr ? 'Téléphone' : 'Phone'}</label>
+                        <input
+                          type="tel"
+                          value={walkInPhone}
+                          onChange={e => setWalkInPhone(e.target.value)}
+                          placeholder="+212..."
+                          maxLength={30}
+                          className="w-full border border-amber-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-amber-400 bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-medium text-gray-600">{fr ? 'Animaux *' : 'Pets *'}</label>
+                        <button
+                          type="button"
+                          onClick={() => setWalkInPets(prev => [...prev, { name: '', species: 'DOG', dateOfBirth: todayMinusYears(3) }])}
+                          className="text-xs text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1"
+                        >
+                          <Plus className="h-3 w-3" />{fr ? 'Ajouter' : 'Add'}
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {walkInPets.map((p, i) => (
+                          <div key={i} className="grid grid-cols-[1fr_90px_140px_28px] gap-2 items-center">
+                            <input
+                              type="text"
+                              value={p.name}
+                              onChange={e => setWalkInPets(prev => prev.map((q, idx) => idx === i ? { ...q, name: e.target.value } : q))}
+                              placeholder={fr ? 'Nom animal' : 'Pet name'}
+                              maxLength={60}
+                              className="border border-amber-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-amber-400 bg-white"
+                            />
+                            <select
+                              value={p.species}
+                              onChange={e => setWalkInPets(prev => prev.map((q, idx) => idx === i ? { ...q, species: e.target.value as 'DOG' | 'CAT' } : q))}
+                              className="border border-amber-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-amber-400 bg-white"
+                            >
+                              <option value="DOG">{fr ? 'Chien' : 'Dog'}</option>
+                              <option value="CAT">{fr ? 'Chat' : 'Cat'}</option>
+                            </select>
+                            <input
+                              type="date"
+                              value={p.dateOfBirth}
+                              onChange={e => setWalkInPets(prev => prev.map((q, idx) => idx === i ? { ...q, dateOfBirth: e.target.value } : q))}
+                              max={todayIso()}
+                              className="border border-amber-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-amber-400 bg-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setWalkInPets(prev => prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev)}
+                              disabled={walkInPets.length === 1}
+                              className="text-gray-400 hover:text-red-500 disabled:opacity-20 flex items-center justify-center"
+                              aria-label={fr ? 'Retirer' : 'Remove'}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        {fr
+                          ? 'Date de naissance approximative acceptée (ex: 1er janvier de l\'année estimée).'
+                          : 'Approximate date of birth is fine (e.g. Jan 1 of the estimated year).'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {clientId && !isWalkIn && (
                   <div>
                     <label className="text-xs font-medium text-gray-500 block mb-1.5">
                       {fr ? 'Animaux *' : 'Pets *'}
