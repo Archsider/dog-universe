@@ -64,11 +64,23 @@ export default async function AdminBillingPage(props: PageProps) {
   const order = (VALID_ORDERS.includes(rawOrder) ? rawOrder : 'desc') as 'asc' | 'desc';
   const clientId = (searchParams.clientId || '').trim();
 
-  // Parse date filters safely — invalid dates are ignored
+  // Parse date filters safely — invalid dates are ignored.
+  // Default range = current month (so the "Revenu total encaissé" stat reflects
+  // this month's activity, matching the dashboard). Admins can clear via Reset.
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
   const dateFromParsed = dateFrom ? new Date(dateFrom) : null;
   const dateToParsed = dateTo ? new Date(dateTo + 'T23:59:59.999Z') : null;
   const dateFromValid = dateFromParsed && !isNaN(dateFromParsed.getTime()) ? dateFromParsed : null;
   const dateToValid = dateToParsed && !isNaN(dateToParsed.getTime()) ? dateToParsed : null;
+
+  // Stats (totals + payment method breakdown) default to current month when
+  // no explicit date range is provided. The invoice table itself stays
+  // unfiltered so admins still see all invoices unless they filter.
+  const statsDateFrom = dateFromValid ?? monthStart;
+  const statsDateTo = dateToValid ?? monthEnd;
 
   const issuedAtFilter: Record<string, Date> = {};
   if (dateFromValid) issuedAtFilter.gte = dateFromValid;
@@ -107,21 +119,17 @@ export default async function AdminBillingPage(props: PageProps) {
   };
   const orderBy = sort ? orderByMap[sort] : { issuedAt: 'desc' as const };
 
-  // Stat cards respect the same filters as the table (date range + invoice filters)
-  const paymentDateFilter: Record<string, Date> = {};
-  if (dateFromValid) paymentDateFilter.gte = dateFromValid;
-  if (dateToValid) paymentDateFilter.lte = dateToValid;
-  const paymentStatsWhere = Object.keys(paymentDateFilter).length
-    ? { paymentDate: paymentDateFilter }
-    : undefined;
+  // Stat cards always span a date range — defaults to current month.
+  const paymentStatsWhere = {
+    paymentDate: { gte: statsDateFrom, lte: statsDateTo },
+  };
 
   // Extended stats where — includes invoice filters via relation
-  const paymentStatsWhereFull: Record<string, unknown> = {};
-  if (Object.keys(paymentDateFilter).length) paymentStatsWhereFull.paymentDate = paymentDateFilter;
+  const paymentStatsWhereFull: Record<string, unknown> = {
+    paymentDate: { gte: statsDateFrom, lte: statsDateTo },
+  };
   if (Object.keys(where).length) paymentStatsWhereFull.invoice = where;
-  const paymentStatsWhereOrUndef = Object.keys(paymentStatsWhereFull).length
-    ? paymentStatsWhereFull
-    : undefined;
+  const paymentStatsWhereOrUndef = paymentStatsWhereFull;
 
   const [invoices, total, totalRevenue, allClients, paymentMethodStats, totalUnfiltered] = await Promise.all([
     prisma.invoice.findMany({
@@ -269,7 +277,14 @@ export default async function AdminBillingPage(props: PageProps) {
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wider text-[#8A7E75] font-semibold">{l.totalRevenue}</div>
+            <div className="text-[10px] uppercase tracking-wider text-[#8A7E75] font-semibold">
+              {l.totalRevenue}
+              {!dateFromValid && !dateToValid && (
+                <span className="ml-1 normal-case text-[#C4974A]/70">
+                  · {statsDateFrom.toLocaleDateString(locale === 'fr' ? 'fr-MA' : 'en-GB', { month: 'long', year: 'numeric' })}
+                </span>
+              )}
+            </div>
             <div className="text-lg font-bold text-[#C4974A]">{formatMAD(totalRevenue._sum.amount || 0)}</div>
           </div>
           <a
