@@ -97,6 +97,7 @@ async function checkTaxiHeartbeats(): Promise<{ scanned: number; alerted: number
         client: { select: { name: true, email: true } },
         bookingPets: { select: { pet: { select: { name: true } } } },
       },
+      take: 200,
     });
     scanned = bookings.length;
 

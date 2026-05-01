@@ -36,9 +36,10 @@ export async function POST(req: Request, { params }: Params) {
   const body = await req.json();
   const { weightKg, measuredAt, note } = body;
 
-  if (typeof weightKg !== 'number' || weightKg <= 0) {
+  if (typeof weightKg !== 'number' || !Number.isFinite(weightKg) || weightKg <= 0 || weightKg > 200) {
     return NextResponse.json({ error: 'INVALID_WEIGHT' }, { status: 400 });
   }
+  const cleanNote = typeof note === 'string' ? note.trim().slice(0, 500) || null : null;
 
   let resolvedDate: Date = new Date();
   if (measuredAt) {
@@ -54,7 +55,7 @@ export async function POST(req: Request, { params }: Params) {
         petId: id,
         weightKg,
         measuredAt: resolvedDate,
-        note: note?.trim() || null,
+        note: cleanNote,
       },
     });
 

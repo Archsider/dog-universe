@@ -97,6 +97,7 @@ export async function GET() {
   const claims = await prisma.loyaltyBenefitClaim.findMany({
     where: { clientId: session.user.id },
     orderBy: { claimedAt: 'desc' },
+    take: 100,
   });
 
   return NextResponse.json(claims);

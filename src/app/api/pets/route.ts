@@ -25,6 +25,7 @@ export async function GET() {
       _count: { select: { bookingPets: true } },
     },
     orderBy: { createdAt: 'asc' },
+    take: 100,
   });
 
   return NextResponse.json(pets);

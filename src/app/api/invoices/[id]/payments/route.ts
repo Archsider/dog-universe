@@ -28,6 +28,7 @@ export async function GET(_req: Request, { params }: Params) {
   const payments = await prisma.payment.findMany({
     where: { invoiceId: id },
     orderBy: { paymentDate: 'asc' },
+    take: 200,
   });
 
   return NextResponse.json(payments);
