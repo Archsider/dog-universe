@@ -24,6 +24,7 @@ function getRedis(): Redis | null {
 
 const TTL_SECONDS = 3600;
 const locationKey = (bookingId: string) => `taxi:location:${bookingId}`;
+const locationChannel = (bookingId: string) => `taxi:loc:${bookingId}`;
 
 export interface TaxiLocationSnapshot {
   lat: number;
@@ -34,14 +35,24 @@ export interface TaxiLocationSnapshot {
   speed?: number | null;
 }
 
-/** Persist a fresh position. Never throws. */
+/** Persist a fresh position + publish on the taxi channel. Never throws. */
 export async function recordLocation(bookingId: string, snap: TaxiLocationSnapshot): Promise<void> {
   const redis = getRedis();
   if (!redis) return;
+  const payload = JSON.stringify(snap);
   try {
-    await redis.set(locationKey(bookingId), JSON.stringify(snap), { ex: TTL_SECONDS });
+    await redis.set(locationKey(bookingId), payload, { ex: TTL_SECONDS });
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'recordLocation failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'recordLocation set failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+  }
+  // Publish on the channel so any SSE subscriber (future ioredis upgrade) gets
+  // an instant push. The current SSE poll at 2s still works without this —
+  // publish is additive and fail-open. Upstash REST exposes PUBLISH as a
+  // single-shot HTTP call (no persistent subscriber connection needed here).
+  try {
+    await redis.publish(locationChannel(bookingId), payload);
+  } catch (err) {
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'recordLocation publish failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }
 

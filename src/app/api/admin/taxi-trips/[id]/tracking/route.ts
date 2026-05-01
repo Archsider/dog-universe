@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { sendSMS } from '@/lib/sms';
+import { recordLocation, clearLocation } from '@/lib/taxi-location';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
 const MAX_LOCATIONS_PER_TRIP = 50;
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const trip = await prisma.taxiTrip.findUnique({
     where: { id: id },
-    select: { id: true, trackingActive: true, trackingToken: true },
+    select: { id: true, bookingId: true, trackingActive: true, trackingToken: true },
   });
   if (!trip) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -95,6 +96,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       where: { id: id },
       data: { trackingActive: false },
     });
+    await clearLocation(trip.bookingId);
     return NextResponse.json({ ok: true });
   }
 
@@ -117,6 +119,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         speed: isValidNumber(speed) ? speed : null,
         accuracy: isValidNumber(accuracy) ? accuracy : null,
       },
+    });
+
+    // Critical: SSE stream at /api/taxi/[token]/stream reads positions from
+    // Redis (not Postgres) — without this, viewers never see updates. The
+    // recordLocation helper also publishes on the channel for any future
+    // pub/sub subscriber. Fail-open: SSE still has a 2s Redis poll fallback.
+    await recordLocation(trip.bookingId, {
+      lat: latitude,
+      lng: longitude,
+      timestamp: Date.now(),
+      heading: isValidNumber(heading) ? heading : null,
+      speed: isValidNumber(speed) ? speed : null,
     });
 
     // Cleanup : ne garder que les MAX_LOCATIONS_PER_TRIP plus récentes (batch 500 max pour éviter DoS)

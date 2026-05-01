@@ -14,6 +14,7 @@ import StayPhotosSection from './StayPhotosSection';
 import AdminMessageSection from './AdminMessageSection';
 import AddonRequestsSection from './AddonRequestsSection';
 import TaxiHeartbeatIndicator from './TaxiHeartbeatIndicator';
+import AdminTaxiLiveMap from './AdminTaxiLiveMap';
 import ExtendBookingSection from './ExtendBookingSection';
 import MergeBookingsSection from './MergeBookingsSection';
 import EditDatesSection from './EditDatesSection';
@@ -641,6 +642,9 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                     trackingToken={rawStandalone.trackingToken}
                     locale={locale}
                   />
+                )}
+                {rawStandalone?.trackingActive && rawStandalone.trackingToken && (
+                  <AdminTaxiLiveMap trackingToken={rawStandalone.trackingToken} locale={locale} />
                 )}
               </div>
             );

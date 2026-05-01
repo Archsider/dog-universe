@@ -22,6 +22,8 @@ import { prisma } from '@/lib/prisma';
 import { recordHeartbeat } from '@/lib/taxi-heartbeat';
 import { recordLocation } from '@/lib/taxi-location';
 
+export const maxDuration = 10;
+
 interface HeartbeatBody {
   latitude?: number;
   longitude?: number;
