@@ -7,6 +7,23 @@
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### 2026-05-01 — Session billing + diag CA Taxi
+
+**Bugs traités :**
+
+1. **CA Taxi = 0 MAD sur analytics (FAUX BUG)** — Diagnostic via `console.error` structuré dans `billedByCategory` (`src/lib/metrics.ts`). Logs Vercel ont confirmé que mai 2026 ne contenait qu'une seule facture (DU-2026-0027) avec 2 items BOARDING et zéro PET_TAXI. Le code était correct : l'utilisateur n'avait simplement pas enregistré la ligne pet taxi sur la facture. Logs diagnostiques retirés après confirmation (`403c193`).
+
+2. **`/admin/billing` — "Revenu total encaissé" affichait le cumul historique** — Le fix de `b12dd80` était sur `main` mais absent de la branche de travail `claude/work-in-progress-8MYIG` (divergence antérieure au commit). Forward-port manuel : ajout `monthStart`/`monthEnd` + `statsDateFrom`/`statsDateTo` (toujours définis), `paymentStatsWhere` toujours scopé sur la période, label `· mai 2026` affiché quand pas de filtre explicite. Vérifié via `git diff main -- billing/page.tsx` → vide.
+
+**Commits sur `main` :**
+- `44255dd fix(billing): default revenue stats to current month (forward-port)`
+- `403c193 chore(metrics): remove temporary diagnostic logging from billedByCategory`
+- `2ec0d1e merge(claude/work-in-progress-8MYIG): billing month default + metrics cleanup`
+
+**Décisions techniques :**
+- **Diagnostic en prod via `console.error(JSON.stringify(...))`** : pattern utile quand on n'a pas accès direct à la DB Supabase. Logs Vercel structurés permettent de vérifier le contenu DB sans query manuelle. À retirer dès la cause confirmée.
+- **Branch divergence** : toujours vérifier `git diff main -- <file>` avant de re-débugger un fix supposément déjà appliqué — peut être absent par divergence antérieure au commit.
+
 ### 2026-04-30 — Session Phase 3 perf + audit sécurité
 
 **3 commits sur `main` :**
