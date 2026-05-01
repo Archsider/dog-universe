@@ -102,6 +102,9 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
   let notifyGrade: NotifyGradeIntent | null = null;
 
   await prisma.$transaction(async (tx) => {
+    // Pessimistic lock: serialize concurrent allocatePayments calls for the same invoice
+    await tx.$executeRaw`SELECT id FROM "Invoice" WHERE id = ${invoiceId} FOR UPDATE`;
+
     // ── 1. Load invoice with items and payments ──────────────────────────
     const invoice = await tx.invoice.findUnique({
       where: { id: invoiceId },

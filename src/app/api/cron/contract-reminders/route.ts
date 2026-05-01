@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
@@ -10,7 +11,15 @@ export async function GET(req: NextRequest) {
   const secret = req.headers.get('x-cron-secret')
     ?? req.headers.get('authorization')?.replace('Bearer ', '');
 
-  if (secret !== process.env.CRON_SECRET) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.error(JSON.stringify({ level: 'error', service: 'cron-contract-reminders', message: 'CRON_SECRET not configured', timestamp: new Date().toISOString() }));
+    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+  }
+  const secretBuf = Buffer.from(secret ?? '');
+  const expectedBuf = Buffer.from(cronSecret);
+  const authorized = secretBuf.length === expectedBuf.length && timingSafeEqual(secretBuf, expectedBuf);
+  if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

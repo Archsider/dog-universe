@@ -18,11 +18,11 @@ function buildCsp(): { nonce: string; csp: string } {
       ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval'`
       : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
     // CSP Level 3 split style directives:
-    // style-src-elem: controls <style> tags — requires nonce (no unsafe-inline)
-    // style-src-attr: controls style="" attributes — unsafe-inline needed for Radix/Tailwind
-    // style-src: fallback for browsers that don't support the split (kept as-is)
+    // style-src-elem: controls <style> tags — nonce required, no inline allowed
+    // style-src: fallback for browsers without split support; also controls style=
+    //   attributes in browsers that support the split (style-src-attr intentionally
+    //   omitted — 'unsafe-inline' on that directive would bypass nonce protection)
     `style-src-elem 'self' 'nonce-${nonce}'`,
-    "style-src-attr 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     // img-src ajoute les CDN tuiles cartographiques (Leaflet/OpenStreetMap)
     // pour le suivi GPS taxi.

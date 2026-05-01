@@ -445,7 +445,14 @@ export async function POST(request: Request) {
             resolvedTotalPrice += qty * up;
           }
         }
-      } catch { /* fallback: keep 0 — better than crashing */ }
+      } catch (err) {
+        console.error(JSON.stringify({ level: 'error', service: 'bookings', message: 'Pricing calculation failed', error: String(err), timestamp: new Date().toISOString() }));
+        return NextResponse.json({ error: 'PRICE_CALCULATION_FAILED' }, { status: 500 });
+      }
+    }
+
+    if (resolvedTotalPrice === 0) {
+      return NextResponse.json({ error: 'PRICE_CALCULATION_FAILED', message: 'Booking price could not be determined. Please try again.' }, { status: 400 });
     }
 
     // ── Auto-merge: if this BOARDING booking is contiguous with an existing one ──
