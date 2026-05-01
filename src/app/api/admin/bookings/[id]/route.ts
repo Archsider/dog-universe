@@ -367,8 +367,33 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'INVALID_COMPUTED_TOTAL' }, { status: 400 });
     }
 
-    // Update booking and invoice
+    // Snapshot old dates for the audit log (captured before the transaction).
+    const oldStartDate = booking.startDate.toISOString().slice(0, 10);
+    const oldEndDate = booking.endDate?.toISOString().slice(0, 10) ?? null;
+
+    // Capacity check + booking/invoice update inside a Serializable transaction
+    // to prevent TOCTOU: no concurrent booking can slip in between the check and
+    // the write. allocatePayments runs after the tx (needs committed state).
+    let editCapacityError: CapacityCheckExceeded | null = null;
     await prisma.$transaction(async (tx) => {
+      // Capacity check for BOARDING — full new window, excluding this booking so
+      // its own pets don't count against the limit during the move.
+      if (booking.serviceType === 'BOARDING') {
+        const capResult = await checkBoardingCapacity(
+          {
+            petIds: booking.bookingPets.map(bp => bp.pet.id),
+            startDate: newStart,
+            endDate: newEnd,
+            excludeBookingId: id,
+          },
+          tx,
+        );
+        if (!capResult.ok) {
+          editCapacityError = capResult;
+          return;
+        }
+      }
+
       await tx.booking.update({
         where: { id: id },
         data: { startDate: newStart, endDate: newEnd, totalPrice: newTotal, version: { increment: 1 } },
@@ -399,9 +424,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           data: { amount: newTotal, status: newStatus },
         });
       }
-    });
+    }, { isolationLevel: 'Serializable' });
 
-    // Reallocate payments after dates/items update
+    if (editCapacityError) {
+      const ce = editCapacityError as CapacityCheckExceeded;
+      return NextResponse.json({ error: 'CAPACITY_EXCEEDED', ...ce }, { status: 400 });
+    }
+
+    // Reallocate payments after dates/items update (outside tx — has own locking)
     if (booking.invoice) {
       const { allocatePayments } = await import('@/lib/payments');
       await allocatePayments(booking.invoice.id);
@@ -412,7 +442,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       action: 'BOOKING_DATES_EDITED',
       entityType: 'Booking',
       entityId: id,
-      details: { newStartDate: newStartStr, newEndDate: newEndStr, newNights, newTotal },
+      details: { oldStartDate, oldEndDate, newStartDate: newStartStr, newEndDate: newEndStr, newNights, newTotal },
     });
 
     return NextResponse.json({ message: 'dates_updated', newStartDate: newStartStr, newEndDate: newEndStr, newNights, newTotal });
