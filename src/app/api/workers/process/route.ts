@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Worker } from 'bullmq';
 import { Redis } from '@upstash/redis';
+import { log } from '@/lib/logger';
 import { getBullMQConnection, isBullMQConfigured } from '@/lib/redis-bullmq';
 import {
   QUEUE_EMAIL, QUEUE_SMS, QUEUE_DLQ,
@@ -211,7 +212,7 @@ export async function GET(request: NextRequest) {
       runWorker<SmsJobData>(QUEUE_SMS, processSmsJob),
     ]);
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'Worker error', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    await log('error', 'workers-process', 'Worker error', { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: 'WORKER_ERROR', heartbeat: heartbeatResult }, { status: 500 });
   }
 

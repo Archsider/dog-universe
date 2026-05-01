@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { log } from '@/lib/logger';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import {
   createBookingConfirmationNotification,
@@ -465,7 +466,7 @@ export async function POST(request: Request) {
           }
         }
       } catch (err) {
-        console.error(JSON.stringify({ level: 'error', service: 'bookings', message: 'Pricing calculation failed', error: String(err), timestamp: new Date().toISOString() }));
+        await log('error', 'bookings', 'Pricing calculation failed', { error: String(err) });
         return NextResponse.json({ error: 'PRICE_CALCULATION_FAILED' }, { status: 500 });
       }
     }
@@ -795,7 +796,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...booking, bookingRef }, { status: 201 });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'Create booking error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    await log('error', 'booking', 'Create booking error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

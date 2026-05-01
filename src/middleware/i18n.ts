@@ -60,8 +60,15 @@ export function applyI18nAndCsp(request: NextRequest): NextResponse {
   // Required by next-intl so requestLocale resolves correctly in getRequestConfig
   requestHeaders.set('x-next-intl-locale', locale);
 
+  // Generate a per-request trace ID for structured log correlation.
+  // Forwarded both to server components (via request header) and to the
+  // caller / Vercel edge logs (via response header).
+  const requestId = crypto.randomUUID();
+  requestHeaders.set('x-request-id', requestId);
+
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('Content-Security-Policy', csp);
+  response.headers.set('x-request-id', requestId);
 
   return response;
 }

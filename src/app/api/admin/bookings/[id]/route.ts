@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { log } from '@/lib/logger';
 import * as Sentry from '@sentry/nextjs';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import {
@@ -698,7 +699,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         promoteWaitlistedBooking({
           startDate: booking.startDate,
           endDate: booking.endDate,
-        }).catch((err) => console.error(JSON.stringify({ level: 'error', service: 'admin-booking', message: 'waitlist promotion failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() })));
+        }).catch(async (err) => log('error', 'admin-booking', 'waitlist promotion failed', { error: err instanceof Error ? err.message : String(err) }));
       }
     } else if (status === 'NO_SHOW') {
       // Client absent sans préavis. Notification informative, pas d'email
@@ -724,7 +725,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         promoteWaitlistedBooking({
           startDate: booking.startDate,
           endDate: booking.endDate,
-        }).catch((err) => console.error(JSON.stringify({ level: 'error', service: 'admin-booking', message: 'waitlist promotion failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() })));
+        }).catch(async (err) => log('error', 'admin-booking', 'waitlist promotion failed', { error: err instanceof Error ? err.message : String(err) }));
       }
     } else if (status === 'COMPLETED') {
       const hasGrooming = booking.boardingDetail?.includeGrooming ?? false;

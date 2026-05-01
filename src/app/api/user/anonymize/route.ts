@@ -17,6 +17,7 @@ import bcrypt from 'bcryptjs';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
+import { log } from '@/lib/logger';
 
 const BLOCKING_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'AT_PICKUP', 'PENDING_EXTENSION'] as const;
 
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
   const anonymizedEmail = `deleted_${targetUserId}@doguniverse.invalid`;
   const anonymizedHash = await bcrypt.hash(`anon-${targetUserId}-${now.getTime()}`, 10);
 
+  try {
   await prisma.$transaction(async (tx) => {
     // Wipe PII on the User row + invalidate all sessions (tokenVersion bump)
     await tx.user.update({
@@ -215,6 +217,11 @@ export async function POST(request: NextRequest) {
       if (rows.length < BATCH) break;
     }
   });
+
+  } catch (error) {
+    await log('error', 'user-anonymize', 'Anonymization failed', { error: error instanceof Error ? error.message : String(error) });
+    return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
+  }
 
   await logAction({
     userId: session.user.id,

@@ -17,9 +17,22 @@ Sentry.init({
   sendDefaultPii: false,
 
   beforeSend(event) {
+    // Strip PII from user context
     if (event.user) {
       delete event.user.email;
       delete event.user.ip_address;
+      delete event.user.username;
+    }
+    // Strip sensitive request headers (client-side — belt-and-suspenders)
+    if (event.request?.headers) {
+      delete (event.request.headers as Record<string, unknown>)['cookie'];
+      delete (event.request.headers as Record<string, unknown>)['authorization'];
+    }
+    // Strip phone/email/password from extra data
+    if (event.extra) {
+      for (const key of Object.keys(event.extra)) {
+        if (/email|phone|password/i.test(key)) delete event.extra[key];
+      }
     }
     return event;
   },

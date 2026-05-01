@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { log } from '@/lib/logger';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
 import { sendSMS, sendAdminSMS, petPossessive } from '@/lib/sms';
@@ -284,6 +285,10 @@ export async function GET(request: Request) {
     } catch (err) {
       errors.push(`end:${booking.id}: ${String(err)}`);
     }
+  }
+
+  if (errors.length) {
+    await log('error', 'cron-reminders', 'Some reminders failed', { errors });
   }
 
   return NextResponse.json({
