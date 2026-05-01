@@ -59,6 +59,26 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
     if (!trackingToken) return;
     let aborted = false;
 
+    // Initial REST fetch — guarantees the map shows the last-known position
+    // even before SSE warms up (or if Redis is empty / unconfigured).
+    void (async () => {
+      try {
+        const res = await fetch(`/api/taxi-tracking/${trackingToken}`, { cache: 'no-store' });
+        if (!aborted && res.ok) {
+          const json = await res.json() as { lastLocation?: { lat: number; lng: number; heading: number | null; speed: number | null; createdAt: string } | null };
+          if (json.lastLocation) {
+            setSnap({
+              lat: json.lastLocation.lat,
+              lng: json.lastLocation.lng,
+              timestamp: new Date(json.lastLocation.createdAt).getTime(),
+              heading: json.lastLocation.heading,
+              speed: json.lastLocation.speed,
+            });
+          }
+        }
+      } catch { /* SSE will recover */ }
+    })();
+
     const startFallback = () => {
       const tick = async () => {
         if (aborted) return;

@@ -37,6 +37,28 @@ function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
+// Read latest position with Redis-first / Postgres-fallback strategy.
+// Without this fallback, an unconfigured or stale Redis silently breaks the
+// stream — Postgres always has the latest TaxiLocation row from the
+// driver's POST, so we can always recover.
+async function readLatest(bookingId: string, tripId: string): Promise<TaxiLocationSnapshot | null> {
+  const cached = await getLocation(bookingId);
+  if (cached) return cached;
+  const row = await prisma.taxiLocation.findFirst({
+    where: { taxiTripId: tripId },
+    orderBy: { createdAt: 'desc' },
+    select: { latitude: true, longitude: true, heading: true, speed: true, createdAt: true },
+  }).catch(() => null);
+  if (!row) return null;
+  return {
+    lat: row.latitude,
+    lng: row.longitude,
+    timestamp: row.createdAt.getTime(),
+    heading: row.heading,
+    speed: row.speed,
+  };
+}
+
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
@@ -83,19 +105,19 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         try { controller.close(); } catch { /* already closed */ }
       };
 
-      // 1. Initial snapshot — even if Redis is empty, send a 'connected'
-      //    event so the client knows the stream is live.
+      // 1. Initial snapshot — try Redis first, fall back to Postgres so the
+      //    map shows immediately even if Redis is unconfigured/empty.
       send(sseEvent('connected', { ts: Date.now() }));
-      const initial = await getLocation(bookingId);
+      const initial = await readLatest(bookingId, tripId);
       if (initial) {
         send(sseEvent('location', initial));
         lastTimestamp = initial.timestamp;
       }
 
-      // 3. Poll Redis for new positions
+      // 3. Poll for new positions — Redis hot path, Postgres fallback
       const pollPos = async () => {
         if (closed) return;
-        const snap = await getLocation(bookingId);
+        const snap = await readLatest(bookingId, tripId);
         if (snap && snap.timestamp > lastTimestamp) {
           lastTimestamp = snap.timestamp;
           send(sseEvent('location', snap satisfies TaxiLocationSnapshot));
