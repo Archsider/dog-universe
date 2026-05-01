@@ -8,7 +8,7 @@ import { Loader2, ArrowRight, Settings2, Check, X, UserX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface Props {
-  booking: { id: string; status: string; serviceType: string };
+  booking: { id: string; version: number; status: string; serviceType: string };
   locale: string;
 }
 
@@ -81,8 +81,17 @@ export default function ReservationActions({ booking, locale }: Props) {
       const res = await fetch(`/api/admin/bookings/${booking.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, version: booking.version }),
       });
+      if (res.status === 409) {
+        toast({
+          title: isFr
+            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (!res.ok) throw new Error('Failed');
       setCurrentStatus(status);
       setForceStatus(status);
@@ -102,7 +111,7 @@ export default function ReservationActions({ booking, locale }: Props) {
       const res = await fetch(`/api/admin/bookings/${booking.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approveExtension: true }),
+        body: JSON.stringify({ approveExtension: true, version: booking.version }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -142,7 +151,7 @@ export default function ReservationActions({ booking, locale }: Props) {
       const res = await fetch(`/api/admin/bookings/${booking.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rejectExtension: true }),
+        body: JSON.stringify({ rejectExtension: true, version: booking.version }),
       });
       const data = await res.json();
       if (!res.ok) {

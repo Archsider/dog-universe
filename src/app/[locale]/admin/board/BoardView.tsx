@@ -13,6 +13,7 @@ import { toast } from '@/hooks/use-toast';
 
 interface BookingCard {
   id: string;
+  version: number;
   serviceType: 'BOARDING' | 'PET_TAXI';
   status: string;
   startDate: string;
@@ -170,8 +171,17 @@ function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string; href:
       const res = await fetch(`/api/admin/bookings/${b.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: action.next }),
+        body: JSON.stringify({ status: action.next, version: b.version }),
       });
+      if (res.status === 409) {
+        toast({
+          title: isFr
+            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (!res.ok) throw new Error('Failed');
       toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
       router.refresh();

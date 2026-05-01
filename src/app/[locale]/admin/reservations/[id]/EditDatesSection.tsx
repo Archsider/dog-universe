@@ -10,6 +10,7 @@ import { formatDate } from '@/lib/utils';
 interface EditDatesSectionProps {
   booking: {
     id: string;
+    version: number;
     startDate: Date;
     endDate: Date | null;
     serviceType: string;
@@ -79,9 +80,18 @@ export default function EditDatesSection({ booking, locale }: EditDatesSectionPr
       const res = await fetch(`/api/admin/bookings/${booking.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ editDates: { startDate, endDate } }),
+        body: JSON.stringify({ editDates: { startDate, endDate }, version: booking.version }),
       });
       const data = await res.json();
+      if (res.status === 409) {
+        toast({
+          title: locale === 'fr'
+            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (!res.ok) {
         toast({ title: data.error ?? t.errorServer, variant: 'destructive' });
         return;

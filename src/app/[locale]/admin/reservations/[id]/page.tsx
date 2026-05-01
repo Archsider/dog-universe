@@ -439,6 +439,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                 <div className="flex items-center gap-2">
                   <RecordPaymentButton
                     invoiceId={booking.invoice.id}
+                    invoiceVersion={booking.invoice.version}
                     currentStatus={booking.invoice.status}
                     locale={locale}
                     invoiceAmount={booking.invoice.amount}
@@ -504,6 +505,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                 </div>
                 <RecordPaymentButton
                   invoiceId={supplementaryInvoice.id}
+                  invoiceVersion={supplementaryInvoice.version}
                   currentStatus={supplementaryInvoice.status}
                   locale={locale}
                   invoiceAmount={supplementaryInvoice.amount}
@@ -615,7 +617,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             </div>
           )}
 
-          <ReservationActions booking={{ id: booking.id, status: booking.status, serviceType: booking.serviceType }} locale={locale} />
+          <ReservationActions booking={{ id: booking.id, version: booking.version, status: booking.status, serviceType: booking.serviceType }} locale={locale} />
 
           {/* Standalone PET_TAXI timeline */}
           {!isBoarding && standaloneTrip && (() => {
@@ -647,7 +649,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
           {/* Edit dates (available on all BOARDING bookings) */}
           {isBoarding && (
             <EditDatesSection
-              booking={{ id: booking.id, startDate: booking.startDate, endDate: booking.endDate ?? null, serviceType: booking.serviceType }}
+              booking={{ id: booking.id, version: booking.version, startDate: booking.startDate, endDate: booking.endDate ?? null, serviceType: booking.serviceType }}
               locale={locale}
             />
           )}
@@ -656,6 +658,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
           {isBoarding && (
             <EditTaxiAddonSection
               bookingId={booking.id}
+              bookingVersion={booking.version}
               boardingDetail={booking.boardingDetail ? {
                 taxiGoEnabled: booking.boardingDetail.taxiGoEnabled,
                 taxiGoDate: booking.boardingDetail.taxiGoDate,
@@ -684,6 +687,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
           {isBoarding && (
             <EditGroomingSection
               bookingId={booking.id}
+              bookingVersion={booking.version}
               boardingDetail={booking.boardingDetail ? {
                 includeGrooming: booking.boardingDetail.includeGrooming,
                 groomingSize: booking.boardingDetail.groomingSize,
@@ -697,6 +701,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             <ExtendBookingSection
               booking={{
                 id: booking.id,
+                version: booking.version,
                 startDate: booking.startDate,
                 endDate: booking.endDate ?? null,
                 totalPrice: booking.totalPrice,

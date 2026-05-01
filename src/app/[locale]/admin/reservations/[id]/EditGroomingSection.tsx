@@ -14,6 +14,7 @@ interface BoardingDetailGrooming {
 
 interface EditGroomingSectionProps {
   bookingId: string;
+  bookingVersion: number;
   boardingDetail: BoardingDetailGrooming | null;
   locale: string;
 }
@@ -64,7 +65,7 @@ const STATUS_COLORS: Record<string, string> = {
   DONE:        'bg-green-100 text-green-700 border-green-200',
 };
 
-export default function EditGroomingSection({ bookingId, boardingDetail, locale }: EditGroomingSectionProps) {
+export default function EditGroomingSection({ bookingId, bookingVersion, boardingDetail, locale }: EditGroomingSectionProps) {
   const router = useRouter();
   const t = l[locale as keyof typeof l] || l.fr;
 
@@ -94,9 +95,19 @@ export default function EditGroomingSection({ bookingId, boardingDetail, locale 
             groomingSize: enabled ? size : null,
             groomingStatus: enabled ? groomStatus : null,
           },
+          version: bookingVersion,
         }),
       });
       const data = await res.json();
+      if (res.status === 409) {
+        toast({
+          title: locale === 'fr'
+            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (!res.ok) {
         toast({ title: data.error ?? t.errorServer, variant: 'destructive' });
         return;

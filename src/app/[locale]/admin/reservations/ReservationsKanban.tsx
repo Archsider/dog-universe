@@ -7,6 +7,7 @@ import { toast } from '@/hooks/use-toast';
 
 export interface KanbanBooking {
   id: string;
+  version: number;
   serviceType: 'BOARDING' | 'PET_TAXI';
   status: string;
   startDate: string;
@@ -89,12 +90,14 @@ function formatShortDate(iso: string, locale: string): string {
 
 function ActionButton({
   bookingId,
+  bookingVersion,
   currentStatus,
   pipeline,
   locale,
   onStatusChange,
 }: {
   bookingId: string;
+  bookingVersion: number;
   currentStatus: string;
   pipeline: 'BOARDING' | 'PET_TAXI';
   locale: string;
@@ -116,8 +119,17 @@ function ActionButton({
       const res = await fetch(`/api/admin/bookings/${bookingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ status: nextStatus, version: bookingVersion }),
       });
+      if (res.status === 409) {
+        toast({
+          title: locale === 'fr'
+            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (!res.ok) throw new Error('Failed');
       onStatusChange(bookingId, nextStatus);
       toast({ title: locale === 'fr' ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
@@ -146,11 +158,13 @@ function ActionButton({
 
 function NoShowButton({
   bookingId,
+  bookingVersion,
   currentStatus,
   locale,
   onStatusChange,
 }: {
   bookingId: string;
+  bookingVersion: number;
   currentStatus: string;
   locale: string;
   onStatusChange: (id: string, newStatus: string) => void;
@@ -173,8 +187,17 @@ function NoShowButton({
       const res = await fetch(`/api/admin/bookings/${bookingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'NO_SHOW' }),
+        body: JSON.stringify({ status: 'NO_SHOW', version: bookingVersion }),
       });
+      if (res.status === 409) {
+        toast({
+          title: locale === 'fr'
+            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (!res.ok) throw new Error('Failed');
       onStatusChange(bookingId, 'NO_SHOW');
       toast({
@@ -234,6 +257,7 @@ function BoardingCard({
       </Link>
       <ActionButton
         bookingId={b.id}
+        bookingVersion={b.version}
         currentStatus={b.status}
         pipeline="BOARDING"
         locale={locale}
@@ -241,6 +265,7 @@ function BoardingCard({
       />
       <NoShowButton
         bookingId={b.id}
+        bookingVersion={b.version}
         currentStatus={b.status}
         locale={locale}
         onStatusChange={onStatusChange}
@@ -301,6 +326,7 @@ function TaxiCard({
       </Link>
       <ActionButton
         bookingId={b.id}
+        bookingVersion={b.version}
         currentStatus={b.status}
         pipeline="PET_TAXI"
         locale={locale}
@@ -308,6 +334,7 @@ function TaxiCard({
       />
       <NoShowButton
         bookingId={b.id}
+        bookingVersion={b.version}
         currentStatus={b.status}
         locale={locale}
         onStatusChange={onStatusChange}

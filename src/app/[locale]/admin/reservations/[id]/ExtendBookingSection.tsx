@@ -10,6 +10,7 @@ import { formatDate } from '@/lib/utils';
 interface ExtendBookingSectionProps {
   booking: {
     id: string;
+    version: number;
     startDate: Date;
     endDate: Date | null;
     totalPrice: number;
@@ -79,9 +80,18 @@ export default function ExtendBookingSection({ booking, locale }: ExtendBookingS
       const res = await fetch(`/api/admin/bookings/${booking.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(opts),
+        body: JSON.stringify({ ...opts, version: booking.version }),
       });
       const data = await res.json();
+      if (res.status === 409) {
+        toast({
+          title: locale === 'fr'
+            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (!res.ok) {
         if (data.error === 'CAPACITY_EXCEEDED') {
           const speciesLabel = locale === 'fr'

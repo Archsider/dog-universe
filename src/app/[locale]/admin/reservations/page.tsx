@@ -70,6 +70,7 @@ export default async function AdminReservationsPage(props: PageProps) {
 
     kanbanBookings = raw.map((b) => ({
       id: b.id,
+      version: b.version,
       serviceType: b.serviceType as 'BOARDING' | 'PET_TAXI',
       status: b.status,
       startDate: b.startDate.toISOString(),

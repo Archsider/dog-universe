@@ -43,6 +43,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
   // Serialize for client component
   const serialized = bookings.map((b) => ({
     id: b.id,
+    version: b.version,
     serviceType: b.serviceType as 'BOARDING' | 'PET_TAXI',
     status: b.status,
     startDate: b.startDate.toISOString(),

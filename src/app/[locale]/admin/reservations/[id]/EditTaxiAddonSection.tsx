@@ -21,6 +21,7 @@ interface BoardingDetailTaxi {
 
 interface EditTaxiAddonSectionProps {
   bookingId: string;
+  bookingVersion: number;
   boardingDetail: BoardingDetailTaxi | null;
   goTrip: TaxiTripData | null;
   returnTrip: TaxiTripData | null;
@@ -64,7 +65,7 @@ const l = {
 };
 
 export default function EditTaxiAddonSection({
-  bookingId, boardingDetail, goTrip, returnTrip, goTracking, returnTracking, locale,
+  bookingId, bookingVersion, boardingDetail, goTrip, returnTrip, goTracking, returnTracking, locale,
 }: EditTaxiAddonSectionProps) {
   const router = useRouter();
   const t = l[locale as keyof typeof l] || l.fr;
@@ -99,9 +100,19 @@ export default function EditTaxiAddonSection({
             taxiReturnTime:    returnEnabled && returnTime    ? returnTime    : null,
             taxiReturnAddress: returnEnabled && returnAddress ? returnAddress : null,
           },
+          version: bookingVersion,
         }),
       });
       const data = await res.json();
+      if (res.status === 409) {
+        toast({
+          title: locale === 'fr'
+            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (!res.ok) {
         toast({ title: data.error ?? t.errorServer, variant: 'destructive' });
         return;

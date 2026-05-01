@@ -7,6 +7,7 @@ import { toast } from '@/hooks/use-toast';
 
 interface Props {
   invoiceId: string;
+  invoiceVersion: number;
   currentStatus: string;
   locale: string;
   invoiceAmount: number;
@@ -24,7 +25,7 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function CreateInvoiceButton({ invoiceId, currentStatus, locale, invoiceAmount, paidAmount }: Props) {
+export default function CreateInvoiceButton({ invoiceId, invoiceVersion, currentStatus, locale, invoiceAmount, paidAmount }: Props) {
   const remaining = Math.max(0, invoiceAmount - paidAmount);
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<string>('CASH');
@@ -74,8 +75,19 @@ export default function CreateInvoiceButton({ invoiceId, currentStatus, locale, 
           paidAmount: newTotal,
           paymentMethod: method,
           paymentDate,
+          version: invoiceVersion,
         }),
       });
+      if (res.status === 409) {
+        toast({
+          title: isFr
+            ? 'Cette facture a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        setOpen(false);
+        return;
+      }
       if (!res.ok) throw new Error('Failed');
       toast({ title: l.success, variant: 'success' });
       setOpen(false);

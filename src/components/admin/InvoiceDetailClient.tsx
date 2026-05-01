@@ -60,6 +60,7 @@ interface BookingData {
 
 export interface InvoiceData {
   id: string;
+  version: number;
   invoiceNumber: string;
   amount: number;
   paidAmount: number;
@@ -244,8 +245,18 @@ export default function InvoiceDetailClient({
           clientDisplayName: editClientName.trim(),
           clientDisplayPhone: editClientPhone.trim() || null,
           clientDisplayEmail: editClientEmail.trim() || null,
+          version: invoice.version,
         }),
       });
+      if (res.status === 409) {
+        toast({
+          title: isFr
+            ? 'Cette facture a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || (isFr ? 'Erreur serveur' : 'Server error'));
