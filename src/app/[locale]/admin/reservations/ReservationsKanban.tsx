@@ -4,6 +4,16 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Package, Car, MapPin, Clock, CalendarDays, ChevronRight, ArrowRight, Loader2, UserX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export interface KanbanBooking {
   id: string;
@@ -170,18 +180,13 @@ function NoShowButton({
   onStatusChange: (id: string, newStatus: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   if (!NO_SHOW_ELIGIBLE_STATUSES.has(currentStatus)) return null;
 
-  const label = locale === 'fr' ? 'No Show' : 'No Show';
-  const confirmMsg =
-    locale === 'fr'
-      ? "Marquer cette réservation comme No Show ? Cette action libère la place et ne compte pas dans les séjours du client."
-      : "Mark this booking as No Show? This frees the slot and is not counted toward the client's stays.";
+  const isFr = locale === 'fr';
 
-  const handleClick = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!window.confirm(confirmMsg)) return;
+  const handleConfirm = async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/admin/bookings/${bookingId}`, {
@@ -191,7 +196,7 @@ function NoShowButton({
       });
       if (res.status === 409) {
         toast({
-          title: locale === 'fr'
+          title: isFr
             ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
             : 'This record was modified by someone else. Please refresh.',
           variant: 'destructive',
@@ -201,29 +206,65 @@ function NoShowButton({
       if (!res.ok) throw new Error('Failed');
       onStatusChange(bookingId, 'NO_SHOW');
       toast({
-        title: locale === 'fr' ? 'Marqué No Show' : 'Marked No Show',
+        title: isFr ? 'Marqué No Show' : 'Marked No Show',
         variant: 'success',
       });
     } catch {
-      toast({ title: locale === 'fr' ? 'Erreur' : 'Error', variant: 'destructive' });
+      toast({ title: isFr ? 'Erreur' : 'Error', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setConfirmOpen(true);
+  };
+
   return (
-    <button
-      onClick={handleClick}
-      disabled={loading}
-      className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 hover:border-red-300 transition-all disabled:opacity-50"
-    >
-      {loading ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
-      ) : (
-        <UserX className="h-3 w-3 flex-shrink-0" />
-      )}
-      <span>{label}</span>
-    </button>
+    <>
+      <button
+        onClick={handleClick}
+        disabled={loading}
+        className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 hover:border-red-300 transition-all disabled:opacity-50"
+      >
+        {loading ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <UserX className="h-3 w-3 flex-shrink-0" />
+        )}
+        <span>No Show</span>
+      </button>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {isFr ? 'Confirmer le No Show' : 'Confirm No Show'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {isFr
+                ? "Marquer cette réservation comme No Show ? Cette action libère la place et ne compte pas dans les séjours du client."
+                : "Mark this booking as No Show? This frees the slot and is not counted toward the client's stays."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmOpen(false)}>
+              {isFr ? 'Annuler' : 'Cancel'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmOpen(false);
+                handleConfirm();
+              }}
+            >
+              {isFr ? 'Confirmer' : 'Confirm'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
@@ -392,9 +433,10 @@ export function ReservationsKanban({ bookings: initialBookings, locale }: Props)
   const filtered = bookings.filter((b) => b.serviceType === pipeline);
 
   // Optimistic status update: move card to new column immediately
+  // Also increment version so the next PATCH sends the correct optimistic lock value.
   const handleStatusChange = (id: string, newStatus: string) => {
     setBookings(prev =>
-      prev.map(b => b.id === id ? { ...b, status: newStatus } : b)
+      prev.map(b => b.id === id ? { ...b, status: newStatus, version: b.version + 1 } : b)
     );
   };
 

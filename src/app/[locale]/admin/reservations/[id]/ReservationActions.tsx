@@ -6,6 +6,16 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, ArrowRight, Settings2, Check, X, UserX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Props {
   booking: { id: string; version: number; status: string; serviceType: string };
@@ -57,6 +67,7 @@ export default function ReservationActions({ booking, locale }: Props) {
   const [loadingReject, setLoadingReject] = useState(false);
   const [loadingNoShow, setLoadingNoShow] = useState(false);
   const [showForce, setShowForce] = useState(false);
+  const [noShowConfirmOpen, setNoShowConfirmOpen] = useState(false);
   const router = useRouter();
   const isFr = locale === 'fr';
 
@@ -67,12 +78,8 @@ export default function ReservationActions({ booking, locale }: Props) {
   const isPendingExtension = currentStatus === 'PENDING_EXTENSION';
   const canMarkNoShow = currentStatus === 'CONFIRMED' || currentStatus === 'IN_PROGRESS';
 
-  const handleNoShow = async () => {
-    const confirmMsg = isFr
-      ? "Marquer cette réservation comme No Show ? Cette action libère la place et ne compte pas dans les séjours du client."
-      : "Mark this booking as No Show? This frees the slot and is not counted toward the client's stays.";
-    if (!window.confirm(confirmMsg)) return;
-    await patchStatus('NO_SHOW', setLoadingNoShow);
+  const handleNoShow = () => {
+    setNoShowConfirmOpen(true);
   };
 
   const patchStatus = async (status: string, setLoading: (v: boolean) => void) => {
@@ -250,19 +257,49 @@ export default function ReservationActions({ booking, locale }: Props) {
 
       {/* No Show — disponible uniquement depuis CONFIRMED ou IN_PROGRESS */}
       {canMarkNoShow && (
-        <Button
-          onClick={handleNoShow}
-          disabled={loadingNoShow}
-          variant="outline"
-          className="w-full flex items-center gap-2 border-red-200 text-red-700 hover:bg-red-50"
-        >
-          {loadingNoShow ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <UserX className="h-4 w-4" />
-          )}
-          {isFr ? 'Marquer No Show' : 'Mark as No Show'}
-        </Button>
+        <>
+          <Button
+            onClick={handleNoShow}
+            disabled={loadingNoShow}
+            variant="outline"
+            className="w-full flex items-center gap-2 border-red-200 text-red-700 hover:bg-red-50"
+          >
+            {loadingNoShow ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <UserX className="h-4 w-4" />
+            )}
+            {isFr ? 'Marquer No Show' : 'Mark as No Show'}
+          </Button>
+
+          <AlertDialog open={noShowConfirmOpen} onOpenChange={setNoShowConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {isFr ? 'Confirmer le No Show' : 'Confirm No Show'}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {isFr
+                    ? "Marquer cette réservation comme No Show ? Cette action libère la place et ne compte pas dans les séjours du client."
+                    : "Mark this booking as No Show? This frees the slot and is not counted toward the client's stays."}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setNoShowConfirmOpen(false)}>
+                  {isFr ? 'Annuler' : 'Cancel'}
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    setNoShowConfirmOpen(false);
+                    patchStatus('NO_SHOW', setLoadingNoShow);
+                  }}
+                >
+                  {isFr ? 'Confirmer' : 'Confirm'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
       )}
 
       {/* Section forçage manuel (secondaire) */}

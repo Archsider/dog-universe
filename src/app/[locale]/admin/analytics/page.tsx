@@ -147,12 +147,13 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
     OTHER:    thisBilled.other,
   };
 
-  const frMonths = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
-                    'juil.', 'août',  'sept.', 'oct.', 'nov.', 'déc.'];
+  const monthLabels = Array.from({ length: 12 }, (_, i) =>
+    new Date(2024, i, 1).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'short' }),
+  );
   const yearSuffix = String(currentYear).slice(2);
 
   const yearlyData = Array.from({ length: thisM + 1 }, (_, i) => ({
-    month:      `${frMonths[i]} ${yearSuffix}`,
+    month:      `${monthLabels[i]} ${yearSuffix}`,
     boarding:   currentYearMonthly[i].boarding,
     grooming:   currentYearMonthly[i].grooming,
     taxi:       currentYearMonthly[i].taxi,
@@ -161,7 +162,7 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
   }));
 
   const lastYearData = Array.from({ length: thisM + 1 }, (_, i) => ({
-    month: frMonths[i],
+    month: monthLabels[i],
     total: lastYearMonthly[i].total,
   }));
 

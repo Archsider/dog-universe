@@ -34,6 +34,11 @@ export async function GET(req: NextRequest) {
   const month = today.getMonth() + 1; // 1-12
   const day = today.getDate();
 
+  // Leap year edge case: pets born on Feb 29 only have a real birthday every 4 years.
+  // In non-leap years, we send their birthday notification on Feb 28 instead.
+  const isLeapYear = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const includeFeb29 = month === 2 && day === 28 && !isLeapYear(today.getFullYear());
+
   // Prisma doesn't have MONTH()/DAY() helpers — use raw query.
   // JOIN avec User pour ramener nom + téléphone owner en 1 seule requête (évite N+1 ensuite).
   const pets = await prisma.$queryRaw<
@@ -54,8 +59,10 @@ export async function GET(req: NextRequest) {
     FROM "Pet" p
     JOIN "User" u ON u.id = p."ownerId"
     WHERE p."dateOfBirth" IS NOT NULL
-      AND EXTRACT(MONTH FROM p."dateOfBirth") = ${month}
-      AND EXTRACT(DAY FROM p."dateOfBirth") = ${day}
+      AND (
+        (EXTRACT(MONTH FROM p."dateOfBirth") = ${month} AND EXTRACT(DAY FROM p."dateOfBirth") = ${day})
+        ${includeFeb29 ? `OR (EXTRACT(MONTH FROM p."dateOfBirth") = 2 AND EXTRACT(DAY FROM p."dateOfBirth") = 29)` : `AND TRUE`}
+      )
   `;
 
   if (pets.length === 0) {
