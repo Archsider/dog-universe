@@ -601,7 +601,7 @@ export async function POST(request: Request) {
     let booking: Awaited<ReturnType<typeof createBookingTx>>;
     try {
       booking = await Sentry.startSpan(
-        { name: 'booking.create', op: 'db' },
+        { name: 'db.booking.create', op: 'db', attributes: { serviceType, petCount: petIds.length } },
         () => runWithSerializableRetry(() =>
           createBookingTx({
             clientId,
