@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 import TaxiTrackingButton from '@/components/admin/TaxiTrackingButton';
+import AdminTaxiLiveMap from './AdminTaxiLiveMap';
 
 interface BoardingDetailTaxi {
   taxiGoEnabled: boolean;
@@ -176,6 +177,9 @@ export default function EditTaxiAddonSection({
                         locale={locale}
                       />
                     )}
+                    {goTracking?.trackingActive && goTracking.trackingToken && (
+                      <AdminTaxiLiveMap trackingToken={goTracking.trackingToken} locale={locale} />
+                    )}
                   </>
                 : <p className="text-xs text-gray-400 italic">{t.noTrip}</p>}
             </div>
@@ -195,6 +199,9 @@ export default function EditTaxiAddonSection({
                         trackingToken={returnTracking.trackingToken}
                         locale={locale}
                       />
+                    )}
+                    {returnTracking?.trackingActive && returnTracking.trackingToken && (
+                      <AdminTaxiLiveMap trackingToken={returnTracking.trackingToken} locale={locale} />
                     )}
                   </>
                 : <p className="text-xs text-gray-400 italic">{t.noTrip}</p>}
@@ -239,6 +246,11 @@ export default function EditTaxiAddonSection({
                         trackingToken={goTracking.trackingToken}
                         locale={locale}
                       />
+                    )}
+                    {goTracking?.trackingActive && goTracking.trackingToken && (
+                      <div className="mt-3">
+                        <AdminTaxiLiveMap trackingToken={goTracking.trackingToken} locale={locale} />
+                      </div>
                     )}
                   </div>
                 )}
@@ -295,6 +307,11 @@ export default function EditTaxiAddonSection({
                         trackingToken={returnTracking.trackingToken}
                         locale={locale}
                       />
+                    )}
+                    {returnTracking?.trackingActive && returnTracking.trackingToken && (
+                      <div className="mt-3">
+                        <AdminTaxiLiveMap trackingToken={returnTracking.trackingToken} locale={locale} />
+                      </div>
                     )}
                   </div>
                 )}
