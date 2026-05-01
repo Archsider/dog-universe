@@ -1,8 +1,8 @@
 import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { sendEmail, getEmailTemplate } from '@/lib/email';
-import { sendSMS } from '@/lib/sms';
+import { getEmailTemplate } from '@/lib/email';
+import { enqueueEmail, enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
 import { APP_URL } from '@/lib/config';
 
@@ -54,10 +54,10 @@ export async function GET(req: NextRequest) {
 
   let sent = 0;
   let skipped = 0;
-  for (const client of unsigned) {
+  await Promise.all(unsigned.map(async (client) => {
     try {
       // Skip si un rappel a déjà été envoyé dans les 7 derniers jours.
-      if (alreadyRemindedUserIds.has(client.id)) { skipped++; continue; }
+      if (alreadyRemindedUserIds.has(client.id)) { skipped++; return; }
 
       const locale = client.language ?? 'fr';
       const loginUrl = `${APP_URL}/${locale}/auth/login`;
@@ -66,35 +66,41 @@ export async function GET(req: NextRequest) {
         { clientName: client.name ?? client.email, loginUrl },
         locale
       );
-      await sendEmail({ to: client.email, subject, html });
+
+      const ops: Promise<unknown>[] = [
+        enqueueEmail({ to: client.email, subject, html }, `contract-reminder:${client.id}:email`),
+        // Trace de l'envoi — sert de marqueur pour la fenêtre de 7 jours.
+        prisma.notification.create({
+          data: {
+            userId: client.id,
+            type: 'CONTRACT_REMINDER',
+            titleFr: 'Rappel contrat',
+            titleEn: 'Contract reminder',
+            messageFr: 'Votre contrat Dog Universe est en attente de signature.',
+            messageEn: 'Your Dog Universe contract is pending signature.',
+            read: false,
+          },
+        }).catch(err => console.error(JSON.stringify({ level: 'error', service: 'cron-contract-reminders', message: 'contract reminder notification trace failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }))),
+      ];
 
       // SMS rappel contrat — premium tone (additif, échec ne bloque pas)
       if (client.phone) {
         const firstName = (client.name ?? '').split(' ')[0] || (client.name ?? '');
-        await sendSMS(
-          client.phone,
-          `Bonjour ${firstName}, votre contrat Dog Universe est en attente de signature. Connectez-vous sur votre espace client pour finaliser votre dossier. — Dog Universe`,
-        );
+        ops.push(enqueueSms(
+          {
+            to: client.phone,
+            message: `Bonjour ${firstName}, votre contrat Dog Universe est en attente de signature. Connectez-vous sur votre espace client pour finaliser votre dossier. — Dog Universe`,
+          },
+          `contract-reminder:${client.id}:sms`,
+        ));
       }
 
-      // Trace de l'envoi — sert de marqueur pour la fenêtre de 7 jours.
-      await prisma.notification.create({
-        data: {
-          userId: client.id,
-          type: 'CONTRACT_REMINDER',
-          titleFr: 'Rappel contrat',
-          titleEn: 'Contract reminder',
-          messageFr: 'Votre contrat Dog Universe est en attente de signature.',
-          messageEn: 'Your Dog Universe contract is pending signature.',
-          read: false,
-        },
-      }).catch(err => console.error(JSON.stringify({ level: 'error', service: 'cron-contract-reminders', message: 'contract reminder notification trace failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() })));
-
+      await Promise.allSettled(ops);
       sent++;
     } catch (e) {
       console.error(JSON.stringify({ level: 'error', service: 'cron-contract-reminders', message: 'contract reminder failed for client', clientId: client.id, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() }));
     }
-  }
+  }));
 
   // debug log removed (contract-reminders summary)
   return NextResponse.json({ sent, skipped, total: unsigned.length });

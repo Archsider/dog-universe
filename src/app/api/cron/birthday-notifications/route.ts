@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { sendSMS } from '@/lib/sms';
+import { enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
 
 export const maxDuration = 60;
@@ -69,48 +69,63 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ sent: 0, message: 'No birthdays today' });
   }
 
-  // Deduplicate: one notification per owner per birthday pet
-  const created: string[] = [];
-  for (const pet of pets) {
+  // Batch dedup: load all PET_BIRTHDAY notifications created today for these owners
+  // in a single query, then check in-memory — avoids N findFirst calls.
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const ownerIds = Array.from(new Set(pets.map(p => p.ownerId)));
+  const existingBirthdayNotifs = await prisma.notification.findMany({
+    where: {
+      userId: { in: ownerIds },
+      type: 'PET_BIRTHDAY',
+      createdAt: { gte: todayStart },
+    },
+    select: { userId: true, metadata: true },
+  });
+  const alreadySentKeys = new Set<string>();
+  for (const n of existingBirthdayNotifs) {
+    try {
+      const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+      if (typeof meta.petId === 'string') alreadySentKeys.add(`${n.userId}:${meta.petId}`);
+    } catch { /* ignore malformed metadata */ }
+  }
+
+  // Deduplicate: one notification per owner per birthday pet — process in parallel
+  const results = await Promise.all(pets.map(async (pet) => {
+    if (alreadySentKeys.has(`${pet.ownerId}:${pet.id}`)) return null;
+
     const age = today.getFullYear() - new Date(pet.dateOfBirth).getFullYear();
     const speciesFr = pet.species === 'DOG' ? 'chien' : 'chat';
     const speciesEn = pet.species === 'DOG' ? 'dog' : 'cat';
 
-    // Avoid duplicate if we already sent one today for this pet
-    // Use specific JSON key-value pattern to avoid partial UUID collisions
-    const alreadySent = await prisma.notification.findFirst({
-      where: {
-        userId: pet.ownerId,
-        type: 'PET_BIRTHDAY',
-        metadata: { contains: `"petId":"${pet.id}"` },
-        createdAt: { gte: new Date(today.getFullYear(), today.getMonth(), today.getDate()) },
-      },
-    });
-    if (alreadySent) continue;
+    const ops: Promise<unknown>[] = [
+      prisma.notification.create({
+        data: {
+          userId: pet.ownerId,
+          type: 'PET_BIRTHDAY',
+          titleFr: `🎂 Joyeux anniversaire ${pet.name} !`,
+          titleEn: `🎂 Happy Birthday ${pet.name}!`,
+          messageFr: `Votre ${speciesFr} ${pet.name} fête ses ${age} an${age > 1 ? 's' : ''} aujourd'hui ! Pensez à lui faire une petite gâterie 🐾`,
+          messageEn: `Your ${speciesEn} ${pet.name} turns ${age} today! Don't forget to give them a little treat 🐾`,
+          metadata: JSON.stringify({ petId: pet.id, age }),
+        },
+      }),
+    ];
 
-    await prisma.notification.create({
-      data: {
-        userId: pet.ownerId,
-        type: 'PET_BIRTHDAY',
-        titleFr: `🎂 Joyeux anniversaire ${pet.name} !`,
-        titleEn: `🎂 Happy Birthday ${pet.name}!`,
-        messageFr: `Votre ${speciesFr} ${pet.name} fête ses ${age} an${age > 1 ? 's' : ''} aujourd'hui ! Pensez à lui faire une petite gâterie 🐾`,
-        messageEn: `Your ${speciesEn} ${pet.name} turns ${age} today! Don't forget to give them a little treat 🐾`,
-        metadata: JSON.stringify({ petId: pet.id, age }),
-      },
-    });
-
-    // SMS anniversaire au propriétaire — données issues du JOIN du $queryRaw (pas de query supplémentaire)
     if (pet.ownerPhone) {
       const ownerFirstName = (pet.ownerName ?? '').split(' ')[0] || (pet.ownerName ?? '');
-      await sendSMS(
-        pet.ownerPhone,
-        `Bonjour ${ownerFirstName} ! 🎂 Toute l'équipe Dog Universe souhaite un merveilleux anniversaire à ${pet.name} qui fête ses ${age} an(s) aujourd'hui ! — Dog Universe ❤️`,
-      );
+      ops.push(enqueueSms(
+        {
+          to: pet.ownerPhone,
+          message: `Bonjour ${ownerFirstName} ! 🎂 Toute l'équipe Dog Universe souhaite un merveilleux anniversaire à ${pet.name} qui fête ses ${age} an(s) aujourd'hui ! — Dog Universe ❤️`,
+        },
+        `birthday:${pet.id}:${todayStart.toISOString().slice(0, 10)}`,
+      ));
     }
 
-    created.push(pet.id);
-  }
+    await Promise.allSettled(ops);
+    return pet.id;
+  }));
 
+  const created = results.filter((id): id is string => id !== null);
   return NextResponse.json({ sent: created.length, petIds: created });
 }

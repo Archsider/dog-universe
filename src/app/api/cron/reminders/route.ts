@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { log } from '@/lib/logger';
-import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
-import { sendSMS, sendAdminSMS, petPossessive } from '@/lib/sms';
+import { petPossessive } from '@/lib/sms';
+import { enqueueEmail, enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
 
 export const maxDuration = 60;
@@ -95,11 +96,11 @@ export async function GET(request: Request) {
     } catch { /* ignore malformed metadata */ }
   }
 
-  for (const booking of startBookings) {
+  await Promise.all(startBookings.map(async (booking) => {
     try {
       // Déduplication : si une notif STAY_REMINDER pour cette booking
       // a déjà été créée aujourd'hui, on saute (évite double envoi sur retry cron).
-      if (notifiedStartBookingIds.has(booking.id)) { skipped++; continue; }
+      if (notifiedStartBookingIds.has(booking.id)) { skipped++; return; }
 
       const locale = booking.client.language ?? 'fr';
       const pets = booking.bookingPets.map(bp => bp.pet);
@@ -122,23 +123,38 @@ export async function GET(request: Request) {
         locale,
         pets,
       );
-      await sendEmail({ to: booking.client.email, subject, html });
 
-      // Client in-app notification
-      await createNotification({
-        userId: booking.clientId,
-        type: 'STAY_REMINDER',
-        titleFr: 'Rappel : séjour demain',
-        titleEn: 'Reminder: stay tomorrow',
-        messageFr: `Le séjour de ${petNames} commence demain (${startDateFr}).`,
-        messageEn: `${petNames}'s stay starts tomorrow (${startDateEn}).`,
-        metadata: { bookingId: booking.id },
-      });
+      // Client in-app notification + email + SMS — fire in parallel
+      const clientName = booking.client.name ?? booking.client.email;
+      const firstName = clientName.split(' ')[0] || clientName;
+      const clientOps: Promise<unknown>[] = [
+        enqueueEmail({ to: booking.client.email, subject, html }, `reminder:start:${booking.id}:client-email`),
+        createNotification({
+          userId: booking.clientId,
+          type: 'STAY_REMINDER',
+          titleFr: 'Rappel : séjour demain',
+          titleEn: 'Reminder: stay tomorrow',
+          messageFr: `Le séjour de ${petNames} commence demain (${startDateFr}).`,
+          messageEn: `${petNames}'s stay starts tomorrow (${startDateEn}).`,
+          metadata: { bookingId: booking.id },
+        }),
+        enqueueSms(
+          {
+            to: booking.client.phone,
+            message: `Bonjour ${firstName} ! Nous avons hâte d'accueillir ${petNames} demain. N'oubliez pas ${petPossessive(pets)} affaires. À demain ! — Dog Universe 🐾`,
+          },
+          `reminder:start:${booking.id}:client-sms`,
+        ),
+        enqueueSms(
+          { to: 'ADMIN', message: `📋 J-1 arrivée demain : ${petNames} de ${clientName}.` },
+          `reminder:start:${booking.id}:admin-sms`,
+        ),
+      ];
 
-      // Admin notifications (in-app + email)
+      // Admin notifications (in-app + email) — parallel per admin
       for (const admin of admins) {
         const adminLocale = admin.language ?? 'fr';
-        await createNotification({
+        clientOps.push(createNotification({
           userId: admin.id,
           type: 'STAY_REMINDER',
           titleFr: `Arrivée demain — ${petNames}`,
@@ -146,7 +162,7 @@ export async function GET(request: Request) {
           messageFr: `${booking.client.name} arrive demain avec ${petNames} (réf. ${bookingRef}).`,
           messageEn: `${booking.client.name} checks in tomorrow with ${petNames} (ref. ${bookingRef}).`,
           metadata: { bookingId: booking.id },
-        });
+        }));
         const { subject: aSubject, html: aHtml } = getEmailTemplate(
           'admin_stay_reminder',
           {
@@ -158,23 +174,18 @@ export async function GET(request: Request) {
           },
           adminLocale,
         );
-        await sendEmail({ to: admin.email, subject: aSubject, html: aHtml });
+        clientOps.push(enqueueEmail(
+          { to: admin.email, subject: aSubject, html: aHtml },
+          `reminder:start:${booking.id}:admin-email:${admin.id}`,
+        ));
       }
 
-      // SMS J-1 arrivée — accord genre/pluriel
-      const clientName = booking.client.name ?? booking.client.email;
-      const firstName = clientName.split(' ')[0] || clientName;
-      await sendSMS(
-        booking.client.phone,
-        `Bonjour ${firstName} ! Nous avons hâte d'accueillir ${petNames} demain. N'oubliez pas ${petPossessive(pets)} affaires. À demain ! — Dog Universe 🐾`,
-      );
-      await sendAdminSMS(`📋 J-1 arrivée demain : ${petNames} de ${clientName}.`);
-
+      await Promise.allSettled(clientOps);
       sent++;
     } catch (err) {
       errors.push(`start:${booking.id}: ${String(err)}`);
     }
-  }
+  }));
 
   // ── End reminders (IN_PROGRESS or CONFIRMED bookings ending tomorrow) ─────
   const endBookings = await prisma.booking.findMany({
@@ -209,10 +220,10 @@ export async function GET(request: Request) {
     } catch { /* ignore malformed metadata */ }
   }
 
-  for (const booking of endBookings) {
+  await Promise.all(endBookings.map(async (booking) => {
     try {
       // Déduplication : skip si une notif STAY_END_REMINDER existe déjà aujourd'hui.
-      if (notifiedEndBookingIds.has(booking.id)) { skipped++; continue; }
+      if (notifiedEndBookingIds.has(booking.id)) { skipped++; return; }
 
       const locale = booking.client.language ?? 'fr';
       const pets = booking.bookingPets.map(bp => bp.pet);
@@ -234,23 +245,38 @@ export async function GET(request: Request) {
         locale,
         pets,
       );
-      await sendEmail({ to: booking.client.email, subject, html });
 
-      // Client in-app notification
-      await createNotification({
-        userId: booking.clientId,
-        type: 'STAY_END_REMINDER',
-        titleFr: 'Fin de séjour demain',
-        titleEn: 'Stay ending tomorrow',
-        messageFr: `Le séjour de ${petNames} se termine demain (${endDateFr}). Pensez à prévoir votre venue.`,
-        messageEn: `${petNames}'s stay ends tomorrow (${endDateEn}). Please plan your pick-up.`,
-        metadata: { bookingId: booking.id },
-      });
+      const clientName = booking.client.name ?? booking.client.email;
+      const firstName = clientName.split(' ')[0] || clientName;
+      const isPlural = pets.length > 1;
 
-      // Admin notifications (in-app + email)
+      const ops: Promise<unknown>[] = [
+        enqueueEmail({ to: booking.client.email, subject, html }, `reminder:end:${booking.id}:client-email`),
+        createNotification({
+          userId: booking.clientId,
+          type: 'STAY_END_REMINDER',
+          titleFr: 'Fin de séjour demain',
+          titleEn: 'Stay ending tomorrow',
+          messageFr: `Le séjour de ${petNames} se termine demain (${endDateFr}). Pensez à prévoir votre venue.`,
+          messageEn: `${petNames}'s stay ends tomorrow (${endDateEn}). Please plan your pick-up.`,
+          metadata: { bookingId: booking.id },
+        }),
+        enqueueSms(
+          {
+            to: booking.client.phone,
+            message: `Bonjour ${firstName} ! ${petNames} rentre${isPlural ? 'nt' : ''} demain à la maison. Ce fut un bonheur de ${isPlural ? 'les' : "l'"} avoir. À très bientôt ! — Dog Universe 🐾`,
+          },
+          `reminder:end:${booking.id}:client-sms`,
+        ),
+        enqueueSms(
+          { to: 'ADMIN', message: `📋 J-1 départ demain : ${petNames} de ${clientName}.` },
+          `reminder:end:${booking.id}:admin-sms`,
+        ),
+      ];
+
       for (const admin of admins) {
         const adminLocale = admin.language ?? 'fr';
-        await createNotification({
+        ops.push(createNotification({
           userId: admin.id,
           type: 'STAY_END_REMINDER',
           titleFr: `Départ demain — ${petNames}`,
@@ -258,7 +284,7 @@ export async function GET(request: Request) {
           messageFr: `${booking.client.name} récupère ${petNames} demain (réf. ${bookingRef}).`,
           messageEn: `${booking.client.name} picks up ${petNames} tomorrow (ref. ${bookingRef}).`,
           metadata: { bookingId: booking.id },
-        });
+        }));
         const { subject: aSubject, html: aHtml } = getEmailTemplate(
           'admin_stay_reminder',
           {
@@ -270,24 +296,18 @@ export async function GET(request: Request) {
           },
           adminLocale,
         );
-        await sendEmail({ to: admin.email, subject: aSubject, html: aHtml });
+        ops.push(enqueueEmail(
+          { to: admin.email, subject: aSubject, html: aHtml },
+          `reminder:end:${booking.id}:admin-email:${admin.id}`,
+        ));
       }
 
-      // SMS J-1 départ — accord genre/pluriel
-      const clientName = booking.client.name ?? booking.client.email;
-      const firstName = clientName.split(' ')[0] || clientName;
-      const isPlural = pets.length > 1;
-      await sendSMS(
-        booking.client.phone,
-        `Bonjour ${firstName} ! ${petNames} rentre${isPlural ? 'nt' : ''} demain à la maison. Ce fut un bonheur de ${isPlural ? 'les' : "l'"} avoir. À très bientôt ! — Dog Universe 🐾`,
-      );
-      await sendAdminSMS(`📋 J-1 départ demain : ${petNames} de ${clientName}.`);
-
+      await Promise.allSettled(ops);
       sent++;
     } catch (err) {
       errors.push(`end:${booking.id}: ${String(err)}`);
     }
-  }
+  }));
 
   if (errors.length) {
     await log('error', 'cron-reminders', 'Some reminders failed', { errors });

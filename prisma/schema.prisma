@@ -182,6 +182,8 @@ model Booking {
   @@index([createdAt])
   @@index([serviceType])
   @@index([deletedAt])
+  @@index([status, startDate]) // Hot path : cron reminders + capacity overlap
+  @@index([status, endDate])   // Hot path : cron reminders end + capacity overlap
 }
 
 model BookingPet {
@@ -387,6 +389,7 @@ model Notification {
   @@index([read])
   @@index([createdAt])
   @@index([userId, read]) // Hot path : compteur de notifications non lues
+  @@index([type, createdAt]) // Hot path : dedup batch par type sur fenêtre récente (cron reminders/birthday)
 }
 
 model LoyaltyGrade {
