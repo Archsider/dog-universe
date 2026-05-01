@@ -6,15 +6,25 @@ export function deltaPercent(cur: number, prev: number): number {
   return prev === 0 ? 0 : Math.round(((cur - prev) / prev) * 1000) / 10;
 }
 
-// ItemCategory → display key. Returns null for OTHER (never silently absorbed).
+// ItemCategory → display key.
+// Falls back to description-based inference for items created before category was
+// required (those were persisted with category=OTHER by the invoice creation route).
 // Internal helper — pas exporté (3 utilisations dans ce fichier uniquement).
 function categoryKey(
   cat: string,
+  description?: string,
 ): 'boarding' | 'taxi' | 'grooming' | 'croquettes' | null {
   if (cat === 'BOARDING') return 'boarding';
   if (cat === 'PET_TAXI') return 'taxi';
   if (cat === 'GROOMING') return 'grooming';
   if (cat === 'PRODUCT') return 'croquettes';
+  if (description) {
+    const d = description.toLowerCase();
+    if (d.includes('pension') || d.includes('boarding') || d.includes('nuit') || d.includes('hébergement')) return 'boarding';
+    if (d.includes('taxi') || d.includes('transport') || d.includes('aller') || d.includes('retour')) return 'taxi';
+    if (d.includes('toilettage') || d.includes('grooming') || d.includes('soin') || d.includes('bain') || d.includes('coupe')) return 'grooming';
+    if (d.includes('croquette') || d.includes('kibble') || d.includes('nourriture') || d.includes('royal') || d.includes('grain')) return 'croquettes';
+  }
   return null;
 }
 
@@ -56,7 +66,7 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
     select: {
       amount: true,
       paymentDate: true,
-      invoice: { select: { items: { select: { category: true, total: true } } } },
+      invoice: { select: { items: { select: { category: true, description: true, total: true } } } },
     },
   });
 
@@ -76,7 +86,7 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
     if (itemsTotal === 0) continue;
     const frac = pmt.amount / itemsTotal;
     for (const item of pmt.invoice.items) {
-      const k = categoryKey(item.category);
+      const k = categoryKey(item.category, item.description);
       if (k) monthly[m][k] += item.total * frac;
     }
   }
@@ -134,7 +144,7 @@ export async function billedByCategory(
       payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
     select: {
-      items:    { select: { category: true, unitPrice: true, quantity: true } },
+      items:    { select: { category: true, description: true, unitPrice: true, quantity: true } },
       payments: { select: { amount: true, paymentDate: true } },
     },
   });
@@ -152,7 +162,7 @@ export async function billedByCategory(
     for (const pmt of periodPayments) {
       const frac = pmt.amount / itemsTotal;
       for (const item of inv.items) {
-        const k = categoryKey(item.category);
+        const k = categoryKey(item.category, item.description);
         const val = item.unitPrice * item.quantity;
         if (k) result[k] += val * frac;
         else    result.other += val * frac;
@@ -201,7 +211,7 @@ export async function volumeByCategory(
       status: { in: ['PAID', 'PARTIALLY_PAID'] },
       payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
-    select: { items: { select: { category: true, unitPrice: true, quantity: true } } },
+    select: { items: { select: { category: true, description: true, unitPrice: true, quantity: true } } },
   });
 
   const result: CategoryBreakdown = {
@@ -220,7 +230,7 @@ export async function volumeByCategory(
     let counted = false;
     for (const item of inv.items) {
       if (item.unitPrice * item.quantity === 0) continue;
-      const k = categoryKey(item.category);
+      const k = categoryKey(item.category, item.description);
       if (k) result[k]++;
       else result.other++;
       counted = true;
