@@ -176,6 +176,122 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
     }
 
+    // ── Sync linked invoice line items so addon toggles reflect on billing ──
+    // When the booking has a linked invoice (and isn't CANCELLED), keep the
+    // taxi go / taxi return / grooming line items in sync with the boarding
+    // detail flags. Skipped for CANCELLED — those invoices are frozen.
+    if (booking.invoice && booking.invoice.status !== 'CANCELLED' && bd) {
+      const { getPricingSettings } = await import('@/lib/pricing');
+      const pricing = await getPricingSettings();
+      const taxiUnitPrice = pricing.taxi_standard ?? 0;
+
+      // Keep BoardingDetail.taxiAddonPrice in sync with the enabled flags so
+      // any future extension/edit recomputation uses the correct value.
+      const newTaxiAddonPrice =
+        (bd.taxiGoEnabled ? taxiUnitPrice : 0) + (bd.taxiReturnEnabled ? taxiUnitPrice : 0);
+      if (bd.taxiAddonPrice !== newTaxiAddonPrice) {
+        await prisma.boardingDetail.update({
+          where: { bookingId: id },
+          data: { taxiAddonPrice: newTaxiAddonPrice },
+        });
+      }
+
+      const dogs = booking.bookingPets
+        .filter(bp => bp.pet.species === 'DOG')
+        .map(bp => bp.pet);
+      const invoiceId = booking.invoice.id;
+
+      await prisma.$transaction(async (tx) => {
+        const items = await tx.invoiceItem.findMany({
+          where: { invoiceId },
+          select: { id: true, description: true },
+        });
+        const findItem = (m: (d: string) => boolean) =>
+          items.find(it => m(it.description.toLowerCase()));
+
+        // Pet Taxi — Aller
+        const taxiGoItem = findItem(d => d.includes('taxi') && d.includes('aller'));
+        if (bd.taxiGoEnabled) {
+          if (taxiGoItem) {
+            await tx.invoiceItem.update({
+              where: { id: taxiGoItem.id },
+              data: { quantity: 1, unitPrice: taxiUnitPrice, total: taxiUnitPrice },
+            });
+          } else {
+            await tx.invoiceItem.create({
+              data: { invoiceId, description: 'Pet Taxi — Aller', quantity: 1, unitPrice: taxiUnitPrice, total: taxiUnitPrice, category: 'PET_TAXI' },
+            });
+          }
+        } else if (taxiGoItem) {
+          await tx.invoiceItem.delete({ where: { id: taxiGoItem.id } });
+        }
+
+        // Pet Taxi — Retour
+        const taxiReturnItem = findItem(d => d.includes('taxi') && d.includes('retour'));
+        if (bd.taxiReturnEnabled) {
+          if (taxiReturnItem) {
+            await tx.invoiceItem.update({
+              where: { id: taxiReturnItem.id },
+              data: { quantity: 1, unitPrice: taxiUnitPrice, total: taxiUnitPrice },
+            });
+          } else {
+            await tx.invoiceItem.create({
+              data: { invoiceId, description: 'Pet Taxi — Retour', quantity: 1, unitPrice: taxiUnitPrice, total: taxiUnitPrice, category: 'PET_TAXI' },
+            });
+          }
+        } else if (taxiReturnItem) {
+          await tx.invoiceItem.delete({ where: { id: taxiReturnItem.id } });
+        }
+
+        // Toilettage — one line per dog (matches pricing-client.ts convention).
+        // Replace all existing grooming lines wholesale to handle dog count changes.
+        const groomingItems = items.filter(it => {
+          const d = it.description.toLowerCase();
+          return d.includes('toilettage') || d.includes('grooming');
+        });
+        for (const gi of groomingItems) {
+          await tx.invoiceItem.delete({ where: { id: gi.id } });
+        }
+        if (bd.includeGrooming && bd.groomingSize && dogs.length > 0) {
+          const rate = bd.groomingSize === 'SMALL'
+            ? (pricing.grooming_small_dog ?? 0)
+            : (pricing.grooming_large_dog ?? 0);
+          const sizeLabel = bd.groomingSize === 'SMALL' ? 'petit' : 'grand';
+          for (const dog of dogs) {
+            await tx.invoiceItem.create({
+              data: {
+                invoiceId,
+                description: `Toilettage ${dog.name} (${sizeLabel})`,
+                quantity: 1,
+                unitPrice: rate,
+                total: rate,
+                category: 'GROOMING',
+              },
+            });
+          }
+        }
+
+        // Recompute invoice + booking total from the resulting items.
+        const after = await tx.invoiceItem.findMany({
+          where: { invoiceId },
+          select: { total: true },
+        });
+        const newAmount = after.reduce((s, it) => s + it.total, 0);
+        await tx.invoice.update({
+          where: { id: invoiceId },
+          data: { amount: newAmount, version: { increment: 1 } },
+        });
+        await tx.booking.update({
+          where: { id },
+          data: { totalPrice: newAmount, version: { increment: 1 } },
+        });
+      });
+
+      // Reallocate payments across the updated items (own locking, post-tx).
+      const { allocatePayments } = await import('@/lib/payments');
+      await allocatePayments(invoiceId);
+    }
+
     // Reuse the already-fetched boardingDetail — no second DB round-trip needed.
     return NextResponse.json({ message: 'boarding_detail_patched', boardingDetail: bd });
   }

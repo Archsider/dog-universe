@@ -76,9 +76,13 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: 'INVALID_PAYMENT_DATE' }, { status: 400 });
   }
 
-  // Prevent overpayment
+  // Prevent overpayment ONLY when the invoice is already fully PAID — on
+  // PENDING / PARTIALLY_PAID invoices the admin may still be editing items
+  // (e.g. just added an addon line and is recording the matching payment),
+  // so a payment that briefly exceeds the current amount is allowed.
+  // allocatePayments() afterwards derives the final status from the items.
   const alreadyPaid = invoice.payments.reduce((s, p) => s + p.amount, 0);
-  if (alreadyPaid + parsedAmount > invoice.amount + 0.001) {
+  if (invoice.status === 'PAID' && alreadyPaid + parsedAmount > invoice.amount + 0.001) {
     return NextResponse.json({ error: 'OVERPAYMENT_NOT_ALLOWED' }, { status: 400 });
   }
 
