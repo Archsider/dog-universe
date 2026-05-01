@@ -15,6 +15,7 @@ import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, cal
 import { bookingCreateSchema, formatZodError } from '@/lib/validation';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
+import { decodeCursor, encodeCursor, parseLimit } from '@/lib/pagination';
 import { revalidateTag } from 'next/cache';
 import * as Sentry from '@sentry/nextjs';
 
@@ -198,10 +199,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
   const clientId = searchParams.get('clientId');
-
-  // Pagination — defaults to first 50 results; clients can request up to 50 per page.
-  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
-  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)));
+  const limit = parseLimit(searchParams.get('limit'), 20);
+  const boundedLimit = Math.min(limit, 100);
+  const cursorRaw = searchParams.get('cursor');
+  const decoded = cursorRaw ? decodeCursor(cursorRaw) : null;
+  if (cursorRaw && !decoded) {
+    return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400 });
+  }
 
   const where: Record<string, unknown> = { deletedAt: null }; // soft-delete: required — no global extension (Edge Runtime incompatible)
 
@@ -214,7 +218,18 @@ export async function GET(request: Request) {
   const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REJECTED'];
   if (status && VALID_STATUSES.includes(status)) where.status = status;
 
-  const bookings = await prisma.booking.findMany({
+  if (decoded) {
+    where.AND = [
+      {
+        OR: [
+          { createdAt: { lt: decoded.createdAt } },
+          { createdAt: decoded.createdAt, id: { lt: decoded.id } },
+        ],
+      },
+    ];
+  }
+
+  const items = await prisma.booking.findMany({
     where,
     include: {
       client: { select: { id: true, name: true, email: true } },
@@ -223,12 +238,16 @@ export async function GET(request: Request) {
       taxiDetail: true,
       invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true } },
     },
-    orderBy: { startDate: 'desc' },
-    take: limit,
-    skip: (page - 1) * limit,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: boundedLimit + 1,
   });
 
-  return NextResponse.json(bookings);
+  const hasMore = items.length > boundedLimit;
+  const data = hasMore ? items.slice(0, boundedLimit) : items;
+  const last = data[data.length - 1];
+  const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
+
+  return NextResponse.json({ data, nextCursor, hasMore });
 }
 
 export async function POST(request: Request) {
