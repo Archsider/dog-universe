@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 
   // Fetch all admins for admin notifications
   const admins = await prisma.user.findMany({
-    where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+    where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { id: true, email: true, language: true },
   });
 

@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   }
 
   const unsigned = await prisma.user.findMany({
-    where: { role: 'CLIENT', contract: null },
+    where: { role: 'CLIENT', deletedAt: null, contract: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { id: true, name: true, email: true, language: true, phone: true },
   });
 

@@ -35,6 +35,8 @@ model User {
   historicalSpendMAD Float  @default(0)
   historicalNote     String?
 
+  deletedAt DateTime? // Soft-delete — null = active, non-null = archived
+
   pets          Pet[]
   bookings      Booking[]
   invoices      Invoice[]
@@ -47,6 +49,8 @@ model User {
   benefitClaims    LoyaltyBenefitClaim[]
   reviewedClaims   LoyaltyBenefitClaim[] @relation("ClaimReviewer")
   revenueSummaries MonthlyRevenueSummary[]
+
+  @@index([deletedAt])
 }
 
 model Pet {

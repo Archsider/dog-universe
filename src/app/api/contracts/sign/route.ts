@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const client = await prisma.user.findUnique({
-    where: { id: clientId },
+  const client = await prisma.user.findFirst({
+    where: { id: clientId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { name: true, email: true },
   });
   if (!client) {

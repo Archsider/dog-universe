@@ -416,7 +416,7 @@ export async function POST(request: Request) {
       try {
         const pricing = await getPricingSettings();
         const petsForCalc = await prisma.pet.findMany({
-          where: { id: { in: petIds } },
+          where: { id: { in: petIds }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
           select: { id: true, name: true, species: true },
         });
 
@@ -716,7 +716,7 @@ export async function POST(request: Request) {
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
           const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
           const admins = await prisma.user.findMany({
-            where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+            where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
             select: { email: true, language: true },
           });
           const serviceLabelFr = booking.serviceType === 'BOARDING' ? 'Pension' : 'Taxi animalier';

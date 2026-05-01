@@ -100,7 +100,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const client = await prisma.user.findUnique({ where: { id: clientId } });
+    const client = await prisma.user.findFirst({ where: { id: clientId, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
     // Generate invoice number — retry on collision (race condition guard)

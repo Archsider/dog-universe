@@ -12,8 +12,8 @@ export async function GET(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const pet = await prisma.pet.findUnique({
-    where: { id },
+  const pet = await prisma.pet.findFirst({
+    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: {
       id: true, ownerId: true, name: true, species: true, breed: true,
       dateOfBirth: true, gender: true, photoUrl: true,
@@ -62,7 +62,7 @@ export async function PATCH(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const pet = await prisma.pet.findUnique({ where: { id }, select: { id: true, ownerId: true } });
+  const pet = await prisma.pet.findFirst({ where: { id, deletedAt: null }, select: { id: true, ownerId: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && pet.ownerId !== session.user.id) {

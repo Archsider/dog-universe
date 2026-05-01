@@ -165,8 +165,8 @@ export async function createBookingCompletedNotification(
 
   // Send email (non-blocking)
   try {
-    const client = await prisma.user.findUnique({
-      where: { id: userId },
+    const client = await prisma.user.findFirst({
+      where: { id: userId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       select: { name: true, email: true, language: true },
     });
     if (client) {
@@ -219,8 +219,8 @@ export async function createInvoicePaidNotification(
   });
 
   try {
-    const client = await prisma.user.findUnique({
-      where: { id: userId },
+    const client = await prisma.user.findFirst({
+      where: { id: userId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       select: { name: true, email: true, language: true },
     });
     if (client) {
@@ -258,7 +258,7 @@ export async function createLoyaltyUpdateNotification(
 
   // Send email notification (non-blocking)
   try {
-    const client = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+    const client = await prisma.user.findFirst({ where: { id: userId, deletedAt: null }, select: { name: true, email: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
     if (client) {
       const gradeLabel = locale === 'fr' ? (gradeLabels.fr[grade] ?? grade) : (gradeLabels.en[grade] ?? grade);
       const { subject, html } = getEmailTemplate('loyalty_update', { clientName: client.name, grade: gradeLabel }, locale);
@@ -327,8 +327,8 @@ export async function createLoyaltyClaimResultNotification(
 
   // Send email (non-blocking)
   try {
-    const client = await prisma.user.findUnique({
-      where: { id: userId },
+    const client = await prisma.user.findFirst({
+      where: { id: userId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       select: { name: true, email: true, language: true },
     });
     if (client) {
@@ -355,7 +355,7 @@ export async function createLoyaltyClaimResultNotification(
 
 async function createAdminNotifications(data: Omit<CreateNotificationData, 'userId'>) {
   const admins = await prisma.user.findMany({
-    where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+    where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { id: true },
   });
   return Promise.all(admins.map((admin) => createNotification({ ...data, userId: admin.id })));
@@ -399,7 +399,7 @@ export async function notifyAdminsNewClient(
   // Send email to all admin emails (non-blocking)
   try {
     const admins = await prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+      where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       select: { email: true, language: true },
     });
     const { getEmailTemplate } = await import('./email');

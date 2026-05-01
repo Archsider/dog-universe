@@ -15,8 +15,8 @@ export async function GET(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const client = await prisma.user.findUnique({
-    where: { id, role: 'CLIENT' },
+  const client = await prisma.user.findFirst({
+    where: { id, role: 'CLIENT', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     include: {
       pets: {
         where: { deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
@@ -79,7 +79,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   // Privilege escalation guard: this endpoint may only mutate CLIENT users.
   // Without this, an ADMIN could PATCH a SUPERADMIN's email/phone/name.
-  const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+  const target = await prisma.user.findFirst({ where: { id, deletedAt: null }, select: { role: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
   if (!target || target.role !== 'CLIENT') {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
@@ -98,7 +98,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
     }
-    const existing = await prisma.user.findFirst({ where: { email, NOT: { id } } });
+    const existing = await prisma.user.findFirst({ where: { email, NOT: { id }, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
     if (existing) return NextResponse.json({ error: 'EMAIL_TAKEN' }, { status: 409 });
     updateData.email = email;
   }
@@ -123,7 +123,7 @@ export async function PATCH(request: Request, { params }: Params) {
   if (recalculateLoyalty) {
     const currentGrade = await prisma.loyaltyGrade.findUnique({ where: { clientId: id } });
     if (!currentGrade?.isOverride) {
-      const user = await prisma.user.findUnique({ where: { id }, select: { historicalStays: true, historicalSpendMAD: true } });
+      const user = await prisma.user.findFirst({ where: { id, deletedAt: null }, select: { historicalStays: true, historicalSpendMAD: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
       const [totalPaid, completedStays] = await Promise.all([
         prisma.invoice.aggregate({ where: { clientId: id, status: 'PAID' }, _sum: { amount: true } }),
         prisma.booking.count({ where: { clientId: id, status: 'COMPLETED', deletedAt: null } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
@@ -152,44 +152,26 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const client = await prisma.user.findUnique({ where: { id, role: 'CLIENT' } });
+  const client = await prisma.user.findFirst({ where: { id, role: 'CLIENT', deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
   if (!client) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  const now = new Date();
+
   await prisma.$transaction(async (tx) => {
-    const bookings = await tx.booking.findMany({ where: { clientId: id }, select: { id: true } });
-    const bookingIds = bookings.map((b) => b.id);
-
-    const invoices = await tx.invoice.findMany({ where: { clientId: id }, select: { id: true } });
-    const invoiceIds = invoices.map((i) => i.id);
-
-    const pets = await tx.pet.findMany({ where: { ownerId: id }, select: { id: true } });
-    const petIds = pets.map((p) => p.id);
-
-    // Remove pet references from bookings first
-    await tx.bookingPet.deleteMany({ where: { bookingId: { in: bookingIds } } });
-
-    // Invoice items
-    await tx.invoiceItem.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
-    await tx.invoice.deleteMany({ where: { clientId: id } });
-
-    // Booking details (also cascade, but explicit for safety)
-    await tx.boardingDetail.deleteMany({ where: { bookingId: { in: bookingIds } } });
-    await tx.taxiDetail.deleteMany({ where: { bookingId: { in: bookingIds } } });
-    await tx.booking.deleteMany({ where: { clientId: id } });
-
-    // Admin notes about this client and their pets
-    await tx.adminNote.deleteMany({
-      where: { OR: [{ entityType: 'CLIENT', entityId: id }, { entityType: 'PET', entityId: { in: petIds } }] },
+    // Soft-delete all active pets (preserve history of past bookings)
+    await tx.pet.updateMany({
+      where: { ownerId: id, deletedAt: null },
+      data: { deletedAt: now },
     });
 
-    // Pets (cascades vaccinations, documents)
-    await tx.pet.deleteMany({ where: { ownerId: id } });
+    // Soft-delete all active bookings
+    await tx.booking.updateMany({
+      where: { clientId: id, deletedAt: null },
+      data: { deletedAt: now },
+    });
 
-    // Action logs (no cascade)
-    await tx.actionLog.deleteMany({ where: { userId: id } });
-
-    // User (cascades loyaltyGrade, notifications, passwordResets)
-    await tx.user.delete({ where: { id } });
+    // Soft-delete the User row (preserves FK integrity on Invoice/ActionLog)
+    await tx.user.update({ where: { id }, data: { deletedAt: now } });
   });
 
   await logAction({

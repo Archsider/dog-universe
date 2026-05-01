@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const pet = await prisma.pet.findUnique({ where: { id }, select: { id: true, name: true } });
+  const pet = await prisma.pet.findFirst({ where: { id, deletedAt: null }, select: { id: true, name: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();

@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: Params) {
     if (!entityId) {
       return NextResponse.json({ error: 'MISSING_ENTITY_ID' }, { status: 400 });
     }
-    const pet = await prisma.pet.findFirst({ where: { id: entityId, ownerId: id } });
+    const pet = await prisma.pet.findFirst({ where: { id: entityId, ownerId: id, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
     if (!pet) {
       return NextResponse.json({ error: 'PET_NOT_FOUND' }, { status: 404 });
     }

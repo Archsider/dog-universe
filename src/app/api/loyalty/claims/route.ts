@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Notify admins (non-blocking)
-  prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, email: true } })
+  prisma.user.findFirst({ where: { id: session.user.id, deletedAt: null }, select: { name: true, email: true } }) // soft-delete: required — no global extension (Edge Runtime incompatible)
     .then((client) => notifyAdminsNewLoyaltyClaim(
       client?.name ?? client?.email ?? 'Client',
       benefit.labelFr,

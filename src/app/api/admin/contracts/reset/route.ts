@@ -26,8 +26,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'MISSING_CLIENT_EMAIL' }, { status: 400 });
   }
 
-  const client = await prisma.user.findUnique({
-    where: { email: clientEmail },
+  const client = await prisma.user.findFirst({
+    where: { email: clientEmail, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { id: true, role: true },
   });
 

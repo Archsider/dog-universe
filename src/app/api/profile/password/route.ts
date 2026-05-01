@@ -14,8 +14,8 @@ export async function POST(request: NextRequest) {
   }
   const { oldPassword, newPassword } = parsed.data;
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
+  const user = await prisma.user.findFirst({
+    where: { id: session.user.id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { id: true, passwordHash: true },
   });
 

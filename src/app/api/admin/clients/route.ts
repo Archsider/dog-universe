@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400 });
   }
 
-  const where: Record<string, unknown> = { role: 'CLIENT' };
+  const where: Record<string, unknown> = { role: 'CLIENT', deletedAt: null }; // soft-delete: required — no global extension (Edge Runtime incompatible)
 
   if (search) {
     where.OR = [
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'WEAK_PASSWORD' }, { status: 400 });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await prisma.user.findFirst({ where: { email, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
   if (existing) {
     return NextResponse.json({ error: 'EMAIL_TAKEN' }, { status: 409 });
   }

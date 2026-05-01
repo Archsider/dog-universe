@@ -21,8 +21,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'INVALID_TYPE' }, { status: 400 });
   }
 
-  const client = await prisma.user.findUnique({
-    where: { id: id },
+  const client = await prisma.user.findFirst({
+    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { name: true, phone: true, isWalkIn: true, role: true },
   });
 
@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (type === 'INCOMPLETE_FILE') {
     // Récupère le premier animal du client pour personnaliser le message
     const pet = await prisma.pet.findFirst({
-      where: { ownerId: id },
+      where: { ownerId: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       select: { name: true },
       orderBy: { createdAt: 'asc' },
     });

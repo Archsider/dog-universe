@@ -46,6 +46,7 @@ export async function GET(request: Request) {
   const users = await prisma.user.findMany({
     where: {
       anonymizedAt: { not: null, lte: cutoff },
+      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
     },
     select: { id: true },
   });

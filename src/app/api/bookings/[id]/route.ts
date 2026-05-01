@@ -95,7 +95,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
     try {
       const admins = await prisma.user.findMany({
-        where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+        where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
         select: { id: true },
       });
       await Promise.all(

@@ -52,7 +52,7 @@ async function alertDlqJob(params: {
     if (acquired !== 'OK') return; // Another worker already alerted this hour.
 
     const superadmins = await prisma.user.findMany({
-      where: { role: 'SUPERADMIN' },
+      where: { role: 'SUPERADMIN', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       select: { id: true },
     });
 

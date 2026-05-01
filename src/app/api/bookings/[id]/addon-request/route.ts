@@ -67,8 +67,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'TOO_MANY_REQUESTS' }, { status: 429 });
   }
 
-  const client = await prisma.user.findUnique({
-    where: { id: session.user.id },
+  const client = await prisma.user.findFirst({
+    where: { id: session.user.id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { name: true, email: true },
   });
   const clientName = client?.name ?? client?.email ?? 'Client';

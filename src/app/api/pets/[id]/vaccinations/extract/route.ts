@@ -135,7 +135,7 @@ export async function POST(request: Request, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  const pet = await prisma.pet.findUnique({ where: { id } });
+  const pet = await prisma.pet.findFirst({ where: { id, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
 
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && pet.ownerId !== session.user.id) {

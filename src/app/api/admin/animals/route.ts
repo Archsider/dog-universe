@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'INVALID_GENDER' }, { status: 400 });
   }
 
-  const owner = await prisma.user.findUnique({ where: { id: ownerId, role: 'CLIENT' } });
+  const owner = await prisma.user.findFirst({ where: { id: ownerId, role: 'CLIENT', deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
   if (!owner) return NextResponse.json({ error: 'Owner not found' }, { status: 404 });
 
   const pet = await prisma.pet.create({

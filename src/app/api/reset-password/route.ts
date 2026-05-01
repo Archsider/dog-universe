@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     }
     const { email, locale } = parsed.data;
 
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    const user = await prisma.user.findFirst({ where: { email: email.toLowerCase(), deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
 
     if (user) {
       // Invalider les anciens tokens non utilisés avant d'en créer un nouveau

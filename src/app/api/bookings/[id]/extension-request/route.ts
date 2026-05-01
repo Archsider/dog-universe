@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const bookingRef = booking.id.slice(0, 8).toUpperCase();
   const petNames = booking.bookingPets.map(bp => bp.pet.name).join(', ');
-  const client = await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true } });
+  const client = await prisma.user.findFirst({ where: { id: session.user.id, deletedAt: null }, select: { name: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
   const clientName = client?.name ?? session.user.email ?? 'Client';
   const dateDisplay = newEndDate.toLocaleDateString('fr-MA');
 
