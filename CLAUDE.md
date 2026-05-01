@@ -424,25 +424,17 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ## ACTIONS MANUELLES EN ATTENTE
 
-### 1. Migration SQL Supabase — capacity defaults
-Exécuter dans le SQL Editor de Supabase :
-```sql
-INSERT INTO "Setting" ("key", "value", "updatedAt")
-VALUES ('capacity_dog', '20', NOW()), ('capacity_cat', '10', NOW())
-ON CONFLICT ("key") DO NOTHING;
-```
-Fichier : `prisma/migrations/20260428_capacity_defaults/migration.sql`
-Note : les clés existent déjà avec valeur `'50'` dans `DEFAULT_SETTINGS` du code → ce seed évite le fallback hardcodé de 50.
+### ✅ Toutes les migrations Supabase exécutées (2026-05-01)
+- `ALTER TABLE "User"/"Pet" ADD COLUMN deletedAt` — soft-delete opérationnel
+- `ALTER TABLE "Booking"/"Invoice" ADD COLUMN version` — optimistic lock actif
+- `INSERT INTO "Setting"` capacity defaults (20 chiens / 10 chats)
+- Vérification : `SELECT COUNT(*) FROM "ClientContract" WHERE "pdfUrl" IS NOT NULL` → 0 ✅
 
-### 1.bis. Migration SQL Supabase — optimistic lock (version column)
-Exécuter `prisma/migrations/20260501_optimistic_lock/migration.sql` sur Supabase. Ajoute `version INTEGER NOT NULL DEFAULT 0` à `Booking` et `Invoice` pour contrôle de concurrence optimiste. `PATCH /api/admin/bookings/[id]` et `PATCH /api/invoices/[id]` acceptent un champ `version` optionnel dans le body : si présent et différent de la version actuelle en DB → 409 `VERSION_CONFLICT` (`{ error, message, currentVersion }`). Si `version` absent → comportement legacy préservé (rétrocompat — les callers existants ne sont pas cassés). Toutes les mutations (booking PATCH final + edit-dates + extensions, invoice PATCH full-edit + legacy, et `allocatePayments` dans `src/lib/payments.ts`) incrémentent `version` atomiquement via `{ increment: 1 }`.
-
-### 2. Variables d'env Vercel — ✅ CONFIGURÉES (2026-05-01)
-Toutes les variables Vercel sont en place :
+### ✅ Variables d'env Vercel configurées (2026-05-01)
 - `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` (cron-lock)
 - `UPSTASH_REDIS_HOST` / `UPSTASH_REDIS_PORT` / `UPSTASH_REDIS_PASSWORD` (BullMQ TCP)
 
-### 3. Secrets GitHub pour E2E Playwright
+### Secrets GitHub pour E2E Playwright
 Ajouter dans Settings → Secrets and variables → Actions :
 - `TEST_CLIENT_EMAIL` / `TEST_CLIENT_PASSWORD` / `TEST_CLIENT_NAME`
 - `TEST_ADMIN_EMAIL` / `TEST_ADMIN_PASSWORD`
@@ -458,7 +450,7 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 |---|---|---|
 | Capacity `excludeBookingId` non câblé | RÉSOLU (`4d7524e`) | Câblé sur les deux chemins d'extension admin |
 | E2E Playwright | RÉSOLU | Secrets GitHub configurés, tests opérationnels en CI |
-| Migration `20260405_private_storage` | CODE OK — BUCKET À VÉRIFIER | Code-side confirmé : `uploadBufferPrivate` + `createSignedUrl` utilisés, `pdfUrl String?` nullable, aucun appel `getPublicUrl` sur contrats. Risque résiduel : bucket `uploads-private` absent de Supabase → upload échoue en 500 (pas de régression silencieuse vers public). Vérification manuelle Supabase : `SELECT COUNT(*) FROM "ClientContract" WHERE "pdfUrl" IS NOT NULL;` doit retourner 0 (aucun contrat legacy public). |
+| Migration `20260405_private_storage` | RÉSOLU (2026-05-01) | Bucket `uploads-private` vérifié, 0 contrats legacy publics confirmés en DB. |
 | Soft-delete User/Pet | RÉSOLU (`0dcf7c8`) | `deletedAt` ajouté à `User` + `Pet`, 28 fichiers filtrés, DELETE → soft-delete — migration SQL à exécuter sur Supabase |
 | Sentry instrumentation API | RÉSOLU (`21bdccd`) | `Sentry.startSpan()` câblé sur POST /api/bookings + PATCH /api/admin/bookings/[id] avec attributs serviceType/petCount/bookingId |
 
