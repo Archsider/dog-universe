@@ -158,34 +158,10 @@ export async function billedByCategory(
       payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
     select: {
-      id:            true,
-      invoiceNumber: true,
-      status:        true,
       items:    { select: { category: true, description: true, unitPrice: true, quantity: true } },
       payments: { select: { amount: true, paymentDate: true } },
     },
   });
-
-  // DIAGNOSTIC — remove after root-cause confirmed
-  console.error(JSON.stringify({
-    level: 'diag',
-    service: 'metrics.billedByCategory',
-    period: { start: start.toISOString(), end: end.toISOString() },
-    invoiceCount: invoices.length,
-    invoices: invoices.map(inv => ({
-      id: inv.id,
-      invoiceNumber: inv.invoiceNumber,
-      status: inv.status,
-      payments: inv.payments.map(p => ({ amount: p.amount, paymentDate: p.paymentDate })),
-      items: inv.items.map(it => ({
-        description: it.description,
-        category: it.category,
-        resolvedKey: categoryKey(it.category, it.description),
-        unitPrice: it.unitPrice,
-        quantity: it.quantity,
-      })),
-    })),
-  }));
 
   const result: CategoryBreakdown = {
     boarding: 0, taxi: 0, grooming: 0, croquettes: 0, other: 0,
