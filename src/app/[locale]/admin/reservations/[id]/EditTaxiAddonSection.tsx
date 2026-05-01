@@ -244,18 +244,18 @@ export default function EditTaxiAddonSection({
                 )}
                 <div className="grid grid-cols-2 gap-3 mt-2">
                   <div>
-                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.date}</label>
-                    <input type="date" value={goDate} onChange={e => setGoDate(e.target.value)}
+                    <label htmlFor="taxi-go-date" className="text-xs font-medium text-gray-600 block mb-1">{t.date}</label>
+                    <input id="taxi-go-date" type="date" value={goDate} onChange={e => setGoDate(e.target.value)}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.time}</label>
-                    <input type="time" value={goTime} min="10:00" max="17:00" onChange={e => setGoTime(e.target.value)}
+                    <label htmlFor="taxi-go-time" className="text-xs font-medium text-gray-600 block mb-1">{t.time}</label>
+                    <input id="taxi-go-time" type="time" value={goTime} min="10:00" max="17:00" onChange={e => setGoTime(e.target.value)}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.address}</label>
-                    <input type="text" value={goAddress} onChange={e => setGoAddress(e.target.value)}
+                    <label htmlFor="taxi-go-address" className="text-xs font-medium text-gray-600 block mb-1">{t.address}</label>
+                    <input id="taxi-go-address" type="text" value={goAddress} onChange={e => setGoAddress(e.target.value)}
                       placeholder={t.addressPlaceholder}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
@@ -300,18 +300,18 @@ export default function EditTaxiAddonSection({
                 )}
                 <div className="grid grid-cols-2 gap-3 mt-2">
                   <div>
-                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.date}</label>
-                    <input type="date" value={returnDate} onChange={e => setReturnDate(e.target.value)}
+                    <label htmlFor="taxi-return-date" className="text-xs font-medium text-gray-600 block mb-1">{t.date}</label>
+                    <input id="taxi-return-date" type="date" value={returnDate} onChange={e => setReturnDate(e.target.value)}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.time}</label>
-                    <input type="time" value={returnTime} min="10:00" max="17:00" onChange={e => setReturnTime(e.target.value)}
+                    <label htmlFor="taxi-return-time" className="text-xs font-medium text-gray-600 block mb-1">{t.time}</label>
+                    <input id="taxi-return-time" type="time" value={returnTime} min="10:00" max="17:00" onChange={e => setReturnTime(e.target.value)}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-xs font-medium text-gray-600 block mb-1">{t.address}</label>
-                    <input type="text" value={returnAddress} onChange={e => setReturnAddress(e.target.value)}
+                    <label htmlFor="taxi-return-address" className="text-xs font-medium text-gray-600 block mb-1">{t.address}</label>
+                    <input id="taxi-return-address" type="text" value={returnAddress} onChange={e => setReturnAddress(e.target.value)}
                       placeholder={t.addressPlaceholder}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>

@@ -188,7 +188,7 @@ export default function RevenueSummaryManager({
       const res = await fetch(`/api/admin/revenue-summary/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error ?? 'Erreur');
+        alert(data.error ?? (locale === 'fr' ? 'Erreur' : 'Error'));
         return;
       }
       setSummaries(prev => prev.filter(s => s.id !== id));

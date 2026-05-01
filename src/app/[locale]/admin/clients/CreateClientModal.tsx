@@ -64,7 +64,7 @@ export default function CreateClientModal({ locale }: Props) {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-serif font-bold text-charcoal">{l.title}</h2>
-              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-charcoal">
+              <button onClick={() => setOpen(false)} aria-label={l.cancel} className="text-gray-400 hover:text-charcoal focus:outline-none focus:ring-2 focus:ring-gold-500 rounded">
                 <X className="h-5 w-5" />
               </button>
             </div>

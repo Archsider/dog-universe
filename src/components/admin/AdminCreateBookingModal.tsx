@@ -327,7 +327,7 @@ export default function AdminCreateBookingModal({
               <h2 className="text-lg font-serif font-bold text-charcoal">
                 {fr ? 'Nouvelle réservation (admin)' : 'New booking (admin)'}
               </h2>
-              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-charcoal">
+              <button onClick={() => setOpen(false)} aria-label={fr ? 'Fermer' : 'Close'} className="text-gray-400 hover:text-charcoal focus:outline-none focus:ring-2 focus:ring-gold-500 rounded">
                 <X className="h-5 w-5" />
               </button>
             </div>

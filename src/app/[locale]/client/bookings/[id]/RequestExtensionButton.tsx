@@ -119,7 +119,7 @@ export default function RequestExtensionButton({ bookingId, currentEndDate, hasE
           <CalendarPlus className="h-4 w-4 text-amber-600" />
           <p className="text-sm font-semibold text-amber-800">{t.requestExtension}</p>
         </div>
-        <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">
+        <button onClick={() => setOpen(false)} aria-label={t.cancel} className="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-400 rounded">
           <X className="h-4 w-4" />
         </button>
       </div>

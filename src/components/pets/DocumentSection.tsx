@@ -170,8 +170,9 @@ export default function DocumentSection({ petId, documents: initialDocuments, lo
                 </a>
                 <button
                   onClick={() => handleDelete(doc.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-500 rounded"
+                  className="p-1.5 text-gray-400 hover:text-red-500 rounded focus:outline-none focus:ring-2 focus:ring-red-400"
                   title={labels.delete}
+                  aria-label={labels.delete}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

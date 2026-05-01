@@ -554,7 +554,8 @@ export default function VaccinationSection({
                 </div>
                 <button
                   onClick={() => handleDeleteVax(v.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-500 rounded flex-shrink-0"
+                  aria-label={locale === 'fr' ? 'Supprimer la vaccination' : 'Delete vaccination'}
+                  className="p-1.5 text-gray-400 hover:text-red-500 rounded flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-red-400"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -636,7 +637,8 @@ export default function VaccinationSection({
                   </a>
                   <button
                     onClick={() => handleDeleteProof(doc.id)}
-                    className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0"
+                    aria-label={locale === 'fr' ? 'Supprimer le justificatif' : 'Delete proof document'}
+                    className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-red-400"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

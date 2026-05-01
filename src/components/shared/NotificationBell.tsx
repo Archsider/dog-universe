@@ -32,7 +32,8 @@ export function NotificationBell() {
   return (
     <Link
       href={`/${locale}/client/notifications`}
-      className="relative flex items-center justify-center h-9 w-9 rounded-full hover:bg-gold-50 transition-colors"
+      aria-label={locale === 'fr' ? `Notifications${unreadCount > 0 ? ` (${unreadCount} non lues)` : ''}` : `Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+      className="relative flex items-center justify-center h-9 w-9 rounded-full hover:bg-gold-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gold-500"
     >
       <Bell className="h-5 w-5 text-charcoal/70" />
       {unreadCount > 0 && (
