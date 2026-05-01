@@ -370,7 +370,47 @@ export default function AdminCreateBookingModal({
         throw new Error(data.error ?? 'INTERNAL_ERROR');
       }
 
-      toast({ title: fr ? 'Réservation créée' : 'Booking created', variant: 'success' });
+      // Step 4 (walk-in only): auto-create invoice — non-blocking, never fails the flow.
+      if (isWalkIn) {
+        let invoiceCreated = false;
+        try {
+          const bookingResult = await res.json().catch(() => ({})) as { id?: string };
+          const invRes = await fetch('/api/invoices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              clientId: resolvedClientId,
+              serviceType,
+              issuedAt: serviceType === 'PET_TAXI' ? taxiDate : startDate,
+              ...(bookingResult.id ? { bookingId: bookingResult.id } : {}),
+              items: [{
+                description: serviceType === 'BOARDING' ? (fr ? 'Pension' : 'Boarding') : 'Pet Taxi',
+                quantity: 1,
+                unitPrice: finalTotal,
+                total: finalTotal,
+                category: serviceType === 'BOARDING' ? 'BOARDING' : 'PET_TAXI',
+              }],
+            }),
+          });
+          if (invRes.ok) {
+            invoiceCreated = true;
+          } else {
+            const invErr = await invRes.json().catch(() => ({}));
+            console.error(JSON.stringify({ level: 'error', service: 'walk-in-booking', message: 'Auto-invoice failed', status: invRes.status, error: invErr, timestamp: new Date().toISOString() }));
+          }
+        } catch (err) {
+          console.error(JSON.stringify({ level: 'error', service: 'walk-in-booking', message: 'Auto-invoice threw', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+        }
+        toast({
+          title: invoiceCreated
+            ? (fr ? 'Réservation + facture créées avec succès' : 'Booking + invoice created successfully')
+            : (fr ? 'Réservation créée' : 'Booking created'),
+          variant: 'success',
+        });
+      } else {
+        toast({ title: fr ? 'Réservation créée' : 'Booking created', variant: 'success' });
+      }
+
       setOpen(false);
       reset();
       router.refresh();
