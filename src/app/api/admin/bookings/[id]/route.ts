@@ -22,6 +22,12 @@ import {
 import { enqueueEmail, enqueueSms } from '@/lib/queues/index';
 import { checkBoardingCapacity, CapacityCheckExceeded } from '@/lib/capacity';
 import { revalidateTag } from 'next/cache';
+import {
+  patchBoardingDetail as patchBoardingDetailService,
+  addBookingItems as addBookingItemsService,
+  rejectExtensionRequest as rejectExtensionRequestService,
+} from '@/lib/services/booking-admin.service';
+import { BookingError } from '@/lib/services/booking-errors';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -127,193 +133,35 @@ export const PATCH = withSchema(
   }
 
   // ── Patch BoardingDetail fields (taxi return / taxi go) ───────────────────
+  // Delegated to `patchBoardingDetailService` — see booking-admin.service.ts.
+  // The catch block mirrors the previous inline error shapes exactly so the
+  // HTTP contract is unchanged.
   if (body.patchBoardingDetail !== undefined) {
-    if (booking.serviceType !== 'BOARDING') {
-      return NextResponse.json({ error: 'Only applies to BOARDING bookings' }, { status: 400 });
-    }
-    const ALLOWED_BD_FIELDS = [
-      'taxiReturnEnabled', 'taxiReturnDate', 'taxiReturnTime', 'taxiReturnAddress',
-      'taxiGoEnabled', 'taxiGoDate', 'taxiGoTime', 'taxiGoAddress',
-      'includeGrooming', 'groomingSize', 'groomingPrice', 'groomingStatus',
-    ];
-    const patch = body.patchBoardingDetail as Record<string, unknown>;
-    const invalidKeys = Object.keys(patch).filter(k => !ALLOWED_BD_FIELDS.includes(k));
-    if (invalidKeys.length > 0) {
-      return NextResponse.json({ error: `Invalid fields: ${invalidKeys.join(', ')}` }, { status: 400 });
-    }
-    await prisma.boardingDetail.upsert({
-      where: { bookingId: id },
-      update: patch,
-      create: { bookingId: id, ...patch },
-    });
-    await logAction({
-      userId: session.user.id,
-      action: 'BOARDING_DETAIL_PATCHED',
-      entityType: 'Booking',
-      entityId: id,
-      details: { patch },
-    });
-
-    // Create TaxiTrip for each enabled taxi leg (idempotent — skip if already exists)
-    const bd = await prisma.boardingDetail.findUnique({ where: { bookingId: id } });
-
-    // Fetch both taxi trips in parallel to avoid two sequential round-trips.
-    const [outboundTrip, returnTrip] = await Promise.all([
-      prisma.taxiTrip.findFirst({ where: { bookingId: id, tripType: 'OUTBOUND' } }),
-      prisma.taxiTrip.findFirst({ where: { bookingId: id, tripType: 'RETURN' } }),
-    ]);
-
-    if (bd?.taxiGoEnabled) {
-      if (!outboundTrip) {
-        const t = await prisma.taxiTrip.create({
-          data: { bookingId: id, tripType: 'OUTBOUND', status: 'PLANNED',
-                  date: bd.taxiGoDate ?? undefined, time: bd.taxiGoTime ?? undefined,
-                  address: bd.taxiGoAddress ?? undefined },
-        });
-        await prisma.taxiStatusHistory.create({ data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: session.user.id } });
-      } else {
-        await prisma.taxiTrip.update({
-          where: { id: outboundTrip.id },
-          data: { date: bd.taxiGoDate ?? undefined, time: bd.taxiGoTime ?? undefined, address: bd.taxiGoAddress ?? undefined },
-        });
-      }
-    }
-    if (bd?.taxiReturnEnabled) {
-      if (!returnTrip) {
-        const t = await prisma.taxiTrip.create({
-          data: { bookingId: id, tripType: 'RETURN', status: 'PLANNED',
-                  date: bd.taxiReturnDate ?? undefined, time: bd.taxiReturnTime ?? undefined,
-                  address: bd.taxiReturnAddress ?? undefined },
-        });
-        await prisma.taxiStatusHistory.create({ data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: session.user.id } });
-      } else {
-        await prisma.taxiTrip.update({
-          where: { id: returnTrip.id },
-          data: { date: bd.taxiReturnDate ?? undefined, time: bd.taxiReturnTime ?? undefined, address: bd.taxiReturnAddress ?? undefined },
-        });
-      }
-    }
-
-    // ── Sync linked invoice line items so addon toggles reflect on billing ──
-    // When the booking has a linked invoice (and isn't CANCELLED), keep the
-    // taxi go / taxi return / grooming line items in sync with the boarding
-    // detail flags. Skipped for CANCELLED — those invoices are frozen.
-    if (booking.invoice && booking.invoice.status !== 'CANCELLED' && bd) {
-      const { getPricingSettings } = await import('@/lib/pricing');
-      const pricing = await getPricingSettings();
-      const taxiUnitPrice = pricing.taxi_standard ?? 0;
-
-      // Keep BoardingDetail.taxiAddonPrice in sync with the enabled flags so
-      // any future extension/edit recomputation uses the correct value.
-      const newTaxiAddonPrice =
-        (bd.taxiGoEnabled ? taxiUnitPrice : 0) + (bd.taxiReturnEnabled ? taxiUnitPrice : 0);
-      if (bd.taxiAddonPrice !== newTaxiAddonPrice) {
-        await prisma.boardingDetail.update({
-          where: { bookingId: id },
-          data: { taxiAddonPrice: newTaxiAddonPrice },
-        });
-      }
-
-      const dogs = booking.bookingPets
-        .filter(bp => bp.pet.species === 'DOG')
-        .map(bp => bp.pet);
-      const invoiceId = booking.invoice.id;
-
-      await prisma.$transaction(async (tx) => {
-        const items = await tx.invoiceItem.findMany({
-          where: { invoiceId },
-          select: { id: true, description: true },
-        });
-        const findItem = (m: (d: string) => boolean) =>
-          items.find(it => m(it.description.toLowerCase()));
-
-        // Pet Taxi — Aller
-        const taxiGoItem = findItem(d => d.includes('taxi') && d.includes('aller'));
-        if (bd.taxiGoEnabled) {
-          if (taxiGoItem) {
-            await tx.invoiceItem.update({
-              where: { id: taxiGoItem.id },
-              data: { quantity: 1, unitPrice: taxiUnitPrice, total: taxiUnitPrice },
-            });
-          } else {
-            await tx.invoiceItem.create({
-              data: { invoiceId, description: 'Pet Taxi — Aller', quantity: 1, unitPrice: taxiUnitPrice, total: taxiUnitPrice, category: 'PET_TAXI' },
-            });
-          }
-        } else if (taxiGoItem) {
-          await tx.invoiceItem.delete({ where: { id: taxiGoItem.id } });
-        }
-
-        // Pet Taxi — Retour
-        const taxiReturnItem = findItem(d => d.includes('taxi') && d.includes('retour'));
-        if (bd.taxiReturnEnabled) {
-          if (taxiReturnItem) {
-            await tx.invoiceItem.update({
-              where: { id: taxiReturnItem.id },
-              data: { quantity: 1, unitPrice: taxiUnitPrice, total: taxiUnitPrice },
-            });
-          } else {
-            await tx.invoiceItem.create({
-              data: { invoiceId, description: 'Pet Taxi — Retour', quantity: 1, unitPrice: taxiUnitPrice, total: taxiUnitPrice, category: 'PET_TAXI' },
-            });
-          }
-        } else if (taxiReturnItem) {
-          await tx.invoiceItem.delete({ where: { id: taxiReturnItem.id } });
-        }
-
-        // Toilettage — one line per dog (matches pricing-client.ts convention).
-        // Replace all existing grooming lines wholesale to handle dog count changes.
-        const groomingItems = items.filter(it => {
-          const d = it.description.toLowerCase();
-          return d.includes('toilettage') || d.includes('grooming');
-        });
-        for (const gi of groomingItems) {
-          await tx.invoiceItem.delete({ where: { id: gi.id } });
-        }
-        if (bd.includeGrooming && bd.groomingSize && dogs.length > 0) {
-          const rate = bd.groomingSize === 'SMALL'
-            ? (pricing.grooming_small_dog ?? 0)
-            : (pricing.grooming_large_dog ?? 0);
-          const sizeLabel = bd.groomingSize === 'SMALL' ? 'petit' : 'grand';
-          for (const dog of dogs) {
-            await tx.invoiceItem.create({
-              data: {
-                invoiceId,
-                description: `Toilettage ${dog.name} (${sizeLabel})`,
-                quantity: 1,
-                unitPrice: rate,
-                total: rate,
-                category: 'GROOMING',
-              },
-            });
-          }
-        }
-
-        // Recompute invoice + booking total from the resulting items.
-        const after = await tx.invoiceItem.findMany({
-          where: { invoiceId },
-          select: { total: true },
-        });
-        const newAmount = after.reduce((s, it) => s + it.total, 0);
-        await tx.invoice.update({
-          where: { id: invoiceId },
-          data: { amount: newAmount, version: { increment: 1 } },
-        });
-        await tx.booking.update({
-          where: { id },
-          data: { totalPrice: newAmount, version: { increment: 1 } },
-        });
+    try {
+      const result = await patchBoardingDetailService({
+        bookingId: id,
+        patch: body.patchBoardingDetail as Record<string, unknown>,
+        actorId: session.user.id,
       });
-
-      // Reallocate payments across the updated items (own locking, post-tx).
-      const { allocatePayments } = await import('@/lib/payments');
-      await allocatePayments(invoiceId);
+      return NextResponse.json(result);
+    } catch (err) {
+      if (err instanceof BookingError) {
+        // Preserve original message-style payloads for these two codes —
+        // older clients may key on the human-readable string.
+        if (err.code === 'ONLY_BOARDING') {
+          return NextResponse.json({ error: 'Only applies to BOARDING bookings' }, { status: 400 });
+        }
+        if (err.code === 'INVALID_FIELDS') {
+          return NextResponse.json({ error: err.message }, { status: 400 });
+        }
+        return NextResponse.json(
+          { error: err.code, ...(err.payload ?? {}) },
+          { status: err.status },
+        );
+      }
+      throw err;
     }
-
-    // Reuse the already-fetched boardingDetail — no second DB round-trip needed.
-    return NextResponse.json({ message: 'boarding_detail_patched', boardingDetail: bd });
   }
-  // ── End patchBoardingDetail ───────────────────────────────────────────────
 
   // ── Add booking items (croquettes / extras) with invoice auto-sync ────────
   // Generic addon path: admin adds custom line(s) to an existing booking and,
@@ -322,109 +170,22 @@ export const PATCH = withSchema(
   // (croquettes, supplements, etc.) for which there's no dedicated UI like
   // EditTaxiAddonSection / EditGroomingSection.
   if (Array.isArray(body.addBookingItems) && body.addBookingItems.length > 0) {
-    const VALID_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER'] as const;
-    type ItemCategory = typeof VALID_CATEGORIES[number];
-    interface IncomingItem {
-      description: string;
-      quantity: number;
-      unitPrice: number;
-      category?: ItemCategory;
-    }
-
-    const validated: IncomingItem[] = [];
-    for (const raw of body.addBookingItems as unknown[]) {
-      if (typeof raw !== 'object' || raw === null) {
-        return NextResponse.json({ error: 'INVALID_ITEM' }, { status: 400 });
-      }
-      const it = raw as Record<string, unknown>;
-      if (typeof it.description !== 'string' || !it.description.trim()) {
-        return NextResponse.json({ error: 'INVALID_ITEM_DESCRIPTION' }, { status: 400 });
-      }
-      if (typeof it.quantity !== 'number' || !Number.isInteger(it.quantity) || it.quantity <= 0) {
-        return NextResponse.json({ error: 'INVALID_ITEM_QUANTITY' }, { status: 400 });
-      }
-      if (typeof it.unitPrice !== 'number' || !isFinite(it.unitPrice) || it.unitPrice < 0) {
-        return NextResponse.json({ error: 'INVALID_ITEM_PRICE' }, { status: 400 });
-      }
-      if (it.category !== undefined && (typeof it.category !== 'string' || !VALID_CATEGORIES.includes(it.category as ItemCategory))) {
-        return NextResponse.json({ error: 'INVALID_ITEM_CATEGORY' }, { status: 400 });
-      }
-      validated.push({
-        description: it.description.trim().slice(0, 200),
-        quantity: it.quantity,
-        unitPrice: it.unitPrice,
-        category: (it.category as ItemCategory | undefined) ?? 'OTHER',
+    try {
+      const result = await addBookingItemsService({
+        bookingId: id,
+        rawItems: body.addBookingItems as unknown[],
+        actorId: session.user.id,
       });
-    }
-
-    const invoice = booking.invoice;
-    const syncInvoice = invoice && invoice.status !== 'CANCELLED';
-
-    await prisma.$transaction(async (tx) => {
-      // 1. Create BookingItem rows (durable record on the booking).
-      await tx.bookingItem.createMany({
-        data: validated.map(it => ({
-          bookingId: id,
-          description: it.description,
-          quantity: it.quantity,
-          unitPrice: it.unitPrice,
-          total: it.quantity * it.unitPrice,
-          category: it.category ?? 'OTHER',
-        })),
-      });
-
-      if (syncInvoice && invoice) {
-        // 2. Create matching InvoiceItem rows so they appear on the linked invoice.
-        await tx.invoiceItem.createMany({
-          data: validated.map(it => ({
-            invoiceId: invoice.id,
-            description: it.description,
-            quantity: it.quantity,
-            unitPrice: it.unitPrice,
-            total: it.quantity * it.unitPrice,
-            category: it.category ?? 'OTHER',
-          })),
-        });
-
-        // 3. Recompute invoice + booking totals from the resulting items.
-        const after = await tx.invoiceItem.findMany({
-          where: { invoiceId: invoice.id },
-          select: { total: true },
-        });
-        const newAmount = after.reduce((s, it) => s + it.total, 0);
-        await tx.invoice.update({
-          where: { id: invoice.id },
-          data: { amount: newAmount, version: { increment: 1 } },
-        });
-        await tx.booking.update({
-          where: { id },
-          data: { totalPrice: newAmount, version: { increment: 1 } },
-        });
+      return NextResponse.json(result);
+    } catch (err) {
+      if (err instanceof BookingError) {
+        return NextResponse.json(
+          { error: err.code, ...(err.payload ?? {}) },
+          { status: err.status },
+        );
       }
-    });
-
-    if (syncInvoice && invoice) {
-      const { allocatePayments } = await import('@/lib/payments');
-      await allocatePayments(invoice.id);
+      throw err;
     }
-
-    await logAction({
-      userId: session.user.id,
-      action: 'BOOKING_ITEMS_ADDED',
-      entityType: 'Booking',
-      entityId: id,
-      details: {
-        count: validated.length,
-        invoiceSynced: !!syncInvoice,
-        items: validated.map(it => ({ description: it.description, total: it.quantity * it.unitPrice, category: it.category })),
-      },
-    });
-
-    return NextResponse.json({
-      message: 'booking_items_added',
-      count: validated.length,
-      invoiceSynced: !!syncInvoice,
-    });
   }
   // ── End addBookingItems ───────────────────────────────────────────────────
 
@@ -703,30 +464,30 @@ export const PATCH = withSchema(
       return NextResponse.json({ error: 'Extensions only apply to boarding stays' }, { status: 400 });
     }
 
-    // ── Reject extension request (flag-based) ────────────────────────────────
+    // ── Reject extension request (flag-based) — extracted to service ────────
     if (body.rejectExtension) {
-      if (!booking.hasExtensionRequest) {
-        return NextResponse.json({ error: 'No pending extension request' }, { status: 400 });
+      try {
+        const result = await rejectExtensionRequestService({
+          bookingId: id,
+          actorId: session.user.id,
+        });
+        return NextResponse.json(result);
+      } catch (err) {
+        if (err instanceof BookingError) {
+          // Map back to the original human-readable message shapes.
+          if (err.code === 'INVALID_TRANSITION') {
+            return NextResponse.json({ error: 'No pending extension request' }, { status: 400 });
+          }
+          if (err.code === 'ONLY_BOARDING') {
+            return NextResponse.json({ error: 'Extensions only apply to boarding stays' }, { status: 400 });
+          }
+          return NextResponse.json(
+            { error: err.code, ...(err.payload ?? {}) },
+            { status: err.status },
+          );
+        }
+        throw err;
       }
-      await prisma.booking.update({
-        where: { id: id },
-        data: {
-          hasExtensionRequest: false,
-          extensionRequestedEndDate: null,
-          extensionRequestNote: null,
-        },
-      });
-      const bookingRef = booking.id.slice(0, 8).toUpperCase();
-      const { createExtensionRejectedNotification } = await import('@/lib/notifications');
-      await createExtensionRejectedNotification(booking.clientId, bookingRef).catch(() => {});
-      await logAction({
-        userId: session.user.id,
-        action: 'EXTENSION_REJECTED',
-        entityType: 'Booking',
-        entityId: id,
-        details: { bookingRef },
-      });
-      return NextResponse.json({ message: 'extension_rejected' });
     }
 
     // ── Apply extension (direct or approved) ─────────────────────────────────

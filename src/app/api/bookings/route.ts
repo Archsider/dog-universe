@@ -15,185 +15,18 @@ import { enqueueEmail, enqueueSms } from '@/lib/queues/index';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
 import { bookingCreateSchema } from '@/lib/validation';
 import { withSchema } from '@/lib/with-schema';
-import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
+import {
+  createBookingTx,
+  runWithSerializableRetry,
+  validateTaxiSlot,
+  validateBoardingTaxiAddons,
+} from '@/lib/services/booking-client.service';
+import { BookingError } from '@/lib/services/booking-errors';
 import { decodeCursor, encodeCursor, parseLimit } from '@/lib/pagination';
 import { revalidateTag } from 'next/cache';
 import * as Sentry from '@sentry/nextjs';
 import { APP_URL } from '@/lib/config';
-
-// Sentinel error thrown inside the booking transaction when capacity is full.
-// Caught by the POST handler to convert into a 400 response.
-class CapacityExceededError extends Error {
-  constructor(public readonly capacity: CapacityCheckExceeded) {
-    super('CAPACITY_EXCEEDED');
-    this.name = 'CapacityExceededError';
-  }
-}
-
-// Wraps an interactive Prisma transaction with retry logic for P2034
-// (PostgreSQL "could not serialize access due to concurrent update").
-// Up to 3 attempts, linear backoff 50ms × attempt. After exhaustion, throws
-// Error('CONFLICT_RETRY_EXCEEDED') for the handler to map to a 503.
-async function runWithSerializableRetry<T>(
-  fn: () => Promise<T>,
-  maxAttempts = 3,
-): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      // Non-conflict errors (CapacityExceededError, validation, etc.) bubble up
-      // immediately so callers can treat them as final.
-      const isConflict =
-        err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034';
-      if (!isConflict) throw err;
-      if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 50 * attempt));
-      }
-    }
-  }
-  console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'serializable retry exhausted', error: lastErr instanceof Error ? lastErr.message : String(lastErr), timestamp: new Date().toISOString() }));
-  throw new Error('CONFLICT_RETRY_EXCEEDED');
-}
-
-interface CreateBookingTxArgs {
-  clientId: string;
-  serviceType: 'BOARDING' | 'PET_TAXI';
-  isAdmin: boolean;
-  // When capacity is full and waitlistFallback === true, the booking is
-  // created with status='WAITLIST' instead of throwing CAPACITY_EXCEEDED.
-  // Used for client self-service (no error 400, just queue them up).
-  // Admins keep the explicit error to surface the conflict.
-  waitlistFallback: boolean;
-  startDate: Date;
-  endDate: Date | null;
-  arrivalTime: string | null;
-  notes: string | null;
-  totalPrice: number;
-  source: string;
-  petIds: string[];
-  // Boarding-specific
-  includeGrooming: boolean;
-  groomingSize: string | null;
-  groomingPrice: number;
-  pricePerNight: number;
-  taxiGoEnabled: boolean;
-  taxiGoDate: string | null;
-  taxiGoTime: string | null;
-  taxiGoAddress: string | null;
-  taxiReturnEnabled: boolean;
-  taxiReturnDate: string | null;
-  taxiReturnTime: string | null;
-  taxiReturnAddress: string | null;
-  taxiAddonPrice: number;
-  // Taxi standalone
-  taxiType: string;
-  // Admin-only billing extras
-  bookingItems: { description: string; quantity: number; unitPrice: number }[];
-}
-
-// Atomic booking creation. Reads (capacity check) and writes (booking,
-// service-specific detail, billing items) execute under Serializable isolation
-// so PostgreSQL aborts (P2034) any concurrent transaction that would violate
-// the capacity invariant.
-async function createBookingTx(args: CreateBookingTxArgs) {
-  return prisma.$transaction(
-    async (tx) => {
-      // Capacity check uses the same tx — its reads are part of the snapshot.
-      // BOARDING only; PET_TAXI standalone has no overnight slot to consume.
-      let waitlisted = false;
-      if (args.serviceType === 'BOARDING') {
-        const capacity = await checkBoardingCapacity(
-          { petIds: args.petIds, startDate: args.startDate, endDate: args.endDate },
-          tx,
-        );
-        if (!capacity.ok) {
-          if (args.waitlistFallback) {
-            waitlisted = true;
-          } else {
-            throw new CapacityExceededError(capacity);
-          }
-        }
-      }
-
-      // Status resolution:
-      // - WAITLIST  → capacity was full and waitlistFallback === true
-      // - CONFIRMED → admin-created booking (manual entry, capacity OK)
-      // - PENDING   → client-created booking awaiting validation
-      const resolvedStatus = waitlisted
-        ? 'WAITLIST'
-        : args.isAdmin
-          ? 'CONFIRMED'
-          : 'PENDING';
-
-      const booking = await tx.booking.create({
-        data: {
-          clientId: args.clientId,
-          serviceType: args.serviceType,
-          status: resolvedStatus,
-          startDate: args.startDate,
-          endDate: args.endDate,
-          arrivalTime: args.arrivalTime,
-          notes: args.notes,
-          totalPrice: args.totalPrice,
-          source: args.source,
-          bookingPets: { create: args.petIds.map((petId) => ({ petId })) },
-        },
-        include: {
-          bookingPets: { include: { pet: true } },
-          client: true,
-        },
-      });
-
-      if (args.serviceType === 'BOARDING') {
-        await tx.boardingDetail.create({
-          data: {
-            bookingId: booking.id,
-            includeGrooming: args.includeGrooming,
-            groomingSize: args.groomingSize,
-            groomingPrice: args.groomingPrice,
-            pricePerNight: args.pricePerNight,
-            taxiGoEnabled: args.taxiGoEnabled,
-            taxiGoDate: args.taxiGoDate,
-            taxiGoTime: args.taxiGoTime,
-            taxiGoAddress: args.taxiGoAddress,
-            taxiReturnEnabled: args.taxiReturnEnabled,
-            taxiReturnDate: args.taxiReturnDate,
-            taxiReturnTime: args.taxiReturnTime,
-            taxiReturnAddress: args.taxiReturnAddress,
-            taxiAddonPrice: args.taxiAddonPrice,
-          },
-        });
-      } else if (args.serviceType === 'PET_TAXI') {
-        await tx.taxiDetail.create({
-          data: {
-            bookingId: booking.id,
-            taxiType: args.taxiType,
-            price: args.totalPrice > 0 ? args.totalPrice : 150,
-          },
-        });
-      }
-
-      if (args.bookingItems.length > 0) {
-        await tx.bookingItem.createMany({
-          data: args.bookingItems.map((item) => ({
-            bookingId: booking.id,
-            description: item.description.trim(),
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            total: item.quantity * item.unitPrice,
-          })),
-        });
-      }
-
-      return booking;
-    },
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 },
-  );
-}
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -315,56 +148,25 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
       }
     }
 
-    // Validation horaires Pet Taxi : pas le dimanche, uniquement 10h-17h
-    if (serviceType === 'PET_TAXI') {
-      const taxiDate = new Date(startDate);
-      if (taxiDate.getDay() === 0) {
-        return NextResponse.json({ error: 'SUNDAY_NOT_ALLOWED' }, { status: 400 });
+    // Validation horaires Pet Taxi (standalone et addons pension)
+    try {
+      if (serviceType === 'PET_TAXI') {
+        validateTaxiSlot({ startDate, arrivalTime: body.arrivalTime });
+      } else if (serviceType === 'BOARDING') {
+        validateBoardingTaxiAddons({
+          taxiGoEnabled,
+          taxiGoDate,
+          taxiGoTime,
+          taxiReturnEnabled,
+          taxiReturnDate,
+          taxiReturnTime,
+        });
       }
-      // Vérifier l'heure (depuis startDate ou arrivalTime)
-      let taxiHour: number | null = null;
-      let taxiMinute = 0;
-      if (body.arrivalTime && typeof body.arrivalTime === 'string') {
-        const parts = body.arrivalTime.split(':').map(Number);
-        taxiHour = parts[0] ?? null;
-        taxiMinute = parts[1] ?? 0;
-      } else {
-        taxiHour = taxiDate.getHours();
-        taxiMinute = taxiDate.getMinutes();
+    } catch (err) {
+      if (err instanceof BookingError) {
+        return NextResponse.json({ error: err.code, ...(err.payload ?? {}) }, { status: err.status });
       }
-      if (taxiHour !== null) {
-        if (isNaN(taxiHour) || isNaN(taxiMinute)) {
-          return NextResponse.json({ error: 'INVALID_TIME_SLOT' }, { status: 400 });
-        }
-        const totalMinutes = taxiHour * 60 + taxiMinute;
-        if (totalMinutes < 10 * 60 || totalMinutes > 17 * 60) {
-          return NextResponse.json({ error: 'INVALID_TIME_SLOT' }, { status: 400 });
-        }
-      }
-    }
-
-    // Validate boarding taxi addon dates/times (same rules as standalone Pet Taxi)
-    if (serviceType === 'BOARDING') {
-      const addonChecks = [
-        { enabled: taxiGoEnabled, date: taxiGoDate, time: taxiGoTime },
-        { enabled: taxiReturnEnabled, date: taxiReturnDate, time: taxiReturnTime },
-      ];
-      for (const addon of addonChecks) {
-        if (!addon.enabled) continue;
-        if (addon.date) {
-          const d = new Date(addon.date + 'T12:00:00');
-          if (d.getDay() === 0) {
-            return NextResponse.json({ error: 'SUNDAY_NOT_ALLOWED' }, { status: 400 });
-          }
-        }
-        if (addon.time && typeof addon.time === 'string') {
-          const [h, m] = addon.time.split(':').map(Number);
-          const total = (h ?? 0) * 60 + (m ?? 0);
-          if (total < 10 * 60 || total > 17 * 60) {
-            return NextResponse.json({ error: 'INVALID_TIME_SLOT' }, { status: 400 });
-          }
-        }
-      }
+      throw err;
     }
 
     // Verify pets belong to this client
@@ -636,16 +438,10 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
         ),
       );
     } catch (err) {
-      if (err instanceof CapacityExceededError) {
+      if (err instanceof BookingError) {
         return NextResponse.json(
-          {
-            error: 'CAPACITY_EXCEEDED',
-            species: err.capacity.species,
-            available: err.capacity.available,
-            requested: err.capacity.requested,
-            limit: err.capacity.limit,
-          },
-          { status: 400 },
+          { error: err.code, ...(err.payload ?? {}) },
+          { status: err.status },
         );
       }
       if (err instanceof Error && err.message === 'CONFLICT_RETRY_EXCEEDED') {
