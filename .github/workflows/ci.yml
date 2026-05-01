@@ -80,10 +80,10 @@ jobs:
           cache: npm
       - run: npm audit --audit-level=high
 
-  # E2E Playwright : exécuté APRÈS build + test mais ne bloque PAS le déploiement.
-  # Vercel déploie en parallèle dès le push sur main ; ce job vérifie a posteriori
-  # contre la prod (PLAYWRIGHT_BASE_URL=https://app.doguniverse.ma).
-  # Si un test échoue, l'équipe est notifiée mais le déploiement Vercel n'est pas bloqué.
+  # E2E Playwright : exécuté APRÈS build + test.
+  # Bloque le CI quand les secrets sont disponibles (push sur main depuis le dépôt principal).
+  # Les forks sans secrets skippent gracieusement via test.skip() dans beforeEach — CI vert.
+  # Cible la production (PLAYWRIGHT_BASE_URL=https://app.doguniverse.ma).
   e2e:
     name: E2E (Playwright)
     needs: [build, test]
@@ -106,7 +106,7 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
       - name: Run Playwright tests
-        run: npx playwright test
+        if: env.TEST_CLIENT_EMAIL != ''
         env:
           PLAYWRIGHT_BASE_URL: https://app.doguniverse.ma
           TEST_CLIENT_EMAIL: ${{ secrets.TEST_CLIENT_EMAIL }}
@@ -114,6 +114,12 @@ jobs:
           TEST_CLIENT_NAME: ${{ secrets.TEST_CLIENT_NAME }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
           TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+        run: npx playwright test
+      - name: Run Playwright tests (secrets absent — graceful skip)
+        if: env.TEST_CLIENT_EMAIL == ''
+        run: npx playwright test
+        env:
+          PLAYWRIGHT_BASE_URL: https://app.doguniverse.ma
       - name: Upload Playwright artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
