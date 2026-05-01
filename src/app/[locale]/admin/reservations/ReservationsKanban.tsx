@@ -1,7 +1,19 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  DndContext,
+  DragEndEvent,
+  DragStartEvent,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  DragOverlay,
+} from '@dnd-kit/core';
 import { Package, Car, MapPin, Clock, CalendarDays, ChevronRight, ArrowRight, Loader2, UserX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -98,20 +110,22 @@ function formatShortDate(iso: string, locale: string): string {
   return new Date(iso).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB', { day: '2-digit', month: 'short' });
 }
 
+type ApplyTransition = (bookingId: string, currentStatus: string, currentVersion: number, newStatus: string) => Promise<void>;
+
 function ActionButton({
   bookingId,
   bookingVersion,
   currentStatus,
   pipeline,
   locale,
-  onStatusChange,
+  applyTransition,
 }: {
   bookingId: string;
   bookingVersion: number;
   currentStatus: string;
   pipeline: 'BOARDING' | 'PET_TAXI';
   locale: string;
-  onStatusChange: (id: string, newStatus: string) => void;
+  applyTransition: ApplyTransition;
 }) {
   const [loading, setLoading] = useState(false);
   const nextStatusMap = pipeline === 'BOARDING' ? BOARDING_NEXT_STATUS : TAXI_NEXT_STATUS;
@@ -126,25 +140,7 @@ function ActionButton({
     e.stopPropagation();
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${bookingId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus, version: bookingVersion }),
-      });
-      if (res.status === 409) {
-        toast({
-          title: locale === 'fr'
-            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
-            : 'This record was modified by someone else. Please refresh.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      if (!res.ok) throw new Error('Failed');
-      onStatusChange(bookingId, nextStatus);
-      toast({ title: locale === 'fr' ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
-    } catch {
-      toast({ title: locale === 'fr' ? 'Erreur' : 'Error', variant: 'destructive' });
+      await applyTransition(bookingId, currentStatus, bookingVersion, nextStatus);
     } finally {
       setLoading(false);
     }
@@ -153,6 +149,7 @@ function ActionButton({
   return (
     <button
       onClick={handleClick}
+      onPointerDown={(e) => e.stopPropagation()}
       disabled={loading}
       className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium bg-charcoal/5 hover:bg-charcoal/10 text-charcoal border border-charcoal/10 hover:border-charcoal/20 transition-all disabled:opacity-50"
     >
@@ -171,13 +168,13 @@ function NoShowButton({
   bookingVersion,
   currentStatus,
   locale,
-  onStatusChange,
+  applyTransition,
 }: {
   bookingId: string;
   bookingVersion: number;
   currentStatus: string;
   locale: string;
-  onStatusChange: (id: string, newStatus: string) => void;
+  applyTransition: ApplyTransition;
 }) {
   const [loading, setLoading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -189,28 +186,7 @@ function NoShowButton({
   const handleConfirm = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${bookingId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'NO_SHOW', version: bookingVersion }),
-      });
-      if (res.status === 409) {
-        toast({
-          title: isFr
-            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
-            : 'This record was modified by someone else. Please refresh.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      if (!res.ok) throw new Error('Failed');
-      onStatusChange(bookingId, 'NO_SHOW');
-      toast({
-        title: isFr ? 'Marqué No Show' : 'Marked No Show',
-        variant: 'success',
-      });
-    } catch {
-      toast({ title: isFr ? 'Erreur' : 'Error', variant: 'destructive' });
+      await applyTransition(bookingId, currentStatus, bookingVersion, 'NO_SHOW');
     } finally {
       setLoading(false);
     }
@@ -226,6 +202,7 @@ function NoShowButton({
     <>
       <button
         onClick={handleClick}
+        onPointerDown={(e) => e.stopPropagation()}
         disabled={loading}
         className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 hover:border-red-300 transition-all disabled:opacity-50"
       >
@@ -268,119 +245,179 @@ function NoShowButton({
   );
 }
 
+/**
+ * DraggableCard — wraps a card with dnd-kit's useDraggable + click-to-navigate.
+ * Activation distance (5px) means a quick click navigates while a real drag triggers DnD.
+ */
+function DraggableCard({
+  booking,
+  locale,
+  children,
+}: {
+  booking: KanbanBooking;
+  locale: string;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: booking.id,
+    data: { booking },
+  });
+
+  const handleClick = (e: React.MouseEvent) => {
+    // Don't navigate if click came from a child button (they stop propagation, but be safe)
+    if ((e.target as HTMLElement).closest('button')) return;
+    router.push(`/${locale}/admin/reservations/${booking.id}`);
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      style={{
+        opacity: isDragging ? 0.5 : 1,
+        cursor: isDragging ? 'grabbing' : 'grab',
+        touchAction: 'none',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function BoardingCardInner({ b, locale }: { b: KanbanBooking; locale: string }) {
+  return (
+    <>
+      <div className="flex items-start justify-between gap-1 mb-2">
+        <div>
+          <p className="text-sm font-semibold text-charcoal leading-tight">{b.pets}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{b.clientName}</p>
+        </div>
+        <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-gold-400 flex-shrink-0 mt-0.5" />
+      </div>
+      <div className="flex items-center gap-1 text-xs text-gray-400">
+        <CalendarDays className="h-3 w-3 flex-shrink-0" />
+        <span>
+          {formatShortDate(b.startDate, locale)}
+          {b.endDate ? ` → ${formatShortDate(b.endDate, locale)}` : ''}
+        </span>
+      </div>
+      <p className="text-[10px] font-mono text-gray-300 mt-2">{b.id.slice(0, 8)}</p>
+    </>
+  );
+}
+
+function TaxiCardInner({ b, locale }: { b: KanbanBooking; locale: string }) {
+  const { departure, arrival } = parseAddresses(b.notes);
+  return (
+    <>
+      <div className="flex items-start justify-between gap-1 mb-2">
+        <div>
+          <p className="text-sm font-semibold text-charcoal leading-tight">{b.pets}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{b.clientName}</p>
+        </div>
+        <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-400 flex-shrink-0 mt-0.5" />
+      </div>
+      {(departure || arrival) && (
+        <div className="space-y-1 mb-2">
+          {departure && (
+            <div className="flex items-start gap-1 text-xs text-gray-500">
+              <MapPin className="h-3 w-3 flex-shrink-0 text-green-500 mt-px" />
+              <span className="truncate">{departure}</span>
+            </div>
+          )}
+          {arrival && (
+            <div className="flex items-start gap-1 text-xs text-gray-500">
+              <MapPin className="h-3 w-3 flex-shrink-0 text-red-400 mt-px" />
+              <span className="truncate">{arrival}</span>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 text-xs text-gray-400">
+          <CalendarDays className="h-3 w-3 flex-shrink-0" />
+          <span>{formatShortDate(b.startDate, locale)}</span>
+        </div>
+        {b.arrivalTime && (
+          <div className="flex items-center gap-1 text-xs text-gray-400">
+            <Clock className="h-3 w-3 flex-shrink-0 text-gray-400" />
+            <span>{b.arrivalTime}</span>
+          </div>
+        )}
+      </div>
+      <p className="text-[10px] font-mono text-gray-300 mt-2">{b.id.slice(0, 8)}</p>
+    </>
+  );
+}
+
 function BoardingCard({
   b,
   locale,
-  onStatusChange,
+  applyTransition,
 }: {
   b: KanbanBooking;
   locale: string;
-  onStatusChange: (id: string, newStatus: string) => void;
+  applyTransition: ApplyTransition;
 }) {
   return (
-    <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-gold-300 hover:shadow-md transition-all group">
-      <Link href={`/${locale}/admin/reservations/${b.id}`} className="block">
-        <div className="flex items-start justify-between gap-1 mb-2">
-          <div>
-            <p className="text-sm font-semibold text-charcoal leading-tight">{b.pets}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{b.clientName}</p>
-          </div>
-          <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-gold-400 flex-shrink-0 mt-0.5" />
-        </div>
-        <div className="flex items-center gap-1 text-xs text-gray-400">
-          <CalendarDays className="h-3 w-3 flex-shrink-0" />
-          <span>
-            {formatShortDate(b.startDate, locale)}
-            {b.endDate ? ` → ${formatShortDate(b.endDate, locale)}` : ''}
-          </span>
-        </div>
-        <p className="text-[10px] font-mono text-gray-300 mt-2">{b.id.slice(0, 8)}</p>
-      </Link>
-      <ActionButton
-        bookingId={b.id}
-        bookingVersion={b.version}
-        currentStatus={b.status}
-        pipeline="BOARDING"
-        locale={locale}
-        onStatusChange={onStatusChange}
-      />
-      <NoShowButton
-        bookingId={b.id}
-        bookingVersion={b.version}
-        currentStatus={b.status}
-        locale={locale}
-        onStatusChange={onStatusChange}
-      />
-    </div>
+    <DraggableCard booking={b} locale={locale}>
+      <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-gold-300 hover:shadow-md transition-all group">
+        <BoardingCardInner b={b} locale={locale} />
+        <ActionButton
+          bookingId={b.id}
+          bookingVersion={b.version}
+          currentStatus={b.status}
+          pipeline="BOARDING"
+          locale={locale}
+          applyTransition={applyTransition}
+        />
+        <NoShowButton
+          bookingId={b.id}
+          bookingVersion={b.version}
+          currentStatus={b.status}
+          locale={locale}
+          applyTransition={applyTransition}
+        />
+      </div>
+    </DraggableCard>
   );
 }
 
 function TaxiCard({
   b,
   locale,
-  onStatusChange,
+  applyTransition,
 }: {
   b: KanbanBooking;
   locale: string;
-  onStatusChange: (id: string, newStatus: string) => void;
+  applyTransition: ApplyTransition;
 }) {
-  const { departure, arrival } = parseAddresses(b.notes);
   return (
-    <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group">
-      <Link href={`/${locale}/admin/reservations/${b.id}`} className="block">
-        <div className="flex items-start justify-between gap-1 mb-2">
-          <div>
-            <p className="text-sm font-semibold text-charcoal leading-tight">{b.pets}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{b.clientName}</p>
-          </div>
-          <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-400 flex-shrink-0 mt-0.5" />
-        </div>
-        {(departure || arrival) && (
-          <div className="space-y-1 mb-2">
-            {departure && (
-              <div className="flex items-start gap-1 text-xs text-gray-500">
-                <MapPin className="h-3 w-3 flex-shrink-0 text-green-500 mt-px" />
-                <span className="truncate">{departure}</span>
-              </div>
-            )}
-            {arrival && (
-              <div className="flex items-start gap-1 text-xs text-gray-500">
-                <MapPin className="h-3 w-3 flex-shrink-0 text-red-400 mt-px" />
-                <span className="truncate">{arrival}</span>
-              </div>
-            )}
-          </div>
-        )}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 text-xs text-gray-400">
-            <CalendarDays className="h-3 w-3 flex-shrink-0" />
-            <span>{formatShortDate(b.startDate, locale)}</span>
-          </div>
-          {b.arrivalTime && (
-            <div className="flex items-center gap-1 text-xs text-gray-400">
-              <Clock className="h-3 w-3 flex-shrink-0" />
-              <span>{b.arrivalTime}</span>
-            </div>
-          )}
-        </div>
-        <p className="text-[10px] font-mono text-gray-300 mt-2">{b.id.slice(0, 8)}</p>
-      </Link>
-      <ActionButton
-        bookingId={b.id}
-        bookingVersion={b.version}
-        currentStatus={b.status}
-        pipeline="PET_TAXI"
-        locale={locale}
-        onStatusChange={onStatusChange}
-      />
-      <NoShowButton
-        bookingId={b.id}
-        bookingVersion={b.version}
-        currentStatus={b.status}
-        locale={locale}
-        onStatusChange={onStatusChange}
-      />
-    </div>
+    <DraggableCard booking={b} locale={locale}>
+      <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group">
+        <TaxiCardInner b={b} locale={locale} />
+        <ActionButton
+          bookingId={b.id}
+          bookingVersion={b.version}
+          currentStatus={b.status}
+          pipeline="PET_TAXI"
+          locale={locale}
+          applyTransition={applyTransition}
+        />
+        <NoShowButton
+          bookingId={b.id}
+          bookingVersion={b.version}
+          currentStatus={b.status}
+          locale={locale}
+          applyTransition={applyTransition}
+        />
+      </div>
+    </DraggableCard>
   );
 }
 
@@ -389,16 +426,17 @@ function Column({
   bookings,
   locale,
   pipeline,
-  onStatusChange,
+  applyTransition,
 }: {
   col: { status: string; label: { fr: string; en: string }; color: string; dot: string };
   bookings: KanbanBooking[];
   locale: string;
   pipeline: 'BOARDING' | 'PET_TAXI';
-  onStatusChange: (id: string, newStatus: string) => void;
+  applyTransition: ApplyTransition;
 }) {
   const isFr = locale === 'fr';
   const label = isFr ? col.label.fr : col.label.en;
+  const { isOver, setNodeRef } = useDroppable({ id: col.status });
 
   return (
     <div className="flex flex-col min-w-[260px] max-w-[280px] flex-shrink-0">
@@ -407,15 +445,20 @@ function Column({
         <span className="text-xs font-semibold text-charcoal flex-1">{label}</span>
         <span className="text-xs text-gray-400 font-medium">{bookings.length}</span>
       </div>
-      <div className={`flex-1 rounded-b-xl border ${col.color} p-2 space-y-2 min-h-[120px]`}>
+      <div
+        ref={setNodeRef}
+        className={`flex-1 rounded-b-xl border ${col.color} p-2 space-y-2 min-h-[120px] transition-all ${
+          isOver ? 'ring-2 ring-gold-400 ring-inset bg-gold-50/40' : ''
+        }`}
+      >
         {bookings.length === 0 ? (
           <p className="text-xs text-gray-300 text-center pt-4">{isFr ? 'Aucune' : 'None'}</p>
         ) : (
           bookings.map((b) =>
             pipeline === 'BOARDING' ? (
-              <BoardingCard key={b.id} b={b} locale={locale} onStatusChange={onStatusChange} />
+              <BoardingCard key={b.id} b={b} locale={locale} applyTransition={applyTransition} />
             ) : (
-              <TaxiCard key={b.id} b={b} locale={locale} onStatusChange={onStatusChange} />
+              <TaxiCard key={b.id} b={b} locale={locale} applyTransition={applyTransition} />
             )
           )
         )}
@@ -427,18 +470,91 @@ function Column({
 export function ReservationsKanban({ bookings: initialBookings, locale }: Props) {
   const [pipeline, setPipeline] = useState<'BOARDING' | 'PET_TAXI'>('BOARDING');
   const [bookings, setBookings] = useState<KanbanBooking[]>(initialBookings);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const isFr = locale === 'fr';
+
+  const sensors = useSensors(
+    // Activation distance 5px: distinguishes a click (navigate) from a drag (DnD).
+    // 5px is a common dnd-kit value — small enough that intentional drags trigger
+    // immediately, large enough that micro-movements during a click don't.
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
+  );
 
   const cols = pipeline === 'BOARDING' ? BOARDING_COLS : TAXI_COLS;
   const filtered = bookings.filter((b) => b.serviceType === pipeline);
 
   // Optimistic status update: move card to new column immediately
   // Also increment version so the next PATCH sends the correct optimistic lock value.
-  const handleStatusChange = (id: string, newStatus: string) => {
+  const handleStatusChange = useCallback((id: string, newStatus: string) => {
     setBookings(prev =>
       prev.map(b => b.id === id ? { ...b, status: newStatus, version: b.version + 1 } : b)
     );
+  }, []);
+
+  /**
+   * applyTransition — single source of truth for status changes.
+   * Used by both transition buttons AND drag-end handler.
+   * Optimistically updates UI, calls PATCH, rolls back on 409 / error.
+   */
+  const applyTransition = useCallback<ApplyTransition>(async (bookingId, currentStatus, currentVersion, newStatus) => {
+    // Optimistic update
+    handleStatusChange(bookingId, newStatus);
+    try {
+      const res = await fetch(`/api/admin/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, version: currentVersion }),
+      });
+      if (res.status === 409) {
+        // Rollback
+        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: currentStatus, version: currentVersion } : b));
+        toast({
+          title: isFr
+            ? "Cette réservation a été modifiée par quelqu'un d'autre. Veuillez rafraîchir."
+            : 'This record was modified by someone else. Please refresh.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!res.ok) throw new Error('Failed');
+      toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
+    } catch {
+      // Rollback
+      setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: currentStatus, version: currentVersion } : b));
+      toast({ title: isFr ? 'Erreur' : 'Error', variant: 'destructive' });
+    }
+  }, [handleStatusChange, isFr]);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
   };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over) return;
+    const bookingId = String(active.id);
+    const targetStatus = String(over.id);
+    const booking = bookings.find(b => b.id === bookingId);
+    if (!booking) return;
+    if (booking.status === targetStatus) return;
+
+    // Validate transition allowed by SAME NEXT_STATUS map used by buttons
+    const nextMap = booking.serviceType === 'BOARDING' ? BOARDING_NEXT_STATUS : TAXI_NEXT_STATUS;
+    const allowedNext = nextMap[booking.status];
+    if (allowedNext !== targetStatus) {
+      toast({
+        title: isFr ? 'Transition non autorisée' : 'Transition not allowed',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    void applyTransition(bookingId, booking.status, booking.version, targetStatus);
+  };
+
+  const activeBooking = activeId ? bookings.find(b => b.id === activeId) ?? null : null;
 
   return (
     <div>
@@ -472,18 +588,31 @@ export function ReservationsKanban({ bookings: initialBookings, locale }: Props)
       </div>
 
       {/* Kanban columns */}
-      <div className="flex gap-3 overflow-x-auto pb-4">
-        {cols.map((col) => (
-          <Column
-            key={col.status}
-            col={col}
-            bookings={filtered.filter((b) => b.status === col.status)}
-            locale={locale}
-            pipeline={pipeline}
-            onStatusChange={handleStatusChange}
-          />
-        ))}
-      </div>
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className="flex gap-3 overflow-x-auto pb-4">
+          {cols.map((col) => (
+            <Column
+              key={col.status}
+              col={col}
+              bookings={filtered.filter((b) => b.status === col.status)}
+              locale={locale}
+              pipeline={pipeline}
+              applyTransition={applyTransition}
+            />
+          ))}
+        </div>
+        <DragOverlay>
+          {activeBooking ? (
+            <div className="bg-white border-2 border-gold-400 rounded-xl p-3 shadow-2xl rotate-2 opacity-90 max-w-[280px]">
+              {activeBooking.serviceType === 'BOARDING' ? (
+                <BoardingCardInner b={activeBooking} locale={locale} />
+              ) : (
+                <TaxiCardInner b={activeBooking} locale={locale} />
+              )}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
     </div>
   );
 }
