@@ -9,7 +9,6 @@ export function deltaPercent(cur: number, prev: number): number {
 // ItemCategory → display key.
 // Falls back to description-based inference for items created before category was
 // required (those were persisted with category=OTHER by the invoice creation route).
-// Internal helper — pas exporté (3 utilisations dans ce fichier uniquement).
 function categoryKey(
   cat: string,
   description?: string,
@@ -26,6 +25,21 @@ function categoryKey(
     if (d.includes('croquette') || d.includes('kibble') || d.includes('nourriture') || d.includes('royal') || d.includes('grain')) return 'croquettes';
   }
   return null;
+}
+
+// Public counterpart returning the canonical ItemCategory (uppercase) so callers
+// outside metrics.ts (e.g. the analytics drill-down) can re-categorize legacy
+// OTHER rows using the same description heuristics as the revenue charts.
+export function inferItemCategory(
+  cat: string,
+  description?: string,
+): 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' {
+  const k = categoryKey(cat, description);
+  if (k === 'boarding') return 'BOARDING';
+  if (k === 'taxi') return 'PET_TAXI';
+  if (k === 'grooming') return 'GROOMING';
+  if (k === 'croquettes') return 'PRODUCT';
+  return 'OTHER';
 }
 
 // ── Cash family ───────────────────────────────────────────────────────────────

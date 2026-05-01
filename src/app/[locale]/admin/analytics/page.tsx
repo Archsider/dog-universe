@@ -10,6 +10,7 @@ import {
   avgBasket as getAvgBasket,
   deltaPercent,
   newClientsCount,
+  inferItemCategory,
 } from '@/lib/metrics';
 // AnalyticsCharts is a 'use client' component that already lazy-loads its
 // Recharts sub-components internally via next/dynamic — no outer wrapper needed.
@@ -63,14 +64,16 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
       },
       select: { items: { select: { category: true, total: true, quantity: true } } },
     }),
-    // Drill-down items for category cards on Analytics
+    // Drill-down items for category cards on Analytics.
+    // No category filter on the query — legacy items persisted with OTHER are
+    // re-categorized below via description heuristics (inferItemCategory) so
+    // a "Pet Taxi — Aller" line on a BOARDING invoice still surfaces under taxi.
     prisma.invoiceItem.findMany({
       where: {
         invoice: {
           status: { in: ['PAID', 'PARTIALLY_PAID'] },
           payments: { some: { paymentDate: { gte: thisMonthStart, lte: thisMonthEnd } } },
         },
-        category: { in: ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT'] },
       },
       select: {
         description: true,
@@ -87,7 +90,9 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
         },
       },
       orderBy: { invoice: { issuedAt: 'desc' } },
-    }),
+    }).then(items => items
+      .map(it => ({ ...it, category: inferItemCategory(it.category, it.description) }))
+      .filter(it => it.category !== 'OTHER')),
   ]);
 
   const delta = deltaPercent(thisAmt, lastAmt);
