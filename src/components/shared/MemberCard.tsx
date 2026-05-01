@@ -140,7 +140,7 @@ export function MemberCard({
         {/* Top row: brand + QR */}
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
-            <p className={`text-[10px] font-bold uppercase tracking-[0.3em] mb-1 ${isPlatinum ? 'text-[#D4AF37]/60' : style.textColor + '/40'}`}>
+            <p className={`text-[10px] font-bold uppercase tracking-[0.3em] mb-1 ${isPlatinum ? 'text-[#D4AF37]/80' : style.textColor + '/40'}`}>
               Dog Universe
             </p>
             <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${style.badgeBg} ${style.badgeText} shadow-sm`}>
@@ -157,12 +157,12 @@ export function MemberCard({
 
         {/* Client name + pets */}
         <div className="mb-5">
-          <p className={`text-[10px] uppercase tracking-widest mb-0.5 font-semibold ${isPlatinum ? 'text-[#D4AF37]/50' : style.textColor + '/40'}`}>
+          <p className={`text-[10px] uppercase tracking-widest mb-0.5 font-semibold ${isPlatinum ? 'text-[#D4AF37]/70' : style.textColor + '/40'}`}>
             {fr ? 'Membre' : 'Member'}
           </p>
           <h2 className={`text-2xl font-serif font-bold ${style.titleColor}`}>{clientName}</h2>
           {petLine && (
-            <p className={`text-sm mt-1 ${isPlatinum ? 'text-[#E8E0CC]/50' : style.textColor + '/50'}`}>
+            <p className={`text-sm mt-1 ${isPlatinum ? 'text-[#E8E0CC]/65' : style.textColor + '/50'}`}>
               {petLine}
             </p>
           )}
@@ -172,13 +172,13 @@ export function MemberCard({
         <div className={`flex gap-8 pt-4 border-t ${divider}`}>
           <div>
             <p className={`text-3xl font-serif font-bold ${style.titleColor}`}>{totalStays}</p>
-            <p className={`text-[11px] mt-0.5 uppercase tracking-wide ${isPlatinum ? 'text-[#E8E0CC]/40' : style.textColor + '/40'}`}>
+            <p className={`text-[11px] mt-0.5 uppercase tracking-wide ${isPlatinum ? 'text-[#E8E0CC]/60' : style.textColor + '/40'}`}>
               {fr ? 'séjours' : 'stays'}
             </p>
           </div>
           <div>
             <p className={`text-3xl font-serif font-bold ${style.titleColor}`}>{formatMAD(totalSpentMAD)}</p>
-            <p className={`text-[11px] mt-0.5 uppercase tracking-wide ${isPlatinum ? 'text-[#E8E0CC]/40' : style.textColor + '/40'}`}>
+            <p className={`text-[11px] mt-0.5 uppercase tracking-wide ${isPlatinum ? 'text-[#E8E0CC]/60' : style.textColor + '/40'}`}>
               {fr ? 'dépensés' : 'spent'}
             </p>
           </div>
@@ -193,7 +193,7 @@ export function MemberCard({
                 style={{ width: `${nextInfo.progressPercent}%` }}
               />
             </div>
-            <p className={`text-[11px] mt-1.5 ${isPlatinum ? 'text-[#E8E0CC]/40' : style.textColor + '/40'}`}>
+            <p className={`text-[11px] mt-1.5 ${isPlatinum ? 'text-[#E8E0CC]/60' : style.textColor + '/40'}`}>
               {fr
                 ? `${nextInfo.staysToNext} séjour${nextInfo.staysToNext > 1 ? 's' : ''} pour atteindre ${getGradeLabel(nextInfo.nextGrade, 'fr')}`
                 : `${nextInfo.staysToNext} stay${nextInfo.staysToNext > 1 ? 's' : ''} to reach ${getGradeLabel(nextInfo.nextGrade, 'en')}`}
@@ -211,7 +211,7 @@ export function MemberCard({
             {/* Automatic perks */}
             {automaticBenefits.length > 0 && (
               <div>
-                <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isPlatinum ? 'text-[#D4AF37]/50' : style.textColor + '/40'}`}>
+                <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isPlatinum ? 'text-[#D4AF37]/70' : style.textColor + '/40'}`}>
                   {fr ? 'Avantages automatiques' : 'Automatic perks'}
                 </p>
                 <ul className="space-y-1.5">
@@ -228,7 +228,7 @@ export function MemberCard({
             {/* Claimable benefits */}
             {claimableBenefits.length > 0 && (
               <div>
-                <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isPlatinum ? 'text-[#D4AF37]/50' : style.textColor + '/40'}`}>
+                <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isPlatinum ? 'text-[#D4AF37]/70' : style.textColor + '/40'}`}>
                   {fr ? 'Avantages à réclamer' : 'Benefits to claim'}
                 </p>
                 <ul className="space-y-2">
