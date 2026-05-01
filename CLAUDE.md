@@ -434,6 +434,9 @@ ON CONFLICT ("key") DO NOTHING;
 Fichier : `prisma/migrations/20260428_capacity_defaults/migration.sql`
 Note : les clés existent déjà avec valeur `'50'` dans `DEFAULT_SETTINGS` du code → ce seed évite le fallback hardcodé de 50.
 
+### 1.bis. Migration SQL Supabase — optimistic lock (version column)
+Exécuter `prisma/migrations/20260501_optimistic_lock/migration.sql` sur Supabase. Ajoute `version INTEGER NOT NULL DEFAULT 0` à `Booking` et `Invoice` pour contrôle de concurrence optimiste. `PATCH /api/admin/bookings/[id]` et `PATCH /api/invoices/[id]` acceptent un champ `version` optionnel dans le body : si présent et différent de la version actuelle en DB → 409 `VERSION_CONFLICT` (`{ error, message, currentVersion }`). Si `version` absent → comportement legacy préservé (rétrocompat — les callers existants ne sont pas cassés). Toutes les mutations (booking PATCH final + edit-dates + extensions, invoice PATCH full-edit + legacy, et `allocatePayments` dans `src/lib/payments.ts`) incrémentent `version` atomiquement via `{ increment: 1 }`.
+
 ### 2. Variables d'env Vercel à ajouter
 - `UPSTASH_REDIS_REST_URL` — URL REST Upstash (cron-lock)
 - `UPSTASH_REDIS_REST_TOKEN` — token Upstash (cron-lock)

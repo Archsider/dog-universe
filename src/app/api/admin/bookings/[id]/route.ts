@@ -73,6 +73,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   });
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // Optimistic concurrency: when caller provides `version`, refuse to apply
+  // the patch if the row was modified since they read it. Backward compatible
+  // — callers that don't send `version` skip the check (legacy behavior).
+  const expectedVersion = typeof body.version === 'number' ? body.version : null;
+  if (expectedVersion !== null && expectedVersion !== booking.version) {
+    return NextResponse.json(
+      { error: 'VERSION_CONFLICT', message: 'This booking was modified by someone else. Please refresh.', currentVersion: booking.version },
+      { status: 409 },
+    );
+  }
+
   // ── Status transition guards ──────────────────────────────────────────────
   // NO_SHOW : seulement depuis CONFIRMED ou IN_PROGRESS (pas depuis PENDING,
   // CANCELLED, COMPLETED, WAITLIST, etc. — un séjour non confirmé ne peut
@@ -359,7 +370,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     await prisma.$transaction(async (tx) => {
       await tx.booking.update({
         where: { id: id },
-        data: { startDate: newStart, endDate: newEnd, totalPrice: newTotal },
+        data: { startDate: newStart, endDate: newEnd, totalPrice: newTotal, version: { increment: 1 } },
       });
 
       if (booking.invoice && ['PENDING', 'PARTIALLY_PAID', 'PAID'].includes(booking.invoice.status)) {
@@ -532,6 +543,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         hasExtensionRequest: false,
         extensionRequestedEndDate: null,
         extensionRequestNote: null,
+        version: { increment: 1 },
       },
     });
 
@@ -559,6 +571,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       data: {
         ...(status && { status }),
         ...(notes !== undefined && { notes }),
+        version: { increment: 1 },
       },
     }),
   );

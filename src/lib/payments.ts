@@ -142,9 +142,11 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
       paidAt = new Date();
     }
 
+    // Bump version (optimistic lock) on every payment-driven update so any
+    // concurrent admin edit reading a stale snapshot will fail with a 409.
     await tx.invoice.update({
       where: { id: invoiceId },
-      data: { paidAmount, status: newStatus, paidAt },
+      data: { paidAmount, status: newStatus, paidAt, version: { increment: 1 } },
     });
 
     // ── 6. First-time PAID transition: loyalty recalc ───────────────────

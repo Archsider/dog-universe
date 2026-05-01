@@ -60,6 +60,17 @@ export async function PATCH(request: Request, { params }: Params) {
   const invoice = await prisma.invoice.findUnique({ where: { id } });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // Optimistic concurrency: when caller provides `version`, refuse to apply
+  // the patch if the row was modified since they read it. Backward compatible
+  // — callers that don't send `version` skip the check (legacy behavior).
+  const expectedVersion = typeof body.version === 'number' ? body.version : null;
+  if (expectedVersion !== null && expectedVersion !== invoice.version) {
+    return NextResponse.json(
+      { error: 'VERSION_CONFLICT', message: 'This invoice was modified by someone else. Please refresh.', currentVersion: invoice.version },
+      { status: 409 },
+    );
+  }
+
   // ── Full edit (items array provided) ──────────────────────────────────────
   if (Array.isArray(body.items)) {
     const { items, issuedAt, notes, status, clientDisplayName, clientDisplayPhone, clientDisplayEmail } = body;
@@ -134,6 +145,7 @@ export async function PATCH(request: Request, { params }: Params) {
         where: { id },
         data: {
           amount: newAmount,
+          version: { increment: 1 },
           ...(resolvedIssuedAt && { issuedAt: resolvedIssuedAt }),
           notes: typeof notes === 'string' ? notes.trim() || null : invoice.notes,
           status: isCancel ? 'CANCELLED' : 'PENDING',
@@ -175,6 +187,7 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json({ error: 'NOTHING_TO_UPDATE' }, { status: 400 });
   }
 
+  updateData.version = { increment: 1 };
   const updated = await prisma.invoice.update({ where: { id }, data: updateData });
   return NextResponse.json(updated);
 }

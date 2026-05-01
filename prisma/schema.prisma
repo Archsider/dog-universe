@@ -158,6 +158,7 @@ model Booking {
   // For PENDING_EXTENSION bookings: links back to the original booking being extended
   extensionForBookingId     String?
   deletedAt   DateTime?
+  version     Int      @default(0) // optimistic concurrency lock
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -311,6 +312,7 @@ model Invoice {
   clientDisplayEmail String?  // overrides client.email on this invoice
   issuedAt      DateTime @default(now())
   paidAt        DateTime?
+  version       Int      @default(0) // optimistic concurrency lock
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
