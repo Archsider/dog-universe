@@ -6,6 +6,8 @@ import { createNotification } from '@/lib/notifications';
 import { sendSMS, sendAdminSMS, petPossessive } from '@/lib/sms';
 import { acquireCronLock } from '@/lib/cron-lock';
 
+export const maxDuration = 60;
+
 /**
  * POST /api/cron/reminders
  * Called daily by Vercel Cron (see vercel.json).

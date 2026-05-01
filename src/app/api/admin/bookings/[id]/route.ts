@@ -495,58 +495,65 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'INVALID_COMPUTED_TOTAL' }, { status: 400 });
     }
 
-    // Invoice impact — always update existing, never create supplementary
+    // Invoice impact — always update existing, never create supplementary.
+    // Atomic: invoiceItem updates + invoice update + booking update must commit
+    // together. allocatePayments runs AFTER the tx — it has its own
+    // $transaction + FOR UPDATE lock and must see the committed state.
     let invoiceWarning = false;
-    if (booking.invoice) {
-      if (['PENDING', 'PARTIALLY_PAID', 'PAID'].includes(booking.invoice.status)) {
-        // Update pension InvoiceItems to reflect the new night count
-        const invoiceItems = await prisma.invoiceItem.findMany({
-          where: { invoiceId: booking.invoice.id },
-          select: { id: true, description: true, unitPrice: true },
-        });
-        await Promise.all(
-          invoiceItems
-            .filter(item => {
-              const d = item.description.toLowerCase();
-              return (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi') && item.unitPrice > 0;
-            })
-            .map(item => prisma.invoiceItem.update({
-              where: { id: item.id },
-              data: { quantity: newNights, total: newNights * item.unitPrice },
-            }))
-        );
+    await prisma.$transaction(async (tx) => {
+      if (booking.invoice) {
+        if (['PENDING', 'PARTIALLY_PAID', 'PAID'].includes(booking.invoice.status)) {
+          // Update pension InvoiceItems to reflect the new night count
+          const invoiceItems = await tx.invoiceItem.findMany({
+            where: { invoiceId: booking.invoice.id },
+            select: { id: true, description: true, unitPrice: true },
+          });
+          await Promise.all(
+            invoiceItems
+              .filter(item => {
+                const d = item.description.toLowerCase();
+                return (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi') && item.unitPrice > 0;
+              })
+              .map(item => tx.invoiceItem.update({
+                where: { id: item.id },
+                data: { quantity: newNights, total: newNights * item.unitPrice },
+              }))
+          );
 
-        const newPaidAmount = booking.invoice.paidAmount;
-        const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
-        await prisma.invoice.update({
-          where: { id: booking.invoice.id },
-          data: {
-            amount: newTotal,
-            status: newStatus,
-            ...(newStatus !== 'PAID' && booking.invoice.status === 'PAID' ? { paidAt: null } : {}),
-          },
-        });
-        if (booking.invoice.status === 'PAID' && newPaidAmount < newTotal) {
-          invoiceWarning = true; // remainder needs to be collected
+          const newPaidAmount = booking.invoice.paidAmount;
+          const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+          await tx.invoice.update({
+            where: { id: booking.invoice.id },
+            data: {
+              amount: newTotal,
+              status: newStatus,
+              ...(newStatus !== 'PAID' && booking.invoice.status === 'PAID' ? { paidAt: null } : {}),
+            },
+          });
+          if (booking.invoice.status === 'PAID' && newPaidAmount < newTotal) {
+            invoiceWarning = true; // remainder needs to be collected
+          }
         }
       }
 
-      // Reallocate payments across the updated items
+      await tx.booking.update({
+        where: { id: id },
+        data: {
+          endDate: newEndDate,
+          totalPrice: newTotal,
+          hasExtensionRequest: false,
+          extensionRequestedEndDate: null,
+          extensionRequestNote: null,
+          version: { increment: 1 },
+        },
+      });
+    });
+
+    if (booking.invoice) {
+      // Reallocate payments across the updated items (outside tx — has own locking)
       const { allocatePayments } = await import('@/lib/payments');
       await allocatePayments(booking.invoice.id);
     }
-
-    await prisma.booking.update({
-      where: { id: id },
-      data: {
-        endDate: newEndDate,
-        totalPrice: newTotal,
-        hasExtensionRequest: false,
-        extensionRequestedEndDate: null,
-        extensionRequestNote: null,
-        version: { increment: 1 },
-      },
-    });
 
     const bookingRef = booking.id.slice(0, 8).toUpperCase();
     const newEndDateDisplay = newEndDate.toLocaleDateString(booking.client.language === 'en' ? 'en-GB' : 'fr-MA');

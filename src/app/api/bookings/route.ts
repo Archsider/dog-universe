@@ -522,36 +522,40 @@ export async function POST(request: Request) {
           await getPricingSettings(),
         );
 
-        // Handle invoice update (same logic as extension)
-        if (existingContiguous.invoice) {
-          if (existingContiguous.invoice.status === 'PENDING') {
-            await prisma.invoice.update({
-              where: { id: existingContiguous.invoice.id },
-              data: { amount: mergedTotal },
-            });
-          } else if (existingContiguous.invoice.status === 'PARTIALLY_PAID') {
-            const invoiceUpdate: Record<string, unknown> = { amount: mergedTotal };
-            if (existingContiguous.invoice.paidAmount >= mergedTotal) {
-              invoiceUpdate.status = 'PAID';
-              invoiceUpdate.paidAt = existingContiguous.invoice.paidAt ?? new Date();
+        // Atomic: invoice + booking updates must commit together. allocatePayments
+        // (if any) runs OUTSIDE — it has its own $transaction + FOR UPDATE lock.
+        await prisma.$transaction(async (tx) => {
+          // Handle invoice update (same logic as extension)
+          if (existingContiguous.invoice) {
+            if (existingContiguous.invoice.status === 'PENDING') {
+              await tx.invoice.update({
+                where: { id: existingContiguous.invoice.id },
+                data: { amount: mergedTotal },
+              });
+            } else if (existingContiguous.invoice.status === 'PARTIALLY_PAID') {
+              const invoiceUpdate: Record<string, unknown> = { amount: mergedTotal };
+              if (existingContiguous.invoice.paidAmount >= mergedTotal) {
+                invoiceUpdate.status = 'PAID';
+                invoiceUpdate.paidAt = existingContiguous.invoice.paidAt ?? new Date();
+              }
+              await tx.invoice.update({
+                where: { id: existingContiguous.invoice.id },
+                data: invoiceUpdate,
+              });
             }
-            await prisma.invoice.update({
-              where: { id: existingContiguous.invoice.id },
-              data: invoiceUpdate,
-            });
+            // If PAID: don't touch — admin will handle supplementary invoice manually
           }
-          // If PAID: don't touch — admin will handle supplementary invoice manually
-        }
 
-        await prisma.booking.update({
-          where: { id: existingContiguous.id },
-          data: {
-            endDate: mergedEndDate,
-            totalPrice: mergedTotal,
-            hasExtensionRequest: false,
-            extensionRequestedEndDate: null,
-            extensionRequestNote: null,
-          },
+          await tx.booking.update({
+            where: { id: existingContiguous.id },
+            data: {
+              endDate: mergedEndDate,
+              totalPrice: mergedTotal,
+              hasExtensionRequest: false,
+              extensionRequestedEndDate: null,
+              extensionRequestNote: null,
+            },
+          });
         });
 
         const mergedRef = existingContiguous.id.slice(0, 8).toUpperCase();

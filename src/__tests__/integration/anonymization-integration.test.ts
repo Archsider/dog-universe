@@ -30,6 +30,10 @@ const { mockPrisma, mockTx, mockAuth, mockBcrypt } = vi.hoisted(() => {
     notification: { deleteMany: vi.fn().mockResolvedValue({}) },
     passwordResetToken: { deleteMany: vi.fn().mockResolvedValue({}) },
     clientContract: { update: vi.fn().mockResolvedValue({}) },
+    actionLog: {
+      findMany: vi.fn().mockResolvedValue([]),
+      update: vi.fn().mockResolvedValue({}),
+    },
   };
 
   const mockPrisma = {

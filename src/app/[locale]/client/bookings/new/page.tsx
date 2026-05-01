@@ -61,6 +61,8 @@ export default function NewBookingPage() {
   const [step, setStep] = useState(1);
   const [pets, setPets] = useState<Pet[]>([]);
   const [loadingPets, setLoadingPets] = useState(true);
+  const [petsError, setPetsError] = useState<string | null>(null);
+  const [petsReloadKey, setPetsReloadKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [bookingRef, setBookingRef] = useState('');
 
@@ -152,6 +154,8 @@ export default function NewBookingPage() {
       fillAllFields: 'Veuillez remplir tous les champs obligatoires',
       checkOutAfterCheckIn: 'La date de départ doit être après la date d\'arrivée',
       capacityFull: 'La pension est complète pour ces dates. Veuillez choisir d\'autres dates ou nous contacter.',
+      petsLoadError: 'Impossible de charger vos animaux. Vérifiez votre connexion et réessayez.',
+      retry: 'Réessayer',
     },
     en: {
       title: 'New booking',
@@ -214,17 +218,36 @@ export default function NewBookingPage() {
       fillAllFields: 'Please fill in all required fields',
       checkOutAfterCheckIn: 'Check-out must be after check-in',
       capacityFull: 'The boarding is fully booked for these dates. Please pick different dates or contact us.',
+      petsLoadError: 'Could not load your pets. Check your connection and try again.',
+      retry: 'Retry',
     },
   };
 
   const l = t[locale as keyof typeof t] || t.fr;
 
   useEffect(() => {
+    let cancelled = false;
+    setLoadingPets(true);
+    setPetsError(null);
     fetch('/api/pets')
-      .then(r => r.json())
-      .then(data => { setPets(data); setLoadingPets(false); })
-      .catch(() => setLoadingPets(false));
-  }, []);
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(data => {
+        if (cancelled) return;
+        if (!Array.isArray(data)) throw new Error('Invalid response');
+        setPets(data);
+        setLoadingPets(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPetsError(l.petsLoadError);
+        setLoadingPets(false);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [petsReloadKey]);
 
   const togglePet = (id: string) => {
     setSelectedPets(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
@@ -476,6 +499,20 @@ export default function NewBookingPage() {
           <div>
             {loadingPets ? (
               <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-gold-500" /></div>
+            ) : petsError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm text-red-800 mb-3">{petsError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPetsReloadKey(k => k + 1)}
+                  >
+                    {l.retry}
+                  </Button>
+                </div>
+              </div>
             ) : pets.length === 0 ? (
               <div className="text-center py-8">
                 <PawPrint className="h-10 w-10 mx-auto mb-3 text-gray-300" />

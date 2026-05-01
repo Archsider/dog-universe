@@ -6,6 +6,8 @@ import { getDlqQueue } from '@/lib/queues/index';
 import { isBullMQConfigured } from '@/lib/redis-bullmq';
 import { createNotification } from '@/lib/notifications';
 
+export const maxDuration = 30;
+
 const DLQ_ALERT_THRESHOLD = 100;
 
 export async function GET(req: NextRequest) {

@@ -25,6 +25,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!user) return null;
         if (user.isWalkIn) return null;
+        if (user.deletedAt || user.anonymizedAt) return null;
 
         const isValid = await bcrypt.compare(password, user.passwordHash);
         if (!isValid) return null;
@@ -59,9 +60,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Re-fetch role and tokenVersion from DB on every token renewal
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id },
-          select: { role: true, language: true, tokenVersion: true },
+          select: { role: true, language: true, tokenVersion: true, deletedAt: true, anonymizedAt: true },
         });
         if (!dbUser) return null; // Account deleted → invalidate session
+        if (dbUser.deletedAt || dbUser.anonymizedAt) return null; // Soft-deleted/anonymized → force logout
         // If tokenVersion changed (password changed/reset), reject the token
         if (dbUser.tokenVersion !== token.tokenVersion) return null;
         token.role = dbUser.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';

@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { sendSMS } from '@/lib/sms';
 import { acquireCronLock } from '@/lib/cron-lock';
 
+export const maxDuration = 60;
+
 // GET /api/cron/birthday-notifications
 // Called daily by Vercel Cron (see vercel.json) or any cron scheduler.
 // Protected by CRON_SECRET environment variable via Authorization: Bearer header.

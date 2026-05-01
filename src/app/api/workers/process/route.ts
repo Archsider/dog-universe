@@ -20,6 +20,8 @@ import { prisma } from '@/lib/prisma';
 import { getLastHeartbeat, tryClaimAlertSlot } from '@/lib/taxi-heartbeat';
 import { notifyAdminsTaxiHeartbeatLost, createNotification } from '@/lib/notifications';
 
+export const maxDuration = 60;
+
 // Upstash REST client used solely for the DLQ alert dedup latch (SET NX EX).
 // Reuses the same env pattern as src/lib/cache.ts. Fail-open: any error in
 // the alerting path is swallowed so the worker loop is never broken.

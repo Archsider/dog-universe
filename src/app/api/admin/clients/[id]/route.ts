@@ -106,12 +106,20 @@ export async function PATCH(request: Request, { params }: Params) {
   // --- Historical baseline fields (admin only) ---
   let recalculateLoyalty = false;
   if (body.historicalStays !== undefined) {
-    const val = Math.max(0, Math.round(Number(body.historicalStays)));
-    if (!isNaN(val)) { updateData.historicalStays = val; recalculateLoyalty = true; }
+    const raw = Number(body.historicalStays);
+    if (!Number.isFinite(raw) || raw < 0 || raw > 100_000) {
+      return NextResponse.json({ error: 'INVALID_VALUE', field: 'historicalStays' }, { status: 400 });
+    }
+    updateData.historicalStays = Math.round(raw);
+    recalculateLoyalty = true;
   }
   if (body.historicalSpendMAD !== undefined) {
-    const val = Math.max(0, Number(body.historicalSpendMAD));
-    if (!isNaN(val)) { updateData.historicalSpendMAD = val; recalculateLoyalty = true; }
+    const raw = Number(body.historicalSpendMAD);
+    if (!Number.isFinite(raw) || raw < 0 || raw > 100_000_000) {
+      return NextResponse.json({ error: 'INVALID_VALUE', field: 'historicalSpendMAD' }, { status: 400 });
+    }
+    updateData.historicalSpendMAD = raw;
+    recalculateLoyalty = true;
   }
   if (body.historicalNote !== undefined) {
     updateData.historicalNote = body.historicalNote ? String(body.historicalNote).trim().slice(0, 500) : null;
