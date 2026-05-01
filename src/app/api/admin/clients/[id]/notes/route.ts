@@ -1,63 +1,66 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { withSchema } from '@/lib/with-schema';
 
-type Params = { params: Promise<{ id: string }> };
+const paramsSchema = z.object({ id: z.string().min(1) });
 
-export async function POST(request: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+const noteCreateSchema = z.object({
+  content: z
+    .string()
+    .min(1, 'MISSING_CONTENT')
+    .max(10000, 'CONTENT_TOO_LONG')
+    .refine(v => v.trim().length > 0, 'MISSING_CONTENT'),
+  entityType: z.enum(['CLIENT', 'PET']).optional().default('CLIENT'),
+  entityId: z.string().min(1).optional(),
+});
 
-  const { id } = await params;
-
-  const client = await prisma.user.findFirst({
-    where: { id, role: 'CLIENT', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
-    select: { id: true },
-  });
-  if (!client) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
-
-  const { content, entityType = 'CLIENT', entityId } = await request.json();
-
-  if (!content?.trim()) {
-    return NextResponse.json({ error: 'MISSING_CONTENT' }, { status: 400 });
-  }
-  if (content.length > 10000) {
-    return NextResponse.json({ error: 'CONTENT_TOO_LONG' }, { status: 400 });
-  }
-  const VALID_ENTITY_TYPES = ['CLIENT', 'PET'];
-  if (!VALID_ENTITY_TYPES.includes(entityType)) {
-    return NextResponse.json({ error: 'INVALID_ENTITY_TYPE' }, { status: 400 });
-  }
-
-  if (entityType === 'PET') {
-    if (!entityId) {
-      return NextResponse.json({ error: 'MISSING_ENTITY_ID' }, { status: 400 });
+export const POST = withSchema(
+  { body: noteCreateSchema, params: paramsSchema },
+  async (_request, { body, params }) => {
+    const session = await auth();
+    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
-    const pet = await prisma.pet.findFirst({ where: { id: entityId, ownerId: id, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
-    if (!pet) {
-      return NextResponse.json({ error: 'PET_NOT_FOUND' }, { status: 404 });
-    }
-  }
 
-  const note = await prisma.adminNote.create({
-    data: {
+    const { id } = params;
+    const { content, entityType, entityId } = body;
+
+    const client = await prisma.user.findFirst({
+      where: { id, role: 'CLIENT', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      select: { id: true },
+    });
+    if (!client) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+
+    if (entityType === 'PET') {
+      if (!entityId) {
+        return NextResponse.json({ error: 'MISSING_ENTITY_ID' }, { status: 400 });
+      }
+      const pet = await prisma.pet.findFirst({ where: { id: entityId, ownerId: id, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+      if (!pet) {
+        return NextResponse.json({ error: 'PET_NOT_FOUND' }, { status: 404 });
+      }
+    }
+
+    const note = await prisma.adminNote.create({
+      data: {
+        entityType,
+        entityId: entityId ?? id,
+        content: content.trim(),
+        createdBy: session.user.id,
+      },
+      include: { author: { select: { name: true } } },
+    });
+
+    await logAction({
+      userId: session.user.id,
+      action: LOG_ACTIONS.ADMIN_NOTE_ADDED,
       entityType,
       entityId: entityId ?? id,
-      content: content.trim(),
-      createdBy: session.user.id,
-    },
-    include: { author: { select: { name: true } } },
-  });
+    });
 
-  await logAction({
-    userId: session.user.id,
-    action: LOG_ACTIONS.ADMIN_NOTE_ADDED,
-    entityType,
-    entityId: entityId ?? id,
-  });
-
-  return NextResponse.json(note, { status: 201 });
-}
+    return NextResponse.json(note, { status: 201 });
+  },
+);

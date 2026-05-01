@@ -211,6 +211,10 @@ function makeRequest(body: unknown, headers: Record<string, string> = {}): Reque
   });
 }
 
+// withSchema-wrapped routes expect a 2nd ctx arg with awaited params.
+// POST /api/bookings has no [param], so ctx is `{ params: Promise.resolve({}) }`.
+const emptyCtx = () => ({ params: Promise.resolve({} as Record<string, never>) });
+
 function makeAdminPatchRequest(id: string, body: unknown): Request {
   return new Request(`https://example.com/api/admin/bookings/${id}`, {
     method: 'PATCH',
@@ -264,7 +268,7 @@ describe('POST /api/bookings', () => {
     mocks.prismaTx.booking.create.mockResolvedValue(createdBooking);
     mocks.prismaTx.boardingDetail.create.mockResolvedValue({});
 
-    const res = await BookingsPOST(makeRequest(validBoardingBody));
+    const res = await BookingsPOST(makeRequest(validBoardingBody), emptyCtx());
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.status).toBe('PENDING');
@@ -280,7 +284,7 @@ describe('POST /api/bookings', () => {
       ok: false, species: 'DOG', available: 0, requested: 1, limit: 20,
     });
     const body = { ...validBoardingBody, clientId: 'client-1' };
-    const res = await BookingsPOST(makeRequest(body));
+    const res = await BookingsPOST(makeRequest(body), emptyCtx());
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBe('CAPACITY_EXCEEDED');
@@ -308,7 +312,7 @@ describe('POST /api/bookings', () => {
     mocks.prismaTx.booking.create.mockResolvedValue(waitlisted);
     mocks.prismaTx.boardingDetail.create.mockResolvedValue({});
 
-    const res = await BookingsPOST(makeRequest(validBoardingBody));
+    const res = await BookingsPOST(makeRequest(validBoardingBody), emptyCtx());
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.status).toBe('WAITLIST');
@@ -322,6 +326,7 @@ describe('POST /api/bookings', () => {
 
     const res = await BookingsPOST(
       makeRequest(validBoardingBody, { 'idempotency-key': 'replay-key-12345' }),
+      emptyCtx(),
     );
     expect(res.status).toBe(409);
     const json = await res.json();
@@ -334,7 +339,7 @@ describe('POST /api/bookings', () => {
     // The route does NOT explicitly check endDate < startDate; we instead exercise
     // the schema-level guard: empty petIds violates `min(1)` and yields 400.
     mocks.auth.mockResolvedValue({ user: { id: 'client-1', role: 'CLIENT' } });
-    const res = await BookingsPOST(makeRequest({ ...validBoardingBody, petIds: [] }));
+    const res = await BookingsPOST(makeRequest({ ...validBoardingBody, petIds: [] }), emptyCtx());
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBe('VALIDATION_ERROR');
@@ -342,7 +347,7 @@ describe('POST /api/bookings', () => {
 
   it('returns 401 when auth() returns null', async () => {
     mocks.auth.mockResolvedValue(null);
-    const res = await BookingsPOST(makeRequest(validBoardingBody));
+    const res = await BookingsPOST(makeRequest(validBoardingBody), emptyCtx());
     expect(res.status).toBe(401);
     const json = await res.json();
     expect(json.error).toBe('Unauthorized');

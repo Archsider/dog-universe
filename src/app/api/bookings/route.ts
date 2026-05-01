@@ -13,7 +13,8 @@ import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { enqueueEmail, enqueueSms } from '@/lib/queues/index';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
-import { bookingCreateSchema, formatZodError } from '@/lib/validation';
+import { bookingCreateSchema } from '@/lib/validation';
+import { withSchema } from '@/lib/with-schema';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
 import { decodeCursor, encodeCursor, parseLimit } from '@/lib/pagination';
@@ -252,7 +253,7 @@ export async function GET(request: Request) {
   return NextResponse.json({ data, nextCursor, hasMore });
 }
 
-export async function POST(request: Request) {
+export const POST = withSchema({ body: bookingCreateSchema }, async (request, { body }) => {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -275,14 +276,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Validation de FORME via Zod (types, enums, longueurs).
+    // Validation de FORME via Zod (types, enums, longueurs) effectuée par withSchema.
     // Les règles métier (date passée, créneau taxi, ownership pets) restent
     // ci-dessous car elles dépendent du rôle et de la DB.
-    const parsed = bookingCreateSchema.safeParse(await request.json().catch(() => ({})));
-    if (!parsed.success) {
-      return NextResponse.json(formatZodError(parsed.error), { status: 400 });
-    }
-    const body = parsed.data;
     const {
       serviceType,
       petIds,
@@ -804,4 +800,4 @@ export async function POST(request: Request) {
     await log('error', 'booking', 'Create booking error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
-}
+});

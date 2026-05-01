@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { log } from '@/lib/logger';
 import * as Sentry from '@sentry/nextjs';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { withSchema } from '@/lib/with-schema';
 import {
   createBookingValidationNotification,
   createBookingRefusalNotification,
@@ -43,24 +45,40 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   return NextResponse.json(booking);
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+// Top-level envelope for PATCH /api/admin/bookings/[id].
+// This file dispatches on many discriminator fields (patchBoardingDetail,
+// addBookingItems, approveExtension, rejectExtension, editDates, extendEndDate,
+// status, notes, version, ...) with custom error responses per branch. Rather
+// than risk regressing a 1000+ LOC handler, we validate only the top-level
+// shape via Zod (status enum + version type) and let downstream branches keep
+// their existing per-field validation. `.passthrough()` preserves all the
+// other body fields untouched.
+const VALID_BOOKING_STATUSES = [
+  'PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS',
+  'CANCELLED', 'REJECTED', 'COMPLETED', 'NO_SHOW',
+  'WAITLIST', 'PENDING_EXTENSION',
+] as const;
+
+const adminBookingPatchSchema = z
+  .object({
+    status: z.enum(VALID_BOOKING_STATUSES).optional(),
+    notes: z.string().optional(),
+    version: z.number().int().optional(),
+  })
+  .passthrough();
+
+const adminBookingParamsSchema = z.object({ id: z.string().min(1) });
+
+export const PATCH = withSchema(
+  { body: adminBookingPatchSchema, params: adminBookingParamsSchema },
+  async (_request, { body, params }) => {
+  const { id } = params;
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await request.json();
-  const { status, notes } = body;
-
-  const VALID_STATUSES = [
-    'PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS',
-    'CANCELLED', 'REJECTED', 'COMPLETED', 'NO_SHOW',
-    'WAITLIST', 'PENDING_EXTENSION',
-  ];
-  if (status && !VALID_STATUSES.includes(status)) {
-    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
-  }
+  const { status, notes } = body as { status?: string; notes?: string };
 
   const booking = await prisma.booking.findFirst({
     where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
@@ -678,7 +696,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   // ── Extension: direct admin extend OR approve client request (flag-based) ─
-  const newEndDateStr: string | undefined = body.extendEndDate ?? (body.approveExtension ? booking.extensionRequestedEndDate?.toISOString().slice(0, 10) : undefined);
+  const newEndDateStr: string | undefined = (body.extendEndDate as string | undefined) ?? (body.approveExtension ? booking.extensionRequestedEndDate?.toISOString().slice(0, 10) : undefined);
 
   if (newEndDateStr || body.rejectExtension) {
     if (booking.serviceType !== 'BOARDING') {
@@ -1101,7 +1119,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   revalidateTag('admin-counts');
 
   return NextResponse.json(updated);
-}
+  },
+);
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

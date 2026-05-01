@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { GRADE_BENEFITS, Grade } from '@/lib/loyalty';
@@ -6,6 +7,7 @@ import { notifyAdminsNewLoyaltyClaim } from '@/lib/notifications';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { revalidateTag } from 'next/cache';
+import { withSchema } from '@/lib/with-schema';
 
 let ratelimit: Ratelimit | null = null;
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
@@ -16,8 +18,12 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   });
 }
 
+const claimCreateSchema = z.object({
+  benefitKey: z.string().min(1, 'benefitKey required').max(100),
+});
+
 // POST /api/loyalty/claims — client submits a benefit claim
-export async function POST(req: NextRequest) {
+export const POST = withSchema({ body: claimCreateSchema }, async (_req, { body }) => {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -28,8 +34,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { benefitKey } = await req.json();
-  if (!benefitKey) return NextResponse.json({ error: 'benefitKey required' }, { status: 400 });
+  const { benefitKey } = body;
 
   const loyaltyGrade = await prisma.loyaltyGrade.findUnique({
     where: { clientId: session.user.id },
@@ -87,7 +92,7 @@ export async function POST(req: NextRequest) {
   revalidateTag('admin-counts');
 
   return NextResponse.json(claim, { status: 201 });
-}
+});
 
 // GET /api/loyalty/claims — client fetches their own claims
 export async function GET() {
