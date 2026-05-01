@@ -18,7 +18,7 @@ import {
   petVerb, petArrived, petChouchoute,
 } from '@/lib/sms';
 import { enqueueEmail, enqueueSms } from '@/lib/queues/index';
-import { checkBoardingCapacity } from '@/lib/capacity';
+import { checkBoardingCapacity, CapacityCheckExceeded } from '@/lib/capacity';
 import { revalidateTag } from 'next/cache';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -469,19 +469,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'New end date must be after current end date' }, { status: 400 });
     }
 
-    // Capacity check for the extension window (booking.endDate → newEndDate).
-    // excludeBookingId prevents the booking from counting against itself
-    // (its current endDate equals the extension startDate, triggering the overlap predicate).
-    const extCapacity2 = await checkBoardingCapacity({
-      petIds: booking.bookingPets.map(bp => bp.pet.id),
-      startDate: booking.endDate ?? booking.startDate,
-      endDate: newEndDate,
-      excludeBookingId: id,
-    });
-    if (!extCapacity2.ok) {
-      return NextResponse.json({ error: 'CAPACITY_EXCEEDED', ...extCapacity2 }, { status: 400 });
-    }
-
     const newNights = Math.floor((newEndDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24));
     const pets = booking.bookingPets.map(bp => bp.pet);
     const groomingPrice = booking.boardingDetail?.groomingPrice ?? 0;
@@ -495,12 +482,32 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'INVALID_COMPUTED_TOTAL' }, { status: 400 });
     }
 
-    // Invoice impact — always update existing, never create supplementary.
-    // Atomic: invoiceItem updates + invoice update + booking update must commit
-    // together. allocatePayments runs AFTER the tx — it has its own
-    // $transaction + FOR UPDATE lock and must see the committed state.
+    // Capacity check + invoice/booking update run inside a single Serializable
+    // transaction so that no concurrent booking can slip in between the check
+    // and the write (TOCTOU prevention). Pass `tx` to checkBoardingCapacity so
+    // the occupancy count reads from the same snapshot as the booking update.
+    // allocatePayments runs AFTER the tx — it has its own $transaction + FOR
+    // UPDATE lock and must see the committed state.
     let invoiceWarning = false;
+    let capacityError: CapacityCheckExceeded | null = null;
     await prisma.$transaction(async (tx) => {
+      // Capacity check for the extension window (booking.endDate → newEndDate).
+      // excludeBookingId prevents the booking from counting against itself
+      // (its current endDate equals the extension startDate, triggering the overlap predicate).
+      const extCapacity2 = await checkBoardingCapacity(
+        {
+          petIds: booking.bookingPets.map(bp => bp.pet.id),
+          startDate: booking.endDate ?? booking.startDate,
+          endDate: newEndDate,
+          excludeBookingId: id,
+        },
+        tx,
+      );
+      if (!extCapacity2.ok) {
+        capacityError = extCapacity2;
+        return; // abort the tx body — transaction will still commit (no throw needed here)
+      }
+
       if (booking.invoice) {
         if (['PENDING', 'PARTIALLY_PAID', 'PAID'].includes(booking.invoice.status)) {
           // Update pension InvoiceItems to reflect the new night count
@@ -547,7 +554,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           version: { increment: 1 },
         },
       });
-    });
+    }, { isolationLevel: 'Serializable' });
+
+    if (capacityError) {
+      const ce = capacityError as CapacityCheckExceeded;
+      return NextResponse.json({ error: 'CAPACITY_EXCEEDED', ...ce }, { status: 400 });
+    }
 
     if (booking.invoice) {
       // Reallocate payments across the updated items (outside tx — has own locking)

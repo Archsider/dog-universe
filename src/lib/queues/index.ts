@@ -3,6 +3,15 @@ import { getBullMQConnection, isBullMQConfigured } from '@/lib/redis-bullmq';
 import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
 
+/**
+ * DLQ depth thresholds — shared between the health endpoint and the dlq-watch cron
+ * so they never drift apart.
+ *   DLQ_WARNING_THRESHOLD : health check downgrades to "degraded" (early signal)
+ *   DLQ_ALERT_THRESHOLD   : dlq-watch cron notifies SUPERADMINs (truly critical)
+ */
+export const DLQ_WARNING_THRESHOLD = 10;
+export const DLQ_ALERT_THRESHOLD = 50;
+
 // PII-safe error logger: masks email recipients in error messages so a queue
 // outage doesn't dump client addresses into Sentry / Vercel logs.
 function maskEmail(addr: string): string {

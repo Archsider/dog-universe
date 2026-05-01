@@ -26,6 +26,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!user || !['ADMIN', 'SUPERADMIN'].includes(user.role)) {
     return NextResponse.json({ error: 'Admin user not found' }, { status: 404 });
   }
+  if (user.deletedAt !== null) {
+    return NextResponse.json({ error: 'Admin user not found' }, { status: 404 });
+  }
 
   await prisma.user.update({ where: { id }, data: { role } });
 

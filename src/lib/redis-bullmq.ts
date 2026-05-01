@@ -38,10 +38,11 @@ export function getBullMQConnection(): IORedis {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
     enableOfflineQueue: false,
+    lazyConnect: true,
   });
 
   _connection.on('error', (err) => {
-    console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'Redis connection error', error: err.message, timestamp: new Date().toISOString() }));
+    console.error(JSON.stringify({ level: 'error', service: 'bullmq-redis', message: err.message, timestamp: new Date().toISOString() }));
   });
 
   return _connection;

@@ -1,10 +1,16 @@
 import { headers } from 'next/headers';
 
-export async function getRequestId(): Promise<string> {
+/**
+ * Returns the x-request-id from the incoming request headers, or undefined when
+ * called outside of a request context (e.g. crons, background workers).
+ * Uses a try/catch to avoid throwing in non-request environments.
+ */
+async function getRequestId(): Promise<string | undefined> {
   try {
-    return (await headers()).get('x-request-id') ?? 'no-rid';
+    return (await headers()).get('x-request-id') ?? undefined;
   } catch {
-    return 'no-rid';
+    // Not in a request context (cron, worker, etc.) — omit the field entirely.
+    return undefined;
   }
 }
 
@@ -17,14 +23,14 @@ export async function log(
   extra?: Record<string, unknown>,
 ): Promise<void> {
   const requestId = await getRequestId();
-  console[level === 'info' ? 'log' : level](
-    JSON.stringify({
-      level,
-      service,
-      message,
-      requestId,
-      timestamp: new Date().toISOString(),
-      ...extra,
-    }),
-  );
+  const entry: Record<string, unknown> = {
+    level,
+    service,
+    message,
+    timestamp: new Date().toISOString(),
+    ...extra,
+  };
+  // Only include requestId when we're inside a request context.
+  if (requestId !== undefined) entry.requestId = requestId;
+  console[level === 'info' ? 'log' : level](JSON.stringify(entry));
 }

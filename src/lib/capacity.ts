@@ -86,6 +86,7 @@ export async function countOverlappingPets(
         where: {
           serviceType: 'BOARDING',
           status: { in: [...ACTIVE_STATUSES] },
+          deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
           startDate: { lte: window.endDate! },
           endDate: { gte: window.startDate, not: null },
           ...(options.excludeBookingId ? { id: { not: options.excludeBookingId } } : {}),

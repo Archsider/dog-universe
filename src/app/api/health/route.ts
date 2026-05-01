@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { checkRedisHealth } from '@/lib/cache';
 import { checkStorageHealth } from '@/lib/supabase';
 import { isBullMQConfigured } from '@/lib/redis-bullmq';
-import { getDlqQueue } from '@/lib/queues/index';
+import { getDlqQueue, DLQ_WARNING_THRESHOLD } from '@/lib/queues/index';
 
 type DlqCheck =
   | { status: 'skipped'; count: 0 }
@@ -18,7 +18,7 @@ async function checkDlqHealth(): Promise<DlqCheck> {
       (counts.wait ?? 0) +
       (counts.delayed ?? 0) +
       (counts.active ?? 0);
-    return { status: count > 10 ? 'warning' : 'ok', count };
+    return { status: count > DLQ_WARNING_THRESHOLD ? 'warning' : 'ok', count };
   } catch {
     return { status: 'error', count: 0 };
   }

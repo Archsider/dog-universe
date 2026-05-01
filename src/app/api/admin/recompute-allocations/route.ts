@@ -30,10 +30,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Cap at 200 per call to prevent OOM on large datasets.
+  // For larger fleets, call repeatedly with a cursor (future improvement).
   const invoices = await prisma.invoice.findMany({
     where: { status: { not: 'CANCELLED' } },
     select: { id: true, invoiceNumber: true },
     orderBy: { issuedAt: 'asc' },
+    take: 200,
   });
 
   const errors: { invoiceNumber: string; error: string }[] = [];

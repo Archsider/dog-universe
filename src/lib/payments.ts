@@ -196,7 +196,7 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
         };
       }
     }
-  }); // ── transaction committed ───────────────────────────────────────────
+  }, { isolationLevel: 'Serializable' }); // ── transaction committed ───────────────────────────────────────────
 
   // Post-commit: fire notifications (use global prisma client, safe after commit)
   // Note: explicit non-null assertions are safe because the variables are only

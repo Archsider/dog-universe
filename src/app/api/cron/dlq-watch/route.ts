@@ -2,13 +2,11 @@ import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
-import { getDlqQueue } from '@/lib/queues/index';
+import { getDlqQueue, DLQ_ALERT_THRESHOLD } from '@/lib/queues/index';
 import { isBullMQConfigured } from '@/lib/redis-bullmq';
 import { createNotification } from '@/lib/notifications';
 
 export const maxDuration = 30;
-
-const DLQ_ALERT_THRESHOLD = 100;
 
 export async function GET(req: NextRequest) {
   const secret = req.headers.get('x-cron-secret')
