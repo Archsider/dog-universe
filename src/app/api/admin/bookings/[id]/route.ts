@@ -564,8 +564,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
   // ── End extension handling ────────────────────────────────────────────────────
 
+  const newStatus = status as string | undefined;
   const updated = await Sentry.startSpan(
-    { name: 'booking.statusUpdate', op: 'db' },
+    { name: 'db.booking.update', op: 'db', attributes: { bookingId: id, newStatus: newStatus ?? '' } },
     () => prisma.booking.update({
       where: { id: id },
       data: {
