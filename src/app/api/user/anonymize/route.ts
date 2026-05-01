@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
   const target = await prisma.user.findUnique({
     where: { id: targetUserId },
-    select: { id: true, role: true, anonymizedAt: true, passwordHash: true, contract: { select: { id: true } } },
+    select: { id: true, role: true, anonymizedAt: true, passwordHash: true, email: true, phone: true, name: true, contract: { select: { id: true } } },
   });
   if (!target) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -132,6 +132,87 @@ export async function POST(request: NextRequest) {
         where: { id: target.contract.id },
         data: { pdfUrl: null, ipAddress: null },
       });
+    }
+
+    // Pseudonymize PII in ActionLog metadata (RGPD right to erasure).
+    // Audit value preserved: userId (actor), action, entityType, createdAt unchanged.
+    // Strategy: scope to rows where the user is SUBJECT (actor=userId OR
+    // entityType='User'+entityId=userId) PLUS any row whose `details` JSON
+    // string mentions the old email or phone (best-effort string replace for
+    // PII embedded in nested metadata of bookings/notifications/etc).
+    const PII_KEYS = ['email', 'phone', 'name', 'address', 'firstName', 'lastName', 'fullName'];
+    const oldEmail = target.email;
+    const oldPhone = target.phone;
+    const oldName = target.name;
+    const ANON = '[ANONYMIZED]';
+
+    const orFilters: Array<Record<string, unknown>> = [
+      { userId: targetUserId },
+      { entityType: 'User', entityId: targetUserId },
+    ];
+    if (oldEmail) orFilters.push({ details: { contains: oldEmail } });
+    if (oldPhone) orFilters.push({ details: { contains: oldPhone } });
+
+    const BATCH = 500;
+    let lastId: string | null = null;
+    // Cursor-paginated batch loop (avoids loading the full set in memory)
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const rows: Array<{ id: string; userId: string | null; entityType: string | null; entityId: string | null; details: string | null }> = await tx.actionLog.findMany({
+        where: { OR: orFilters, ...(lastId ? { id: { gt: lastId } } : {}) },
+        orderBy: { id: 'asc' },
+        take: BATCH,
+        select: { id: true, userId: true, entityType: true, entityId: true, details: true },
+      });
+      if (rows.length === 0) break;
+
+      for (const row of rows) {
+        let nextDetails: string | null = row.details;
+        const isSubject =
+          row.userId === targetUserId ||
+          (row.entityType === 'User' && row.entityId === targetUserId);
+
+        if (row.details) {
+          // 1) Typed scrub when user is the subject: parse + null-out PII keys
+          if (isSubject) {
+            try {
+              const parsed = JSON.parse(row.details);
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const scrubbed = { ...(parsed as Record<string, unknown>) };
+                let touched = false;
+                for (const k of PII_KEYS) {
+                  if (k in scrubbed) {
+                    scrubbed[k] = ANON;
+                    touched = true;
+                  }
+                }
+                if (touched) nextDetails = JSON.stringify(scrubbed);
+              }
+            } catch {
+              // not JSON or not an object — fall through to string replace
+            }
+          }
+          // 2) Best-effort string replace: scrub literal email/phone/name
+          //    occurrences anywhere in the JSON string (handles nested metadata).
+          if (nextDetails) {
+            let s = nextDetails;
+            if (oldEmail) s = s.split(oldEmail).join(ANON);
+            if (oldPhone) s = s.split(oldPhone).join(ANON);
+            if (oldName && oldName.length >= 3) s = s.split(oldName).join(ANON);
+            nextDetails = s;
+          }
+        }
+
+        if (nextDetails !== row.details) {
+          await tx.actionLog.update({
+            where: { id: row.id },
+            data: { details: nextDetails },
+          });
+        }
+        lastId = row.id;
+      }
+
+      if (rows.length < BATCH) break;
     }
   });
 
