@@ -12,6 +12,13 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const { id } = await params;
+
+  const client = await prisma.user.findFirst({
+    where: { id, role: 'CLIENT', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    select: { id: true },
+  });
+  if (!client) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+
   const { content, entityType = 'CLIENT', entityId } = await request.json();
 
   if (!content?.trim()) {
