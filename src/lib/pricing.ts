@@ -60,12 +60,15 @@ export async function getPricingSettings(): Promise<PricingSettings> {
 export type TaxiType = 'STANDARD' | 'VET' | 'AIRPORT';
 export type GroomingSize = 'SMALL' | 'LARGE';
 
+export type ItemCategory = 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER';
+
 export interface PriceLineItem {
   descriptionFr: string;
   descriptionEn: string;
   quantity: number;
   unitPrice: number;
   total: number;
+  category: ItemCategory;
 }
 
 export interface PriceBreakdown {
@@ -111,6 +114,7 @@ export function calculateBoardingBreakdown(
       quantity: nights,
       unitPrice: pricePerNight,
       total: nights * pricePerNight,
+      category: 'BOARDING',
     });
   } else if (dogs.length > 1) {
     dogs.forEach(dog => {
@@ -120,6 +124,7 @@ export function calculateBoardingBreakdown(
         quantity: nights,
         unitPrice: p.boarding_dog_multi,
         total: nights * p.boarding_dog_multi,
+        category: 'BOARDING',
       });
     });
   }
@@ -132,6 +137,7 @@ export function calculateBoardingBreakdown(
       quantity: nights,
       unitPrice: p.boarding_cat_per_night,
       total: nights * p.boarding_cat_per_night,
+      category: 'BOARDING',
     });
   });
 
@@ -149,6 +155,7 @@ export function calculateBoardingBreakdown(
           quantity: 1,
           unitPrice: groomPrice,
           total: groomPrice,
+          category: 'GROOMING',
         });
       }
     });
@@ -162,6 +169,7 @@ export function calculateBoardingBreakdown(
       quantity: 1,
       unitPrice: p.taxi_standard,
       total: p.taxi_standard,
+      category: 'PET_TAXI',
     });
   }
   if (taxiReturnEnabled) {
@@ -171,6 +179,7 @@ export function calculateBoardingBreakdown(
       quantity: 1,
       unitPrice: p.taxi_standard,
       total: p.taxi_standard,
+      category: 'PET_TAXI',
     });
   }
 
@@ -207,6 +216,7 @@ export function calculateTaxiPrice(taxiType: TaxiType, pricing?: PricingSettings
         quantity: 1,
         unitPrice: price,
         total: price,
+        category: 'PET_TAXI' as ItemCategory,
       },
     ],
     total: price,

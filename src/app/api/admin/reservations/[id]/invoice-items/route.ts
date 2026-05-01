@@ -55,11 +55,12 @@ export async function GET(_req: Request, { params }: Params) {
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       total: item.total,
+      category: item.category,
     }));
 
-    // Append admin-defined extra lines
+    // Append admin-defined extra lines (preserve category set at booking creation)
     for (const bi of booking.bookingItems) {
-      items.push({ description: bi.description, quantity: bi.quantity, unitPrice: bi.unitPrice, total: bi.total });
+      items.push({ description: bi.description, quantity: bi.quantity, unitPrice: bi.unitPrice, total: bi.total, category: bi.category });
     }
 
     return NextResponse.json({ items });
@@ -73,11 +74,12 @@ export async function GET(_req: Request, { params }: Params) {
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       total: item.total,
+      category: item.category,
     }));
 
-    // Append admin-defined extra lines
+    // Append admin-defined extra lines (preserve category set at booking creation)
     for (const bi of booking.bookingItems) {
-      items.push({ description: bi.description, quantity: bi.quantity, unitPrice: bi.unitPrice, total: bi.total });
+      items.push({ description: bi.description, quantity: bi.quantity, unitPrice: bi.unitPrice, total: bi.total, category: bi.category });
     }
 
     return NextResponse.json({ items });
@@ -89,6 +91,7 @@ export async function GET(_req: Request, { params }: Params) {
     quantity: bi.quantity,
     unitPrice: bi.unitPrice,
     total: bi.total,
+    category: bi.category,
   }));
   return NextResponse.json({ items });
 }
