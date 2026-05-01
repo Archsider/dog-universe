@@ -307,12 +307,12 @@ export default function ProfilePage() {
           <div className="relative">
             <Label htmlFor="old-pw">{l.oldPassword}</Label>
             <Input id="old-pw" type={showOld ? 'text' : 'password'} value={pwForm.oldPassword} onChange={e => setPwForm(p => ({ ...p, oldPassword: e.target.value }))} className="mt-1 pr-10" required />
-            <button type="button" className="absolute right-3 top-8 text-gray-400 hover:text-gray-600" onClick={() => setShowOld(!showOld)}>{showOld ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+            <button type="button" aria-label={showOld ? (locale === 'fr' ? 'Masquer le mot de passe' : 'Hide password') : (locale === 'fr' ? 'Afficher le mot de passe' : 'Show password')} className="absolute right-3 top-8 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-500 rounded" onClick={() => setShowOld(!showOld)}>{showOld ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
           </div>
           <div className="relative">
             <Label htmlFor="new-pw">{l.newPassword}</Label>
             <Input id="new-pw" type={showNew ? 'text' : 'password'} value={pwForm.newPassword} onChange={e => setPwForm(p => ({ ...p, newPassword: e.target.value }))} className="mt-1 pr-10" required minLength={8} />
-            <button type="button" className="absolute right-3 top-8 text-gray-400 hover:text-gray-600" onClick={() => setShowNew(!showNew)}>{showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+            <button type="button" aria-label={showNew ? (locale === 'fr' ? 'Masquer le mot de passe' : 'Hide password') : (locale === 'fr' ? 'Afficher le mot de passe' : 'Show password')} className="absolute right-3 top-8 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-500 rounded" onClick={() => setShowNew(!showNew)}>{showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
           </div>
           <div>
             <Label htmlFor="confirm-pw">{l.confirmPassword}</Label>
