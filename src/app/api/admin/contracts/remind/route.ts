@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { APP_URL } from '@/lib/config';
 
-const LOGIN_URL = process.env.NEXT_PUBLIC_APP_URL
-  ? `${process.env.NEXT_PUBLIC_APP_URL}/fr/auth/login`
-  : 'https://app.doguniverse.ma/fr/auth/login';
+const LOGIN_URL = `${APP_URL}/fr/auth/login`;
 
 // POST /api/admin/contracts/remind
 // Body: { clientId?: string } — if omitted, sends to ALL unsigned clients

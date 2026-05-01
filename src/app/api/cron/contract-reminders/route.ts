@@ -4,10 +4,9 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendSMS } from '@/lib/sms';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { APP_URL } from '@/lib/config';
 
 export const maxDuration = 60;
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
 
 export async function GET(req: NextRequest) {
   const secret = req.headers.get('x-cron-secret')

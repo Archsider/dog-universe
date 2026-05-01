@@ -19,6 +19,7 @@ import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempot
 import { decodeCursor, encodeCursor, parseLimit } from '@/lib/pagination';
 import { revalidateTag } from 'next/cache';
 import * as Sentry from '@sentry/nextjs';
+import { APP_URL } from '@/lib/config';
 
 // Sentinel error thrown inside the booking transaction when capacity is full.
 // Caught by the POST handler to convert into a 400 response.
@@ -719,7 +720,7 @@ export async function POST(request: Request) {
           const esc = (s: string) => s
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
+          const appUrl = APP_URL;
           const admins = await prisma.user.findMany({
             where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
             select: { email: true, language: true },

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
@@ -28,7 +29,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // notification insert fails the claim status update rolls back too, so
   // the admin sees the error and can retry — no silent "approved without
   // ever telling the client" state.
-  const claim = await prisma.$transaction(async (tx) => {
+  const claim = await Sentry.startSpan(
+    { name: 'mutation.loyaltyClaim.review', op: 'db', attributes: { claimId: id, action } },
+    () => prisma.$transaction(async (tx) => {
     const updated = await tx.loyaltyBenefitClaim.update({
       where: { id },
       data: {
@@ -57,7 +60,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     });
 
     return updated;
-  });
+    }),
+  );
 
   // Email is fire-and-forget post-commit — an SMTP outage must not roll back
   // a successfully approved claim.

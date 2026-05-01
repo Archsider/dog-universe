@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel in-progress runs on the same PR/branch to save CI minutes.
+# main pushes are not cancelled (cancel-in-progress only on PRs).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   typecheck:
     name: TypeScript
@@ -23,7 +29,6 @@ jobs:
 
   test:
     name: Tests
-    needs: typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -38,7 +43,6 @@ jobs:
 
   build:
     name: Build
-    needs: typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

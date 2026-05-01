@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { invalidateCapacityCache } from '@/lib/capacity';
+
+// Body schema: open record of string keys → numeric (string|number) values.
+// Stricter validation (allowed keys + positive number) is done after parse.
+const settingsBodySchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number()]),
+);
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   boarding_dog_per_night: '120',
@@ -40,7 +48,11 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const body = await request.json() as Record<string, string>;
+  const parsed = settingsBodySchema.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'INVALID_BODY', issues: parsed.error.issues }, { status: 400 });
+  }
+  const body = parsed.data;
 
   // Only allow known keys with positive numeric values
   const allowedKeys = Object.keys(DEFAULT_SETTINGS);

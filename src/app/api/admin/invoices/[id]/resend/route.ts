@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
@@ -32,17 +33,22 @@ export async function POST(_req: Request, { params }: Params) {
   const locale = client.language ?? 'fr';
   const amountStr = formatMAD(invoice.amount);
 
-  if (invoice.status === 'PAID') {
-    await createInvoicePaidNotification(client.id, invoice.invoiceNumber, amountStr);
-  } else {
-    await createInvoiceNotification(client.id, invoice.invoiceNumber, amountStr);
-    const { subject, html } = getEmailTemplate('invoice_available', {
-      clientName: client.name ?? client.email,
-      invoiceNumber: invoice.invoiceNumber,
-      amount: amountStr,
-    }, locale);
-    await sendEmail({ to: client.email, subject, html });
-  }
+  await Sentry.startSpan(
+    { name: 'mutation.invoice.resend', op: 'http.server', attributes: { invoiceId: id, status: invoice.status } },
+    async () => {
+      if (invoice.status === 'PAID') {
+        await createInvoicePaidNotification(client.id, invoice.invoiceNumber, amountStr);
+      } else {
+        await createInvoiceNotification(client.id, invoice.invoiceNumber, amountStr);
+        const { subject, html } = getEmailTemplate('invoice_available', {
+          clientName: client.name ?? client.email,
+          invoiceNumber: invoice.invoiceNumber,
+          amount: amountStr,
+        }, locale);
+        await sendEmail({ to: client.email, subject, html });
+      }
+    },
+  );
 
   return NextResponse.json({ ok: true });
 }

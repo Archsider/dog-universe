@@ -4,6 +4,7 @@ import { addHours } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { resetPasswordRequestSchema, resetPasswordConfirmSchema, formatZodError } from '@/lib/validation';
+import { APP_URL } from '@/lib/config';
 
 export async function POST(request: Request) {
   try {
@@ -32,8 +33,7 @@ export async function POST(request: Request) {
         },
       });
 
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
-      const resetUrl = `${appUrl}/${locale}/auth/reset-password/${token}`;
+      const resetUrl = `${APP_URL}/${locale}/auth/reset-password/${token}`;
       const { subject, html } = getEmailTemplate('reset_password', { resetUrl }, locale);
 
       await sendEmail({ to: user.email, subject, html });

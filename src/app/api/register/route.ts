@@ -5,6 +5,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { notifyAdminsNewClient } from '@/lib/notifications';
 import { registerSchema, formatZodError } from '@/lib/validation';
+import { APP_URL } from '@/lib/config';
 
 export async function POST(request: Request) {
   try {
@@ -58,8 +59,7 @@ export async function POST(request: Request) {
 
     // Welcome email — non-blocking
     const locale = user.language ?? 'fr';
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
-    const loginUrl = `${appUrl}/${locale}/auth/login`;
+    const loginUrl = `${APP_URL}/${locale}/auth/login`;
     const { subject, html } = getEmailTemplate(
       'welcome',
       { clientName: user.name ?? user.email, loginUrl },
