@@ -2,7 +2,18 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
-import AnalyticsCharts from './AnalyticsCharts';
+import dynamic from 'next/dynamic';
+
+// AnalyticsCharts is a heavy 'use client' component that contains recharts
+// sub-imports (already lazy via next/dynamic within the component) plus
+// significant client-side state. Lazy-load it so its code is excluded from
+// the analytics page's initial SSR bundle.
+const AnalyticsCharts = dynamic(() => import('./AnalyticsCharts'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-64 animate-pulse bg-gray-100 rounded-xl" />
+  ),
+});
 import {
   totalCashCollected,
   cashByMonth,

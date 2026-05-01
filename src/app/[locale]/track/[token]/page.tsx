@@ -4,21 +4,23 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { Map as LeafletMap, Marker as LeafletMarker } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 
-// Tuiles OpenStreetMap (whitelisted dans CSP middleware) — pas d'API key requise.
-const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const TILE_ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 // Fallback poll interval (used only if the SSE stream cannot be established
 // — old browsers, blocked proxies, repeated server errors).
 const FALLBACK_POLL_MS = 10_000;
 // Threshold before we give up on SSE and switch to fallback polling.
 const SSE_MAX_RECONNECT_ATTEMPTS = 3;
 
-// Composants Leaflet : SSR off (Leaflet utilise window/document).
-const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
-const TileLayer    = dynamic(() => import('react-leaflet').then(m => m.TileLayer),    { ssr: false });
-const Marker       = dynamic(() => import('react-leaflet').then(m => m.Marker),       { ssr: false });
+// MapView encapsulates all Leaflet imports (CSS + JS) — lazy loaded only when
+// a GPS position is available, keeping Leaflet out of the initial page bundle.
+const MapView = dynamic(() => import('./MapView'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6 gap-4">
+      <div className="inline-block w-10 h-10 border-[3px] border-[#C4974A] border-t-transparent rounded-full animate-spin" />
+    </div>
+  ),
+});
 
 interface TrackResponse {
   active?: boolean;
@@ -48,13 +50,14 @@ export default function TrackPage() {
   // Polling : setTimeout récursif (plus fiable que setInterval pour les requêtes lentes)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  // Refs impératifs Leaflet — la prop "position" du Marker peut ne pas
-  // se réactualiser correctement en mode dynamic-import. On déplace le
-  // marker et recentre la carte via setLatLng / flyTo à chaque update.
+  // Refs impératifs Leaflet — passés à MapView pour les mises à jour de position
+  // (setLatLng / flyTo) sans re-render du composant parent.
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<LeafletMarker | null>(null);
 
-  // Charge l'icône custom (divIcon = pas d'image externe — CSP-safe)
+  // Charge l'icône custom (divIcon = pas d'image externe — CSP-safe).
+  // L'import dynamique de leaflet est hors du bundle initial — Leaflet n'est
+  // chargé qu'ici, après montage, uniquement quand la carte est affichée.
   useEffect(() => {
     let cancelled = false;
     import('leaflet').then((L) => {
@@ -192,22 +195,6 @@ export default function TrackPage() {
     };
   }, [token]);
 
-  // Déplacement impératif du marker + auto-centrage carte (flyTo animé)
-  // à chaque nouvelle position GPS.
-  useEffect(() => {
-    const loc = data?.lastLocation;
-    if (!loc) return;
-    const next: [number, number] = [loc.lat, loc.lng];
-    if (markerRef.current) {
-      markerRef.current.setLatLng(next);
-    }
-    if (mapRef.current) {
-      mapRef.current.flyTo(next, 16, { duration: 1 });
-    }
-    // Volontairement deps minimales — re-render sur changement de coords seulement.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.lastLocation?.lat, data?.lastLocation?.lng]);
-
   // ── Vues d'erreur / état ────────────────────────────────────────────────
   if (status === 'loading') {
     return (
@@ -291,20 +278,12 @@ export default function TrackPage() {
       {/* Carte */}
       <div className="flex-1 relative">
         {last ? (
-          <MapContainer
+          <MapView
             center={center}
-            zoom={15}
-            scrollWheelZoom
-            style={{ height: '100%', width: '100%', minHeight: '60vh' }}
-            ref={mapRef as never}
-          >
-            <TileLayer attribution={TILE_ATTRIB} url={TILE_URL} />
-            <Marker
-              position={center}
-              ref={markerRef as never}
-              {...(carIcon ? { icon: carIcon as never } : {})}
-            />
-          </MapContainer>
+            mapRef={mapRef}
+            markerRef={markerRef}
+            carIcon={carIcon}
+          />
         ) : (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6 gap-4">
             <div className="inline-block w-10 h-10 border-[3px] border-[#C4974A] border-t-transparent rounded-full animate-spin" />
