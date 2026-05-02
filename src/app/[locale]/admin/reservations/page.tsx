@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { Calendar, ChevronRight, Package, Car, LayoutList, LayoutGrid } from 'lucide-react';
+import { Calendar, ChevronRight, Package, Car, LayoutList, LayoutGrid, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import { ReservationsKanban, type KanbanBooking } from './ReservationsKanban';
@@ -32,8 +32,8 @@ export default async function AdminReservationsPage(props: PageProps) {
   };
 
   const labels = {
-    fr: { title: 'Réservations', all: 'Toutes', pending: 'En attente', confirmed: 'Confirmées', completed: 'Terminées', cancelled: 'Annulées', pendingExtension: 'Extensions', allTypes: 'Tous', boarding: 'Pension', taxi: 'Taxi', client: 'Client', animals: 'Animaux', dates: 'Date', total: 'Total', noBookings: 'Aucune réservation', list: 'Liste', board: 'Board' },
-    en: { title: 'Bookings', all: 'All', pending: 'Pending', confirmed: 'Confirmed', completed: 'Completed', cancelled: 'Cancelled', pendingExtension: 'Extensions', allTypes: 'All', boarding: 'Boarding', taxi: 'Taxi', client: 'Client', animals: 'Pets', dates: 'Date', total: 'Total', noBookings: 'No bookings', list: 'List', board: 'Board' },
+    fr: { title: 'Réservations', all: 'Toutes', pending: 'En attente', confirmed: 'Confirmées', completed: 'Terminées', cancelled: 'Annulées', pendingExtension: 'Extensions', allTypes: 'Tous', boarding: 'Pension', taxi: 'Taxi', client: 'Client', animals: 'Animaux', dates: 'Date', total: 'Total', noBookings: 'Aucune réservation', list: 'Liste', board: 'Board', create: 'Créer une réservation' },
+    en: { title: 'Bookings', all: 'All', pending: 'Pending', confirmed: 'Confirmed', completed: 'Completed', cancelled: 'Cancelled', pendingExtension: 'Extensions', allTypes: 'All', boarding: 'Boarding', taxi: 'Taxi', client: 'Client', animals: 'Pets', dates: 'Date', total: 'Total', noBookings: 'No bookings', list: 'List', board: 'Board', create: 'New booking' },
   };
 
   const sl: Record<string, Record<string, string>> = {
@@ -124,6 +124,12 @@ export default async function AdminReservationsPage(props: PageProps) {
               </button>
             </Link>
           </div>
+          <Link href={`/${locale}/admin/reservations/new`}>
+            <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-gold-500 text-white rounded-lg hover:bg-gold-600 transition-colors">
+              <Plus className="h-3.5 w-3.5" />
+              {l.create}
+            </button>
+          </Link>
         </div>
       </div>
 

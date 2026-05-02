@@ -127,6 +127,38 @@ export const bookingCreateSchema = z.object({
   })).optional(),
 });
 
+// Création d'une réservation par un ADMIN (depuis /admin/reservations/new) —
+// inclut un cas walk-in (création inline du User + Pets).
+const adminWalkInPetSchema = z.object({
+  name: z.string().min(1).max(100),
+  species: z.enum(['DOG', 'CAT']),
+  dateOfBirth: z.string().max(40).optional().nullable(),
+  breed: z.string().max(100).optional().nullable(),
+});
+
+export const adminBookingCreateSchema = z.object({
+  clientId: z.string().min(1).optional(),
+  walkIn: z
+    .object({
+      name: z.string().min(1).max(150),
+      phone: z.string().min(1).max(40),
+      email: z.string().email().max(200).optional().nullable(),
+    })
+    .optional(),
+  petIds: z.array(z.string().min(1)).optional().default([]),
+  pets: z.array(adminWalkInPetSchema).optional().default([]),
+  serviceType: z.enum(['BOARDING', 'PET_TAXI']),
+  startDate: z.string().min(1).max(40),
+  endDate: z.string().max(40).optional().nullable(),
+  arrivalTime: z.string().max(20).optional().nullable(),
+  totalPrice: z.number().min(0).max(1_000_000),
+  notes: z.string().max(2000).optional().nullable(),
+  createInvoice: z.boolean().optional().default(true),
+}).refine(
+  d => !!d.clientId || !!d.walkIn,
+  { message: 'clientId or walkIn required' },
+);
+
 // Demande d'extension client — body simple
 export const bookingExtensionRequestSchema = z.object({
   requestedEndDate: dateStringSchema,
