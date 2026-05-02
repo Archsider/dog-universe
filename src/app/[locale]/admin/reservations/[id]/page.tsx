@@ -742,7 +742,16 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       {/* Stay photos — full width below the grid */}
       {isBoarding && !isPendingExtension && (
         <div className="mt-4">
-          <StayPhotosSection bookingId={booking.id} locale={locale} />
+          <StayPhotosSection
+            bookingId={booking.id}
+            locale={locale}
+            initialPhotos={booking.stayPhotos.map(p => ({
+              id: p.id,
+              url: p.url,
+              caption: p.caption,
+              createdAt: p.createdAt.toISOString(),
+            }))}
+          />
         </div>
       )}
     </div>
