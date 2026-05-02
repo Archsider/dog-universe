@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Playfair_Display, Inter } from 'next/font/google';
 import { headers } from 'next/headers';
+import { PWAInstaller } from '@/components/shared/PWAInstaller';
 import './globals.css';
 
 const playfair = Playfair_Display({
@@ -20,6 +21,15 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Dog Universe',
   description: 'Pension haut de gamme et transport pour animaux à Marrakech',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Dog Universe',
+  },
+  icons: {
+    apple: '/icons/icon-192.png',
+  },
 };
 
 export default async function RootLayout({
@@ -33,7 +43,10 @@ export default async function RootLayout({
 
   return (
     <html lang={lang} suppressHydrationWarning nonce={nonce} className={`${playfair.variable} ${inter.variable}`}>
-      <body>{children}</body>
+      <body>
+        <PWAInstaller />
+        {children}
+      </body>
     </html>
   );
 }
