@@ -54,10 +54,6 @@ export async function GET(request: Request) {
       _count: {
         select: { bookings: true },
       },
-      invoices: {
-        where: { status: 'PAID' },
-        select: { amount: true },
-      },
       bookings: {
         where: { status: 'COMPLETED' },
         orderBy: { startDate: 'desc' },
@@ -74,12 +70,26 @@ export async function GET(request: Request) {
   const last = page[page.length - 1];
   const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
 
+  // Aggregate paid revenue in one groupBy (avoid N+1 invoice includes)
+  const ids = page.map((c) => c.id);
+  const revenueRows = ids.length
+    ? await prisma.invoice.groupBy({
+        by: ['clientId'],
+        where: { clientId: { in: ids }, status: 'PAID' },
+        _sum: { amount: true },
+      })
+    : [];
+  const revenueByClient = new Map<string, number>();
+  for (const row of revenueRows) {
+    revenueByClient.set(row.clientId, row._sum.amount ?? 0);
+  }
+
   const data = page.map((client) => {
     // Explicitly exclude passwordHash via destructuring (safer than `undefined` override)
     const { passwordHash: _pw, ...safeClient } = client;
     return {
       ...safeClient,
-      totalRevenue: client.invoices.reduce((sum, inv) => sum + inv.amount, 0),
+      totalRevenue: revenueByClient.get(client.id) ?? 0,
       lastStay: client.bookings[0] ?? null,
       totalStays: client._count.bookings,
     };
