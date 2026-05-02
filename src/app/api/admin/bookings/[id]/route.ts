@@ -824,10 +824,11 @@ export const PATCH = withSchema(
           prisma.loyaltyGrade.findUnique({ where: { clientId: booking.clientId } }),
         ]);
         const suggestedGrade = calculateSuggestedGrade(totalStays, totalPaid._sum.amount ?? 0);
-        if (currentGrade && !currentGrade.isOverride && currentGrade.grade !== suggestedGrade) {
-          await prisma.loyaltyGrade.update({
+        if (!currentGrade?.isOverride && currentGrade?.grade !== suggestedGrade) {
+          await prisma.loyaltyGrade.upsert({
             where: { clientId: booking.clientId },
-            data: { grade: suggestedGrade },
+            update: { grade: suggestedGrade },
+            create: { clientId: booking.clientId, grade: suggestedGrade },
           });
           const { invalidateLoyaltyCache } = await import('@/lib/loyalty-server');
           await invalidateLoyaltyCache(booking.clientId);
