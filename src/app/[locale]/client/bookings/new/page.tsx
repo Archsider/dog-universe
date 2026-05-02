@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { formatMAD } from '@/lib/utils';
+import { AvailabilityCalendar } from '@/components/shared/AvailabilityCalendar';
 
 interface Pet {
   id: string;
@@ -568,6 +569,19 @@ export default function NewBookingPage() {
                 <Label htmlFor="checkout">{l.checkOut} *</Label>
                 <Input id="checkout" type="date" value={checkOut} onChange={e => setCheckOut(e.target.value)} min={checkIn || today} className="mt-1" />
               </div>
+            </div>
+
+            {/* Availability Calendar — visual aid for BOARDING dates */}
+            <div>
+              <p className="text-xs text-gray-500 mb-2">
+                {locale === 'fr' ? 'Disponibilités de la pension' : 'Boarding availability'}
+              </p>
+              <AvailabilityCalendar
+                species={dogPets.length > 0 ? 'DOG' : 'CAT'}
+                selectedStart={checkIn || null}
+                selectedEnd={checkOut || null}
+                interactive={false}
+              />
             </div>
 
             {/* Grooming — dogs only */}
