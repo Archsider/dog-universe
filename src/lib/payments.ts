@@ -164,7 +164,7 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
           _sum: { amount: true },
         });
         const completedStays = await tx.booking.count({
-          where: { clientId: invoice.clientId, status: 'COMPLETED' },
+          where: { clientId: invoice.clientId, status: 'COMPLETED', deletedAt: null },
         });
 
         const totalStays = completedStays + (client.historicalStays ?? 0);
