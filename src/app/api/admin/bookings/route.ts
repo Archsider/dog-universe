@@ -37,14 +37,27 @@ export async function GET(request: NextRequest) {
     ];
   }
 
+  // Slim select for list/Kanban view — heavier fields belong to the detail route
   const items = await prisma.booking.findMany({
     where,
-    include: {
-      client: { select: { id: true, name: true, email: true } },
-      bookingPets: { include: { pet: true } },
-      boardingDetail: true,
-      taxiDetail: true,
-      invoice: { select: { id: true, invoiceNumber: true, amount: true, status: true } },
+    select: {
+      id: true,
+      status: true,
+      serviceType: true,
+      startDate: true,
+      endDate: true,
+      arrivalTime: true,
+      notes: true,
+      totalPrice: true,
+      version: true,
+      createdAt: true,
+      client: { select: { id: true, name: true, email: true, phone: true } },
+      bookingPets: {
+        select: {
+          pet: { select: { id: true, name: true, species: true, photoUrl: true } },
+        },
+      },
+      invoice: { select: { id: true, invoiceNumber: true, status: true } },
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
