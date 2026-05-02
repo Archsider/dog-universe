@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Camera, Trash2, Loader2, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,7 @@ interface StayPhoto {
 interface Props {
   bookingId: string;
   locale: string;
+  initialPhotos?: StayPhoto[];
 }
 
 const l = {
@@ -46,22 +48,17 @@ const l = {
   },
 };
 
-export default function StayPhotosSection({ bookingId, locale }: Props) {
+export default function StayPhotosSection({ bookingId, locale, initialPhotos = [] }: Props) {
+  const router = useRouter();
   const labels = l[locale as keyof typeof l] || l.fr;
-  const [photos, setPhotos] = useState<StayPhoto[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Server passes initialPhotos via Prisma include — no client fetch waterfall.
+  const [photos, setPhotos] = useState<StayPhoto[]>(initialPhotos);
   const [uploading, setUploading] = useState(false);
   const [caption, setCaption] = useState('');
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetch(`/api/admin/bookings/${bookingId}/photos`)
-      .then(r => r.json())
-      .then(data => { setPhotos(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [bookingId]);
+  const loading = false;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,12 +78,14 @@ export default function StayPhotosSection({ bookingId, locale }: Props) {
       const res = await fetch(`/api/admin/bookings/${bookingId}/photos`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error('Upload failed');
       const photo = await res.json();
+      // Optimistic UI: show new photo immediately, then refresh server component.
       setPhotos(prev => [photo, ...prev]);
       setSelectedFile(null);
       setPreview(null);
       setCaption('');
       if (fileRef.current) fileRef.current.value = '';
       toast({ title: labels.notifSent, variant: 'success' });
+      router.refresh();
     } catch {
       toast({ title: labels.error, variant: 'destructive' });
     } finally {
@@ -102,6 +101,7 @@ export default function StayPhotosSection({ bookingId, locale }: Props) {
         body: JSON.stringify({ photoId }),
       });
       setPhotos(prev => prev.filter(p => p.id !== photoId));
+      router.refresh();
     } catch {
       toast({ title: labels.error, variant: 'destructive' });
     }
