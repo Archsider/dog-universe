@@ -17,18 +17,21 @@ const mocks = vi.hoisted(() => {
     prisma: {
       $queryRaw: vi.fn(),
       notification: {
-        findFirst: vi.fn(),
+        findMany: vi.fn(),
         create: vi.fn(),
       },
     },
-    sendSMS: vi.fn().mockResolvedValue(undefined),
+    enqueueSms: vi.fn().mockResolvedValue(undefined),
     acquireCronLock: vi.fn(),
   };
 });
 
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.prisma }));
+vi.mock('@/lib/queues', () => ({
+  enqueueSms: mocks.enqueueSms,
+  enqueueEmail: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('@/lib/sms', () => ({
-  sendSMS: mocks.sendSMS,
   petPossessive: vi.fn().mockReturnValue('ses'),
   petVerb: vi.fn().mockReturnValue('est'),
   petCompanion: vi.fn().mockReturnValue('votre compagnon'),
@@ -67,8 +70,8 @@ beforeEach(() => {
   mocks.acquireCronLock.mockResolvedValue(true);
   // Default: no pets with birthdays
   mocks.prisma.$queryRaw.mockResolvedValue([]);
-  // Default: no existing notification today
-  mocks.prisma.notification.findFirst.mockResolvedValue(null);
+  // Default: no existing notifications today (batch dedup)
+  mocks.prisma.notification.findMany.mockResolvedValue([]);
   mocks.prisma.notification.create.mockResolvedValue({ id: 'notif-1' });
 });
 
@@ -122,7 +125,7 @@ describe('GET /api/cron/birthday-notifications — no birthdays', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.sent).toBe(0);
-    expect(mocks.sendSMS).not.toHaveBeenCalled();
+    expect(mocks.enqueueSms).not.toHaveBeenCalled();
     expect(mocks.prisma.notification.create).not.toHaveBeenCalled();
   });
 });
@@ -150,10 +153,10 @@ describe('GET /api/cron/birthday-notifications — processing', () => {
       }),
     );
 
-    // SMS sent to owner
-    expect(mocks.sendSMS).toHaveBeenCalledWith(
-      '+212600000001',
-      expect.stringContaining('Luna'),
+    // SMS enqueued for owner
+    expect(mocks.enqueueSms).toHaveBeenCalledWith(
+      expect.objectContaining({ to: '+212600000001', message: expect.stringContaining('Luna') }),
+      expect.any(String),
     );
   });
 
@@ -165,22 +168,24 @@ describe('GET /api/cron/birthday-notifications — processing', () => {
     const res = await GET(makeRequest('Bearer test-secret') as any);
     const json = await res.json();
     expect(json.sent).toBe(1);
-    // Notification created but no SMS
+    // Notification created but no SMS enqueued
     expect(mocks.prisma.notification.create).toHaveBeenCalled();
-    expect(mocks.sendSMS).not.toHaveBeenCalled();
+    expect(mocks.enqueueSms).not.toHaveBeenCalled();
   });
 
   it('deduplicates: skips pet already notified today', async () => {
     mocks.prisma.$queryRaw.mockResolvedValue([petWithBirthday]);
     // Simulate: a PET_BIRTHDAY notification was already sent today for this pet
-    mocks.prisma.notification.findFirst.mockResolvedValue({ id: 'existing-notif' });
+    mocks.prisma.notification.findMany.mockResolvedValue([
+      { userId: 'owner-1', metadata: JSON.stringify({ petId: 'pet-001' }) },
+    ]);
 
     const res = await GET(makeRequest('Bearer test-secret') as any);
     const json = await res.json();
     expect(json.sent).toBe(0);
     // Neither create nor SMS should be called
     expect(mocks.prisma.notification.create).not.toHaveBeenCalled();
-    expect(mocks.sendSMS).not.toHaveBeenCalled();
+    expect(mocks.enqueueSms).not.toHaveBeenCalled();
   });
 
   it('processes multiple pets, each with dedup check', async () => {
@@ -194,19 +199,19 @@ describe('GET /api/cron/birthday-notifications — processing', () => {
       ownerPhone: '+212600000002',
     };
     mocks.prisma.$queryRaw.mockResolvedValue([petWithBirthday, pet2]);
-    // Only pet-001 was already notified
-    mocks.prisma.notification.findFirst
-      .mockResolvedValueOnce({ id: 'existing' }) // pet-001 already notified
-      .mockResolvedValueOnce(null);              // pet-002 not yet notified
+    // Only pet-001 was already notified — batch findMany returns just that one
+    mocks.prisma.notification.findMany.mockResolvedValue([
+      { userId: 'owner-1', metadata: JSON.stringify({ petId: 'pet-001' }) },
+    ]);
 
     const res = await GET(makeRequest('Bearer test-secret') as any);
     const json = await res.json();
     expect(json.sent).toBe(1);
     expect(json.petIds).toEqual(['pet-002']);
-    expect(mocks.sendSMS).toHaveBeenCalledTimes(1);
-    expect(mocks.sendSMS).toHaveBeenCalledWith(
-      '+212600000002',
-      expect.stringContaining('Rex'),
+    expect(mocks.enqueueSms).toHaveBeenCalledTimes(1);
+    expect(mocks.enqueueSms).toHaveBeenCalledWith(
+      expect.objectContaining({ to: '+212600000002', message: expect.stringContaining('Rex') }),
+      expect.any(String),
     );
   });
 
