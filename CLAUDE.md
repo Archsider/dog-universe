@@ -401,7 +401,7 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ---
 
-## VERSIONS STACK (2026-04-30)
+## VERSIONS STACK (2026-05-02)
 
 | Package | Version |
 |---|---|
@@ -416,7 +416,7 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 | Zod | 3.23.8 |
 | @sentry/nextjs | (configuré server + edge + client + instrumentation-client) |
 | Playwright | configuré, skip gracieux si secrets absents (`test.skip()` dans `beforeEach`) |
-| Vitest | 4.1.5 (217+ tests unitaires) |
+| Vitest | 4.1.5 (306 tests unitaires) |
 
 **Pattern Next.js 15 params** : toujours `params: Promise<{ locale: string }>` + `const { locale } = await params` (async — pattern obligatoire sur main).
 
@@ -453,6 +453,7 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | Migration `20260405_private_storage` | RÉSOLU (2026-05-01) | Bucket `uploads-private` vérifié, 0 contrats legacy publics confirmés en DB. |
 | Soft-delete User/Pet | RÉSOLU (`0dcf7c8`) | `deletedAt` ajouté à `User` + `Pet`, 28 fichiers filtrés, DELETE → soft-delete — migration SQL à exécuter sur Supabase |
 | Sentry instrumentation API | RÉSOLU (`21bdccd`) | `Sentry.startSpan()` câblé sur POST /api/bookings + PATCH /api/admin/bookings/[id] avec attributs serviceType/petCount/bookingId |
+| 2FA TOTP ADMIN/SUPERADMIN | **OUVERT** | Absence de second facteur — si mot de passe admin fuite, accès total au backoffice. À implémenter en priorité. |
 
 ---
 
@@ -509,11 +510,75 @@ Phrase principale : Nous attendons {_companionFr} avec impatience.
 
 ---
 
+## PWA
+
+Support PWA ajouté (2026-05-02) :
+- `public/manifest.json` — thème `#141428` / `#D4AF37`, orientation portrait-primary, maskable icon
+- `public/sw.js` — cache-first `/_next/static/**`, network-first navigation, offline fallback `/offline.html`
+- `public/offline.html` — page branded hors-ligne (patte de chien + bouton Réessayer)
+- `public/icons/icon-192.png` + `icon-512.png` — générés via `sharp` depuis SVG (fond sombre, cercle gold, "DU")
+- `src/components/shared/PWAInstaller.tsx` — `'use client'`, enregistre `/sw.js` dans `useEffect`
+- `src/app/layout.tsx` — `metadata.manifest`, `appleWebApp`, `icons.apple` + `<PWAInstaller />` dans `<body>`
+
+---
+
+## CALENDRIER DE DISPONIBILITÉS
+
+Ajouté (2026-05-02) :
+
+### `GET /api/availability`
+- Public (pas d'auth requise)
+- Query params : `month=YYYY-MM`, `species=DOG|CAT`
+- Une seule requête Prisma → comptage par jour en JS (pas de N+1)
+- Statuts : `available` (>20% libre), `limited` (≤20%), `full` (0 place)
+- Cache Redis 5 min via `cacheReadThrough('availability:{species}:{month}', 300, loader)`
+- Capacité lue dans `Setting` (`capacity_dog` / `capacity_cat`)
+- Statuts comptés : `PENDING`, `CONFIRMED`, `IN_PROGRESS` (cohérent avec `checkBoardingCapacity`)
+- Soft-delete : `booking.deletedAt: null` obligatoire
+
+### `src/components/shared/AvailabilityCalendar.tsx`
+- `'use client'`, aucune lib externe — React + Tailwind uniquement
+- Navigation mois, en-têtes français (Lu Ma Me Je Ve Sa Di)
+- Couleurs : vert (available), jaune (limited), rouge (full), gris (passé)
+- Tooltip hover : "X places restantes" / "Complet"
+- Sélection de plage : 2 clics → start + end, surbrillance bleue
+- Props : `species`, `selectedStart/End`, `onRangeSelect`, `interactive`, `initialMonth`
+
+### Intégrations
+- **Admin** : `/admin/calendar` — deux panneaux côte à côte DOG + CAT, lecture seule
+- **Client** : formulaire de réservation Step 3 (BOARDING) — calendrier lecture seule, `selectedStart/End` miroir des date pickers
+
+---
+
 ## HISTORIQUE
 
 L'historique complet des sessions de travail et décisions techniques (sécurité, perf, architecture) est consigné dans [HISTORY.md](./HISTORY.md).
 
 **Décision-clé toujours active : Soft-delete via filtres explicites `deletedAt: null`**
+
+---
+
+### 2026-05-02 — Session sécurité P0 + quick wins + PWA + calendrier disponibilités
+
+**Commits sur `main` :**
+
+1. **P0 sécurité (3 fixes)** — IDOR sur notes admin (`/api/admin/clients/[id]/notes` : vérification `role === 'CLIENT'` avant accès). Injection SMS sanitisée (`/api/admin/clients/[id]/sms` : strip control chars + regex whitelist). Step-up auth sur danger route (`/api/admin/danger` : bcrypt compare + rate-limit 3/h + logs audit).
+
+2. **CI fix** — `secrets.*` invalide dans les `if:` GitHub Actions → pattern `env: MIGRATE_DB_URL: ${{ secrets.DATABASE_URL }}` au niveau job + `if: env.MIGRATE_DB_URL != ''`.
+
+3. **Quick wins sécurité** — `CRON_SECRET` requis en prod (Zod `env.ts`). Complexité password unifiée via `strongPassword()` dans `validation.ts` (register, passwordChange, resetPasswordConfirm, admin-create). `take: 1000` sur `billedByCategory` (défense DoS/OOM Lambda). HSTS déjà présent (confirmé, pas de changement).
+
+4. **`feat(pwa)`** — manifest, SW, offline page, icons 192+512, PWAInstaller, layout meta tags.
+
+5. **`feat(calendar)`** — `GET /api/availability`, `AvailabilityCalendar` component, admin calendar page, intégration booking client.
+
+6. **`fix(tests)`** — `birthday-notifications.test.ts` : mock `notification.findMany` (batch dedup remplacé `findFirst`), mock `enqueueSms` (remplace `sendSMS` direct). 306 tests verts.
+
+**Décisions techniques :**
+- **`withSchema` Zod wrapper** : `src/lib/with-schema.ts` — wrapper générique pour routes Next.js 15 (async params + body validation, formatZodError unifié).
+- **Services booking** : `src/lib/services/booking-admin.service.ts` + `booking-client.service.ts` + `booking-errors.ts` — extraction logique métier hors des routes (BookingError avec code → HTTP status map).
+- **Indexes DB** : migration `20260502_indexes_composites` — `Notification(type, createdAt)`, `Booking(status, startDate)`, `Booking(status, endDate)`.
+- **Audit full god-mode** : Morocco = marché ouvert (0 concurrence directe identifiée), 2FA = plus gros gap sécurité, multi-tenancy = bloquant fundability SaaS.
 
 ---
 
