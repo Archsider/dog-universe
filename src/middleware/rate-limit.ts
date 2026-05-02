@@ -138,6 +138,11 @@ export function getDynamicLimitBucket(path: string): DynamicBucket | null {
   if (path.startsWith('/api/bookings/') && path.endsWith('/extension-request')) {
     return 'addonRequest';
   }
+  // P1-3: /api/admin/bookings/{id}/photos — file upload route under admin namespace.
+  // Reuse the uploads bucket (30/h per user) to cap photo-spam and storage abuse.
+  if (path.startsWith('/api/admin/bookings/') && path.endsWith('/photos')) {
+    return 'uploads';
+  }
   return null;
 }
 

@@ -18,6 +18,7 @@
 //   - invalid lat/lng → silently ignored (heartbeat still recorded)
 //   - Redis down → recordHeartbeat / recordLocation fail open silently
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { recordHeartbeat } from '@/lib/taxi-heartbeat';
 import { recordLocation } from '@/lib/taxi-location';
@@ -45,7 +46,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const auth = request.headers.get('authorization') ?? '';
   const match = /^Bearer\s+(.+)$/i.exec(auth);
   const providedToken = match?.[1]?.trim();
-  if (!providedToken || providedToken !== urlToken) {
+  if (!providedToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  // Timing-safe comparison to prevent token oracle attacks
+  const aBuffer = Buffer.from(providedToken);
+  const bBuffer = Buffer.from(urlToken);
+  const tokensMatch = aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
+  if (!tokensMatch) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

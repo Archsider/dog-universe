@@ -144,7 +144,7 @@ export default async function AdminBillingPage(props: PageProps) {
     }),
     prisma.invoice.count({ where }),
     prisma.payment.aggregate({ _sum: { amount: true }, where: paymentStatsWhere }),
-    prisma.user.findMany({ where: { role: 'CLIENT' }, select: { id: true, name: true, email: true }, orderBy: { name: 'asc' } }),
+    prisma.user.findMany({ where: { role: 'CLIENT', deletedAt: null }, select: { id: true, name: true, email: true }, orderBy: { name: 'asc' }, take: 1000 }),
     prisma.payment.groupBy({
       by: ['paymentMethod'],
       _sum: { amount: true },

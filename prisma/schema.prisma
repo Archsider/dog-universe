@@ -376,6 +376,8 @@ model Payment {
   createdAt     DateTime @default(now())
 
   @@index([invoiceId])
+  @@index([paymentDate])
+  @@index([invoiceId, paymentDate])
 }
 
 model Notification {

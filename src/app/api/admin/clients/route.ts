@@ -52,7 +52,7 @@ export async function GET(request: Request) {
       pets: { where: { deletedAt: null }, select: { id: true, name: true } }, // soft-delete: required — no global extension (Edge Runtime incompatible)
       loyaltyGrade: true,
       _count: {
-        select: { bookings: true },
+        select: { bookings: { where: { status: 'COMPLETED', deletedAt: null } } },
       },
       bookings: {
         where: { status: 'COMPLETED' },

@@ -64,10 +64,74 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
     });
   }
 
-  await prisma.boardingDetail.upsert({
-    where: { bookingId },
-    update: patch,
-    create: { bookingId, ...patch },
+  // P0-8: wrap boardingDetail upsert + taxi trip creates/updates in a single
+  // transaction so a partial failure (e.g. taxiStatusHistory create) cannot
+  // leave boardingDetail updated but taxi trips missing.
+  let bd = await prisma.$transaction(async (tx) => {
+    await tx.boardingDetail.upsert({
+      where: { bookingId },
+      update: patch,
+      create: { bookingId, ...patch },
+    });
+
+    const updatedBd = await tx.boardingDetail.findUnique({ where: { bookingId } });
+
+    // Fetch both taxi trips inside the transaction for consistency.
+    const [outboundTrip, returnTrip] = await Promise.all([
+      tx.taxiTrip.findFirst({ where: { bookingId, tripType: 'OUTBOUND' } }),
+      tx.taxiTrip.findFirst({ where: { bookingId, tripType: 'RETURN' } }),
+    ]);
+
+    if (updatedBd?.taxiGoEnabled) {
+      if (!outboundTrip) {
+        const t = await tx.taxiTrip.create({
+          data: {
+            bookingId, tripType: 'OUTBOUND', status: 'PLANNED',
+            date: updatedBd.taxiGoDate ?? undefined,
+            time: updatedBd.taxiGoTime ?? undefined,
+            address: updatedBd.taxiGoAddress ?? undefined,
+          },
+        });
+        await tx.taxiStatusHistory.create({
+          data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: actorId },
+        });
+      } else {
+        await tx.taxiTrip.update({
+          where: { id: outboundTrip.id },
+          data: {
+            date: updatedBd.taxiGoDate ?? undefined,
+            time: updatedBd.taxiGoTime ?? undefined,
+            address: updatedBd.taxiGoAddress ?? undefined,
+          },
+        });
+      }
+    }
+    if (updatedBd?.taxiReturnEnabled) {
+      if (!returnTrip) {
+        const t = await tx.taxiTrip.create({
+          data: {
+            bookingId, tripType: 'RETURN', status: 'PLANNED',
+            date: updatedBd.taxiReturnDate ?? undefined,
+            time: updatedBd.taxiReturnTime ?? undefined,
+            address: updatedBd.taxiReturnAddress ?? undefined,
+          },
+        });
+        await tx.taxiStatusHistory.create({
+          data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: actorId },
+        });
+      } else {
+        await tx.taxiTrip.update({
+          where: { id: returnTrip.id },
+          data: {
+            date: updatedBd.taxiReturnDate ?? undefined,
+            time: updatedBd.taxiReturnTime ?? undefined,
+            address: updatedBd.taxiReturnAddress ?? undefined,
+          },
+        });
+      }
+    }
+
+    return updatedBd;
   });
 
   await logAction({
@@ -77,63 +141,6 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
     entityId: bookingId,
     details: { patch },
   });
-
-  const bd = await prisma.boardingDetail.findUnique({ where: { bookingId } });
-
-  // Fetch both taxi trips in parallel.
-  const [outboundTrip, returnTrip] = await Promise.all([
-    prisma.taxiTrip.findFirst({ where: { bookingId, tripType: 'OUTBOUND' } }),
-    prisma.taxiTrip.findFirst({ where: { bookingId, tripType: 'RETURN' } }),
-  ]);
-
-  if (bd?.taxiGoEnabled) {
-    if (!outboundTrip) {
-      const t = await prisma.taxiTrip.create({
-        data: {
-          bookingId, tripType: 'OUTBOUND', status: 'PLANNED',
-          date: bd.taxiGoDate ?? undefined,
-          time: bd.taxiGoTime ?? undefined,
-          address: bd.taxiGoAddress ?? undefined,
-        },
-      });
-      await prisma.taxiStatusHistory.create({
-        data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: actorId },
-      });
-    } else {
-      await prisma.taxiTrip.update({
-        where: { id: outboundTrip.id },
-        data: {
-          date: bd.taxiGoDate ?? undefined,
-          time: bd.taxiGoTime ?? undefined,
-          address: bd.taxiGoAddress ?? undefined,
-        },
-      });
-    }
-  }
-  if (bd?.taxiReturnEnabled) {
-    if (!returnTrip) {
-      const t = await prisma.taxiTrip.create({
-        data: {
-          bookingId, tripType: 'RETURN', status: 'PLANNED',
-          date: bd.taxiReturnDate ?? undefined,
-          time: bd.taxiReturnTime ?? undefined,
-          address: bd.taxiReturnAddress ?? undefined,
-        },
-      });
-      await prisma.taxiStatusHistory.create({
-        data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: actorId },
-      });
-    } else {
-      await prisma.taxiTrip.update({
-        where: { id: returnTrip.id },
-        data: {
-          date: bd.taxiReturnDate ?? undefined,
-          time: bd.taxiReturnTime ?? undefined,
-          address: bd.taxiReturnAddress ?? undefined,
-        },
-      });
-    }
-  }
 
   // Sync linked invoice line items so addon toggles reflect on billing.
   if (booking.invoice && booking.invoice.status !== 'CANCELLED' && bd) {

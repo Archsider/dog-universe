@@ -35,7 +35,9 @@ export function TotpVerifyForm() {
 
       // Déclenche le renouvellement du JWT pour effacer totpPending
       await update();
-      const callbackUrl = searchParams.get('callbackUrl') ?? '/fr/admin';
+      // P0: validate callbackUrl to prevent open redirect to external domains
+      const rawCallbackUrl = searchParams.get('callbackUrl') ?? '';
+      const callbackUrl = /^\/(fr|en)\//.test(rawCallbackUrl) ? rawCallbackUrl : '/fr/admin';
       router.push(callbackUrl);
       router.refresh();
     } catch {

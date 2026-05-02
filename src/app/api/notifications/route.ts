@@ -37,6 +37,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
     }
 
+    // P1-1: Ensure target is a CLIENT — prevent sending notifications to admins
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    if (!targetUser || targetUser.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     if (typeof messageFr !== 'string' || messageFr.length > 5000) {
       return NextResponse.json({ error: 'MESSAGE_TOO_LONG' }, { status: 400 });
     }

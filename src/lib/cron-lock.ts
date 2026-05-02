@@ -4,8 +4,9 @@
 // (defence in depth); this lock just avoids the wasted round-trip.
 //
 // Behaviour:
-// - Lock key: `cron:{name}:{period}` where period is YYYY-MM-DD for daily
-//   or YYYY-Www for weekly crons (ISO week year + week number).
+// - Lock key: `cron:{name}:{period}` where period is YYYY-MM-DD for daily,
+//   YYYY-Www for weekly crons (ISO week year + week number), or YYYY-MM for
+//   monthly crons.
 // - SET NX EX: atomic — first caller wins, subsequent callers in the same
 //   period get false back.
 // - Fail-open: if Redis is unconfigured or unreachable, returns true so
@@ -15,7 +16,7 @@ import { Redis } from '@upstash/redis';
 import { getISOWeek, getISOWeekYear } from 'date-fns';
 import { env } from '@/lib/env';
 
-export type CronPeriod = 'daily' | 'weekly';
+export type CronPeriod = 'daily' | 'weekly' | 'monthly';
 
 let cachedRedis: Redis | null | undefined;
 

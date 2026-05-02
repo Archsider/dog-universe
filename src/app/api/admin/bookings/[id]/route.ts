@@ -110,6 +110,19 @@ export const PATCH = withSchema(
   }
 
   // ── Status transition guards ──────────────────────────────────────────────
+  // P0-5: REJECTED / CANCELLED require a cancellationReason (min 10 chars) so
+  // the client always receives a meaningful explanation and admins cannot skip
+  // the justification step by calling the API directly.
+  if ((status === 'REJECTED' || status === 'CANCELLED') && body.patchBoardingDetail === undefined) {
+    const reason = typeof body.cancellationReason === 'string' ? body.cancellationReason.trim() : '';
+    if (reason.length < 10) {
+      return NextResponse.json(
+        { error: 'CANCELLATION_REASON_REQUIRED', message: 'cancellationReason (min 10 chars) is required when rejecting or cancelling a booking' },
+        { status: 400 },
+      );
+    }
+  }
+
   // NO_SHOW : seulement depuis CONFIRMED ou IN_PROGRESS (pas depuis PENDING,
   // CANCELLED, COMPLETED, WAITLIST, etc. — un séjour non confirmé ne peut
   // pas être un "no-show", il est juste annulé).
@@ -285,7 +298,7 @@ export const PATCH = withSchema(
     const bookingRef = originalBooking.id.slice(0, 8).toUpperCase();
     const newEndDateDisplay = newEndDate.toLocaleDateString(originalBooking.client?.language === 'en' ? 'en-GB' : 'fr-MA');
     const { createBookingExtendedNotification } = await import('@/lib/notifications');
-    await createBookingExtendedNotification(originalBooking.clientId, bookingRef, newEndDateDisplay, originalBooking.client?.language ?? 'fr').catch(() => {});
+    await createBookingExtendedNotification(originalBooking.clientId, bookingRef, newEndDateDisplay, originalBooking.client?.language ?? 'fr').catch(err => console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Failed to create notification', error: err instanceof Error ? err.message : String(err) })));
 
     await logAction({
       userId: session.user.id,
@@ -322,7 +335,7 @@ export const PATCH = withSchema(
     if (originalBookingId) {
       const bookingRef = originalBookingId.slice(0, 8).toUpperCase();
       const { createExtensionRejectedNotification } = await import('@/lib/notifications');
-      await createExtensionRejectedNotification(booking.clientId, bookingRef).catch(() => {});
+      await createExtensionRejectedNotification(booking.clientId, bookingRef).catch(err => console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Failed to create notification', error: err instanceof Error ? err.message : String(err) })));
     }
 
     await logAction({
@@ -608,7 +621,7 @@ export const PATCH = withSchema(
     const bookingRef = booking.id.slice(0, 8).toUpperCase();
     const newEndDateDisplay = newEndDate.toLocaleDateString(booking.client.language === 'en' ? 'en-GB' : 'fr-MA');
     const { createBookingExtendedNotification } = await import('@/lib/notifications');
-    await createBookingExtendedNotification(booking.clientId, bookingRef, newEndDateDisplay, booking.client.language ?? 'fr').catch(() => {});
+    await createBookingExtendedNotification(booking.clientId, bookingRef, newEndDateDisplay, booking.client.language ?? 'fr').catch(err => console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Failed to create notification', error: err instanceof Error ? err.message : String(err) })));
 
     await logAction({
       userId: session.user.id,
@@ -623,6 +636,10 @@ export const PATCH = withSchema(
   // ── End extension handling ────────────────────────────────────────────────────
 
   const newStatus = status as string | undefined;
+  // Persist cancellationReason when admin rejects or cancels a booking
+  const cancellationReason = (status === 'REJECTED' || status === 'CANCELLED')
+    ? (typeof body.cancellationReason === 'string' ? body.cancellationReason.trim() : undefined)
+    : undefined;
   const updated = await Sentry.startSpan(
     { name: 'db.booking.update', op: 'db', attributes: { bookingId: id, newStatus: newStatus ?? '' } },
     () => prisma.booking.update({
@@ -630,6 +647,7 @@ export const PATCH = withSchema(
       data: {
         ...(status && { status }),
         ...(notes !== undefined && { notes }),
+        ...(cancellationReason !== undefined && { cancellationReason }),
         version: { increment: 1 },
       },
     }),
@@ -728,9 +746,12 @@ export const PATCH = withSchema(
           `${id}:refused-email`,
         ).catch(() => {});
 
-        // SMS client annulation + SMS admin alerte (queued)
+        // SMS client annulation + SMS admin alerte (queued) — localisé selon la langue du client
+        const refusedSmsMsg = userLang === 'en'
+          ? `Hello ${firstName}, your booking for ${petNames} has been cancelled. We remain available. — Dog Universe`
+          : `Bonjour ${firstName}, votre réservation pour ${petNames} a été annulée. Nous restons disponibles. — Dog Universe`;
         enqueueSms(
-          { to: booking.client.phone, message: `Bonjour ${firstName}, votre réservation pour ${petNames} a été annulée. Nous restons disponibles. — Dog Universe` },
+          { to: booking.client.phone, message: refusedSmsMsg },
           `${id}:refused-sms-client`,
         ).catch(() => {});
         const adminDateRange = booking.serviceType === 'BOARDING' && booking.endDate

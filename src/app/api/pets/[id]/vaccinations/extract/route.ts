@@ -49,7 +49,14 @@ interface ExtractionResult {
 async function fetchFileAsBase64(fileUrl: string): Promise<{ base64: string; mimeType: string } | null> {
   try {
     if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-      const res = await fetch(fileUrl);
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10_000);
+      let res: Response;
+      try {
+        res = await fetch(fileUrl, { signal: ctrl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       if (!res.ok) return null;
       const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
       const mimeType = contentType.split(';')[0].trim();

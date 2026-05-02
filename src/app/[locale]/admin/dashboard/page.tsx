@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, LogIn, LogOut, Package } from 'lucide-react';
+import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, LogIn, LogOut, Package, CalendarOff } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import RevenueChartWrapper from './RevenueChartWrapper';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -52,6 +52,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     lastMonthHistorical,
     thisBilled,
     lastBilled,
+    petsWithoutDob,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'CLIENT', isWalkIn: false } }),
     pendingBookingsCount(),
@@ -130,6 +131,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     }).catch(() => null),
     billedByCategory(thisMonthStart, thisMonthEnd),
     billedByCategory(lastMonthStart, lastMonthEnd),
+    prisma.pet.count({ where: { dateOfBirth: null, deletedAt: null } }),
   ]);
 
   const { cat: currentCatBoarders, dog: currentDogBoarders } = boarders;
@@ -281,6 +283,19 @@ export default async function AdminDashboardPage({ params }: PageProps) {
             <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
             <span className="text-amber-700 font-medium">
               {pendingBookings} {locale === 'fr' ? `réservation${pendingBookings > 1 ? 's' : ''} en attente de confirmation` : `booking${pendingBookings > 1 ? 's' : ''} pending confirmation`}
+            </span>
+          </div>
+        </Link>
+      )}
+
+      {petsWithoutDob > 0 && (
+        <Link href={`/${locale}/admin/animals?missingDob=true`}>
+          <div className="mb-6 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4 hover:bg-amber-100 transition-colors cursor-pointer">
+            <CalendarOff className="h-5 w-5 text-amber-500 flex-shrink-0" />
+            <span className="text-amber-700 font-medium">
+              {petsWithoutDob} {locale === 'fr'
+                ? `animal${petsWithoutDob > 1 ? 'aux' : ''} sans date de naissance — affecter les anniversaires`
+                : `pet${petsWithoutDob > 1 ? 's' : ''} without date of birth — assign birthdays`}
             </span>
           </div>
         </Link>

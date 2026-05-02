@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
+import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -57,8 +58,16 @@ export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params;
   const body = await request.json();
 
-  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    include: { client: { select: { role: true } } },
+  });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // P0: cross-role guard — an ADMIN must not mutate invoices belonging to a SUPERADMIN
+  if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   // Optimistic concurrency: when caller provides `version`, refuse to apply
   // the patch if the row was modified since they read it. Backward compatible
@@ -168,6 +177,15 @@ export async function PATCH(request: Request, { params }: Params) {
       await allocatePayments(id);
     }
 
+    // P0-4: audit log on full invoice edit
+    await logAction({
+      userId: session.user.id,
+      action: LOG_ACTIONS.INVOICE_UPDATED,
+      entityType: 'Invoice',
+      entityId: id,
+      details: { fromStatus: invoice.status, toStatus: isCancel ? 'CANCELLED' : status ?? invoice.status, amount: newAmount },
+    });
+
     const updated = await prisma.invoice.findUnique({ where: { id }, include: FULL_INCLUDE });
     return NextResponse.json(updated);
   }
@@ -189,6 +207,16 @@ export async function PATCH(request: Request, { params }: Params) {
 
   updateData.version = { increment: 1 };
   const updated = await prisma.invoice.update({ where: { id }, data: updateData });
+
+  // P0-4: audit log on legacy status/notes update
+  await logAction({
+    userId: session.user.id,
+    action: LOG_ACTIONS.INVOICE_UPDATED,
+    entityType: 'Invoice',
+    entityId: id,
+    details: { fromStatus: invoice.status, toStatus: (updateData.status as string | undefined) ?? invoice.status },
+  });
+
   return NextResponse.json(updated);
 }
 
@@ -200,11 +228,28 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    include: { client: { select: { role: true } } },
+  });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // P0: cross-role guard — an ADMIN must not delete invoices belonging to a SUPERADMIN
+  if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   // onDelete: Cascade on InvoiceItem and Payment handles related records
   await prisma.invoice.delete({ where: { id } });
+
+  // P0-4: audit log on invoice deletion
+  await logAction({
+    userId: session.user.id,
+    action: LOG_ACTIONS.INVOICE_DELETED,
+    entityType: 'Invoice',
+    entityId: id,
+    details: { status: invoice.status, amount: invoice.amount, clientId: invoice.clientId },
+  });
 
   return new NextResponse(null, { status: 204 });
 }
