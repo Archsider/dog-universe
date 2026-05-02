@@ -30,12 +30,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const isValid = await bcrypt.compare(password, user.passwordHash);
         if (!isValid) return null;
 
+        // Fetch totpEnabled to signal pending 2FA
+        const totpData = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { totpEnabled: true },
+        });
+        const totpPending = totpData?.totpEnabled ?? false;
+
         return {
           id: user.id,
           email: user.email,
           name: user.name ?? user.email.split('@')[0],
           role: user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN',
           language: user.language,
+          totpPending,
         };
       },
     }),
@@ -50,6 +58,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id!;
         token.role = user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
         token.language = (user as { language?: string }).language ?? 'fr';
+        token.totpPending = (user as { totpPending?: boolean }).totpPending ?? false;
         // Store tokenVersion at login time — used to detect password changes
         const dbUserAtLogin = await prisma.user.findUnique({
           where: { id: user.id! },
@@ -60,7 +69,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Re-fetch role and tokenVersion from DB on every token renewal
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id },
-          select: { role: true, language: true, tokenVersion: true, deletedAt: true, anonymizedAt: true },
+          select: { role: true, language: true, tokenVersion: true, deletedAt: true, anonymizedAt: true, totpEnabled: true, totpVerifiedAt: true },
         });
         if (!dbUser) return null; // Account deleted → invalidate session
         if (dbUser.deletedAt || dbUser.anonymizedAt) return null; // Soft-deleted/anonymized → force logout
@@ -68,6 +77,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (dbUser.tokenVersion !== token.tokenVersion) return null;
         token.role = dbUser.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
         token.language = dbUser.language ?? 'fr';
+        // Si TOTP pending mais vérifié depuis le login → clear
+        if (token.totpPending && dbUser.totpVerifiedAt) {
+          const issuedAt = new Date((token.iat as number) * 1000);
+          if (dbUser.totpVerifiedAt > issuedAt) {
+            token.totpPending = false;
+          }
+        }
+        // Si TOTP désactivé entre-temps → clear
+        if (!dbUser.totpEnabled) {
+          token.totpPending = false;
+        }
       }
       return token;
     },
@@ -76,6 +96,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.id;
         session.user.role = token.role;
         session.user.language = token.language ?? 'fr';
+        session.user.totpPending = token.totpPending ?? false;
       }
       return session;
     },

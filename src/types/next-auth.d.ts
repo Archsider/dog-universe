@@ -9,6 +9,7 @@ declare module 'next-auth' {
       name: string;
       role: 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
       language: string;
+      totpPending?: boolean;
     };
   }
 
@@ -18,6 +19,7 @@ declare module 'next-auth' {
     name: string;
     role: 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
     language: string;
+    totpPending?: boolean;
   }
 }
 
@@ -27,5 +29,6 @@ declare module 'next-auth/jwt' {
     role: 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
     language: string;
     tokenVersion: number;
+    totpPending?: boolean;
   }
 }

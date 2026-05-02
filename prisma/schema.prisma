@@ -37,6 +37,11 @@ model User {
 
   deletedAt DateTime? // Soft-delete — null = active, non-null = archived
 
+  // 2FA TOTP
+  totpSecret     String?
+  totpEnabled    Boolean  @default(false)
+  totpVerifiedAt DateTime?
+
   pets          Pet[]
   bookings      Booking[]
   invoices      Invoice[]
