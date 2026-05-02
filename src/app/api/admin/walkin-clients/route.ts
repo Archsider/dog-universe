@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
+import { z } from 'zod';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 
@@ -10,18 +11,33 @@ import { prisma } from '@/lib/prisma';
 // existe déjà, le retourne directement.
 // body: { name: string, phone?: string }
 // ---------------------------------------------------------------------------
+
+const walkInSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^(\+212|0)[5-7]\d{8}$/, 'INVALID_PHONE_FORMAT')
+    .max(30)
+    .optional()
+    .nullable(),
+});
+
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const body = await request.json();
-  const { name, phone } = body;
-
-  if (!name || typeof name !== 'string' || !name.trim()) {
-    return NextResponse.json({ error: 'INVALID_NAME' }, { status: 400 });
+  // P1-2: Zod validation — phone format marocain + name constraints
+  const rawBody = await request.json().catch(() => ({}));
+  const parsed = walkInSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    const firstError = parsed.error.errors[0];
+    const code = firstError?.message === 'INVALID_PHONE_FORMAT' ? 'INVALID_PHONE_FORMAT' : 'INVALID_INPUT';
+    return NextResponse.json({ error: code, details: parsed.error.errors }, { status: 400 });
   }
+  const { name, phone } = parsed.data;
 
   const trimmedName = name.trim().slice(0, 100);
   const trimmedPhone =

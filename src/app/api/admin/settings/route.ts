@@ -54,13 +54,19 @@ export async function PUT(request: Request) {
   }
   const body = parsed.data;
 
-  // Only allow known keys with positive numeric values
+  // Only allow known keys with positive numeric values within safe bounds
   const allowedKeys = Object.keys(DEFAULT_SETTINGS);
+  const CAPACITY_KEYS = new Set(['capacity_dog', 'capacity_cat']);
+  const MAX_RATE = 99999;
+  const MAX_CAPACITY = 500;
+
   const updates = Object.entries(body)
     .filter(([k]) => allowedKeys.includes(k))
-    .filter(([, v]) => {
-      const parsed = Number(v);
-      return !isNaN(parsed) && parsed > 0;
+    .filter(([k, v]) => {
+      const n = Number(v);
+      if (isNaN(n) || n <= 0) return false;
+      const max = CAPACITY_KEYS.has(k) ? MAX_CAPACITY : MAX_RATE;
+      return n <= max;
     });
 
   if (updates.length === 0) return NextResponse.json({ ok: true });

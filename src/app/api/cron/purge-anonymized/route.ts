@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   }
 
   // Monthly idempotency lock (period key = YYYY-MM)
-  const acquired = await acquireCronLock('purge-anonymized', 28 * 24 * 3600, 'weekly');
+  const acquired = await acquireCronLock('purge-anonymized', 28 * 24 * 3600, 'monthly');
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }

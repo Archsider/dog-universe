@@ -39,6 +39,9 @@ export function periodKey(period: CronPeriod, now: Date = new Date()): string {
   }
   const y = now.getUTCFullYear();
   const m = String(now.getUTCMonth() + 1).padStart(2, '0');
+  if (period === 'monthly') {
+    return `${y}-${m}`;
+  }
   const d = String(now.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
