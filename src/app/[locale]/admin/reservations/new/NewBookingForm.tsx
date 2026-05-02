@@ -8,6 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { AvailabilityCalendar } from '@/components/shared/AvailabilityCalendar';
+import {
+  calculateBoardingBreakdown,
+  calculateTaxiPrice,
+  type PricingSettings,
+} from '@/lib/pricing-rules';
 
 type PetLite = { id: string; name: string; species: 'DOG' | 'CAT'; dateOfBirth: string | null };
 type ClientLite = { id: string; name: string; email: string; phone: string | null; pets: PetLite[] };
@@ -15,8 +20,7 @@ type ClientLite = { id: string; name: string; email: string; phone: string | nul
 type Props = {
   clients: ClientLite[];
   locale: string;
-  pricePerNightDog: number;
-  pricePerNightCat: number;
+  pricing: PricingSettings;
 };
 
 type WalkInPet = { name: string; species: 'DOG' | 'CAT'; dateOfBirth: string; breed: string };
@@ -110,7 +114,7 @@ const L = {
   },
 };
 
-export function NewBookingForm({ clients, locale, pricePerNightDog, pricePerNightCat }: Props) {
+export function NewBookingForm({ clients, locale, pricing }: Props) {
   const router = useRouter();
   const t = (L as Record<string, typeof L.fr>)[locale] || L.fr;
 
@@ -146,26 +150,31 @@ export function NewBookingForm({ clients, locale, pricePerNightDog, pricePerNigh
 
   const selectedClient = clients.find((c) => c.id === clientId) || null;
 
-  // Suggested price: BOARDING = days × pricePerNight × pets (per species), TAXI = 150 flat.
+  // Suggested price uses calculateBoardingBreakdown / calculateTaxiPrice from
+  // pricing-rules (single source of truth, same engine as the client booking
+  // flow and admin extension recalculations).
   const suggestedPrice = useMemo(() => {
-    if (serviceType === 'PET_TAXI') return 150;
+    if (serviceType === 'PET_TAXI') {
+      return calculateTaxiPrice('STANDARD', pricing).total;
+    }
     if (!startDate || !endDate) return 0;
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000));
-    if (walkInMode) {
-      const validPets = walkInPets.filter((p) => p.name.trim());
-      const total = validPets.reduce((acc, p) => {
-        return acc + days * (p.species === 'CAT' ? pricePerNightCat : pricePerNightDog);
-      }, 0);
-      return total || days * pricePerNightDog;
-    }
-    const selectedPets = selectedClient?.pets.filter((p) => selectedPetIds.includes(p.id)) ?? [];
-    if (selectedPets.length === 0) return 0;
-    return selectedPets.reduce((acc, p) => {
-      return acc + days * (p.species === 'CAT' ? pricePerNightCat : pricePerNightDog);
-    }, 0);
-  }, [serviceType, startDate, endDate, walkInMode, walkInPets, selectedPetIds, selectedClient, pricePerNightDog, pricePerNightCat]);
+    const nights = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000));
+
+    const pets = walkInMode
+      ? walkInPets
+          .filter((p) => p.name.trim())
+          .map((p, i) => ({ id: `wi-${i}`, name: p.name.trim(), species: p.species }))
+      : (selectedClient?.pets.filter((p) => selectedPetIds.includes(p.id)) ?? []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          species: p.species,
+        }));
+
+    if (pets.length === 0) return 0;
+    return calculateBoardingBreakdown(nights, pets, undefined, false, false, pricing).total;
+  }, [serviceType, startDate, endDate, walkInMode, walkInPets, selectedPetIds, selectedClient, pricing]);
 
   // Mirror calendar selection.
   const onCalendarRange = (s: string, e: string | null) => {
