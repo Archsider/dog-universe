@@ -454,6 +454,8 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | Soft-delete User/Pet | RÉSOLU (`0dcf7c8`) | `deletedAt` ajouté à `User` + `Pet`, 28 fichiers filtrés, DELETE → soft-delete — migration SQL à exécuter sur Supabase |
 | Sentry instrumentation API | RÉSOLU (`21bdccd`) | `Sentry.startSpan()` câblé sur POST /api/bookings + PATCH /api/admin/bookings/[id] avec attributs serviceType/petCount/bookingId |
 | 2FA TOTP ADMIN/SUPERADMIN | **DURCI (2026-05-03)** | Bypass `/api/admin/*` corrigé (middleware retourne 403 `TOTP_REQUIRED`). Setup/disable exigent re-auth password ; disable + rotation exigent aussi un token TOTP courant. Replay protection (`lastTotpToken` + `lastTotpUsedAt`, fenêtre 90 s). Rate-limit `auth` (10/15 min) sur validate / verify-setup / disable. Secrets chiffrés AES-256-GCM via `TOTP_ENCRYPTION_KEY` (32 bytes hex). Migration : `20260503_totp_replay/migration.sql`. **Variable d'env requise en production : `TOTP_ENCRYPTION_KEY` — générer avec `openssl rand -hex 32`.** |
+| Création réservation admin | RÉSOLU (2026-05-03, `f9f5552`) | `POST /api/admin/bookings` + page `/admin/reservations/new` (formulaire walk-in / clients existants, calendrier disponibilités, prix suggéré, auto-facture). Bouton "+ Créer une réservation" dans header `/admin/reservations`. |
+| Routing slug conflict Next.js | RÉSOLU (2026-05-03, `8fc409d`) | `/api/taxi/[bookingId]/heartbeat` et `/api/taxi/[token]/stream` partageaient le même parent → Next.js 15 crashe le dev server au démarrage, toutes requêtes API renvoient HTML d'erreur (`Unexpected token '<'`). Renommé `[bookingId]` → `[token]` sur heartbeat. **Règle Next.js 15 : un seul nom de slug autorisé par niveau hiérarchique de route.** |
 
 ---
 
