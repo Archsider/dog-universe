@@ -161,6 +161,10 @@ export async function billedByCategory(
       items:    { select: { category: true, description: true, unitPrice: true, quantity: true } },
       payments: { select: { amount: true, paymentDate: true } },
     },
+    // DoS / OOM defense: cap at 1000 invoices per period. At ~current volume this never trips;
+    // at 10k+ invoices a single period query would exhaust Lambda memory. If the cap is ever
+    // reached, the analytics page should switch to summary-table aggregation.
+    take: 1000,
   });
 
   const result: CategoryBreakdown = {

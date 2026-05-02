@@ -4,13 +4,25 @@ import { z } from 'zod';
 
 // ─── Auth / profil ─────────────────────────────────────────────────────────
 
-export const passwordChangeSchema = z.object({
-  oldPassword: z.string().min(1, 'oldPassword required').max(200),
-  newPassword: z
+// Password complexity policy: 8+ chars with at least one lowercase, one uppercase, one digit.
+// Applied on register, reset-password, password-change, and admin-create-user paths.
+const PASSWORD_COMPLEXITY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
+const PASSWORD_COMPLEXITY_MSG =
+  'Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre';
+
+const strongPassword = () =>
+  z
     .string()
     .min(8, 'min 8 chars')
     .max(200, 'max 200 chars')
-    .refine(v => v.trim().length === v.length, 'no leading/trailing spaces'),
+    .regex(PASSWORD_COMPLEXITY, PASSWORD_COMPLEXITY_MSG);
+
+export const passwordChangeSchema = z.object({
+  oldPassword: z.string().min(1, 'oldPassword required').max(200),
+  newPassword: strongPassword().refine(
+    v => v.trim().length === v.length,
+    'no leading/trailing spaces',
+  ),
 });
 
 // Inscription nouveau client
@@ -31,7 +43,7 @@ export const registerSchema = z.object({
     .or(z.null())
     .or(z.undefined())
     .transform(v => (v === '' ? null : v ?? null)),
-  password: z.string().min(8, 'min 8 chars').max(200),
+  password: strongPassword(),
   language: z.enum(['fr', 'en']).optional(),
 });
 
@@ -44,7 +56,7 @@ export const resetPasswordRequestSchema = z.object({
 // Confirmation reset password (token + new password)
 export const resetPasswordConfirmSchema = z.object({
   token: z.string().min(20).max(100), // UUID v4 = 36, on tolère un peu
-  password: z.string().min(8, 'min 8 chars').max(200),
+  password: strongPassword(),
 });
 
 // Update profil client (champs limités)

@@ -86,7 +86,7 @@ function makeRequest(body: unknown): Request {
 const validBody = {
   name: 'Alice Dupont',
   email: 'alice@example.com',
-  password: 'secure-password-123',
+  password: 'SecurePassword123',
   phone: '+212600000001',
   language: 'fr',
 };
@@ -214,7 +214,7 @@ describe('POST /api/register — success', () => {
   it('stores hashed password, not plaintext', async () => {
     await POST(makeRequest(validBody));
     // bcrypt.hash must be called with the plaintext password
-    expect(mocks.bcryptHash).toHaveBeenCalledWith('secure-password-123', 12);
+    expect(mocks.bcryptHash).toHaveBeenCalledWith('SecurePassword123', 12);
     // tx.user.create must receive passwordHash, not the plain password
     expect(mocks.prismaTx.user.create).toHaveBeenCalledWith(
       expect.objectContaining({

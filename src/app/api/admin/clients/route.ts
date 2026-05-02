@@ -104,7 +104,12 @@ export async function POST(request: Request) {
   if (!name || !email || !password) {
     return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
   }
-  if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+  if (
+    typeof password !== 'string' ||
+    password.length < 8 ||
+    password.length > 128 ||
+    !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)
+  ) {
     return NextResponse.json({ error: 'WEAK_PASSWORD' }, { status: 400 });
   }
 

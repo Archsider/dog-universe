@@ -34,7 +34,12 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
 
   SENTRY_DSN: z.string().url().optional(),
-  CRON_SECRET: z.string().optional(),
+  // CRON_SECRET: required in production (cron endpoints would be unprotected without it).
+  // Optional in dev/test/build to keep local DX painless.
+  CRON_SECRET:
+    process.env.NODE_ENV === 'production'
+      ? z.string().min(32, 'CRON_SECRET must be ≥32 chars in production')
+      : z.string().optional(),
 });
 
 const skip =
