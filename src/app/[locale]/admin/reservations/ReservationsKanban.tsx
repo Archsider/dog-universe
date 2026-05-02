@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, Component, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   DndContext,
@@ -14,6 +14,13 @@ import {
   useDroppable,
   DragOverlay,
 } from '@dnd-kit/core';
+
+// Error boundary — catches dnd-kit DOM crashes (Android Chrome / React 19 hydration)
+class KanbanErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { crashed: boolean }> {
+  state = { crashed: false };
+  static getDerivedStateFromError() { return { crashed: true }; }
+  render() { return this.state.crashed ? this.props.fallback : this.props.children; }
+}
 import { Package, Car, MapPin, Clock, CalendarDays, ChevronRight, ArrowRight, Loader2, UserX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -246,7 +253,32 @@ function NoShowButton({
 }
 
 /**
- * DraggableCard — wraps a card with dnd-kit's useDraggable + click-to-navigate.
+ * StaticCard — mobile fallback, no DnD. Click navigates to booking detail.
+ * Rendered on touch devices to avoid dnd-kit crashing (Android Chrome / React 19).
+ */
+function StaticCard({
+  booking,
+  locale,
+  children,
+}: {
+  booking: KanbanBooking;
+  locale: string;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const handleClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    router.push(`/${locale}/admin/reservations/${booking.id}`);
+  };
+  return (
+    <div onClick={handleClick} role="button" tabIndex={0} style={{ cursor: 'pointer' }}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * DraggableCard — desktop only. Wraps a card with dnd-kit's useDraggable.
  * Activation distance (5px) means a quick click navigates while a real drag triggers DnD.
  */
 function DraggableCard({
@@ -265,7 +297,6 @@ function DraggableCard({
   });
 
   const handleClick = (e: React.MouseEvent) => {
-    // Don't navigate if click came from a child button (they stop propagation, but be safe)
     if ((e.target as HTMLElement).closest('button')) return;
     router.push(`/${locale}/admin/reservations/${booking.id}`);
   };
@@ -359,13 +390,16 @@ function BoardingCard({
   b,
   locale,
   applyTransition,
+  isMobile,
 }: {
   b: KanbanBooking;
   locale: string;
   applyTransition: ApplyTransition;
+  isMobile: boolean;
 }) {
+  const CardWrapper = isMobile ? StaticCard : DraggableCard;
   return (
-    <DraggableCard booking={b} locale={locale}>
+    <CardWrapper booking={b} locale={locale}>
       <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-gold-300 hover:shadow-md transition-all group">
         <BoardingCardInner b={b} locale={locale} />
         <ActionButton
@@ -384,7 +418,7 @@ function BoardingCard({
           applyTransition={applyTransition}
         />
       </div>
-    </DraggableCard>
+    </CardWrapper>
   );
 }
 
@@ -392,13 +426,16 @@ function TaxiCard({
   b,
   locale,
   applyTransition,
+  isMobile,
 }: {
   b: KanbanBooking;
   locale: string;
   applyTransition: ApplyTransition;
+  isMobile: boolean;
 }) {
+  const CardWrapper = isMobile ? StaticCard : DraggableCard;
   return (
-    <DraggableCard booking={b} locale={locale}>
+    <CardWrapper booking={b} locale={locale}>
       <div className="bg-white border border-ivory-200 rounded-xl p-3 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group">
         <TaxiCardInner b={b} locale={locale} />
         <ActionButton
@@ -417,11 +454,12 @@ function TaxiCard({
           applyTransition={applyTransition}
         />
       </div>
-    </DraggableCard>
+    </CardWrapper>
   );
 }
 
-function Column({
+/** Desktop column — uses useDroppable, must be inside DndContext */
+function DesktopColumn({
   col,
   bookings,
   locale,
@@ -451,17 +489,50 @@ function Column({
           isOver ? 'ring-2 ring-gold-400 ring-inset bg-gold-50/40' : ''
         }`}
       >
-        {bookings.length === 0 ? (
-          <p className="text-xs text-gray-300 text-center pt-4">{isFr ? 'Aucune' : 'None'}</p>
-        ) : (
-          bookings.map((b) =>
-            pipeline === 'BOARDING' ? (
-              <BoardingCard key={b.id} b={b} locale={locale} applyTransition={applyTransition} />
-            ) : (
-              <TaxiCard key={b.id} b={b} locale={locale} applyTransition={applyTransition} />
-            )
-          )
-        )}
+        {bookings.length === 0
+          ? <p className="text-xs text-gray-300 text-center pt-4">{isFr ? 'Aucune' : 'None'}</p>
+          : bookings.map((b) =>
+              pipeline === 'BOARDING'
+                ? <BoardingCard key={b.id} b={b} locale={locale} applyTransition={applyTransition} isMobile={false} />
+                : <TaxiCard key={b.id} b={b} locale={locale} applyTransition={applyTransition} isMobile={false} />
+            )}
+      </div>
+    </div>
+  );
+}
+
+/** Mobile column — no DnD hooks, safe on Android Chrome */
+function MobileColumn({
+  col,
+  bookings,
+  locale,
+  pipeline,
+  applyTransition,
+}: {
+  col: { status: string; label: { fr: string; en: string }; color: string; dot: string };
+  bookings: KanbanBooking[];
+  locale: string;
+  pipeline: 'BOARDING' | 'PET_TAXI';
+  applyTransition: ApplyTransition;
+}) {
+  const isFr = locale === 'fr';
+  const label = isFr ? col.label.fr : col.label.en;
+
+  return (
+    <div className="flex flex-col min-w-[260px] max-w-[280px] flex-shrink-0">
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-t-xl border-t border-l border-r ${col.color}`}>
+        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${col.dot}`} />
+        <span className="text-xs font-semibold text-charcoal flex-1">{label}</span>
+        <span className="text-xs text-gray-400 font-medium">{bookings.length}</span>
+      </div>
+      <div className={`flex-1 rounded-b-xl border ${col.color} p-2 space-y-2 min-h-[120px]`}>
+        {bookings.length === 0
+          ? <p className="text-xs text-gray-300 text-center pt-4">{isFr ? 'Aucune' : 'None'}</p>
+          : bookings.map((b) =>
+              pipeline === 'BOARDING'
+                ? <BoardingCard key={b.id} b={b} locale={locale} applyTransition={applyTransition} isMobile={true} />
+                : <TaxiCard key={b.id} b={b} locale={locale} applyTransition={applyTransition} isMobile={true} />
+            )}
       </div>
     </div>
   );
@@ -471,12 +542,18 @@ export function ReservationsKanban({ bookings: initialBookings, locale }: Props)
   const [pipeline, setPipeline] = useState<'BOARDING' | 'PET_TAXI'>('BOARDING');
   const [bookings, setBookings] = useState<KanbanBooking[]>(initialBookings);
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Detect touch device — evaluated after hydration to avoid SSR mismatch.
+  // On touch devices, dnd-kit's PointerSensor can crash React 19 hydration
+  // (TypeError: parentNode null) on Android Chrome. We disable DnD on mobile;
+  // ActionButton handles transitions on all screen sizes.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    setIsMobile(window.matchMedia('(pointer: coarse)').matches);
+  }, []);
+
   const isFr = locale === 'fr';
 
   const sensors = useSensors(
-    // Activation distance 5px: distinguishes a click (navigate) from a drag (DnD).
-    // 5px is a common dnd-kit value — small enough that intentional drags trigger
-    // immediately, large enough that micro-movements during a click don't.
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor),
   );
@@ -556,42 +633,44 @@ export function ReservationsKanban({ bookings: initialBookings, locale }: Props)
 
   const activeBooking = activeId ? bookings.find(b => b.id === activeId) ?? null : null;
 
-  return (
-    <div>
-      {/* Pipeline toggle */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setPipeline('BOARDING')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            pipeline === 'BOARDING'
-              ? 'bg-gold-500 text-white shadow-sm'
-              : 'bg-white border border-ivory-200 text-gray-600 hover:border-gold-300'
-          }`}
-        >
-          <Package className="h-4 w-4" />
-          {isFr ? 'Pension' : 'Boarding'}
-        </button>
-        <button
-          onClick={() => setPipeline('PET_TAXI')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            pipeline === 'PET_TAXI'
-              ? 'bg-blue-500 text-white shadow-sm'
-              : 'bg-white border border-ivory-200 text-gray-600 hover:border-blue-300'
-          }`}
-        >
-          <Car className="h-4 w-4" />
-          Pet Taxi
-        </button>
-        <span className="ml-auto text-xs text-gray-400 self-center">
-          {filtered.length} {isFr ? 'réservation(s)' : 'booking(s)'}
-        </span>
-      </div>
+  const toggle = (
+    <div className="flex gap-2 mb-4">
+      <button
+        onClick={() => setPipeline('BOARDING')}
+        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          pipeline === 'BOARDING'
+            ? 'bg-gold-500 text-white shadow-sm'
+            : 'bg-white border border-ivory-200 text-gray-600 hover:border-gold-300'
+        }`}
+      >
+        <Package className="h-4 w-4" />
+        {isFr ? 'Pension' : 'Boarding'}
+      </button>
+      <button
+        onClick={() => setPipeline('PET_TAXI')}
+        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          pipeline === 'PET_TAXI'
+            ? 'bg-blue-500 text-white shadow-sm'
+            : 'bg-white border border-ivory-200 text-gray-600 hover:border-blue-300'
+        }`}
+      >
+        <Car className="h-4 w-4" />
+        Pet Taxi
+      </button>
+      <span className="ml-auto text-xs text-gray-400 self-center">
+        {filtered.length} {isFr ? 'réservation(s)' : 'booking(s)'}
+      </span>
+    </div>
+  );
 
-      {/* Kanban columns */}
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+  // Mobile: no DnD, no DndContext — plain scrollable columns with ActionButtons
+  if (isMobile) {
+    return (
+      <div>
+        {toggle}
         <div className="flex gap-3 overflow-x-auto pb-4">
           {cols.map((col) => (
-            <Column
+            <MobileColumn
               key={col.status}
               col={col}
               bookings={filtered.filter((b) => b.status === col.status)}
@@ -601,18 +680,56 @@ export function ReservationsKanban({ bookings: initialBookings, locale }: Props)
             />
           ))}
         </div>
-        <DragOverlay>
-          {activeBooking ? (
-            <div className="bg-white border-2 border-gold-400 rounded-xl p-3 shadow-2xl rotate-2 opacity-90 max-w-[280px]">
-              {activeBooking.serviceType === 'BOARDING' ? (
-                <BoardingCardInner b={activeBooking} locale={locale} />
-              ) : (
-                <TaxiCardInner b={activeBooking} locale={locale} />
-              )}
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      </div>
+    );
+  }
+
+  // Desktop: full DnD experience, wrapped in error boundary as safety net
+  return (
+    <div>
+      {toggle}
+      <KanbanErrorBoundary
+        fallback={
+          <div className="flex gap-3 overflow-x-auto pb-4">
+            {cols.map((col) => (
+              <MobileColumn
+                key={col.status}
+                col={col}
+                bookings={filtered.filter((b) => b.status === col.status)}
+                locale={locale}
+                pipeline={pipeline}
+                applyTransition={applyTransition}
+              />
+            ))}
+          </div>
+        }
+      >
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="flex gap-3 overflow-x-auto pb-4">
+            {cols.map((col) => (
+              <DesktopColumn
+                key={col.status}
+                col={col}
+                bookings={filtered.filter((b) => b.status === col.status)}
+                locale={locale}
+                pipeline={pipeline}
+                applyTransition={applyTransition}
+              />
+            ))}
+          </div>
+          <DragOverlay>
+            {activeBooking ? (
+              <div className="bg-white border-2 border-gold-400 rounded-xl p-3 shadow-2xl rotate-2 opacity-90 max-w-[280px]">
+                {activeBooking.serviceType === 'BOARDING' ? (
+                  <BoardingCardInner b={activeBooking} locale={locale} />
+                ) : (
+                  <TaxiCardInner b={activeBooking} locale={locale} />
+                )}
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      </KanbanErrorBoundary>
     </div>
   );
 }
