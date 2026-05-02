@@ -2,6 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { CalendarGrid } from './CalendarGrid';
+import { AvailabilityCalendar } from '@/components/shared/AvailabilityCalendar';
 
 interface Props {
   params: Promise<{ locale: string }>;
@@ -108,6 +109,35 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
       </div>
 
       <CalendarGrid year={year} month={month} locale={locale} bookings={serialized} />
+
+      {/* Availability panels — occupancy at a glance */}
+      <div className="mt-8">
+        <h2 className="text-lg font-semibold text-charcoal mb-4">
+          {locale === 'en' ? 'Availability Overview' : 'Calendrier de disponibilités'}
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <p className="text-sm font-medium text-charcoal/70 mb-2">
+              {locale === 'en' ? 'Dogs' : 'Chiens'}
+            </p>
+            <AvailabilityCalendar
+              species="DOG"
+              interactive={false}
+              initialMonth={`${year}-${String(month).padStart(2, '0')}`}
+            />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-charcoal/70 mb-2">
+              {locale === 'en' ? 'Cats' : 'Chats'}
+            </p>
+            <AvailabilityCalendar
+              species="CAT"
+              interactive={false}
+              initialMonth={`${year}-${String(month).padStart(2, '0')}`}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
