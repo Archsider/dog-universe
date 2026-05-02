@@ -61,6 +61,7 @@ async function computeAvailability(species: Species, month: string): Promise<Ava
         select: { pet: { select: { species: true } } },
       },
     },
+    take: 2000,
   });
 
   // Count only pets of the requested species per booking
@@ -112,6 +113,24 @@ export async function GET(request: NextRequest) {
   // Validate month
   if (!MONTH_RE.test(month)) {
     return NextResponse.json({ error: 'Invalid month format. Use YYYY-MM.' }, { status: 400 });
+  }
+
+  // Clamp month to ±24 months around today. Prevents an attacker from
+  // forcing the server to pre-compute and cache thousands of far-future or
+  // ancient projections (cache pollution + DB load).
+  {
+    const [yStr, mStr] = month.split('-');
+    const year = parseInt(yStr, 10);
+    const monthNum = parseInt(mStr, 10);
+    if (!Number.isFinite(year) || monthNum < 1 || monthNum > 12) {
+      return NextResponse.json({ error: 'INVALID_MONTH_RANGE' }, { status: 400 });
+    }
+    const requested = year * 12 + (monthNum - 1);
+    const now = new Date();
+    const current = now.getFullYear() * 12 + now.getMonth();
+    if (Math.abs(requested - current) > 24) {
+      return NextResponse.json({ error: 'INVALID_MONTH_RANGE' }, { status: 400 });
+    }
   }
 
   // Validate species
