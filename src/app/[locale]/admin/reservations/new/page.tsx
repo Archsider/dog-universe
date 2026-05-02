@@ -14,22 +14,26 @@ export default async function AdminNewReservationPage({ params }: PageProps) {
     redirect(`/${locale}/auth/login`);
   }
 
-  const clientsRaw = await prisma.user.findMany({
-    where: { role: 'CLIENT', deletedAt: null },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      pets: {
-        where: { deletedAt: null },
-        select: { id: true, name: true, species: true, dateOfBirth: true },
-        orderBy: { name: 'asc' },
+  const [clientsRaw, settingDog, settingCat] = await Promise.all([
+    prisma.user.findMany({
+      where: { role: 'CLIENT', deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        pets: {
+          where: { deletedAt: null },
+          select: { id: true, name: true, species: true, dateOfBirth: true },
+          orderBy: { name: 'asc' },
+        },
       },
-    },
-    orderBy: { name: 'asc' },
-    take: 1000,
-  });
+      orderBy: { name: 'asc' },
+      take: 1000,
+    }),
+    prisma.setting.findUnique({ where: { key: 'price_per_night_dog' }, select: { value: true } }),
+    prisma.setting.findUnique({ where: { key: 'price_per_night_cat' }, select: { value: true } }),
+  ]);
 
   const clients = clientsRaw.map((c) => ({
     id: c.id,
@@ -44,12 +48,21 @@ export default async function AdminNewReservationPage({ params }: PageProps) {
     })),
   }));
 
+  // Default to 200 MAD/night if not configured in Settings
+  const pricePerNightDog = settingDog?.value ? parseFloat(settingDog.value) || 200 : 200;
+  const pricePerNightCat = settingCat?.value ? parseFloat(settingCat.value) || 200 : 200;
+
   return (
     <div className="max-w-4xl">
       <h1 className="text-2xl font-serif font-bold text-charcoal mb-6">
         {locale === 'fr' ? 'Créer une réservation' : 'New booking'}
       </h1>
-      <NewBookingForm clients={clients} locale={locale} />
+      <NewBookingForm
+        clients={clients}
+        locale={locale}
+        pricePerNightDog={pricePerNightDog}
+        pricePerNightCat={pricePerNightCat}
+      />
     </div>
   );
 }

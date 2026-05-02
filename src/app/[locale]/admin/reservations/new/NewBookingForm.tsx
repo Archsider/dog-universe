@@ -15,6 +15,8 @@ type ClientLite = { id: string; name: string; email: string; phone: string | nul
 type Props = {
   clients: ClientLite[];
   locale: string;
+  pricePerNightDog: number;
+  pricePerNightCat: number;
 };
 
 type WalkInPet = { name: string; species: 'DOG' | 'CAT'; dateOfBirth: string; breed: string };
@@ -108,7 +110,7 @@ const L = {
   },
 };
 
-export function NewBookingForm({ clients, locale }: Props) {
+export function NewBookingForm({ clients, locale, pricePerNightDog, pricePerNightCat }: Props) {
   const router = useRouter();
   const t = (L as Record<string, typeof L.fr>)[locale] || L.fr;
 
@@ -144,18 +146,26 @@ export function NewBookingForm({ clients, locale }: Props) {
 
   const selectedClient = clients.find((c) => c.id === clientId) || null;
 
-  // Suggested price: BOARDING = days × 200 × pets, TAXI = 150 flat.
+  // Suggested price: BOARDING = days × pricePerNight × pets (per species), TAXI = 150 flat.
   const suggestedPrice = useMemo(() => {
     if (serviceType === 'PET_TAXI') return 150;
     if (!startDate || !endDate) return 0;
     const start = new Date(startDate);
     const end = new Date(endDate);
     const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000));
-    const petCount = walkInMode
-      ? Math.max(1, walkInPets.filter((p) => p.name.trim()).length)
-      : Math.max(1, selectedPetIds.length);
-    return days * 200 * petCount;
-  }, [serviceType, startDate, endDate, walkInMode, walkInPets, selectedPetIds]);
+    if (walkInMode) {
+      const validPets = walkInPets.filter((p) => p.name.trim());
+      const total = validPets.reduce((acc, p) => {
+        return acc + days * (p.species === 'CAT' ? pricePerNightCat : pricePerNightDog);
+      }, 0);
+      return total || days * pricePerNightDog;
+    }
+    const selectedPets = selectedClient?.pets.filter((p) => selectedPetIds.includes(p.id)) ?? [];
+    if (selectedPets.length === 0) return 0;
+    return selectedPets.reduce((acc, p) => {
+      return acc + days * (p.species === 'CAT' ? pricePerNightCat : pricePerNightDog);
+    }, 0);
+  }, [serviceType, startDate, endDate, walkInMode, walkInPets, selectedPetIds, selectedClient, pricePerNightDog, pricePerNightCat]);
 
   // Mirror calendar selection.
   const onCalendarRange = (s: string, e: string | null) => {
