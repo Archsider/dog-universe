@@ -41,6 +41,8 @@ model User {
   totpSecret     String?
   totpEnabled    Boolean  @default(false)
   totpVerifiedAt DateTime?
+  lastTotpToken  String?
+  lastTotpUsedAt DateTime?
 
   pets          Pet[]
   bookings      Booking[]
