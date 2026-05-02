@@ -22,6 +22,29 @@ export async function middleware(request: NextRequest) {
   const rl = await checkRateLimit(request, { resolveUserId });
   if (!rl.ok) return rl.response;
 
+  // TOTP pending guard — ADMIN/SUPERADMIN who have not yet validated their 2FA
+  // this session are redirected to /[locale]/auth/totp until they do.
+  const pathname = request.nextUrl.pathname;
+  const isTotpPage = /\/auth\/totp/.test(pathname);
+  const isApiRoute = pathname.startsWith('/api/');
+  const isStaticRoute = /\/_next\/|\/favicon/.test(pathname);
+
+  if (!isTotpPage && !isApiRoute && !isStaticRoute) {
+    try {
+      const { auth } = await import('../auth');
+      const session = await auth();
+      if (session?.user?.totpPending) {
+        const localeMatch = pathname.match(/^\/(fr|en)\//);
+        const locale = localeMatch?.[1] ?? 'fr';
+        const totpUrl = new URL(`/${locale}/auth/totp`, request.url);
+        totpUrl.searchParams.set('callbackUrl', pathname);
+        return NextResponse.redirect(totpUrl);
+      }
+    } catch {
+      // fail-safe: if auth() fails, let the request through
+    }
+  }
+
   // CSP nonce + locale forwarding for RSC + next-intl.
   return applyI18nAndCsp(request);
 }
