@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cacheReadThrough } from '@/lib/cache';
+import { getCapacityLimits } from '@/lib/capacity';
 
 const MONTH_RE = /^\d{4}-\d{2}$/;
 const VALID_SPECIES = ['DOG', 'CAT'] as const;
@@ -30,7 +31,11 @@ function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function computeAvailability(species: Species, month: string): Promise<AvailabilityResponse> {
+async function computeAvailability(
+  species: Species,
+  month: string,
+  limit: number,
+): Promise<AvailabilityResponse> {
   const [yearStr, monthStr] = month.split('-');
   const year = parseInt(yearStr, 10);
   const monthNum = parseInt(monthStr, 10);
@@ -39,11 +44,6 @@ async function computeAvailability(species: Species, month: string): Promise<Ava
   start.setHours(0, 0, 0, 0);
   const end = new Date(year, monthNum, 0);
   end.setHours(23, 59, 59, 999);
-
-  // Get capacity limit for this species
-  const settingKey = species === 'DOG' ? 'capacity_dog' : 'capacity_cat';
-  const settingRow = await prisma.setting.findUnique({ where: { key: settingKey } });
-  const limit = settingRow ? parseInt(settingRow.value, 10) : (species === 'DOG' ? 20 : 10);
 
   // Fetch all BOARDING bookings overlapping the month
   const bookings = await prisma.booking.findMany({
@@ -140,9 +140,15 @@ export async function GET(request: NextRequest) {
 
   const species = (speciesParam as Species | undefined) ?? 'DOG';
 
+  // Single cached read for capacity limits — shared across all availability
+  // requests via the 5-min Redis cache in @/lib/capacity (vs the previous
+  // per-call setting.findUnique which bypassed the cache).
+  const limits = await getCapacityLimits();
+  const limit = species === 'DOG' ? limits.dogs : limits.cats;
+
   const cacheKey = `availability:${species}:${month}`;
   const data = await cacheReadThrough<AvailabilityResponse>(cacheKey, 300, () =>
-    computeAvailability(species, month),
+    computeAvailability(species, month, limit),
   );
 
   return NextResponse.json(data);

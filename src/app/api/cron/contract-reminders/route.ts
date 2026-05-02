@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
 
   let sent = 0;
   let skipped = 0;
+  let failures = 0;
   await Promise.all(unsigned.map(async (client) => {
     try {
       // Skip si un rappel a déjà été envoyé dans les 7 derniers jours.
@@ -95,7 +96,8 @@ export async function GET(req: NextRequest) {
         ));
       }
 
-      await Promise.allSettled(ops);
+      const settled = await Promise.allSettled(ops);
+      for (const s of settled) if (s.status === 'rejected') failures++;
       sent++;
     } catch (e) {
       console.error(JSON.stringify({ level: 'error', service: 'cron-contract-reminders', message: 'contract reminder failed for client', clientId: client.id, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() }));
@@ -103,5 +105,5 @@ export async function GET(req: NextRequest) {
   }));
 
   // debug log removed (contract-reminders summary)
-  return NextResponse.json({ sent, skipped, total: unsigned.length });
+  return NextResponse.json({ sent, skipped, failures, total: unsigned.length });
 }

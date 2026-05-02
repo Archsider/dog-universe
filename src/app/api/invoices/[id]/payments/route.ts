@@ -107,11 +107,11 @@ export async function POST(request: Request, { params }: Params) {
     await sendSMS(
       invoice.client.phone,
       `Bonjour ${firstName} ! Votre paiement de ${formatMAD(parsedAmount)} a bien été reçu. Merci pour votre fidélité. — Dog Universe`,
-    );
+    ).catch(() => undefined); // additive — do not fail the payment recording
   }
   await sendAdminSMS(
     `💰 Paiement : ${formatMAD(parsedAmount)} reçu de ${clientFullName} — ${invoice.invoiceNumber}.`,
-  );
+  ).catch(() => undefined);
 
   // --- Log ---
   await logAction({

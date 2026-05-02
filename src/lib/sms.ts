@@ -1,4 +1,5 @@
 import { env } from 'process'
+import CircuitBreaker from 'opossum'
 
 // Normalise un numéro marocain vers +212XXXXXXXXX
 function normalizePhone(phone: string): string {
@@ -9,7 +10,73 @@ function normalizePhone(phone: string): string {
   return '+212' + clean
 }
 
+// Mask a phone number for safe logging: keep last 2 digits, mask the rest.
+// "+212612345678" -> "+212********78"
+function maskPhone(phone: string): string {
+  if (phone.length <= 4) return '****'
+  return phone.slice(0, 4) + '*'.repeat(Math.max(0, phone.length - 6)) + phone.slice(-2)
+}
+
+type SmsSendParams = {
+  baseUrl: string
+  username: string
+  password: string
+  phone: string
+  message: string
+}
+
+// Inner sender — performs the HTTP call with a 10s AbortController timeout.
+// THROWS on any failure (non-2xx / network / abort) so opossum tracks errors
+// and BullMQ workers can retry.
+async function smsSendInner(params: SmsSendParams): Promise<true> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 10_000)
+  try {
+    const res = await fetch(`${params.baseUrl}/message`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ' + Buffer.from(`${params.username}:${params.password}`).toString('base64'),
+      },
+      body: JSON.stringify({
+        textMessage: { text: params.message },
+        phoneNumbers: [params.phone],
+      }),
+      signal: ctrl.signal,
+    })
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '')
+      throw new Error(`SMS gateway ${res.status}: ${errBody.slice(0, 200)}`)
+    }
+    return true
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Singleton circuit breaker — Vercel reuses Lambda containers, so this state
+// (rolling error rate, open/half-open) survives across invocations on the
+// same warm instance. Opens for 30s after >50% errors in the rolling window.
+let _smsBreaker: CircuitBreaker<[SmsSendParams], true> | null = null
+function getSmsBreaker(): CircuitBreaker<[SmsSendParams], true> {
+  if (_smsBreaker) return _smsBreaker
+  _smsBreaker = new CircuitBreaker(smsSendInner, {
+    timeout: 12_000,                 // safety net above the 10s AbortController
+    errorThresholdPercentage: 50,
+    resetTimeout: 30_000,
+    rollingCountTimeout: 60_000,
+    rollingCountBuckets: 6,
+    volumeThreshold: 5,              // need ≥5 calls before tripping
+  })
+  _smsBreaker.on('open',     () => console.error(JSON.stringify({ level: 'error', service: 'sms', message: 'Circuit breaker OPEN', timestamp: new Date().toISOString() })))
+  _smsBreaker.on('halfOpen', () => console.warn(JSON.stringify({ level: 'warn',  service: 'sms', message: 'Circuit breaker HALF-OPEN', timestamp: new Date().toISOString() })))
+  _smsBreaker.on('close',    () => console.warn(JSON.stringify({ level: 'warn',  service: 'sms', message: 'Circuit breaker CLOSED', timestamp: new Date().toISOString() })))
+  return _smsBreaker
+}
+
 // Helper principal — envoie un SMS via sms-gate.app cloud
+// Throws on failure (timeout / breaker open / gateway error) so the BullMQ
+// worker retries per its `attempts` config. Phone numbers are masked in logs.
 export async function sendSMS(
   phoneNumber: string | null | undefined,
   message: string
@@ -25,28 +92,22 @@ export async function sendSMS(
     return false
   }
 
+  const phone = normalizePhone(phoneNumber)
+  const baseUrl = url.replace(/\/+$/, '')
+
   try {
-    const phone = normalizePhone(phoneNumber)
-    const base = url.replace(/\/+$/, '')
-    const res = await fetch(`${base}/message`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64'),
-      },
-      body: JSON.stringify({
-        textMessage: { text: message },
-        phoneNumbers: [phone],
-      }),
-    })
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => '')
-      console.error(JSON.stringify({ level: 'error', service: 'sms', message: 'Gateway error', status: res.status, body: errBody, timestamp: new Date().toISOString() }))
-    }
-    return res.ok
+    await getSmsBreaker().fire({ baseUrl, username, password, phone, message })
+    return true
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'sms', message: 'Send failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }))
-    return false
+    console.error(JSON.stringify({
+      level: 'error',
+      service: 'sms',
+      message: 'Send failed',
+      to: maskPhone(phone),
+      error: err instanceof Error ? err.message : String(err),
+      timestamp: new Date().toISOString(),
+    }))
+    throw err instanceof Error ? err : new Error(String(err))
   }
 }
 

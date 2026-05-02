@@ -74,6 +74,14 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(60, '1 m'),
       prefix: 'rl:health',
     }),
+    // Public availability calendar (DB scan + per-month projection) — 60
+    // per 15 min per IP. Cheap thanks to a 5-min Redis cache, but a tight
+    // bucket discourages scrapers harvesting boarding-occupancy patterns.
+    availability: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(60, '15 m'),
+      prefix: 'rl:availability',
+    }),
   };
 }
 
@@ -91,15 +99,22 @@ export const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
   '/api/contracts/sign': 'uploads', // signature contrat — spam protection
   '/api/bookings': 'bookings',
   '/api/uploads': 'uploads',
+  // TOTP endpoints — bucket alongside auth (10 / 15 min) to slow brute force
+  // of 6-digit codes (1e6 space; without rate-limit a few thousand req/s on
+  // serverless infra cracks it in minutes).
+  '/api/auth/totp/validate': 'auth',
+  '/api/auth/totp/verify-setup': 'auth',
+  '/api/auth/totp/disable': 'auth',
 };
 
 type DynamicBucket = 'uploads' | 'auth' | 'passwordReset' | 'bookings' | 'taxiStream' | 'addonRequest';
 
 // Routes rate-limited regardless of HTTP method (e.g. expensive GETs).
-export const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'health'> = {
-  '/api/user/export': 'rgpd',     // GET — full DB read
-  '/api/user/anonymize': 'rgpd',  // POST — transactional write
-  '/api/health': 'health',        // GET — uptime probe, 60/min per IP
+export const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'health' | 'availability'> = {
+  '/api/user/export': 'rgpd',          // GET — full DB read
+  '/api/user/anonymize': 'rgpd',       // POST — transactional write
+  '/api/health': 'health',             // GET — uptime probe, 60/min per IP
+  '/api/availability': 'availability', // GET — public calendar, scrape-resistant
 };
 
 // Routes dynamiques (avec [params]) — match par suffixe de path
@@ -164,8 +179,14 @@ export async function checkRateLimit(
   // Autres dynamiques : POST seulement.
   // Admin : toutes méthodes mutantes (déjà filtré par isAdminMutation).
   const methodAllowed =
-    exactKey ? request.method === 'POST' :
-    anyMethodKey ? true :
+    exactKey
+      ? // /api/auth/totp/disable uses DELETE; everything else with an exact
+        // key is POST. Allow either method when the path is the TOTP disable
+        // endpoint.
+        path === '/api/auth/totp/disable'
+        ? request.method === 'DELETE'
+        : request.method === 'POST'
+      : anyMethodKey ? true :
     dynamicKey === 'taxiStream' ? request.method === 'GET' :
     dynamicKey ? request.method === 'POST' :
     true; // admin mutation

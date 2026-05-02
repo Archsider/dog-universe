@@ -132,6 +132,7 @@ async function runWorker<T>(
 ): Promise<QueueResult> {
   const connection = getBullMQConnection();
   const dlqQueue   = getDlqQueue();
+  const queue      = queueName === QUEUE_EMAIL ? getEmailQueue() : getSmsQueue();
 
   let processed = 0;
   let failed = 0;
@@ -173,18 +174,38 @@ async function runWorker<T>(
 
   worker.on('completed', () => { processed++; });
 
-  await Promise.race([
-    new Promise<void>((resolve) => {
-      const check = () => {
-        if (processed + failed >= MAX_JOBS_PER_QUEUE) resolve();
-      };
-      worker.on('completed', check);
-      worker.on('failed',    check);
-      worker.on('drained',   resolve);
-    }),
-    new Promise<void>((resolve) => setTimeout(resolve, WORKER_TIMEOUT_MS)),
-  ]);
+  // Graceful drain — wait until both:
+  //   - no jobs are active in the worker (concurrency: 3 → up to 3 in-flight),
+  //   - and no jobs are waiting in the queue (or we hit MAX_JOBS_PER_QUEUE).
+  // The previous Promise.race resolved on the first 'drained' event even if
+  // jobs were still active concurrently, causing worker.close() to abort them
+  // mid-flight → BullMQ retried them → duplicate sends.
+  await new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; clearTimeout(timer); resolve(); } };
+    const check = async () => {
+      if (done) return;
+      try {
+        if (processed + failed >= MAX_JOBS_PER_QUEUE) return finish();
+        const [active, waiting] = await Promise.all([
+          queue.getActiveCount(),
+          queue.getWaitingCount(),
+        ]);
+        if (active === 0 && waiting === 0) finish();
+      } catch {
+        // If the count probes fail (Redis hiccup), let the timeout net us in.
+      }
+    };
+    worker.on('completed', check);
+    worker.on('failed',    check);
+    worker.on('drained',   check);
+    const timer = setTimeout(finish, WORKER_TIMEOUT_MS);
+    // Initial check in case the queue was empty at startup.
+    void check();
+  });
 
+  // worker.close() waits for active jobs to complete (graceful), so the
+  // in-flight set above (≤ concurrency) finishes cleanly — no duplicate retries.
   await worker.close();
   return { processed, failed };
 }

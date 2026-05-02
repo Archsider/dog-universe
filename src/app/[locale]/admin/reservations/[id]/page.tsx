@@ -42,6 +42,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       },
       invoice: true,
       bookingItems: { orderBy: { id: 'asc' } },
+      stayPhotos: { orderBy: { createdAt: 'desc' }, take: 200 },
     },
   });
 

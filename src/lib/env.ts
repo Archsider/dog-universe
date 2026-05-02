@@ -40,6 +40,18 @@ const envSchema = z.object({
     process.env.NODE_ENV === 'production'
       ? z.string().min(32, 'CRON_SECRET must be ≥32 chars in production')
       : z.string().optional(),
+
+  // TOTP secret-at-rest encryption key (AES-256-GCM). 32 bytes hex (64 chars).
+  // Required in production once 2FA is enabled — optional in dev/test for DX.
+  TOTP_ENCRYPTION_KEY:
+    process.env.NODE_ENV === 'production'
+      ? z
+          .string()
+          .regex(/^[0-9a-fA-F]{64}$/, 'TOTP_ENCRYPTION_KEY must be 64 hex chars (32 bytes)')
+      : z
+          .string()
+          .regex(/^[0-9a-fA-F]{64}$/, 'TOTP_ENCRYPTION_KEY must be 64 hex chars (32 bytes)')
+          .optional(),
 });
 
 const skip =

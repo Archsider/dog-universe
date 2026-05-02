@@ -21,16 +21,21 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 // ---------------------------------------------------------------------------
 const mocks = vi.hoisted(() => ({
   prisma: {
-    setting: { findUnique: vi.fn() },
+    setting: { findUnique: vi.fn(), findMany: vi.fn() },
     booking: { findMany: vi.fn() },
   },
   cacheReadThrough: vi.fn(async (_key: string, _ttl: number, loader: () => unknown) => loader()),
+  getCapacityLimits: vi.fn(async () => ({ dogs: 20, cats: 10 })),
 }));
 
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.prisma }));
 
 vi.mock('@/lib/cache', () => ({
   cacheReadThrough: mocks.cacheReadThrough,
+}));
+
+vi.mock('@/lib/capacity', () => ({
+  getCapacityLimits: mocks.getCapacityLimits,
 }));
 
 // ---------------------------------------------------------------------------
@@ -69,7 +74,8 @@ function makeBooking(opts: {
 beforeEach(() => {
   vi.clearAllMocks();
 
-  // Default: capacity_dog = 20, no bookings, pass-through cache
+  // Default: capacity_dog = 20, capacity_cat = 10, no bookings, pass-through cache
+  mocks.getCapacityLimits.mockResolvedValue({ dogs: 20, cats: 10 });
   mocks.prisma.setting.findUnique.mockResolvedValue({ key: 'capacity_dog', value: '20' });
   mocks.prisma.booking.findMany.mockResolvedValue([]);
   mocks.cacheReadThrough.mockImplementation(
@@ -108,11 +114,24 @@ describe('GET /api/availability', () => {
   // ── MONTH_RE boundary — two-digit month always passes regex ──────────
 
   describe('MONTH_RE boundary', () => {
-    it('accepts "2026-13" (passes \\d{4}-\\d{2} regex; route does not validate calendar)', async () => {
-      // MONTH_RE = /^\d{4}-\d{2}$/ → two digits always match
-      // JS: new Date(2026, 12, 0) = 2026-12-31, so route returns 200 with days
+    it('rejects "2026-13" with 400 INVALID_MONTH_RANGE (calendar validation)', async () => {
+      // S6 hardening: month must be 01-12 AND within ±24 months of today.
       const res = await GET(makeRequest({ month: '2026-13', species: 'DOG' }));
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('INVALID_MONTH_RANGE');
+    });
+
+    it('rejects months >24 months in the past with 400 INVALID_MONTH_RANGE', async () => {
+      const res = await GET(makeRequest({ month: '2020-01', species: 'DOG' }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('INVALID_MONTH_RANGE');
+    });
+
+    it('rejects months >24 months in the future with 400 INVALID_MONTH_RANGE', async () => {
+      const res = await GET(makeRequest({ month: '2030-01', species: 'DOG' }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('INVALID_MONTH_RANGE');
     });
   });
 
@@ -160,8 +179,10 @@ describe('GET /api/availability', () => {
       expect((await res.json()).days).toHaveLength(28);
     });
 
-    it('returns days array with 29 entries for February 2024 (leap year)', async () => {
-      const res = await GET(makeRequest({ month: '2024-02', species: 'DOG' }));
+    it('returns days array with 29 entries for February 2028 (leap year)', async () => {
+      // S6 hardening clamps month to ±24 months around today; 2028-02 fits
+      // when "today" is in 2026 — pick a leap year inside that window.
+      const res = await GET(makeRequest({ month: '2028-02', species: 'DOG' }));
       expect((await res.json()).days).toHaveLength(29);
     });
 
@@ -302,40 +323,34 @@ describe('GET /api/availability', () => {
   // ── Capacity from Setting ──────────────────────────────────────────────
 
   describe('capacity from Setting', () => {
-    it('reads capacity_dog from Setting for DOG species', async () => {
-      mocks.prisma.setting.findUnique.mockResolvedValue({ key: 'capacity_dog', value: '15' });
+    it('reads dogs limit from getCapacityLimits for DOG species', async () => {
+      mocks.getCapacityLimits.mockResolvedValueOnce({ dogs: 15, cats: 10 });
       const res = await GET(makeRequest({ month: '2026-05', species: 'DOG' }));
       const body = await res.json();
       expect(body.days[0].limit).toBe(15);
-      expect(mocks.prisma.setting.findUnique).toHaveBeenCalledWith({
-        where: { key: 'capacity_dog' },
-      });
+      expect(mocks.getCapacityLimits).toHaveBeenCalled();
     });
 
-    it('reads capacity_cat from Setting for CAT species', async () => {
-      mocks.prisma.setting.findUnique.mockResolvedValue({ key: 'capacity_cat', value: '8' });
+    it('reads cats limit from getCapacityLimits for CAT species', async () => {
+      mocks.getCapacityLimits.mockResolvedValueOnce({ dogs: 20, cats: 8 });
       const res = await GET(makeRequest({ month: '2026-05', species: 'CAT' }));
       const body = await res.json();
       expect(body.days[0].limit).toBe(8);
-      expect(mocks.prisma.setting.findUnique).toHaveBeenCalledWith({
-        where: { key: 'capacity_cat' },
-      });
+      expect(mocks.getCapacityLimits).toHaveBeenCalled();
     });
 
-    it('falls back to limit=20 for DOG when Setting row is missing', async () => {
-      mocks.prisma.setting.findUnique.mockResolvedValue(null);
+    it('uses default limit=20 for DOG when getCapacityLimits returns defaults', async () => {
       const res = await GET(makeRequest({ month: '2026-05', species: 'DOG' }));
       expect((await res.json()).days[0].limit).toBe(20);
     });
 
-    it('falls back to limit=10 for CAT when Setting row is missing', async () => {
-      mocks.prisma.setting.findUnique.mockResolvedValue(null);
+    it('uses default limit=10 for CAT when getCapacityLimits returns defaults', async () => {
       const res = await GET(makeRequest({ month: '2026-05', species: 'CAT' }));
       expect((await res.json()).days[0].limit).toBe(10);
     });
 
-    it('parses Setting.value as an integer (stored as string in DB)', async () => {
-      mocks.prisma.setting.findUnique.mockResolvedValue({ key: 'capacity_dog', value: '25' });
+    it('forwards numeric limits from getCapacityLimits unchanged', async () => {
+      mocks.getCapacityLimits.mockResolvedValueOnce({ dogs: 25, cats: 10 });
       const res = await GET(makeRequest({ month: '2026-05', species: 'DOG' }));
       const limit = (await res.json()).days[0].limit;
       expect(typeof limit).toBe('number');
@@ -355,7 +370,6 @@ describe('GET /api/availability', () => {
     });
 
     it('uses key "availability:CAT:2026-05" when species=CAT', async () => {
-      mocks.prisma.setting.findUnique.mockResolvedValue({ key: 'capacity_cat', value: '10' });
       await GET(makeRequest({ month: '2026-05', species: 'CAT' }));
       const [key] = mocks.cacheReadThrough.mock.calls[0];
       expect(key).toBe('availability:CAT:2026-05');
@@ -386,14 +400,12 @@ describe('GET /api/availability', () => {
       expect((await res.json()).species).toBe('DOG');
     });
 
-    it('reads capacity_dog setting when species is omitted', async () => {
-      mocks.prisma.setting.findUnique.mockResolvedValue({ key: 'capacity_dog', value: '12' });
+    it('reads dogs limit from getCapacityLimits when species is omitted', async () => {
+      mocks.getCapacityLimits.mockResolvedValueOnce({ dogs: 12, cats: 10 });
       const res = await GET(makeRequest({ month: '2026-05' }));
       const body = await res.json();
       expect(body.days[0].limit).toBe(12);
-      expect(mocks.prisma.setting.findUnique).toHaveBeenCalledWith({
-        where: { key: 'capacity_dog' },
-      });
+      expect(mocks.getCapacityLimits).toHaveBeenCalled();
     });
 
     it('uses cache key "availability:DOG:2026-05" when species is omitted', async () => {

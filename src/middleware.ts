@@ -22,18 +22,34 @@ export async function middleware(request: NextRequest) {
   const rl = await checkRateLimit(request, { resolveUserId });
   if (!rl.ok) return rl.response;
 
-  // TOTP pending guard — ADMIN/SUPERADMIN who have not yet validated their 2FA
-  // this session are redirected to /[locale]/auth/totp until they do.
+  // TOTP pending guard.
+  //
+  // Two paths:
+  //  1. Browser navigation (non-API): ADMIN/SUPERADMIN who have not yet
+  //     validated their 2FA this session are redirected to /[locale]/auth/totp.
+  //  2. API access to /api/admin/*: bypassing the redirect by hitting the
+  //     JSON API directly used to be possible — now blocked with 403
+  //     TOTP_REQUIRED. The TOTP-validation endpoint itself stays open so
+  //     the user can complete the second factor.
   const pathname = request.nextUrl.pathname;
   const isTotpPage = /\/auth\/totp/.test(pathname);
   const isApiRoute = pathname.startsWith('/api/');
   const isStaticRoute = /\/_next\/|\/favicon/.test(pathname);
+  const isAdminApi = pathname.startsWith('/api/admin/');
+  const isTotpApi = pathname.startsWith('/api/auth/totp/');
 
-  if (!isTotpPage && !isApiRoute && !isStaticRoute) {
+  const needsTotpCheck =
+    (!isTotpPage && !isApiRoute && !isStaticRoute) ||
+    (isAdminApi && !isTotpApi);
+
+  if (needsTotpCheck) {
     try {
       const { auth } = await import('../auth');
       const session = await auth();
       if (session?.user?.totpPending) {
+        if (isApiRoute) {
+          return NextResponse.json({ error: 'TOTP_REQUIRED' }, { status: 403 });
+        }
         const localeMatch = pathname.match(/^\/(fr|en)\//);
         const locale = localeMatch?.[1] ?? 'fr';
         const totpUrl = new URL(`/${locale}/auth/totp`, request.url);

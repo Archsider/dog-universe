@@ -90,6 +90,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Deduplicate: one notification per owner per birthday pet — process in parallel
+  let failures = 0;
   const results = await Promise.all(pets.map(async (pet) => {
     if (alreadySentKeys.has(`${pet.ownerId}:${pet.id}`)) return null;
 
@@ -122,10 +123,11 @@ export async function GET(req: NextRequest) {
       ));
     }
 
-    await Promise.allSettled(ops);
+    const settled = await Promise.allSettled(ops);
+    for (const s of settled) if (s.status === 'rejected') failures++;
     return pet.id;
   }));
 
   const created = results.filter((id): id is string => id !== null);
-  return NextResponse.json({ sent: created.length, petIds: created });
+  return NextResponse.json({ sent: created.length, failures, petIds: created });
 }

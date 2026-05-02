@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/dlq-watch",
-      "schedule": "0 9 * * 1"
+      "schedule": "0 9 * * *"
     }
   ]
 }

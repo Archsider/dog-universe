@@ -76,11 +76,22 @@ async function fetchFileAsBase64(fileUrl: string): Promise<{ base64: string; mim
   }
 }
 
+// Singleton Anthropic client — Vercel reuses Lambda containers, so we avoid
+// reconstructing the SDK (and its connection pool) on every invocation.
+// Timeout 15s + 1 retry caps the worst case at ~30s, well under the 60s
+// Vercel function limit and the upload route's UX expectations.
+let _anthropic: Anthropic | null = null;
+function getAnthropic(apiKey: string): Anthropic {
+  if (_anthropic) return _anthropic;
+  _anthropic = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 1 });
+  return _anthropic;
+}
+
 async function callClaudeExtraction(base64: string, mimeType: string): Promise<ExtractionResult | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
-  const client = new Anthropic({ apiKey });
+  const client = getAnthropic(apiKey);
 
   try {
     let contentBlock: Anthropic.MessageParam['content'];

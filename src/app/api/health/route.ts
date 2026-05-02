@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { prisma } from '@/lib/prisma';
 import { checkRedisHealth } from '@/lib/cache';
 import { checkStorageHealth } from '@/lib/supabase';
@@ -43,6 +44,16 @@ export async function GET() {
     hardFail ? 'error' :
     redis !== 'ok' || storage !== 'ok' || dlq.status === 'warning' ? 'degraded' :
     'ok';
+
+  // Surface DLQ saturation to Sentry — fingerprint is stable so repeated
+  // probes within the same incident dedupe to a single Sentry issue.
+  if (dlq.status === 'warning') {
+    Sentry.captureMessage('DLQ size exceeded threshold', {
+      level: 'warning',
+      fingerprint: ['health', 'dlq-warning'],
+      extra: { dlqCount: dlq.count, threshold: DLQ_WARNING_THRESHOLD },
+    });
+  }
 
   return NextResponse.json(
     {

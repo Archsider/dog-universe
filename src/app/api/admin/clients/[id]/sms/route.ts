@@ -93,7 +93,9 @@ export const POST = withSchema(
       message = `Bonjour ${firstName}, votre facture ${invoice.invoiceNumber} d'un montant de ${formatMAD(invoice.amount)} est disponible sur votre espace client. — Dog Universe 🐾`;
     }
 
-    const ok = await sendSMS(client.phone, message);
+    // sendSMS now throws on gateway/timeout/breaker failure — translate to a
+     // boolean for the existing 502 response contract.
+     const ok = await sendSMS(client.phone, message).catch(() => false);
 
     await logAction({
       userId: session.user.id,

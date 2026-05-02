@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import CircuitBreaker from 'opossum';
 import { petCompanion, petVerb, petArrived } from '../sms';
 
 let transporter: nodemailer.Transporter;
@@ -52,6 +53,52 @@ function sanitizeEmail(addr: string): string {
   return cleaned;
 }
 
+// Mask an email address for safe logging: keep first char + domain.
+// "alice@example.com" -> "a***@example.com"
+function maskEmail(addr: string): string {
+  const at = addr.indexOf('@');
+  if (at <= 0) return '***';
+  return addr[0] + '***' + addr.slice(at);
+}
+
+type EmailSendParams = {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+};
+
+// Inner sender — actually performs the SMTP transaction. Throws on any failure
+// so opossum tracks errors and BullMQ workers retry per `attempts: 4`.
+async function emailSendInner(params: EmailSendParams): Promise<void> {
+  const transport = await getTransporter();
+  await transport.sendMail({
+    from: process.env.EMAIL_FROM ?? '"Dog Universe" <noreply@doguniverse.ma>',
+    to: sanitizeEmail(params.to),
+    subject: sanitizeSmtpHeader(params.subject),
+    html: params.html,
+    text: params.text ?? params.html.replace(/<[^>]*>/g, ''),
+  });
+}
+
+// Singleton circuit breaker — survives across warm Lambda invocations.
+let _emailBreaker: CircuitBreaker<[EmailSendParams], void> | null = null;
+function getEmailBreaker(): CircuitBreaker<[EmailSendParams], void> {
+  if (_emailBreaker) return _emailBreaker;
+  _emailBreaker = new CircuitBreaker(emailSendInner, {
+    timeout: 15_000,                 // SMTP can be slower than HTTP gateway
+    errorThresholdPercentage: 50,
+    resetTimeout: 30_000,
+    rollingCountTimeout: 60_000,
+    rollingCountBuckets: 6,
+    volumeThreshold: 5,
+  });
+  _emailBreaker.on('open',     () => console.error(JSON.stringify({ level: 'error', service: 'email', message: 'Circuit breaker OPEN', timestamp: new Date().toISOString() })));
+  _emailBreaker.on('halfOpen', () => console.warn(JSON.stringify({ level: 'warn',  service: 'email', message: 'Circuit breaker HALF-OPEN', timestamp: new Date().toISOString() })));
+  _emailBreaker.on('close',    () => console.warn(JSON.stringify({ level: 'warn',  service: 'email', message: 'Circuit breaker CLOSED', timestamp: new Date().toISOString() })));
+  return _emailBreaker;
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -64,18 +111,18 @@ export async function sendEmail({
   text?: string;
 }): Promise<void> {
   try {
-    const transport = await getTransporter();
-    const info = await transport.sendMail({
-      from: process.env.EMAIL_FROM ?? '"Dog Universe" <noreply@doguniverse.ma>',
-      to: sanitizeEmail(to),
-      subject: sanitizeSmtpHeader(subject),
-      html,
-      text: text ?? html.replace(/<[^>]*>/g, ''),
-    });
-
+    await getEmailBreaker().fire({ to, subject, html, text });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'email', message: 'Failed to send email', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
-    // Don't throw - email failures shouldn't break the main flow
+    console.error(JSON.stringify({
+      level: 'error',
+      service: 'email',
+      message: 'Failed to send email',
+      to: maskEmail(to),
+      error: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+    }));
+    // Propagate to BullMQ worker (retries per `attempts: 4`).
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }
 

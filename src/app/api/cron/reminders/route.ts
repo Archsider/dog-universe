@@ -56,6 +56,7 @@ export async function GET(request: Request) {
 
   let sent = 0;
   let skipped = 0;
+  let failures = 0;
   const errors: string[] = [];
 
   // Marqueur de jour : permet de détecter une notif déjà créée aujourd'hui
@@ -180,7 +181,8 @@ export async function GET(request: Request) {
         ));
       }
 
-      await Promise.allSettled(clientOps);
+      const settled = await Promise.allSettled(clientOps);
+      for (const s of settled) if (s.status === 'rejected') failures++;
       sent++;
     } catch (err) {
       errors.push(`start:${booking.id}: ${String(err)}`);
@@ -302,7 +304,8 @@ export async function GET(request: Request) {
         ));
       }
 
-      await Promise.allSettled(ops);
+      const settled = await Promise.allSettled(ops);
+      for (const s of settled) if (s.status === 'rejected') failures++;
       sent++;
     } catch (err) {
       errors.push(`end:${booking.id}: ${String(err)}`);
@@ -317,6 +320,7 @@ export async function GET(request: Request) {
     ok: true,
     sent,
     skipped,
+    failures,
     startReminders: startBookings.length,
     endReminders: endBookings.length,
     errors: errors.length ? errors : undefined,

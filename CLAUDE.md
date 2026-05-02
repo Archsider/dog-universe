@@ -453,7 +453,7 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | Migration `20260405_private_storage` | RÉSOLU (2026-05-01) | Bucket `uploads-private` vérifié, 0 contrats legacy publics confirmés en DB. |
 | Soft-delete User/Pet | RÉSOLU (`0dcf7c8`) | `deletedAt` ajouté à `User` + `Pet`, 28 fichiers filtrés, DELETE → soft-delete — migration SQL à exécuter sur Supabase |
 | Sentry instrumentation API | RÉSOLU (`21bdccd`) | `Sentry.startSpan()` câblé sur POST /api/bookings + PATCH /api/admin/bookings/[id] avec attributs serviceType/petCount/bookingId |
-| 2FA TOTP ADMIN/SUPERADMIN | **OUVERT** | Absence de second facteur — si mot de passe admin fuite, accès total au backoffice. À implémenter en priorité. |
+| 2FA TOTP ADMIN/SUPERADMIN | **DURCI (2026-05-03)** | Bypass `/api/admin/*` corrigé (middleware retourne 403 `TOTP_REQUIRED`). Setup/disable exigent re-auth password ; disable + rotation exigent aussi un token TOTP courant. Replay protection (`lastTotpToken` + `lastTotpUsedAt`, fenêtre 90 s). Rate-limit `auth` (10/15 min) sur validate / verify-setup / disable. Secrets chiffrés AES-256-GCM via `TOTP_ENCRYPTION_KEY` (32 bytes hex). Migration : `20260503_totp_replay/migration.sql`. **Variable d'env requise en production : `TOTP_ENCRYPTION_KEY` — générer avec `openssl rand -hex 32`.** |
 
 ---
 
