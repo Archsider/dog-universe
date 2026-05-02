@@ -39,13 +39,13 @@ function isValidLng(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v) && v >= -180 && v <= 180;
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ bookingId: string }> }) {
-  const { bookingId } = await params;
+export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const { token: urlToken } = await params;
 
   const auth = request.headers.get('authorization') ?? '';
   const match = /^Bearer\s+(.+)$/i.exec(auth);
   const providedToken = match?.[1]?.trim();
-  if (!providedToken) {
+  if (!providedToken || providedToken !== urlToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -58,10 +58,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     },
   });
 
-  // Token mismatch OR token belongs to a different booking → opaque 401
-  if (!trip || trip.bookingId !== bookingId || trip.booking.deletedAt) {
+  if (!trip || trip.booking.deletedAt) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const bookingId = trip.bookingId;
 
   if (trip.booking.serviceType !== 'PET_TAXI' || trip.tripType !== 'STANDALONE') {
     return NextResponse.json({ error: 'NOT_STANDALONE_TAXI' }, { status: 400 });
