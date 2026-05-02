@@ -73,6 +73,8 @@ export default function NewBookingPage() {
   // Boarding
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
+  // Pre-flight capacity status for the selected range (computed via /api/availability)
+  const [capacityStatus, setCapacityStatus] = useState<'ok' | 'limited' | 'full' | null>(null);
   const [groomingPets, setGroomingPets] = useState<Record<string, boolean>>({});
   const [petSizes, setPetSizes] = useState<Record<string, PetSize>>({});
   const [boardingNotes, setBoardingNotes] = useState('');
@@ -264,6 +266,54 @@ export default function NewBookingPage() {
   const dogPets = selectedPetObjects.filter(p => p.species === 'DOG');
   const catPets = selectedPetObjects.filter(p => p.species === 'CAT');
 
+  // Pre-flight capacity check: when checkIn/checkOut change, fetch availability
+  // for the relevant species and the months covered by the range. Debounced.
+  useEffect(() => {
+    if (bookingType !== 'BOARDING' || !checkIn || !checkOut || dogPets.length + catPets.length === 0) {
+      setCapacityStatus(null);
+      return;
+    }
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+      setCapacityStatus(null);
+      return;
+    }
+    const speciesList: Array<'DOG' | 'CAT'> = [];
+    if (dogPets.length > 0) speciesList.push('DOG');
+    if (catPets.length > 0) speciesList.push('CAT');
+    const months = new Set<string>();
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (cursor <= end) {
+      months.add(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    const handle = setTimeout(async () => {
+      try {
+        const startISO = start.toISOString().slice(0, 10);
+        const endISO = end.toISOString().slice(0, 10);
+        let worst: 'ok' | 'limited' | 'full' = 'ok';
+        for (const species of speciesList) {
+          for (const month of months) {
+            const res = await fetch(`/api/availability?month=${month}&species=${species}`);
+            if (!res.ok) continue;
+            const data = await res.json() as { days?: Array<{ date: string; status: 'available' | 'limited' | 'full' }> };
+            const days = data.days ?? [];
+            for (const d of days) {
+              if (d.date < startISO || d.date > endISO) continue;
+              if (d.status === 'full') worst = 'full';
+              else if (d.status === 'limited' && worst !== 'full') worst = 'limited';
+            }
+          }
+        }
+        setCapacityStatus(worst);
+      } catch {
+        setCapacityStatus(null);
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [bookingType, checkIn, checkOut, dogPets.length, catPets.length]);
+
   const getPriceBreakdown = (): { items: PriceItem[], total: number } => {
     if (bookingType === 'PET_TAXI') {
       const price = TAXI_PRICES[taxiType];
@@ -349,6 +399,15 @@ export default function NewBookingPage() {
     if (step === 3 && bookingType === 'BOARDING') {
       if (!checkIn || !checkOut) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
       if (new Date(checkOut) <= new Date(checkIn)) { toast({ title: l.checkOutAfterCheckIn, variant: 'destructive' }); return false; }
+      if (capacityStatus === 'full') {
+        toast({
+          title: locale === 'fr'
+            ? 'Pension complète sur ces dates — choisissez une autre période.'
+            : 'Boarding is full on these dates — please pick another period.',
+          variant: 'destructive',
+        });
+        return false;
+      }
       if (taxiGoEnabled) {
         if (!taxiGoDate || !taxiGoTime || !taxiGoAddress) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
         if (!isValidTaxiDate(taxiGoDate)) { toast({ title: l.sundayNotAllowed, variant: 'destructive' }); return false; }
@@ -570,6 +629,28 @@ export default function NewBookingPage() {
                 <Input id="checkout" type="date" value={checkOut} onChange={e => setCheckOut(e.target.value)} min={checkIn || today} className="mt-1" />
               </div>
             </div>
+
+            {/* Pre-flight capacity warning for the chosen range */}
+            {capacityStatus === 'limited' && (
+              <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <span>
+                  {locale === 'fr'
+                    ? 'Il reste peu de places pour ces dates — votre demande pourrait être refusée si la pension se remplit avant validation.'
+                    : 'Few spots left for these dates — your request may be declined if the boarding fills up before approval.'}
+                </span>
+              </div>
+            )}
+            {capacityStatus === 'full' && (
+              <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <span>
+                  {locale === 'fr'
+                    ? 'Pension complète sur ces dates — veuillez choisir une autre période.'
+                    : 'Boarding is full on these dates — please pick another period.'}
+                </span>
+              </div>
+            )}
 
             {/* Availability Calendar — visual aid for BOARDING dates */}
             <div>

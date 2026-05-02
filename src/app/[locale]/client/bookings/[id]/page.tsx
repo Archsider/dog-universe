@@ -15,6 +15,7 @@ import CancelBookingButton from '../../history/CancelBookingButton';
 import AutoRefresh from '@/components/shared/AutoRefresh';
 import RequestExtensionButton from './RequestExtensionButton';
 import RequestAddonButton from './RequestAddonButton';
+import RescheduleBookingButton from './RescheduleBookingButton';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
@@ -315,7 +316,19 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
           </div>
           <p className="text-xs text-gray-400">{formatDate(booking.createdAt, locale)}</p>
         </div>
-        {canCancel && <CancelBookingButton bookingId={booking.id} locale={locale} />}
+        <div className="flex items-center gap-2 flex-wrap">
+          {canCancel && (
+            <RescheduleBookingButton
+              bookingId={booking.id}
+              serviceType={booking.serviceType as 'BOARDING' | 'PET_TAXI'}
+              species={(booking.bookingPets[0]?.pet?.species as 'DOG' | 'CAT' | undefined) ?? null}
+              currentStart={booking.startDate.toISOString()}
+              currentEnd={booking.endDate ? booking.endDate.toISOString() : null}
+              locale={locale}
+            />
+          )}
+          {canCancel && <CancelBookingButton bookingId={booking.id} locale={locale} />}
+        </div>
       </div>
 
       <div className="space-y-4">

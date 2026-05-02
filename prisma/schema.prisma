@@ -428,6 +428,8 @@ model LoyaltyBenefitClaim {
 
   @@index([clientId])
   @@index([status])
+  @@index([clientId, status])
+  @@index([status, claimedAt])
 }
 
 model AdminNote {

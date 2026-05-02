@@ -145,6 +145,19 @@ export const bookingClientCancelSchema = z.object({
   cancellationReason: z.string().max(500).optional().nullable(),
 });
 
+// PATCH booking côté CLIENT — demande de changement de dates (reschedule)
+// Soit BOARDING (requestedStartDate + requestedEndDate) soit PET_TAXI (requestedScheduledAt)
+const isoDate = z.string().min(1).refine(v => !isNaN(new Date(v).getTime()), 'invalid date');
+export const bookingClientRescheduleSchema = z.object({
+  requestedStartDate: isoDate.optional(),
+  requestedEndDate: isoDate.optional(),
+  requestedScheduledAt: isoDate.optional(),
+  rescheduleNote: z.string().max(500).optional().nullable(),
+}).refine(
+  d => (d.requestedStartDate && d.requestedEndDate) || d.requestedScheduledAt,
+  { message: 'requestedStartDate+requestedEndDate or requestedScheduledAt required' },
+);
+
 // ─── Pets ──────────────────────────────────────────────────────────────────
 
 export const speciesSchema = z.enum(['DOG', 'CAT']);

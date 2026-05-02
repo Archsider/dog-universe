@@ -5,7 +5,8 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createBookingValidationNotification, createBookingRefusalNotification, createBookingCompletedNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
-import { bookingClientCancelSchema, formatZodError } from '@/lib/validation';
+import { bookingClientCancelSchema, bookingClientRescheduleSchema, formatZodError } from '@/lib/validation';
+import { createNotification } from '@/lib/notifications';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -51,11 +52,94 @@ export async function PATCH(request: Request, { params }: Params) {
 
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Client path — strictly isolated: only status=CANCELLED allowed, no other fields
+  // Client path — strictly isolated: only cancel OR reschedule request allowed
   if (session.user.role === 'CLIENT') {
     if (booking.clientId !== session.user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    // ── Reschedule request (client asks for new dates — admin must approve) ──
+    const isReschedule = body && (body.requestedStartDate || body.requestedScheduledAt);
+    if (isReschedule) {
+      const parsedR = bookingClientRescheduleSchema.safeParse(body);
+      if (!parsedR.success) {
+        return NextResponse.json(formatZodError(parsedR.error), { status: 400 });
+      }
+      if (!['PENDING', 'CONFIRMED'].includes(booking.status)) {
+        return NextResponse.json({ error: 'Cannot reschedule this booking' }, { status: 400 });
+      }
+      const oldStart = booking.startDate.toISOString();
+      const oldEnd = booking.endDate?.toISOString() ?? null;
+      const newStart = parsedR.data.requestedStartDate ?? parsedR.data.requestedScheduledAt!;
+      const newEnd = parsedR.data.requestedEndDate ?? null;
+      // Validate ordering for BOARDING
+      if (parsedR.data.requestedStartDate && parsedR.data.requestedEndDate) {
+        if (new Date(newEnd!) <= new Date(newStart)) {
+          return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 });
+        }
+      }
+      // Persist as a structured tag prepended to notes (no schema change — Booking has no metadata column)
+      const rescheduleTag = JSON.stringify({
+        rescheduleRequest: {
+          requestedAt: new Date().toISOString(),
+          oldStart,
+          oldEnd,
+          newStart,
+          newEnd,
+          note: parsedR.data.rescheduleNote ?? null,
+        },
+      });
+      const existingNotes = booking.notes ?? '';
+      const cleanedNotes = existingNotes.replace(/\[RESCHEDULE_REQUEST\]\{[^}]*\}\{[^}]*\}/g, '').trim();
+      const newNotes = `[RESCHEDULE_REQUEST]${rescheduleTag}\n${cleanedNotes}`.trim();
+
+      const updated = await prisma.booking.update({
+        where: { id },
+        data: {
+          status: 'PENDING', // re-validation required
+          notes: newNotes,
+        },
+        include: { client: true, bookingPets: { include: { pet: true } } },
+      });
+
+      await logAction({
+        userId: session.user.id,
+        action: 'BOOKING_RESCHEDULE_REQUESTED',
+        entityType: 'Booking',
+        entityId: id,
+        details: { oldStart, oldEnd, newStart, newEnd },
+      });
+
+      // Notify all admins (in-app)
+      try {
+        const admins = await prisma.user.findMany({
+          where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null },
+          select: { id: true },
+        });
+        const petNames = booking.bookingPets.map(bp => bp.pet.name).join(' et ') || 'animal';
+        const clientName = booking.client.name ?? booking.client.email;
+        const newStartFr = formatDateFR(new Date(newStart));
+        const newEndFr = newEnd ? formatDateFR(new Date(newEnd)) : null;
+        const dateLabelFr = newEndFr ? `du ${newStartFr} au ${newEndFr}` : `le ${newStartFr}`;
+        const dateLabelEn = newEndFr ? `from ${newStartFr} to ${newEndFr}` : `on ${newStartFr}`;
+        await Promise.all(
+          admins.map(admin => createNotification({
+            userId: admin.id,
+            type: 'BOOKING_RESCHEDULE_REQUEST',
+            titleFr: `Changement de dates — ${clientName}`,
+            titleEn: `Reschedule request — ${clientName}`,
+            messageFr: `${clientName} demande à déplacer ${petNames} ${dateLabelFr}.`,
+            messageEn: `${clientName} requests moving ${petNames} ${dateLabelEn}.`,
+            metadata: { bookingId: id },
+          }).catch(() => { /* non-blocking */ })),
+        );
+      } catch (err) {
+        console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin reschedule notif failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+      }
+
+      return NextResponse.json(updated);
+    }
+
     // Validation Zod stricte du body côté client (force status=CANCELLED + cancellationReason ≤ 500)
     const parsed = bookingClientCancelSchema.safeParse(body);
     if (!parsed.success) {
