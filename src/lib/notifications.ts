@@ -25,7 +25,9 @@ export type NotificationType =
   | 'BOOKING_EXTENDED'          // client receives when stay is extended (admin direct or approved)
   | 'BOOKING_NO_SHOW'           // client receives when booking is marked NO_SHOW by admin
   | 'BOOKING_WAITLISTED'        // client receives when booking is queued on the waitlist
-  | 'BOOKING_WAITLIST_PROMOTED'; // client receives when waitlisted booking is promoted to PENDING
+  | 'BOOKING_WAITLIST_PROMOTED' // client receives when waitlisted booking is promoted to PENDING
+  | 'BOOKING_CANCELLED'         // admin receives when a client cancels a booking
+  | 'BOOKING_RESCHEDULE_REQUEST'; // admin receives when a client requests new dates
 
 interface CreateNotificationData {
   userId: string;

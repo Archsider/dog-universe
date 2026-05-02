@@ -6,6 +6,7 @@ import {
   CheckCheck, Loader2, BellOff, Camera, MessageSquare,
   CheckCircle2, XCircle, Bell, Star, Receipt, CalendarClock,
   ArrowRight, Cake, Truck, UserX, Hourglass, Sparkles, AlertTriangle,
+  AlertCircle, RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
@@ -43,6 +44,8 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   BOOKING_WAITLIST_PROMOTED:{ icon: Sparkles,   color: 'text-emerald-600',bg: 'bg-emerald-50' },
   ADDON_REQUEST:        { icon: Sparkles,       color: 'text-gold-600',   bg: 'bg-gold-50' },
   TAXI_HEARTBEAT_LOST:  { icon: AlertTriangle,  color: 'text-red-600',    bg: 'bg-red-50' },
+  BOOKING_CANCELLED:           { icon: AlertCircle, color: 'text-red-600',   bg: 'bg-red-50' },
+  BOOKING_RESCHEDULE_REQUEST:  { icon: RefreshCw,   color: 'text-amber-600', bg: 'bg-amber-50' },
 };
 
 function parseMetadata(raw: string | null): Record<string, unknown> {

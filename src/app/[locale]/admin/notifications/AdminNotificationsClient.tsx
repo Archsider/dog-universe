@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   Bell, BellOff, CheckCheck, Loader2,
   CalendarClock, Star, ArrowRight, UserPlus,
+  AlertCircle, RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
@@ -22,9 +23,11 @@ export interface NotificationItem {
 }
 
 const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
-  BOOKING_REQUEST:          { icon: CalendarClock, color: 'text-amber-600',  bg: 'bg-amber-50' },
-  LOYALTY_CLAIM_PENDING:    { icon: Star,          color: 'text-gold-600',   bg: 'bg-gold-50' },
-  NEW_CLIENT_REGISTRATION:  { icon: UserPlus,      color: 'text-blue-600',   bg: 'bg-blue-50' },
+  BOOKING_REQUEST:             { icon: CalendarClock, color: 'text-amber-600',  bg: 'bg-amber-50' },
+  LOYALTY_CLAIM_PENDING:       { icon: Star,          color: 'text-gold-600',   bg: 'bg-gold-50' },
+  NEW_CLIENT_REGISTRATION:     { icon: UserPlus,      color: 'text-blue-600',   bg: 'bg-blue-50' },
+  BOOKING_CANCELLED:           { icon: AlertCircle,   color: 'text-red-600',    bg: 'bg-red-50' },
+  BOOKING_RESCHEDULE_REQUEST:  { icon: RefreshCw,     color: 'text-amber-600',  bg: 'bg-amber-50' },
 };
 
 function parseMetadata(raw: string | null): Record<string, unknown> {
