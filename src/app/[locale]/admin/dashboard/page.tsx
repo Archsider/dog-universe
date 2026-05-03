@@ -131,7 +131,13 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     }).catch(() => null),
     billedByCategory(thisMonthStart, thisMonthEnd),
     billedByCategory(lastMonthStart, lastMonthEnd),
-    prisma.pet.count({ where: { dateOfBirth: null, deletedAt: null } }),
+    prisma.pet.count({
+      where: {
+        dateOfBirth: null,
+        deletedAt: null,
+        owner: { isWalkIn: false },
+      },
+    }),
   ]);
 
   const { cat: currentCatBoarders, dog: currentDogBoarders } = boarders;
