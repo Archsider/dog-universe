@@ -8,6 +8,7 @@ import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import ReservationActions from './ReservationActions';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 import TaxiTrackingButton from '@/components/admin/TaxiTrackingButton';
+import { TaxiNavBlock } from '@/components/admin/TaxiNavigationButton';
 import DeleteBookingButton from './DeleteBookingButton';
 import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import StayPhotosSection from './StayPhotosSection';
@@ -620,6 +621,38 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
           )}
 
           <ReservationActions booking={{ id: booking.id, version: booking.version, status: booking.status, serviceType: booking.serviceType }} locale={locale} />
+
+          {/* PET_TAXI navigation — pickup + dropoff (driver helper) */}
+          {!isBoarding && booking.taxiDetail && (
+            <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-4">
+              <div>
+                <h3 className="font-semibold text-charcoal text-sm flex items-center gap-2 mb-3">
+                  <span className="text-base">📍</span>
+                  {locale === 'fr' ? 'Localisation pickup' : 'Pickup location'}
+                </h3>
+                <TaxiNavBlock
+                  lat={booking.taxiDetail.pickupLat}
+                  lng={booking.taxiDetail.pickupLng}
+                  address={booking.taxiDetail.pickupAddress}
+                  locale={locale === 'en' ? 'en' : 'fr'}
+                />
+              </div>
+              {(booking.taxiDetail.dropoffLat || booking.taxiDetail.dropoffLng || booking.taxiDetail.dropoffAddress) && (
+                <div className="pt-4 border-t border-ivory-100">
+                  <h3 className="font-semibold text-charcoal text-sm flex items-center gap-2 mb-3">
+                    <span className="text-base">📍</span>
+                    {locale === 'fr' ? 'Localisation dropoff' : 'Dropoff location'}
+                  </h3>
+                  <TaxiNavBlock
+                    lat={booking.taxiDetail.dropoffLat}
+                    lng={booking.taxiDetail.dropoffLng}
+                    address={booking.taxiDetail.dropoffAddress}
+                    locale={locale === 'en' ? 'en' : 'fr'}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Standalone PET_TAXI timeline */}
           {!isBoarding && standaloneTrip && (() => {
