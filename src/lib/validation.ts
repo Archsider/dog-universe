@@ -118,6 +118,12 @@ export const bookingCreateSchema = z.object({
   taxiAddonPrice: z.number().nonnegative().optional(),
   // Taxi
   taxiType: taxiTypeSchema.optional(),
+  taxiPickupLat: z.number().min(-90).max(90).optional().nullable(),
+  taxiPickupLng: z.number().min(-180).max(180).optional().nullable(),
+  taxiPickupAddress: z.string().max(500).optional().nullable(),
+  taxiDropoffLat: z.number().min(-90).max(90).optional().nullable(),
+  taxiDropoffLng: z.number().min(-180).max(180).optional().nullable(),
+  taxiDropoffAddress: z.string().max(500).optional().nullable(),
   // Admin items (passé tel quel — chaque item validé séparément si besoin)
   bookingItems: z.array(z.object({
     description: z.string().max(500),
