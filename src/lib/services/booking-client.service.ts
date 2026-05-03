@@ -131,6 +131,12 @@ export interface CreateBookingTxArgs {
   taxiAddonPrice: number;
   // Taxi standalone
   taxiType: string;
+  taxiPickupLat?: number | null;
+  taxiPickupLng?: number | null;
+  taxiPickupAddress?: string | null;
+  taxiDropoffLat?: number | null;
+  taxiDropoffLng?: number | null;
+  taxiDropoffAddress?: string | null;
   // Admin-only billing extras
   bookingItems: { description: string; quantity: number; unitPrice: number }[];
 }
@@ -219,6 +225,12 @@ export async function createBookingTx(args: CreateBookingTxArgs) {
             bookingId: booking.id,
             taxiType: args.taxiType,
             price: args.totalPrice > 0 ? args.totalPrice : 150,
+            pickupLat: args.taxiPickupLat ?? null,
+            pickupLng: args.taxiPickupLng ?? null,
+            pickupAddress: args.taxiPickupAddress ?? null,
+            dropoffLat: args.taxiDropoffLat ?? null,
+            dropoffLng: args.taxiDropoffLng ?? null,
+            dropoffAddress: args.taxiDropoffAddress ?? null,
           },
         });
       }

@@ -92,6 +92,9 @@ export default function NewBookingPage() {
   const [taxiDate, setTaxiDate] = useState('');
   const [taxiTime, setTaxiTime] = useState('');
   const [pickupAddress, setPickupAddress] = useState('');
+  const [pickupLat, setPickupLat] = useState<number | null>(null);
+  const [pickupLng, setPickupLng] = useState<number | null>(null);
+  const [geolocating, setGeolocating] = useState(false);
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [taxiNotes, setTaxiNotes] = useState('');
 
@@ -135,6 +138,10 @@ export default function NewBookingPage() {
       taxiTimeLabel: 'Heure',
       pickup: 'Adresse de départ',
       dropoff: 'Adresse d\'arrivée',
+      useMyLocation: '📍 Utiliser ma position',
+      locating: 'Localisation…',
+      geoDenied: 'Géolocalisation refusée. Saisissez l\'adresse manuellement.',
+      geoTimeout: 'Localisation lente, saisissez l\'adresse manuellement.',
       notes: 'Notes particulières',
       notesPlaceholder: 'Allergies, médicaments, préférences...',
       summary: 'Récapitulatif',
@@ -199,6 +206,10 @@ export default function NewBookingPage() {
       taxiTimeLabel: 'Time',
       pickup: 'Pickup address',
       dropoff: 'Dropoff address',
+      useMyLocation: '📍 Use my location',
+      locating: 'Locating…',
+      geoDenied: 'Geolocation denied. Please enter the address manually.',
+      geoTimeout: 'Slow geolocation, please enter the address manually.',
       notes: 'Special notes',
       notesPlaceholder: 'Allergies, medications, preferences...',
       summary: 'Summary',
@@ -464,6 +475,10 @@ export default function NewBookingPage() {
         body.startDate = taxiDate; // date only — pas de conversion UTC pour éviter le décalage horaire
         body.arrivalTime = taxiTime; // heure brute parsée côté serveur
         body.taxiType = taxiType;
+        body.taxiPickupLat = pickupLat;
+        body.taxiPickupLng = pickupLng;
+        body.taxiPickupAddress = pickupAddress || null;
+        body.taxiDropoffAddress = dropoffAddress || null;
         const notes = [taxiNotes, pickupAddress && `Départ: ${pickupAddress}`, dropoffAddress && `Arrivée: ${dropoffAddress}`].filter(Boolean).join(' | ');
         body.notes = notes || undefined;
       }
@@ -876,7 +891,55 @@ export default function NewBookingPage() {
               </div>
             </div>
             <div>
-              <Label htmlFor="pickup">{l.pickup} *</Label>
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="pickup">{l.pickup} *</Label>
+                <button
+                  type="button"
+                  disabled={geolocating}
+                  onClick={() => {
+                    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+                      toast({ title: l.geoDenied, variant: 'destructive' });
+                      return;
+                    }
+                    setGeolocating(true);
+                    navigator.geolocation.getCurrentPosition(
+                      async (pos) => {
+                        const { latitude, longitude } = pos.coords;
+                        setPickupLat(latitude);
+                        setPickupLng(longitude);
+                        try {
+                          const res = await fetch(
+                            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${locale}`,
+                            { headers: { 'User-Agent': 'DogUniverse/1.0' } },
+                          );
+                          if (res.ok) {
+                            const data = await res.json();
+                            if (typeof data?.display_name === 'string') {
+                              setPickupAddress(data.display_name);
+                            }
+                          }
+                        } catch {
+                          // silent: lat/lng captured, user can type address manually
+                        } finally {
+                          setGeolocating(false);
+                        }
+                      },
+                      (err) => {
+                        setGeolocating(false);
+                        if (err.code === 3) {
+                          toast({ title: l.geoTimeout, variant: 'destructive' });
+                        } else {
+                          toast({ title: l.geoDenied, variant: 'destructive' });
+                        }
+                      },
+                      { timeout: 10_000, enableHighAccuracy: true },
+                    );
+                  }}
+                  className="text-xs text-gold-600 hover:text-gold-700 disabled:opacity-50"
+                >
+                  {geolocating ? l.locating : l.useMyLocation}
+                </button>
+              </div>
               <Input id="pickup" value={pickupAddress} onChange={e => setPickupAddress(e.target.value)} placeholder="Gueliz, Marrakech" className="mt-1" />
             </div>
             <div>
