@@ -22,6 +22,12 @@ import { timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { recordHeartbeat } from '@/lib/taxi-heartbeat';
 import { recordLocation } from '@/lib/taxi-location';
+import { haversineDistance } from '@/lib/geo';
+import { tryAcquireFlag } from '@/lib/cache';
+import {
+  createTaxiNearPickupNotification,
+  createTaxiArrivedNotification,
+} from '@/lib/notifications';
 
 export const maxDuration = 10;
 
@@ -62,7 +68,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     select: {
       bookingId: true,
       tripType: true,
-      booking: { select: { status: true, serviceType: true, deletedAt: true } },
+      status: true,
+      booking: {
+        select: {
+          status: true,
+          serviceType: true,
+          deletedAt: true,
+          clientId: true,
+          taxiDetail: { select: { pickupLat: true, pickupLng: true } },
+        },
+      },
     },
   });
 
@@ -96,6 +111,43 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       heading: typeof body.heading === 'number' && Number.isFinite(body.heading) ? body.heading : null,
       speed: typeof body.speed === 'number' && Number.isFinite(body.speed) ? body.speed : null,
     });
+
+    // Geofencing: alert client when driver approaches pickup location.
+    // Skips silently when pickup coords are not set (legacy bookings).
+    // Wrapped in try/catch so geofencing NEVER breaks the heartbeat.
+    try {
+      const pickupLat = trip.booking.taxiDetail?.pickupLat;
+      const pickupLng = trip.booking.taxiDetail?.pickupLng;
+      if (
+        pickupLat != null &&
+        pickupLng != null &&
+        trip.status === 'DRIVER_EN_ROUTE'
+      ) {
+        const distance = haversineDistance(body.latitude, body.longitude, pickupLat, pickupLng);
+        const clientId = trip.booking.clientId;
+
+        if (distance < 100) {
+          const acquired = await tryAcquireFlag(`taxi:arrived_alert:${bookingId}`, 3600);
+          if (acquired) {
+            await createTaxiArrivedNotification(clientId, bookingId, 'fr');
+          }
+        } else if (distance < 1000) {
+          const acquired = await tryAcquireFlag(`taxi:near_alert:${bookingId}`, 3600);
+          if (acquired) {
+            await createTaxiNearPickupNotification(clientId, bookingId, distance, 'fr');
+          }
+        }
+      }
+    } catch (err) {
+      console.error(JSON.stringify({
+        level: 'error',
+        service: 'taxi-heartbeat',
+        message: 'geofencing failed (non-blocking)',
+        bookingId,
+        error: err instanceof Error ? err.message : String(err),
+        timestamp: new Date().toISOString(),
+      }));
+    }
   }
 
   return NextResponse.json({ ok: true });

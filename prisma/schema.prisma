@@ -249,6 +249,9 @@ model TaxiDetail {
   taxiType  String // "STANDARD" | "VET" | "AIRPORT"
   price     Float
 
+  // Geocoded pickup / dropoff coordinates — used for geofencing alerts
+  // (notify client when driver approaches pickup). Optional: legacy
+  // bookings without coords skip alerts silently.
   pickupLat       Float?
   pickupLng       Float?
   pickupAddress   String?
