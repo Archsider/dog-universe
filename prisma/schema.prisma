@@ -249,6 +249,16 @@ model TaxiDetail {
   taxiType  String // "STANDARD" | "VET" | "AIRPORT"
   price     Float
 
+  // Geocoded pickup / dropoff coordinates — used for geofencing alerts
+  // (notify client when driver approaches pickup). Optional: legacy
+  // bookings without coords skip alerts silently.
+  pickupAddress  String?
+  pickupLat      Float?
+  pickupLng      Float?
+  dropoffAddress String?
+  dropoffLat     Float?
+  dropoffLng     Float?
+
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }
 

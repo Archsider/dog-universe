@@ -22,6 +22,8 @@ export type NotificationType =
   | 'EXTENSION_REQUEST'         // admin receives when a client requests a stay extension
   | 'ADDON_REQUEST'             // admin receives when a client requests an additional service on a booking
   | 'TAXI_HEARTBEAT_LOST'       // admin receives when no GPS heartbeat for >5 min on an active taxi trip
+  | 'TAXI_NEAR_PICKUP'          // client receives when driver is within ~1 km of pickup location
+  | 'TAXI_ARRIVED'              // client receives when driver is within ~100 m of pickup location
   | 'BOOKING_EXTENDED'          // client receives when stay is extended (admin direct or approved)
   | 'BOOKING_NO_SHOW'           // client receives when booking is marked NO_SHOW by admin
   | 'BOOKING_WAITLISTED'        // client receives when booking is queued on the waitlist
@@ -465,6 +467,41 @@ export async function notifyAdminsTaxiHeartbeatLost(args: {
     messageFr: `⚠️ Pas de signal GPS depuis 5 min — ${args.clientName} / ${args.petNames} / Réservation ${args.bookingRef}`,
     messageEn: `⚠️ No GPS signal for 5 min — ${args.clientName} / ${args.petNames} / Booking ${args.bookingRef}`,
     metadata: { bookingId: args.bookingId, bookingRef: args.bookingRef },
+  });
+}
+
+// ─── Taxi geofencing notifications ───────────────────────────────────────────
+
+export async function createTaxiNearPickupNotification(
+  userId: string,
+  bookingId: string,
+  distance: number,
+  _lang: string,
+) {
+  return createNotification({
+    userId,
+    type: 'TAXI_NEAR_PICKUP',
+    titleFr: '🚗 Votre chauffeur arrive',
+    titleEn: '🚗 Your driver is arriving',
+    messageFr: 'Votre chauffeur arrive dans environ 5 minutes !',
+    messageEn: 'Your driver is arriving in about 5 minutes!',
+    metadata: { bookingId, distance: String(Math.round(distance)) },
+  });
+}
+
+export async function createTaxiArrivedNotification(
+  userId: string,
+  bookingId: string,
+  _lang: string,
+) {
+  return createNotification({
+    userId,
+    type: 'TAXI_ARRIVED',
+    titleFr: '✅ Votre chauffeur est arrivé',
+    titleEn: '✅ Your driver has arrived',
+    messageFr: "Votre chauffeur vient d'arriver à votre adresse.",
+    messageEn: 'Your driver has just arrived at your address.',
+    metadata: { bookingId },
   });
 }
 
