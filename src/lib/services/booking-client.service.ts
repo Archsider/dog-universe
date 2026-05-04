@@ -115,6 +115,13 @@ export interface CreateBookingTxArgs {
   totalPrice: number;
   source: string;
   petIds: string[];
+  /**
+   * Optional deterministic dedup key: if a booking with this key already exists
+   * (non-deleted), it is returned immediately without creating a duplicate.
+   * Pattern: `{clientId}:{startDate}:{endDate}:{petId1}:{petId2}…`
+   * Absent (undefined) = no dedup (e.g. admin walk-in or unkeyed path).
+   */
+  idempotencyKey?: string;
   // Boarding-specific
   includeGrooming: boolean;
   groomingSize: string | null;
@@ -152,6 +159,20 @@ export interface CreateBookingTxArgs {
 export async function createBookingTx(args: CreateBookingTxArgs) {
   return prisma.$transaction(
     async (tx) => {
+      // ── Idempotency dedup: if the same booking was already created, return it ──
+      if (args.idempotencyKey) {
+        const existing = await tx.booking.findUnique({
+          where: { idempotencyKey: args.idempotencyKey },
+          include: {
+            bookingPets: { include: { pet: true } },
+            client: true,
+          },
+        });
+        if (existing && !existing.deletedAt) {
+          return existing;
+        }
+      }
+
       let waitlisted = false;
       if (args.serviceType === 'BOARDING') {
         const capacity = await checkBoardingCapacity(
@@ -192,6 +213,7 @@ export async function createBookingTx(args: CreateBookingTxArgs) {
           notes: args.notes,
           totalPrice: args.totalPrice,
           source: args.source,
+          idempotencyKey: args.idempotencyKey ?? null,
           bookingPets: { create: args.petIds.map((petId) => ({ petId })) },
         },
         include: {
