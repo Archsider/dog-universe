@@ -51,7 +51,7 @@ export async function GET(_req: Request, { params }: Params) {
 
   const totalRevenue = client.invoices
     .filter((i) => i.status === 'PAID')
-    .reduce((sum, i) => sum + i.amount, 0);
+    .reduce((sum, i) => sum + Number(i.amount), 0);
 
   const adminNotes = await prisma.adminNote.findMany({
     where: { entityType: 'CLIENT', entityId: id },
@@ -137,7 +137,7 @@ export async function PATCH(request: Request, { params }: Params) {
         prisma.booking.count({ where: { clientId: id, status: 'COMPLETED', deletedAt: null } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
       ]);
       const totalStays = completedStays + (user?.historicalStays ?? 0);
-      const totalRevenue = (totalPaid._sum.amount ?? 0) + (user?.historicalSpendMAD ?? 0);
+      const totalRevenue = Number(totalPaid._sum.amount ?? 0) + Number(user?.historicalSpendMAD ?? 0);
       const suggestedGrade = calculateSuggestedGrade(totalStays, totalRevenue);
       await prisma.loyaltyGrade.upsert({
         where: { clientId: id },

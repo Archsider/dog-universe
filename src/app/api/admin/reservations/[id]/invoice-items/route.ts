@@ -60,7 +60,7 @@ export async function GET(_req: Request, { params }: Params) {
 
     // Append admin-defined extra lines (preserve category set at booking creation)
     for (const bi of booking.bookingItems) {
-      items.push({ description: bi.description, quantity: bi.quantity, unitPrice: bi.unitPrice, total: bi.total, category: bi.category });
+      items.push({ description: bi.description, quantity: bi.quantity, unitPrice: Number(bi.unitPrice), total: Number(bi.total), category: bi.category });
     }
 
     return NextResponse.json({ items });
@@ -79,7 +79,7 @@ export async function GET(_req: Request, { params }: Params) {
 
     // Append admin-defined extra lines (preserve category set at booking creation)
     for (const bi of booking.bookingItems) {
-      items.push({ description: bi.description, quantity: bi.quantity, unitPrice: bi.unitPrice, total: bi.total, category: bi.category });
+      items.push({ description: bi.description, quantity: bi.quantity, unitPrice: Number(bi.unitPrice), total: Number(bi.total), category: bi.category });
     }
 
     return NextResponse.json({ items });

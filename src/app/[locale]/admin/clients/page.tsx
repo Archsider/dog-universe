@@ -60,7 +60,7 @@ export default async function AdminClientsPage(props: PageProps) {
     _sum: { amount: true },
   });
   const revenueByClient = new Map<string, number>(
-    revenueRows.map((r) => [r.clientId, r._sum.amount ?? 0]),
+    revenueRows.map((r) => [r.clientId, Number(r._sum.amount ?? 0)]),
   );
 
   const filteredClients = gradeFilter ? clients.filter(c => c.loyaltyGrade?.grade === gradeFilter) : clients;

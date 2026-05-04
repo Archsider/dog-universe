@@ -218,7 +218,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       id: before.id,
       startDate: before.startDate,
       endDate: before.endDate,
-      totalPrice: before.totalPrice,
+      totalPrice: Number(before.totalPrice),
       status: before.status,
       pets: before.bookingPets.map(bp => bp.pet.name).join(', '),
       relation: 'before',
@@ -229,7 +229,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       id: after.id,
       startDate: after.startDate,
       endDate: after.endDate,
-      totalPrice: after.totalPrice,
+      totalPrice: Number(after.totalPrice),
       status: after.status,
       pets: after.bookingPets.map(bp => bp.pet.name).join(', '),
       relation: 'after',
@@ -424,7 +424,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                     <span className="text-gray-500">{locale === 'fr' ? 'Total' : 'Total'}</span>
                     <span className="font-bold text-charcoal">{formatMAD(booking.invoice.amount)}</span>
                   </div>
-                  {booking.invoice.paidAmount > 0 && (
+                  {Number(booking.invoice.paidAmount) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-500">{locale === 'fr' ? 'Payé' : 'Paid'}</span>
                       <span className="font-medium text-green-700">{formatMAD(booking.invoice.paidAmount)}</span>
@@ -433,7 +433,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                   {booking.invoice.status !== 'PAID' && (
                     <div className="flex justify-between border-t border-ivory-100 pt-1">
                       <span className="text-gray-600 font-medium">{locale === 'fr' ? 'Restant' : 'Remaining'}</span>
-                      <span className="font-bold text-orange-600">{formatMAD(Math.max(0, booking.invoice.amount - booking.invoice.paidAmount))}</span>
+                      <span className="font-bold text-orange-600">{formatMAD(Math.max(0, Number(booking.invoice.amount) - Number(booking.invoice.paidAmount)))}</span>
                     </div>
                   )}
                 </div>
@@ -443,8 +443,8 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                     invoiceVersion={booking.invoice.version}
                     currentStatus={booking.invoice.status}
                     locale={locale}
-                    invoiceAmount={booking.invoice.amount}
-                    paidAmount={booking.invoice.paidAmount}
+                    invoiceAmount={Number(booking.invoice.amount)}
+                    paidAmount={Number(booking.invoice.paidAmount)}
                   />
                   <Link href={`/${locale}/admin/billing?status=`} className="text-xs text-gray-400 hover:text-gold-600">
                     {locale === 'fr' ? 'Voir facturation' : 'View billing'}
@@ -475,7 +475,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                     <span className="text-gray-500">Total</span>
                     <span className="font-bold text-charcoal">{formatMAD(supplementaryInvoice.amount)}</span>
                   </div>
-                  {supplementaryInvoice.paidAmount > 0 && (
+                  {Number(supplementaryInvoice.paidAmount) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-500">{locale === 'fr' ? 'Payé' : 'Paid'}</span>
                       <span className="font-medium text-green-700">{formatMAD(supplementaryInvoice.paidAmount)}</span>
@@ -484,7 +484,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                   {supplementaryInvoice.status !== 'PAID' && (
                     <div className="flex justify-between border-t border-ivory-100 pt-1">
                       <span className="text-gray-600 font-medium">{locale === 'fr' ? 'Restant' : 'Remaining'}</span>
-                      <span className="font-bold text-orange-600">{formatMAD(Math.max(0, supplementaryInvoice.amount - supplementaryInvoice.paidAmount))}</span>
+                      <span className="font-bold text-orange-600">{formatMAD(Math.max(0, Number(supplementaryInvoice.amount) - Number(supplementaryInvoice.paidAmount)))}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
@@ -509,8 +509,8 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                   invoiceVersion={supplementaryInvoice.version}
                   currentStatus={supplementaryInvoice.status}
                   locale={locale}
-                  invoiceAmount={supplementaryInvoice.amount}
-                  paidAmount={supplementaryInvoice.paidAmount}
+                  invoiceAmount={Number(supplementaryInvoice.amount)}
+                  paidAmount={Number(supplementaryInvoice.paidAmount)}
                 />
               </div>
             )}
@@ -611,7 +611,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                 <div className="px-3 py-2 border-t border-gold-200/60 bg-ivory-50 flex justify-between items-center text-xs">
                   <span className="font-semibold text-charcoal">{locale === 'fr' ? 'Sous-total additionnels' : 'Extras subtotal'}</span>
                   <span className="font-bold text-gold-600">
-                    {formatMAD(booking.bookingItems.reduce((s, i) => s + i.total, 0))}
+                    {formatMAD(booking.bookingItems.reduce((s, i) => s + Number(i.total), 0))}
                   </span>
                 </div>
               </div>
@@ -708,7 +708,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                 version: booking.version,
                 startDate: booking.startDate,
                 endDate: booking.endDate ?? null,
-                totalPrice: booking.totalPrice,
+                totalPrice: Number(booking.totalPrice),
                 hasExtensionRequest: booking.hasExtensionRequest,
                 extensionRequestedEndDate: booking.extensionRequestedEndDate ?? null,
                 extensionRequestNote: booking.extensionRequestNote ?? null,

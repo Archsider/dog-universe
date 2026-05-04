@@ -453,6 +453,50 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | Migration `20260405_private_storage` | RÉSOLU (2026-05-01) | Bucket `uploads-private` vérifié, 0 contrats legacy publics confirmés en DB. |
 | Soft-delete User/Pet | RÉSOLU (`0dcf7c8`) | `deletedAt` ajouté à `User` + `Pet`, 28 fichiers filtrés, DELETE → soft-delete — migration SQL à exécuter sur Supabase |
 | Sentry instrumentation API | RÉSOLU (`21bdccd`) | `Sentry.startSpan()` câblé sur POST /api/bookings + PATCH /api/admin/bookings/[id] avec attributs serviceType/petCount/bookingId |
+| Float → Decimal sur colonnes monétaires | RÉSOLU (2026-05-04) | Toutes les colonnes MAD migrées en `Decimal @db.Decimal(10,2)` (User, Booking, BookingItem, BoardingDetail, TaxiDetail, TaxiTrip, Invoice, InvoiceItem, Payment, MonthlyRevenueSummary). Migration SQL : `prisma/migrations/20260504_decimal_money`. Helper `toNumber()` dans `src/lib/decimal.ts`. `formatMAD()` accepte désormais `Decimal | number`. |
+| Authz cross-role factures | RÉSOLU (2026-05-04) | GET/PATCH/DELETE `/api/invoices/[id]` : ADMIN ne peut accéder qu'aux factures dont `client.role === 'CLIENT'`. SUPERADMIN passe partout. |
+| Idempotence workers BullMQ | RÉSOLU (2026-05-04) | `processEmailJob` / `processSmsJob` : flag Redis `job:processed:{queue}:{jobId}` SET NX EX 24h via `tryAcquireFlag`. Garde at-most-once même si BullMQ retraite par erreur. Fail-open si Redis down. |
+| Cron worker tour à vide | RÉSOLU (2026-05-04) | `/api/workers/process` : early-exit si `getJobCounts(waiting+active+delayed)` = 0 sur les deux queues ET aucun TaxiTrip `DRIVER_EN_ROUTE`. Économise les Workers BullMQ + connexions IORedis quand l'app est inactive. |
+| Timing side-channel reset-password | RÉSOLU (2026-05-04) | `POST /api/reset-password` : floor de réponse 250 ms (pad au timeout résiduel). Empêche l'énumération par mesure du temps de réponse user-existe vs n'existe-pas. |
+
+---
+
+## DECIMAL MIGRATION (2026-05-04)
+
+**Problème** : toutes les colonnes monétaires (MAD) étaient stockées en `Float` (PG `DOUBLE PRECISION`). Erreurs d'arrondi sur les sommes (`0.1 + 0.2 ≠ 0.3`), dérive cumulative sur les allocations de paiements multi-items.
+
+**Solution** : `Decimal @db.Decimal(10, 2)` côté Prisma → `DECIMAL(10,2)` côté PostgreSQL. Précision exacte au centime, plage `[-99 999 999.99, 99 999 999.99]` MAD.
+
+### Colonnes migrées
+- `User.historicalSpendMAD`
+- `Booking.totalPrice`
+- `BookingItem.unitPrice`, `total`
+- `BoardingDetail.groomingPrice`, `pricePerNight`, `taxiAddonPrice`
+- `TaxiDetail.price`
+- `TaxiTrip.price` (mais pas `distanceKm` → reste Float, ce n'est pas de l'argent)
+- `Invoice.amount`, `paidAmount`
+- `InvoiceItem.unitPrice`, `total`, `allocatedAmount`
+- `Payment.amount`
+- `MonthlyRevenueSummary.boardingRevenue / groomingRevenue / taxiRevenue / otherRevenue`
+
+### Stratégie d'adaptation TypeScript
+
+`Prisma.Decimal` est un objet runtime (pas un primitif). En TS strict, `decimal + number` est une erreur de type. Approche pragmatique adoptée :
+
+1. **Boundary conversion via `toNumber()` (`src/lib/decimal.ts`)** : convertit `Decimal | number | string | null` → `number`. Utilisé au plus près du UI / des calculs JS.
+2. **`formatMAD()` accepte `DecimalLike`** : aucun appelant n'a besoin de convertir manuellement avant l'appel. Idem pour `formatMAD()` dans `src/lib/sms.ts`.
+3. **Conservation de l'arithmétique JS** : on convertit d'abord en `number`, on calcule, on écrit. Acceptable car : (a) la précision est garantie côté DB par le type DECIMAL ; (b) les calculs ponctuels sur < 10 items en JS ne génèrent pas assez de bruit pour casser le centime.
+4. **Decimal arithmetic explicite** : non utilisée, l'API `Decimal.add()` aurait été lourde à généraliser sur 51 fichiers. Si un cas critique exige une exactitude absolue (multi-step), passer par `Prisma.Decimal` localement.
+
+### Migration SQL
+
+`prisma/migrations/20260504_decimal_money/migration.sql` — `ALTER TABLE ... ALTER COLUMN ... TYPE DECIMAL(10,2) USING ...::DECIMAL(10,2);` pour chaque colonne. À exécuter manuellement sur Supabase.
+
+### Décisions
+
+- `@db.Decimal(10, 2)` : 10 chiffres au total, 2 après la virgule → max 99 999 999.99 MAD (≈ 100 M MAD). Largement suffisant pour Dog Universe Maroc.
+- **Migration in-place** sans default value : les valeurs existantes sont castées via `USING "col"::DECIMAL(10,2)` — PostgreSQL gère la conversion sans perte significative depuis `DOUBLE PRECISION` (déjà tronqué à 2 décimales par convention métier).
+- **Lecture transparente** : `formatMAD(invoice.amount)` fonctionne directement, qu'`amount` soit `number` ou `Decimal`. Pas de breaking change pour les composants UI.
 
 ---
 

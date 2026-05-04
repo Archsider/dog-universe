@@ -129,7 +129,7 @@ export async function GET(request: Request) {
   ];
 
   const rows = invoices.map(inv => {
-    const remaining = Math.max(0, inv.amount - inv.paidAmount);
+    const remaining = Math.max(0, Number(inv.amount) - Number(inv.paidAmount));
     // Most recent payment's date/method
     const lastPayment = inv.payments[0] ?? null;
     const paymentDateStr = lastPayment

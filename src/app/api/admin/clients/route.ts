@@ -79,7 +79,7 @@ export async function GET(request: Request) {
     const { passwordHash: _pw, ...safeClient } = client;
     return {
       ...safeClient,
-      totalRevenue: client.invoices.reduce((sum, inv) => sum + inv.amount, 0),
+      totalRevenue: client.invoices.reduce((sum, inv) => sum + Number(inv.amount), 0),
       lastStay: client.bookings[0] ?? null,
       totalStays: client._count.bookings,
     };

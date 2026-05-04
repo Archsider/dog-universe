@@ -91,7 +91,7 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
       },
       orderBy: { invoice: { issuedAt: 'desc' } },
     }).then(items => items
-      .map(it => ({ ...it, category: inferItemCategory(it.category, it.description) }))
+      .map(it => ({ ...it, unitPrice: Number(it.unitPrice), category: inferItemCategory(it.category, it.description) }))
       .filter(it => it.category !== 'OTHER')),
   ]);
 
@@ -100,7 +100,7 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
   // Avg stay duration — boarding-dominant invoices (item with highest total = BOARDING)
   const boardingDominant = avgNightsData.filter(inv => {
     if (inv.items.length === 0) return false;
-    const dom = inv.items.reduce((best, item) => item.total > best.total ? item : best);
+    const dom = inv.items.reduce((best, item) => Number(item.total) > Number(best.total) ? item : best);
     return dom.category === 'BOARDING';
   });
   const nightItems = boardingDominant.flatMap(inv =>

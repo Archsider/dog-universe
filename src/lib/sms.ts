@@ -63,9 +63,14 @@ export function formatDateFR(date: Date | string): string {
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-// Helper pour formater les montants MAD
-export function formatMAD(amount: number): string {
-  return amount.toLocaleString('fr-FR') + ' MAD'
+// Helper pour formater les montants MAD — accepte Decimal | number (cf. lib/decimal.ts)
+export function formatMAD(amount: number | { toNumber: () => number } | string | null | undefined): string {
+  let n: number;
+  if (amount === null || amount === undefined) n = 0;
+  else if (typeof amount === 'number') n = amount;
+  else if (typeof amount === 'string') n = Number(amount) || 0;
+  else n = amount.toNumber();
+  return n.toLocaleString('fr-FR') + ' MAD'
 }
 
 // ─── Helpers genre / pluriel ─────────────────────────────────────────────────

@@ -32,7 +32,7 @@ model User {
 
   // Historical baseline (for pre-existing clients before the app)
   historicalStays    Int    @default(0)
-  historicalSpendMAD Float  @default(0)
+  historicalSpendMAD Decimal @default(0) @db.Decimal(10, 2)
   historicalNote     String?
 
   deletedAt DateTime? // Soft-delete — null = active, non-null = archived
@@ -153,7 +153,7 @@ model Booking {
   arrivalTime String?
   notes              String?
   cancellationReason String?
-  totalPrice         Float    @default(0)
+  totalPrice         Decimal  @default(0) @db.Decimal(10, 2)
   source             String?  // "ONLINE" | "MANUAL" — null = legacy / unknown
   // Boarding stay extension request (from client)
   hasExtensionRequest       Boolean   @default(false)
@@ -205,8 +205,8 @@ model BookingItem {
   bookingId   String
   description String
   quantity    Int          @default(1)
-  unitPrice   Float
-  total       Float
+  unitPrice   Decimal      @db.Decimal(10, 2)
+  total       Decimal      @db.Decimal(10, 2)
   category    ItemCategory @default(OTHER)
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -219,9 +219,9 @@ model BoardingDetail {
   bookingId       String  @unique
   includeGrooming Boolean @default(false)
   groomingSize    String? // "SMALL" | "LARGE"
-  groomingPrice   Float   @default(0)
+  groomingPrice   Decimal @default(0) @db.Decimal(10, 2)
   groomingStatus  String? // "PLANNED" | "IN_PROGRESS" | "DONE" — null si pas de toilettage
-  pricePerNight   Float   @default(0)
+  pricePerNight   Decimal @default(0) @db.Decimal(10, 2)
   // Pet taxi addon
   taxiGoEnabled     Boolean @default(false)
   taxiGoDate        String?
@@ -231,7 +231,7 @@ model BoardingDetail {
   taxiReturnDate    String?
   taxiReturnTime    String?
   taxiReturnAddress String?
-  taxiAddonPrice    Float   @default(0)
+  taxiAddonPrice    Decimal @default(0) @db.Decimal(10, 2)
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }
@@ -240,7 +240,7 @@ model TaxiDetail {
   id        String @id @default(cuid())
   bookingId String @unique
   taxiType  String // "STANDARD" | "VET" | "AIRPORT"
-  price     Float
+  price     Decimal @db.Decimal(10, 2)
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }
@@ -258,7 +258,7 @@ model TaxiTrip {
   time      String?
   address   String?
   taxiType  String?  // "STANDARD" | "VET" | "AIRPORT" — STANDALONE only
-  price     Float    @default(0)
+  price     Decimal  @default(0) @db.Decimal(10, 2)
   // GPS tracking — controlled per-trip by admin
   trackingActive Boolean @default(false)
   trackingToken  String? @unique  // public token, allows client tracking without auth
@@ -307,8 +307,8 @@ model Invoice {
   bookingId     String?  @unique
   clientId      String
   invoiceNumber String   @unique
-  amount        Float
-  paidAmount    Float    @default(0) // Calculé = SUM(payments.amount), mis à jour par allocatePayments()
+  amount        Decimal  @db.Decimal(10, 2)
+  paidAmount    Decimal  @default(0) @db.Decimal(10, 2) // Calculé = SUM(payments.amount), mis à jour par allocatePayments()
   status        String   @default("PENDING") // "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED"
   serviceType   String?  // "BOARDING" | "PET_TAXI" | "GROOMING" | "PRODUCT_SALE" | null (legacy)
   pdfUrl        String?
@@ -347,9 +347,9 @@ model InvoiceItem {
   invoiceId       String
   description     String
   quantity        Int          @default(1)
-  unitPrice       Float
-  total           Float
-  allocatedAmount Float        @default(0)   // Montant alloué par allocatePayments()
+  unitPrice       Decimal      @db.Decimal(10, 2)
+  total           Decimal      @db.Decimal(10, 2)
+  allocatedAmount Decimal      @default(0) @db.Decimal(10, 2)   // Montant alloué par allocatePayments()
   status          String       @default("PENDING") // "PENDING" | "PARTIAL" | "PAID"
   category        ItemCategory @default(OTHER)
 
@@ -362,7 +362,7 @@ model Payment {
   id            String   @id @default(cuid())
   invoiceId     String
   invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  amount        Float
+  amount        Decimal  @db.Decimal(10, 2)
   paymentMethod String   // "CASH" | "CARD" | "CHECK" | "TRANSFER"
   paymentDate   DateTime
   notes         String?
@@ -504,10 +504,10 @@ model MonthlyRevenueSummary {
   id              String   @id @default(cuid())
   year            Int
   month           Int      // 1–12
-  boardingRevenue Float    @default(0)
-  groomingRevenue Float    @default(0)
-  taxiRevenue     Float    @default(0)
-  otherRevenue    Float    @default(0)
+  boardingRevenue Decimal  @default(0) @db.Decimal(10, 2)
+  groomingRevenue Decimal  @default(0) @db.Decimal(10, 2)
+  taxiRevenue     Decimal  @default(0) @db.Decimal(10, 2)
+  otherRevenue    Decimal  @default(0) @db.Decimal(10, 2)
   notes           String?
   createdBy       String
   createdAt       DateTime @default(now())

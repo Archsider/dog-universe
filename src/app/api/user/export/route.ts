@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
 
   const totalSpentMAD = invoices
     .filter((i) => i.status === 'PAID')
-    .reduce((sum, i) => sum + i.amount, 0);
+    .reduce((sum, i) => sum + Number(i.amount), 0);
 
   const exportPayload = {
     exportedAt: new Date().toISOString(),

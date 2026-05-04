@@ -144,7 +144,7 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
     const newTaxiAddonPrice =
       (bd.taxiGoEnabled ? taxiUnitPrice : 0) +
       (bd.taxiReturnEnabled ? taxiUnitPrice : 0);
-    if (bd.taxiAddonPrice !== newTaxiAddonPrice) {
+    if (Number(bd.taxiAddonPrice) !== newTaxiAddonPrice) {
       await prisma.boardingDetail.update({
         where: { bookingId },
         data: { taxiAddonPrice: newTaxiAddonPrice },
@@ -232,7 +232,7 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
         where: { invoiceId },
         select: { total: true },
       });
-      const newAmount = after.reduce((s, it) => s + it.total, 0);
+      const newAmount = after.reduce((s, it) => s + Number(it.total), 0);
       await tx.invoice.update({
         where: { id: invoiceId },
         data: { amount: newAmount, version: { increment: 1 } },
@@ -344,7 +344,7 @@ export async function addBookingItems(args: AddBookingItemsArgs) {
         where: { invoiceId: invoice.id },
         select: { total: true },
       });
-      const newAmount = after.reduce((s, it) => s + it.total, 0);
+      const newAmount = after.reduce((s, it) => s + Number(it.total), 0);
       await tx.invoice.update({
         where: { id: invoice.id },
         data: { amount: newAmount, version: { increment: 1 } },

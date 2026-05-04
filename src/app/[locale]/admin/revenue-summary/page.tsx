@@ -77,9 +77,18 @@ ALTER TABLE "MonthlyRevenueSummary"
     );
   }
 
+  // Decimal columns serialised to numbers for the client component.
+  const initialSummaries = summaries.map((s) => ({
+    ...s,
+    boardingRevenue: Number(s.boardingRevenue),
+    groomingRevenue: Number(s.groomingRevenue),
+    taxiRevenue: Number(s.taxiRevenue),
+    otherRevenue: Number(s.otherRevenue),
+  }));
+
   return (
     <RevenueSummaryManager
-      initialSummaries={summaries}
+      initialSummaries={initialSummaries}
       isSuperAdmin={session.user.role === 'SUPERADMIN'}
       locale={locale}
     />

@@ -149,15 +149,15 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     id: r.clientId,
     name: top5Users.find(u => u.id === r.clientId)?.name ?? r.clientId,
     email: top5Users.find(u => u.id === r.clientId)?.email ?? '',
-    totalRevenue: r._sum.paidAmount ?? 0,
+    totalRevenue: Number(r._sum.paidAmount ?? 0),
   }));
 
   // CA global — paiements réels + données historiques manuelles
   const thisHistAmt = thisMonthHistorical
-    ? thisMonthHistorical.boardingRevenue + thisMonthHistorical.groomingRevenue + thisMonthHistorical.taxiRevenue + thisMonthHistorical.otherRevenue
+    ? Number(thisMonthHistorical.boardingRevenue) + Number(thisMonthHistorical.groomingRevenue) + Number(thisMonthHistorical.taxiRevenue) + Number(thisMonthHistorical.otherRevenue)
     : 0;
   const lastHistAmt = lastMonthHistorical
-    ? lastMonthHistorical.boardingRevenue + lastMonthHistorical.groomingRevenue + lastMonthHistorical.taxiRevenue + lastMonthHistorical.otherRevenue
+    ? Number(lastMonthHistorical.boardingRevenue) + Number(lastMonthHistorical.groomingRevenue) + Number(lastMonthHistorical.taxiRevenue) + Number(lastMonthHistorical.otherRevenue)
     : 0;
   const thisAmt = thisCash + thisHistAmt;
   const lastAmt = lastCash + lastHistAmt;
@@ -186,7 +186,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   }
 
   const loyalClients = loyalClientsGroups.length;
-  const pendingInvoicesAmount = pendingInvoicesAgg._sum.amount ?? 0;
+  const pendingInvoicesAmount = Number(pendingInvoicesAgg._sum.amount ?? 0);
   const pendingInvoicesCount = pendingInvoicesAgg._count.id ?? 0;
 
   const labels = {

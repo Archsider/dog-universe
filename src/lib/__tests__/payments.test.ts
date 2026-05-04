@@ -121,7 +121,7 @@ describe('computeItemAllocation — plusieurs items', () => {
       pension('i1', 500), pension('i2', 500),
       taxiAller('i3', 150), taxiRetour('i4', 150), other('i5', 100),
     ];
-    const total = items.reduce((s, i) => s + i.total, 0);
+    const total = items.reduce((s, i) => s + Number(i.total ?? 0), 0);
     const results = computeItemAllocation(items, total);
     results.forEach(r => expect(r.status).toBe('PAID'));
   });

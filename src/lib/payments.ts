@@ -14,6 +14,7 @@
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
 import { calculateSuggestedGrade } from '@/lib/loyalty';
+import { toNumber, type DecimalLike } from '@/lib/decimal';
 
 // ---------------------------------------------------------------------------
 // Item sort priority:
@@ -43,7 +44,7 @@ export function getItemAllocationPriority(description: string): number {
 export interface AllocationItem {
   id: string;
   description: string;
-  total: number;
+  total: DecimalLike;
 }
 
 export interface AllocationResult {
@@ -62,11 +63,12 @@ export function computeItemAllocation(
 
   let remaining = totalPaid;
   return sorted.map(item => {
+    const itemTotal = toNumber(item.total);
     let allocatedAmount: number;
     let status: 'PAID' | 'PARTIAL' | 'PENDING';
 
-    if (remaining >= item.total) {
-      allocatedAmount = item.total;
+    if (remaining >= itemTotal) {
+      allocatedAmount = itemTotal;
       status = 'PAID';
     } else if (remaining > 0) {
       allocatedAmount = remaining;
@@ -122,7 +124,7 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
     const wasAlreadyPaid = invoice.status === 'PAID';
 
     // ── 2. Recompute paidAmount ──────────────────────────────────────────
-    const paidAmount = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
+    const paidAmount = invoice.payments.reduce((sum, p) => sum + toNumber(p.amount), 0);
 
     // ── 3 & 4. Sort items and distribute payment across them ─────────────
     const allocations = computeItemAllocation(invoice.items, paidAmount);
@@ -135,7 +137,7 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
     }
 
     // ── 5. Derive invoice status ─────────────────────────────────────────
-    let newStatus: string = deriveInvoiceStatus(paidAmount, invoice.amount);
+    let newStatus: string = deriveInvoiceStatus(paidAmount, toNumber(invoice.amount));
     let paidAt = invoice.paidAt;
 
     if (newStatus === 'PAID' && !paidAt) {
@@ -168,7 +170,7 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
         });
 
         const totalStays = completedStays + (client.historicalStays ?? 0);
-        const totalRevenue = (totalPaidAgg._sum.amount ?? 0) + (client.historicalSpendMAD ?? 0);
+        const totalRevenue = toNumber(totalPaidAgg._sum.amount) + toNumber(client.historicalSpendMAD);
 
         const suggestedGrade = calculateSuggestedGrade(totalStays, totalRevenue);
 
@@ -192,7 +194,7 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
         notifyPaid = {
           clientId: invoice.clientId,
           invoiceNumber: invoice.invoiceNumber,
-          amount: invoice.amount,
+          amount: toNumber(invoice.amount),
         };
       }
     }

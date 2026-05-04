@@ -49,7 +49,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
     startDate: b.startDate.toISOString(),
     endDate: b.endDate?.toISOString() ?? null,
     arrivalTime: b.arrivalTime ?? null,
-    totalPrice: b.totalPrice,
+    totalPrice: Number(b.totalPrice),
     clientName: b.client?.name ?? b.client?.email ?? '',
     clientId: b.client?.id ?? '',
     pets: b.bookingPets?.map((bp) => ({ name: bp.pet.name, species: bp.pet.species, photoUrl: bp.pet.photoUrl ?? null })) ?? [],

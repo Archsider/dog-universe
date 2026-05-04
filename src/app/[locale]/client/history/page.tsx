@@ -247,7 +247,7 @@ export default async function HistoryPage(props: PageProps) {
                           {booking.invoice.status === 'PAID' ? t.invoicePaid : t.invoicePending}
                         </span>
                       </Link>
-                    ) : booking.totalPrice && booking.totalPrice > 0 ? (
+                    ) : booking.totalPrice && Number(booking.totalPrice) > 0 ? (
                       <span className="text-sm font-semibold text-gold-600">
                         {formatMAD(booking.totalPrice)} <span className="text-xs text-gray-400 font-normal">({t.estimated})</span>
                       </span>

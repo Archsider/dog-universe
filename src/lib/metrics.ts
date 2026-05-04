@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { toNumber } from '@/lib/decimal';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ export async function totalCashCollected(start: Date, end: Date): Promise<number
     },
     _sum: { amount: true },
   });
-  return result._sum.amount ?? 0;
+  return toNumber(result._sum.amount);
 }
 
 export type MonthlyEntry = {
@@ -95,13 +96,14 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
 
   for (const pmt of payments) {
     const m = new Date(pmt.paymentDate).getMonth();
-    const itemsTotal = pmt.invoice.items.reduce((s, i) => s + i.total, 0);
-    monthly[m].total += pmt.amount;
+    const pmtAmount = toNumber(pmt.amount);
+    const itemsTotal = pmt.invoice.items.reduce((s, i) => s + toNumber(i.total), 0);
+    monthly[m].total += pmtAmount;
     if (itemsTotal === 0) continue;
-    const frac = pmt.amount / itemsTotal;
+    const frac = pmtAmount / itemsTotal;
     for (const item of pmt.invoice.items) {
       const k = categoryKey(item.category, item.description);
-      if (k) monthly[m][k] += item.total * frac;
+      if (k) monthly[m][k] += toNumber(item.total) * frac;
     }
   }
 
@@ -118,16 +120,16 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
 
     // Utiliser le summary UNIQUEMENT si aucun payment réel ce mois
     if (monthly[m].total === 0) {
-      monthly[m].total =
-        summary.boardingRevenue +
-        summary.groomingRevenue +
-        summary.taxiRevenue +
-        summary.otherRevenue;
-      monthly[m].boarding = summary.boardingRevenue;
-      monthly[m].grooming = summary.groomingRevenue;
-      monthly[m].taxi = summary.taxiRevenue;
+      const b = toNumber(summary.boardingRevenue);
+      const g = toNumber(summary.groomingRevenue);
+      const t = toNumber(summary.taxiRevenue);
+      const o = toNumber(summary.otherRevenue);
+      monthly[m].total = b + g + t + o;
+      monthly[m].boarding = b;
+      monthly[m].grooming = g;
+      monthly[m].taxi = t;
       // otherRevenue → croquettes (pas de champ PRODUCT dans le modèle historique)
-      monthly[m].croquettes = summary.otherRevenue;
+      monthly[m].croquettes = o;
     }
   }
 
@@ -168,16 +170,16 @@ export async function billedByCategory(
   };
 
   for (const inv of invoices) {
-    const itemsTotal = inv.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+    const itemsTotal = inv.items.reduce((s, i) => s + toNumber(i.unitPrice) * i.quantity, 0);
     if (itemsTotal === 0) continue;
     const periodPayments = inv.payments.filter(
       p => p.paymentDate >= start && p.paymentDate <= end,
     );
     for (const pmt of periodPayments) {
-      const frac = pmt.amount / itemsTotal;
+      const frac = toNumber(pmt.amount) / itemsTotal;
       for (const item of inv.items) {
         const k = categoryKey(item.category, item.description);
-        const val = item.unitPrice * item.quantity;
+        const val = toNumber(item.unitPrice) * item.quantity;
         if (k) result[k] += val * frac;
         else    result.other += val * frac;
       }
@@ -203,10 +205,10 @@ export async function billedByCategory(
       },
     });
     if (summary) {
-      result.boarding = summary.boardingRevenue;
-      result.grooming = summary.groomingRevenue;
-      result.taxi = summary.taxiRevenue;
-      result.other = summary.otherRevenue;
+      result.boarding = toNumber(summary.boardingRevenue);
+      result.grooming = toNumber(summary.groomingRevenue);
+      result.taxi = toNumber(summary.taxiRevenue);
+      result.other = toNumber(summary.otherRevenue);
       // Pas de champ PRODUCT dans le modèle historique → croquettes reste 0
     }
   }
@@ -243,7 +245,7 @@ export async function volumeByCategory(
     // Compter chaque item avec montant > 0 (pas seulement le dominant)
     let counted = false;
     for (const item of inv.items) {
-      if (item.unitPrice * item.quantity === 0) continue;
+      if (toNumber(item.unitPrice) * item.quantity === 0) continue;
       const k = categoryKey(item.category, item.description);
       if (k) result[k]++;
       else result.other++;
@@ -267,7 +269,7 @@ export async function avgBasket(start: Date, end: Date): Promise<number> {
   });
   const count = result._count.id ?? 0;
   if (count === 0) return 0;
-  return Math.round((result._sum.amount ?? 0) / count);
+  return Math.round(toNumber(result._sum.amount) / count);
 }
 
 // ── Shared queries ────────────────────────────────────────────────────────────

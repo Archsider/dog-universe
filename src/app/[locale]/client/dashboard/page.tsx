@@ -130,7 +130,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           pets={pets.map((p) => ({ name: p.name, species: p.species }))}
           grade={grade}
           totalStays={totalStays}
-          totalSpentMAD={totalSpent._sum.amount ?? 0}
+          totalSpentMAD={Number(totalSpent._sum.amount ?? 0)}
           locale={locale}
           claims={myClaims as { benefitKey: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' }[]}
         />

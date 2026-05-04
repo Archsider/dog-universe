@@ -521,19 +521,19 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
             <div className="space-y-2 text-sm">
               {booking.boardingDetail && (
                 <>
-                  {booking.boardingDetail.pricePerNight > 0 && (
+                  {Number(booking.boardingDetail.pricePerNight) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-500">{t.boarding} × {nights} {t.nights}</span>
-                      <span className="text-charcoal">{formatMAD(booking.boardingDetail.pricePerNight * nights)}</span>
+                      <span className="text-charcoal">{formatMAD(Number(booking.boardingDetail.pricePerNight) * nights)}</span>
                     </div>
                   )}
-                  {booking.boardingDetail.includeGrooming && booking.boardingDetail.groomingPrice > 0 && (
+                  {booking.boardingDetail.includeGrooming && Number(booking.boardingDetail.groomingPrice) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-500">{t.grooming}</span>
                       <span className="text-charcoal">{formatMAD(booking.boardingDetail.groomingPrice)}</span>
                     </div>
                   )}
-                  {booking.boardingDetail.taxiAddonPrice > 0 && (
+                  {Number(booking.boardingDetail.taxiAddonPrice) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-500">{t.taxi}</span>
                       <span className="text-charcoal">{formatMAD(booking.boardingDetail.taxiAddonPrice)}</span>
@@ -541,7 +541,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                   )}
                 </>
               )}
-              {booking.taxiDetail && booking.taxiDetail.price > 0 && (
+              {booking.taxiDetail && Number(booking.taxiDetail.price) > 0 && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">{t.taxi}</span>
                   <span className="text-charcoal">{formatMAD(booking.taxiDetail.price)}</span>
@@ -614,7 +614,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                 <span className="text-gray-500">{t.amount}</span>
                 <span className="font-bold text-amber-600">{formatMAD(supplementaryInvoice.amount)}</span>
               </div>
-              {supplementaryInvoice.paidAmount > 0 && (
+              {Number(supplementaryInvoice.paidAmount) > 0 && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">{t.paid}</span>
                   <span className="text-green-600">{formatMAD(supplementaryInvoice.paidAmount)}</span>
@@ -622,7 +622,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
               )}
               <div className="flex justify-between pt-2 border-t border-ivory-100">
                 <span className="text-gray-500">{t.remaining}</span>
-                <span className="font-semibold text-charcoal">{formatMAD(supplementaryInvoice.amount - supplementaryInvoice.paidAmount)}</span>
+                <span className="font-semibold text-charcoal">{formatMAD(Number(supplementaryInvoice.amount) - Number(supplementaryInvoice.paidAmount))}</span>
               </div>
               <div className="flex justify-between items-center pt-1">
                 <span className="text-gray-500">Statut</span>
