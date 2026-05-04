@@ -207,6 +207,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ skipped: 'queues', reason: 'UPSTASH_REDIS_HOST not configured', heartbeat: heartbeatResult });
   }
 
+  // Early-exit : si rien à faire dans les queues ET aucune course taxi active,
+  // on évite d'allouer Workers BullMQ (coût Lambda + connexions Redis). Fail-open :
+  // toute erreur sur le check → comportement normal (on tente le run).
+  try {
+    const emailQ = getEmailQueue();
+    const smsQ   = getSmsQueue();
+    const [emailCounts, smsCounts, activeTrips] = await Promise.all([
+      emailQ.getJobCounts('waiting', 'active', 'delayed'),
+      smsQ.getJobCounts('waiting', 'active', 'delayed'),
+      prisma.taxiTrip.count({ where: { status: 'DRIVER_EN_ROUTE' } }),
+    ]);
+    const emailPending = (emailCounts.waiting ?? 0) + (emailCounts.active ?? 0) + (emailCounts.delayed ?? 0);
+    const smsPending   = (smsCounts.waiting ?? 0)   + (smsCounts.active ?? 0)   + (smsCounts.delayed ?? 0);
+    if (emailPending === 0 && smsPending === 0 && activeTrips === 0) {
+      return NextResponse.json({ ok: true, skipped: true, reason: 'no work', heartbeat: heartbeatResult });
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'early-exit check failed (proceeding with full run)', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+  }
+
   const results: Record<string, QueueResult> = {};
 
   try {
