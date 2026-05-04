@@ -234,6 +234,9 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
           totalPrice,
           source: 'MANUAL',
           petIds: resolvedPetIds,
+          idempotencyKey: walkIn
+            ? undefined
+            : [resolvedClientId, new Date(startDate).toISOString(), endDate ? new Date(endDate).toISOString() : '', ...([...resolvedPetIds].sort())].join(':'),
           includeGrooming: false,
           groomingSize: null,
           groomingPrice: 0,
@@ -270,6 +273,15 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
     let invoiceNumber: string | null = null;
     if (createInvoice && totalPrice > 0) {
       try {
+        // Dedup guard: skip if an invoice already exists for this booking
+        // (protects against double-submission races at the HTTP layer)
+        const existingInvoice = await prisma.invoice.findFirst({
+          where: { bookingId: booking.id },
+          select: { invoiceNumber: true },
+        });
+        if (existingInvoice) {
+          invoiceNumber = existingInvoice.invoiceNumber;
+        } else {
         const year = new Date().getFullYear();
         for (let attempt = 0; attempt < 5; attempt++) {
           const count = await prisma.invoice.count();
@@ -300,6 +312,7 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
             },
           });
         }
+        } // end else (no existing invoice)
       } catch (err) {
         await log('error', 'admin-booking', 'Invoice auto-create failed', {
           error: err instanceof Error ? err.message : String(err),

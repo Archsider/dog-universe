@@ -425,6 +425,7 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
             totalPrice: resolvedTotalPrice,
             source: resolvedSource,
             petIds,
+            idempotencyKey: [clientId, new Date(startDate).toISOString(), endDate ? new Date(endDate).toISOString() : '', ...([...petIds].sort())].join(':'),
             includeGrooming: includeGrooming ?? false,
             groomingSize: groomingSize || null,
             groomingPrice: typeof groomingPrice === 'number' ? groomingPrice : 0,

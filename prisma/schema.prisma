@@ -168,6 +168,7 @@ model Booking {
   extensionRequestNote      String?
   // For PENDING_EXTENSION bookings: links back to the original booking being extended
   extensionForBookingId     String?
+  idempotencyKey String?   @unique // deterministic key: userId:startDate:endDate:petId1:petId2…
   deletedAt   DateTime?
   version     Int      @default(0) // optimistic concurrency lock
   createdAt   DateTime @default(now())
