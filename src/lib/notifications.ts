@@ -30,7 +30,8 @@ export type NotificationType =
   | 'BOOKING_WAITLIST_PROMOTED' // client receives when waitlisted booking is promoted to PENDING
   | 'BOOKING_CANCELLED'         // admin receives when a client cancels a booking
   | 'BOOKING_RESCHEDULE_REQUEST' // admin receives when a client requests new dates
-  | 'STAY_PHOTO_ADDED'; // client receives when new stay photos are uploaded (Instagram-like feed)
+  | 'STAY_PHOTO_ADDED'           // client receives when new stay photos are uploaded (Instagram-like feed)
+  | 'WEEKLY_PET_REPORT';        // client receives weekly AI-generated stay report during IN_PROGRESS boarding
 
 interface CreateNotificationData {
   userId: string;
