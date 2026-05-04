@@ -1,0 +1,551 @@
+{
+  "common": {
+    "appName": "Dog Universe",
+    "loading": "جار التحميل...",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "confirm": "تأكيد",
+    "back": "رجوع",
+    "next": "التالي",
+    "submit": "إرسال",
+    "search": "بحث",
+    "filter": "تصفية",
+    "all": "الكل",
+    "yes": "نعم",
+    "no": "لا",
+    "noData": "لا توجد بيانات للعرض",
+    "error": "حدث خطأ",
+    "success": "تمت العملية بنجاح",
+    "currency": "MAD",
+    "view": "عرض",
+    "download": "تنزيل",
+    "add": "إضافة",
+    "create": "إنشاء",
+    "close": "إغلاق",
+    "required": "مطلوب",
+    "optional": "اختياري",
+    "actions": "إجراءات",
+    "status": "الحالة",
+    "date": "التاريخ",
+    "name": "الاسم",
+    "email": "البريد الإلكتروني",
+    "phone": "الهاتف",
+    "notes": "ملاحظات",
+    "amount": "المبلغ",
+    "total": "المجموع",
+    "from": "من",
+    "to": "إلى",
+    "per": "لكل",
+    "night": "ليلة",
+    "nights": "ليالي",
+    "or": "أو",
+    "and": "و"
+  },
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "pets": "حيواناتي",
+    "bookings": "الحجوزات",
+    "history": "السجل",
+    "invoices": "الفواتير",
+    "loyalty": "مزاياي",
+    "notifications": "الإشعارات",
+    "profile": "ملفي الشخصي",
+    "logout": "تسجيل الخروج",
+    "connectedAs": "متصل بصفتك",
+    "admin": {
+      "dashboard": "لوحة التحكم",
+      "clients": "العملاء",
+      "animals": "الحيوانات",
+      "calendar": "التقويم",
+      "reservations": "الحجوزات",
+      "board": "لوحة العمليات",
+      "billing": "الفواتير",
+      "analytics": "التحليلات",
+      "logs": "السجلات",
+      "settings": "الإعدادات",
+      "profile": "ملفي الشخصي",
+      "contracts": "العقود",
+      "users": "المستخدمون",
+      "loyalty": "طلبات الولاء",
+      "reviews": "تقييمات العملاء",
+      "logout": "تسجيل الخروج",
+      "revenue_summary": "البيانات التاريخية"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "تسجيل الدخول",
+      "subtitle": "ادخل إلى حسابك في Dog Universe",
+      "email": "البريد الإلكتروني",
+      "password": "كلمة المرور",
+      "forgotPassword": "نسيت كلمة المرور؟",
+      "submit": "تسجيل الدخول",
+      "noAccount": "ليس لديك حساب؟",
+      "register": "إنشاء حساب",
+      "errors": {
+        "invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+        "accountDisabled": "هذا الحساب معطل"
+      }
+    },
+    "register": {
+      "title": "إنشاء حساب",
+      "subtitle": "انضم إلى Dog Universe",
+      "name": "الاسم الكامل",
+      "email": "البريد الإلكتروني",
+      "phone": "الهاتف",
+      "password": "كلمة المرور",
+      "confirmPassword": "تأكيد كلمة المرور",
+      "submit": "إنشاء حسابي",
+      "hasAccount": "لديك حساب بالفعل؟",
+      "login": "تسجيل الدخول",
+      "errors": {
+        "emailTaken": "هذا البريد الإلكتروني مستخدم بالفعل",
+        "passwordMismatch": "كلمات المرور غير متطابقة",
+        "weakPassword": "يجب أن تحتوي كلمة المرور على 8 أحرف على الأقل"
+      }
+    },
+    "resetPassword": {
+      "title": "نسيت كلمة المرور",
+      "subtitle": "أدخل بريدك الإلكتروني لتلقي رابط إعادة التعيين",
+      "email": "البريد الإلكتروني",
+      "submit": "إرسال الرابط",
+      "emailSent": "إذا كان هذا البريد موجوداً، ستتلقى رسالة قريباً.",
+      "backToLogin": "العودة إلى تسجيل الدخول",
+      "newTitle": "كلمة مرور جديدة",
+      "newPassword": "كلمة المرور الجديدة",
+      "confirmNewPassword": "تأكيد كلمة المرور الجديدة",
+      "changePassword": "تغيير كلمة المرور",
+      "tokenExpired": "هذا الرابط منتهي الصلاحية أو غير صالح.",
+      "success": "تم تغيير كلمة المرور بنجاح."
+    }
+  },
+  "dashboard": {
+    "greeting": "مرحباً، {name}!",
+    "subtitle": "مرحباً بك في فضاء Dog Universe الخاص بك",
+    "stats": {
+      "pets": "الحيوانات",
+      "totalStays": "إجمالي الإقامات",
+      "totalSpent": "إجمالي الإنفاق",
+      "loyalty": "درجة الولاء"
+    },
+    "myPets": "حيواناتي",
+    "upcomingBookings": "الحجوزات القادمة",
+    "recentInvoices": "الفواتير الأخيرة",
+    "recentActivity": "النشاط الأخير",
+    "noUpcomingBookings": "لا توجد حجوزات قادمة",
+    "bookNow": "احجز الآن",
+    "viewAllPets": "عرض جميع حيواناتي",
+    "viewAllBookings": "عرض جميع الحجوزات",
+    "viewAllInvoices": "عرض جميع الفواتير",
+    "loyalty": {
+      "grade": "درجة الولاء",
+      "bronze": "برونز",
+      "silver": "فضة",
+      "gold": "ذهب",
+      "platinum": "بلاتين"
+    },
+    "quickActions": {
+      "book": "احجز",
+      "myPets": "حيواناتي",
+      "invoices": "الفواتير",
+      "history": "السجل"
+    }
+  },
+  "pets": {
+    "title": "حيواناتي",
+    "addPet": "إضافة حيوان",
+    "editPet": "تعديل الملف",
+    "noPets": "لم تسجل أي حيوانات بعد.",
+    "noPetsAction": "أضف حيوانك الأول للبدء.",
+    "form": {
+      "name": "اسم الحيوان",
+      "species": "النوع",
+      "speciesOptions": {
+        "DOG": "كلب",
+        "CAT": "قطة"
+      },
+      "breed": "السلالة",
+      "dateOfBirth": "تاريخ الميلاد",
+      "gender": "الجنس",
+      "genderOptions": {
+        "MALE": "ذكر",
+        "FEMALE": "أنثى"
+      },
+      "photo": "صورة",
+      "uploadPhoto": "رفع صورة",
+      "changePhoto": "تغيير الصورة",
+      "notes": "ملاحظات / تعليمات خاصة"
+    },
+    "tabs": {
+      "profile": "الملف الشخصي",
+      "vaccinations": "التطعيمات",
+      "documents": "الوثائق",
+      "history": "السجل"
+    },
+    "vaccinations": {
+      "add": "إضافة تطعيم",
+      "edit": "تعديل",
+      "name": "اسم اللقاح",
+      "date": "تاريخ التطعيم",
+      "comment": "تعليق",
+      "noVaccinations": "لا توجد تطعيمات مسجلة",
+      "upToDate": "محدّث",
+      "expired": "منتهي الصلاحية",
+      "expiresSoon": "ينتهي قريباً"
+    },
+    "documents": {
+      "upload": "رفع وثيقة",
+      "name": "اسم الوثيقة",
+      "noDocuments": "لا توجد وثائق مسجلة",
+      "uploadedOn": "رُفعت في",
+      "allowedFormats": "الصيغ المقبولة: PDF، JPG، PNG (الحد الأقصى 10 ميغابايت)"
+    },
+    "history": {
+      "noHistory": "لا يوجد سجل إقامات لهذا الحيوان"
+    },
+    "age": "{count} سنة",
+    "born": "وُلد في",
+    "male": "ذكر",
+    "female": "أنثى",
+    "dog": "كلب",
+    "cat": "قطة"
+  },
+  "bookings": {
+    "title": "الحجوزات",
+    "newBooking": "حجز جديد",
+    "ref": "المرجع",
+    "noBookings": "لا توجد حجوزات",
+    "status": {
+      "PENDING": "في الانتظار",
+      "CONFIRMED": "مؤكد",
+      "COMPLETED": "منتهي",
+      "CANCELLED": "ملغى"
+    },
+    "serviceType": {
+      "BOARDING": "إيواء",
+      "PET_TAXI": "تاكسي الحيوانات"
+    },
+    "taxiType": {
+      "STANDARD": "رحلة عادية",
+      "VET": "نقل طبي",
+      "AIRPORT": "مكوك المطار"
+    },
+    "grooming": "العناية مشمولة",
+    "arrival": "الوصول",
+    "departure": "المغادرة",
+    "duration": "{count} ليلة",
+    "cancel": "إلغاء الحجز",
+    "cancelConfirm": "هل أنت متأكد من إلغاء هذا الحجز؟",
+    "wizard": {
+      "step1": {
+        "title": "نوع الخدمة",
+        "subtitle": "ما الخدمة التي تريد حجزها؟",
+        "boarding": {
+          "title": "إيواء",
+          "description": "إقامة فاخرة لحيوانك في منشأتنا"
+        },
+        "taxi": {
+          "title": "تاكسي الحيوانات",
+          "description": "نقل آمن في مراكش"
+        }
+      },
+      "step2": {
+        "title": "اختر حيواناً",
+        "subtitle": "ما الحيوان(ات) الذي تريد إيداعه؟"
+      },
+      "step3": {
+        "title": "التواريخ والأوقات",
+        "checkIn": "تاريخ الوصول",
+        "checkOut": "تاريخ المغادرة",
+        "arrivalTime": "وقت الوصول",
+        "taxiDate": "تاريخ الاستلام",
+        "taxiTime": "الوقت"
+      },
+      "step4": {
+        "title": "الخيارات",
+        "groomingTitle": "العناية",
+        "groomingDescription": "حمام، قص وعناية كاملة",
+        "groomingSmall": "+100 MAD (كلب صغير)",
+        "groomingLarge": "+150 MAD (كلب كبير)",
+        "taxiTypeTitle": "نوع الرحلة",
+        "notes": "ملاحظات خاصة",
+        "notesPlaceholder": "نظام غذائي، أدوية، سلوك خاص..."
+      },
+      "step5": {
+        "title": "ملخص الحجز",
+        "subtitle": "تحقق من تفاصيل حجزك",
+        "service": "الخدمة",
+        "pet": "الحيوان",
+        "dates": "التواريخ",
+        "options": "الخيارات",
+        "groomingIncluded": "العناية مشمولة",
+        "noGrooming": "بدون عناية",
+        "priceBreakdown": "تفاصيل السعر",
+        "boarding": "الإيواء",
+        "grooming": "العناية",
+        "taxi": "التاكسي",
+        "total": "المجموع التقديري",
+        "submitText": "إرسال طلب الحجز",
+        "notice": "سيتم تأكيد حجزك من قِبل فريقنا خلال 24 ساعة.",
+        "noPayment": "لا يلزم أي دفع إلكتروني في الوقت الحالي."
+      },
+      "confirmation": {
+        "title": "تم إرسال الطلب!",
+        "subtitle": "تم استلام طلب حجزك. سيراجعه فريقنا خلال 24 ساعة.",
+        "bookingRef": "رقم الطلب",
+        "viewBooking": "عرض الحجز",
+        "newBooking": "حجز جديد",
+        "backToDashboard": "العودة إلى لوحة التحكم"
+      }
+    }
+  },
+  "history": {
+    "title": "السجل",
+    "allStays": "جميع الإقامات",
+    "upcoming": "القادمة",
+    "completed": "المنتهية",
+    "cancelled": "الملغاة",
+    "noHistory": "لا يوجد سجل إقامات"
+  },
+  "invoices": {
+    "title": "الفواتير",
+    "number": "رقم الفاتورة",
+    "date": "تاريخ الإصدار",
+    "dueDate": "تاريخ الاستحقاق",
+    "amount": "المبلغ",
+    "status": {
+      "PAID": "مدفوعة",
+      "PENDING": "في الانتظار"
+    },
+    "download": "تنزيل PDF",
+    "view": "عرض الفاتورة",
+    "noInvoices": "لا توجد فواتير",
+    "items": "التفاصيل",
+    "description": "الوصف",
+    "quantity": "الكمية",
+    "unitPrice": "سعر الوحدة",
+    "subtotal": "المجموع الفرعي",
+    "total": "المجموع",
+    "paidOn": "دُفعت في",
+    "issuedOn": "صدرت في"
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "markAllRead": "وضع علامة مقروءة على الكل",
+    "markRead": "وضع علامة مقروءة",
+    "noNotifications": "لا توجد إشعارات",
+    "unread": "غير مقروء",
+    "types": {
+      "BOOKING_CONFIRMATION": "تأكيد الحجز",
+      "BOOKING_VALIDATION": "تم تأكيد الحجز",
+      "BOOKING_REFUSAL": "تم رفض الحجز",
+      "STAY_REMINDER": "تذكير بالإقامة",
+      "INVOICE_AVAILABLE": "فاتورة جديدة",
+      "ADMIN_MESSAGE": "رسالة من Dog Universe",
+      "STAY_PHOTO": "صور الإقامة",
+      "LOYALTY_UPDATE": "تحديث درجة الولاء"
+    }
+  },
+  "profile": {
+    "title": "ملفي الشخصي",
+    "personalInfo": "المعلومات الشخصية",
+    "security": "الأمان",
+    "preferences": "التفضيلات",
+    "name": "الاسم الكامل",
+    "email": "البريد الإلكتروني",
+    "phone": "الهاتف",
+    "changePassword": "تغيير كلمة المرور",
+    "currentPassword": "كلمة المرور الحالية",
+    "newPassword": "كلمة المرور الجديدة",
+    "confirmNewPassword": "تأكيد كلمة المرور الجديدة",
+    "language": "اللغة",
+    "languageOptions": {
+      "fr": "Français",
+      "en": "English",
+      "ar": "العربية"
+    },
+    "saved": "تم تحديث الملف الشخصي بنجاح"
+  },
+  "admin": {
+    "dashboard": {
+      "title": "لوحة التحكم",
+      "subtitle": "نظرة عامة على نشاطك",
+      "monthlyRevenue": "إيرادات الشهر",
+      "currentBoarders": "المقيمون الحاليون",
+      "occupancyRate": "معدل الإشغال",
+      "pendingReservations": "الحجوزات المعلقة",
+      "newClientsThisMonth": "عملاء جدد هذا الشهر",
+      "returningClients": "العملاء المتكررون",
+      "revenueChart": "تطور الإيرادات (12 شهراً الأخيرة)",
+      "serviceBreakdown": "التوزيع حسب الخدمة",
+      "recentActivity": "النشاط الأخير",
+      "vsLastMonth": "مقارنة بالشهر الماضي"
+    },
+    "analytics": {
+      "title": "التحليلات",
+      "period": "الفترة",
+      "thisMonth": "هذا الشهر",
+      "last3months": "3 أشهر الأخيرة",
+      "last6months": "6 أشهر الأخيرة",
+      "last12months": "12 شهراً الأخيرة",
+      "totalRevenue": "الإيراد الإجمالي",
+      "avgBasket": "متوسط السلة",
+      "avgStayDuration": "متوسط مدة الإقامة",
+      "clientSegmentation": "تقسيم العملاء",
+      "active": "نشط",
+      "semiActive": "شبه نشط",
+      "inactive": "غير نشط",
+      "boarding": "إيواء",
+      "taxi": "تاكسي",
+      "grooming": "عناية"
+    },
+    "clients": {
+      "title": "العملاء",
+      "search": "البحث عن عميل...",
+      "totalClients": "إجمالي العملاء",
+      "loyaltyGrade": "الدرجة",
+      "totalStays": "الإقامات",
+      "totalSpent": "الإنفاق",
+      "lastStay": "آخر إقامة",
+      "noClients": "لا يوجد عملاء",
+      "viewProfile": "عرض الملف",
+      "internalNotes": "ملاحظات داخلية (غير مرئية للعميل)",
+      "addNote": "إضافة ملاحظة",
+      "loyaltyOverride": "تغيير الدرجة يدوياً",
+      "suggestedGrade": "الدرجة المقترحة",
+      "currentGrade": "الدرجة الحالية",
+      "overrideGrade": "فرض الدرجة"
+    },
+    "animals": {
+      "title": "الحيوانات",
+      "allAnimals": "جميع الحيوانات",
+      "search": "البحث عن حيوان...",
+      "owner": "المالك",
+      "vaccinationStatus": "حالة التطعيمات",
+      "upToDate": "محدّثة",
+      "expired": "منتهية الصلاحية",
+      "expiresSoon": "تنتهي قريباً",
+      "noAnimals": "لا توجد حيوانات",
+      "internalNotes": "ملاحظات داخلية (غير مرئية للعميل)"
+    },
+    "reservations": {
+      "title": "الحجوزات",
+      "pending": "في الانتظار",
+      "all": "الكل",
+      "calendar": "التقويم",
+      "list": "القائمة",
+      "approve": "موافقة",
+      "reject": "رفض",
+      "complete": "إنهاء",
+      "createManual": "إنشاء حجز",
+      "addGrooming": "إضافة العناية",
+      "rejectionReason": "سبب الرفض",
+      "internalNotes": "ملاحظات داخلية",
+      "noReservations": "لا توجد حجوزات",
+      "confirmApprove": "تأكيد حجز {client} لـ {pet}؟",
+      "confirmReject": "رفض الحجز؟",
+      "confirmComplete": "وضع علامة نهاية الإقامة؟"
+    },
+    "billing": {
+      "title": "الفواتير",
+      "createInvoice": "إنشاء فاتورة",
+      "allInvoices": "جميع الفواتير",
+      "paid": "مدفوعة",
+      "pending": "في الانتظار",
+      "markPaid": "وضع علامة مدفوعة",
+      "paymentMethod": "طريقة الدفع",
+      "exportCsv": "تصدير CSV",
+      "client": "العميل",
+      "booking": "الحجز المرتبط",
+      "noInvoices": "لا توجد فواتير",
+      "paymentMethods": {
+        "CASH": "نقداً",
+        "CARD": "بطاقة بنكية",
+        "TRANSFER": "تحويل بنكي"
+      }
+    },
+    "logs": {
+      "title": "سجلات الإجراءات",
+      "action": "الإجراء",
+      "actor": "المُنفِّذ",
+      "entity": "الكيان",
+      "timestamp": "الطابع الزمني",
+      "details": "التفاصيل",
+      "noLogs": "لا توجد سجلات",
+      "system": "النظام"
+    },
+    "loyalty": {
+      "bronze": "برونز",
+      "silver": "فضة",
+      "gold": "ذهب",
+      "platinum": "بلاتين",
+      "thresholds": {
+        "bronze": "1-3 إقامات",
+        "silver": "4-9 إقامات",
+        "gold": "10-19 إقامة",
+        "platinum": "20+ إقامة أو +5000 EUR من رقم الأعمال"
+      }
+    }
+  },
+  "landing": {
+    "hero": {
+      "title": "في مراكش، بيئة متميزة حيث يعيشون ويتفاعلون ويزدهرون.",
+      "subtitle": "إيواء • عناية • نقل",
+      "cta": "احجز الآن",
+      "login": "فضائي كعميل",
+      "tagline": "ثقة • احتراف • طمأنينة"
+    },
+    "services": {
+      "title": "خدماتنا",
+      "subtitle": "عرض متكامل لرفاهية حيوانك",
+      "boarding": {
+        "title": "الإيواء",
+        "description": "أماكن مريحة وآمنة ودافئة لحيوانك مع متابعة شخصية."
+      },
+      "taxi": {
+        "title": "تاكسي الحيوانات",
+        "description": "نقل آمن وخالٍ من التوتر لرفيقك إلى الطبيب البيطري أو المطار أو أي مكان في مراكش."
+      },
+      "grooming": {
+        "title": "العناية",
+        "description": "حمام متاح كإضافة لخدمة الإيواء."
+      }
+    },
+    "why": {
+      "title": "لماذا تختارنا؟",
+      "trust": {
+        "title": "الثقة",
+        "description": "فريق محترف ومُخلص مكرّس لسلامة حيوانك."
+      },
+      "quality": {
+        "title": "جودة متميزة",
+        "description": "مساحات معيشة راقية وتغذية ملائمة ومتابعة يومية."
+      },
+      "communication": {
+        "title": "متابعة في الوقت الحقيقي",
+        "description": "إشعارات وتحديثات عبر فضائك الشخصي كعميل."
+      }
+    },
+    "contact": {
+      "title": "تواصل معنا",
+      "address": "مراكش، المغرب",
+      "phone": "+212 600-000000",
+      "email": "contact@doguniverse.ma",
+      "hours": "الإثنين–الأحد: 8 صباحاً–8 مساءً"
+    },
+    "footer": {
+      "rights": "جميع الحقوق محفوظة",
+      "privacy": "سياسة الخصوصية",
+      "terms": "شروط الاستخدام"
+    }
+  },
+  "errors": {
+    "page404": "الصفحة غير موجودة",
+    "page403": "وصول غير مصرح",
+    "page500": "خطأ في الخادم",
+    "goHome": "العودة إلى الرئيسية",
+    "tryAgain": "حاول مرة أخرى"
+  }
+}

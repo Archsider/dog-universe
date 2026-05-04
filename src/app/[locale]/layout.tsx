@@ -15,16 +15,19 @@ export default async function LocaleLayout({
 }) {
   const { locale } = await params;
 
-  if (!routing.locales.includes(locale as 'fr' | 'en')) {
+  if (!routing.locales.includes(locale as 'fr' | 'en' | 'ar')) {
     notFound();
   }
 
   const messages = await getMessages();
+  const dir = locale === 'ar' ? 'rtl' : 'ltr';
 
   return (
     <NextIntlClientProvider messages={messages} locale={locale}>
-      {children}
-      <Toaster />
+      <div dir={dir} lang={locale}>
+        {children}
+        <Toaster />
+      </div>
     </NextIntlClientProvider>
   );
 }
