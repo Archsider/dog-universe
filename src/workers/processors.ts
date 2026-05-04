@@ -7,7 +7,16 @@ import type { Job } from 'bullmq';
 import { z } from 'zod';
 import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
+import { tryAcquireFlag } from '@/lib/cache';
 import type { EmailJobData, SmsJobData } from '@/lib/queues/index';
+
+// Idempotence : Redis NX EX 24h. Si un Worker BullMQ retraite par erreur le
+// même jobId (réseau perdu après ack, dédoublement éventuel), le second
+// passage voit le flag déjà posé → no-op silencieux. Fail-open via tryAcquireFlag.
+const PROCESSED_TTL_SECONDS = 86_400;
+function processedKey(queue: 'email' | 'sms', jobId: string): string {
+  return `job:processed:${queue}:${jobId}`;
+}
 
 // Validate job payloads at deserialise. If Redis returns a malformed blob
 // (corruption, manual edit, version skew between producer and consumer), we
@@ -29,6 +38,14 @@ export async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
   if (!parsed.success) {
     throw new Error(`[email-job] invalid payload: ${parsed.error.message}`);
   }
+  const jobId = job.id;
+  if (jobId) {
+    const acquired = await tryAcquireFlag(processedKey('email', jobId), PROCESSED_TTL_SECONDS);
+    if (!acquired) {
+      console.info(JSON.stringify({ level: 'info', service: 'worker', message: 'job already processed', queue: 'email', jobId, timestamp: new Date().toISOString() }));
+      return;
+    }
+  }
   await sendEmail(parsed.data);
 }
 
@@ -36,6 +53,14 @@ export async function processSmsJob(job: Job<SmsJobData>): Promise<void> {
   const parsed = smsJobSchema.safeParse(job.data);
   if (!parsed.success) {
     throw new Error(`[sms-job] invalid payload: ${parsed.error.message}`);
+  }
+  const jobId = job.id;
+  if (jobId) {
+    const acquired = await tryAcquireFlag(processedKey('sms', jobId), PROCESSED_TTL_SECONDS);
+    if (!acquired) {
+      console.info(JSON.stringify({ level: 'info', service: 'worker', message: 'job already processed', queue: 'sms', jobId, timestamp: new Date().toISOString() }));
+      return;
+    }
   }
   const { to, message } = parsed.data;
   if (to === 'ADMIN') {

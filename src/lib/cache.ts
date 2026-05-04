@@ -23,6 +23,29 @@ function getRedis(): Redis | null {
   return cached;
 }
 
+// ─── Atomic flag (SET NX EX) ───────────────────────────────────────────────
+
+/**
+ * Tries to atomically claim a single-use flag. Returns true if the flag was
+ * acquired (caller must proceed), false if it was already set.
+ *
+ * Fail-open: any Redis error (or unconfigured Redis) returns true so the
+ * caller behaves as if the flag was newly acquired. Acceptable trade-off
+ * for non-critical guards (geofencing, idempotency hints) where missing
+ * a side-effect is worse than running it twice.
+ */
+export async function tryAcquireFlag(key: string, ttlSeconds: number): Promise<boolean> {
+  const redis = getRedis();
+  if (!redis) return true;
+  try {
+    const res = await redis.set(key, '1', { nx: true, ex: ttlSeconds });
+    return res === 'OK';
+  } catch (err) {
+    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'tryAcquireFlag failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    return true;
+  }
+}
+
 // ─── Generic JSON helpers ──────────────────────────────────────────────────
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
