@@ -200,6 +200,7 @@ Définis dans `vercel.json`, tous à **08h00 UTC** :
 | `/api/cron/reminders` | Quotidien | Rappels J-1 séjour (arrivée + départ) |
 | `/api/cron/birthday-notifications` | Quotidien | Notifications anniversaire des animaux |
 | `/api/cron/contract-reminders` | Lundi (hebdo) | Rappel signature contrat aux clients sans contrat |
+| `/api/cron/overdue-invoices` | Quotidien (09h UTC) | Relances factures impayées J+30 / J+60 (depuis 2026-05-04) |
 
 **Protection :** header `x-cron-secret` vérifié contre `CRON_SECRET` (déjà défini sur Vercel).
 Vercel l'injecte automatiquement via `Authorization: Bearer` pour ses propres crons.
@@ -472,6 +473,11 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | Loyalty COMPLETED ne crée pas de grade | RÉSOLU (2026-05-04, `dcd2776`) | Guard `if (currentGrade && ...)` empêchait `update` si la row n'existait pas → tous les nouveaux clients restaient BRONZE après leur 1er séjour terminé. Fix : `update` → `upsert`, guard retiré. |
 | Walk-in pets dans le compteur DOB manquant | RÉSOLU (2026-05-04, `38066da`) | `/admin/dashboard` comptait tous les pets sans `dateOfBirth`. Filtre `owner: { isWalkIn: false }` ajouté — walk-in = client one-shot, profil sparse, pas de DOB attendu. |
 | GPS Pet Taxi end-to-end | LIVRÉ (2026-05-04, `c5377ab`) | Client : bouton "📍 Utiliser ma position" + reverse-geocode Nominatim → `pickupLat/Lng/Address`. Admin : boutons Google Maps + Waze sur fiche réservation. Geofencing : heartbeat chauffeur → notifs `TAXI_NEAR_PICKUP` (<1km) + `TAXI_ARRIVED` (<100m), flags Redis NX EX 1h pour dédupliquer, fail-open. Helper `haversineDistance()` dans `src/lib/geo.ts` (5 tests). Migration `20260504_taxi_gps_pickup` (6 colonnes sur `TaxiDetail`). |
+| Boot guard env prod | RÉSOLU (2026-05-04) | `assertProductionEnv()` dans `src/lib/boot-checks.ts`, appelé depuis `instrumentation.ts → register()`. En prod, throw si l'une des vars manque ou est invalide : `TOTP_ENCRYPTION_KEY` (64 hex), `CRON_SECRET`, `NEXTAUTH_SECRET`, `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`. Dev → warning seulement. |
+| Indexes billing manquants | RÉSOLU (2026-05-04) | `Payment.paymentMethod`, `InvoiceItem.category`, `Invoice(clientId,status)` ajoutés. Migration manuelle `20260504_billing_indexes` à exécuter sur Supabase (CREATE INDEX CONCURRENTLY — hors transaction Prisma). |
+| Cron relances impayés J+30/J+60 | LIVRÉ (2026-05-04) | `/api/cron/overdue-invoices` daily 09h UTC. Templates `invoice_overdue_30` / `invoice_overdue_60` (fr/en, ferme mais professionnel). Notif `INVOICE_OVERDUE` avec `metadata { invoiceId, reminderKind }` pour dédupliquer 24h. Walk-in clients exclus. |
+| Zod `.passthrough()` sur PATCH /api/admin/bookings | RÉSOLU (2026-05-04) | Remplacé par `.strict()` avec whitelist explicite des discriminateurs (`patchBoardingDetail`, `addBookingItems`, `approveExtension`, `rejectExtension`, `editDates`, `extendEndDate`, `forcePaidInvoice`). Champs inconnus rejetés. |
+| next-auth GA | EN ATTENTE | Encore beta (5.0.0-beta.31 au 2026-05-04). Surveillance des releases ; upgrade prévu dès la GA stable. |
 
 ---
 
