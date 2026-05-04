@@ -50,6 +50,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   BOOKING_RESCHEDULE_REQUEST:   { icon: RefreshCw,   color: 'text-amber-600', bg: 'bg-amber-50' },
   WEEKLY_PET_REPORT:            { icon: Sparkles,    color: 'text-emerald-600', bg: 'bg-emerald-50' },
   INVOICE_OVERDUE:              { icon: Receipt,     color: 'text-red-600',     bg: 'bg-red-50' },
+  REVIEW_REQUEST:               { icon: Star,        color: 'text-gold-500',    bg: 'bg-gold-50' },
 };
 
 function parseMetadata(raw: string | null): Record<string, unknown> {
