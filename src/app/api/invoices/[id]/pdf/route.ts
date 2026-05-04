@@ -35,7 +35,21 @@ export async function GET(req: Request, { params }: Params) {
 
   try {
     const { generateInvoicePDF } = await import('@/lib/pdf');
-    const pdfBuffer = await generateInvoicePDF(invoice as Parameters<typeof generateInvoicePDF>[0]);
+    // Convert Decimal columns → number at the boundary so the PDF generator
+    // (which works on plain numbers) doesn't have to know about Prisma.Decimal.
+    const invoiceForPdf = {
+      ...invoice,
+      amount: Number(invoice.amount),
+      paidAmount: Number(invoice.paidAmount),
+      items: invoice.items.map(it => ({
+        ...it,
+        unitPrice: Number(it.unitPrice),
+        total: Number(it.total),
+        allocatedAmount: Number(it.allocatedAmount),
+      })),
+      payments: invoice.payments.map(p => ({ ...p, amount: Number(p.amount) })),
+    };
+    const pdfBuffer = await generateInvoicePDF(invoiceForPdf as Parameters<typeof generateInvoicePDF>[0]);
 
     await logAction({
       userId: session.user.id,

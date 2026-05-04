@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, LogIn, LogOut, Package, CalendarOff } from 'lucide-react';
+import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, LogIn, LogOut, Package, CalendarOff, MessageSquare } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import RevenueChartWrapper from './RevenueChartWrapper';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -32,6 +32,9 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   const lastMonthStart = startOfMonth(subMonths(now, 1));
   const lastMonthEnd = endOfMonth(subMonths(now, 1));
 
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
   const [
     totalClients,
     pendingBookings,
@@ -53,6 +56,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     thisBilled,
     lastBilled,
     petsWithoutDob,
+    reviewStats,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'CLIENT', isWalkIn: false } }),
     pendingBookingsCount(),
@@ -138,6 +142,11 @@ export default async function AdminDashboardPage({ params }: PageProps) {
         owner: { isWalkIn: false },
       },
     }),
+    prisma.review.aggregate({
+      where: { createdAt: { gte: thirtyDaysAgo } },
+      _avg: { rating: true },
+      _count: { id: true },
+    }),
   ]);
 
   const { cat: currentCatBoarders, dog: currentDogBoarders } = boarders;
@@ -157,15 +166,15 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     id: r.clientId,
     name: top5Users.find(u => u.id === r.clientId)?.name ?? r.clientId,
     email: top5Users.find(u => u.id === r.clientId)?.email ?? '',
-    totalRevenue: r._sum.paidAmount ?? 0,
+    totalRevenue: Number(r._sum.paidAmount ?? 0),
   }));
 
   // CA global — paiements réels + données historiques manuelles
   const thisHistAmt = thisMonthHistorical
-    ? thisMonthHistorical.boardingRevenue + thisMonthHistorical.groomingRevenue + thisMonthHistorical.taxiRevenue + thisMonthHistorical.otherRevenue
+    ? Number(thisMonthHistorical.boardingRevenue) + Number(thisMonthHistorical.groomingRevenue) + Number(thisMonthHistorical.taxiRevenue) + Number(thisMonthHistorical.otherRevenue)
     : 0;
   const lastHistAmt = lastMonthHistorical
-    ? lastMonthHistorical.boardingRevenue + lastMonthHistorical.groomingRevenue + lastMonthHistorical.taxiRevenue + lastMonthHistorical.otherRevenue
+    ? Number(lastMonthHistorical.boardingRevenue) + Number(lastMonthHistorical.groomingRevenue) + Number(lastMonthHistorical.taxiRevenue) + Number(lastMonthHistorical.otherRevenue)
     : 0;
   const thisAmt = thisCash + thisHistAmt;
   const lastAmt = lastCash + lastHistAmt;
@@ -194,7 +203,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   }
 
   const loyalClients = loyalClientsGroups.length;
-  const pendingInvoicesAmount = pendingInvoicesAgg._sum.amount ?? 0;
+  const pendingInvoicesAmount = Number(pendingInvoicesAgg._sum.amount ?? 0);
   const pendingInvoicesCount = pendingInvoicesAgg._count.id ?? 0;
 
   const labels = {
@@ -367,6 +376,32 @@ export default async function AdminDashboardPage({ params }: PageProps) {
           </div>
         </Link>
       </div>
+
+      {/* Reviews KPI card */}
+      {reviewStats._count.id > 0 && (
+        <div className="mb-4">
+          <Link href={`/${locale}/admin/reviews`}>
+            <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card hover:shadow-card-hover transition-shadow flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-gold-50 flex items-center justify-center flex-shrink-0">
+                <Star className="h-5 w-5 text-gold-500" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-bold text-charcoal">{(reviewStats._avg.rating ?? 0).toFixed(1)}</span>
+                  <div className="flex gap-0.5">
+                    {[1,2,3,4,5].map(s => (
+                      <Star key={s} className={`h-3.5 w-3.5 ${s <= Math.round(reviewStats._avg.rating ?? 0) ? 'text-gold-500 fill-gold-500' : 'text-gray-200 fill-gray-200'}`} />
+                    ))}
+                  </div>
+                  <span className="text-xs text-gray-400">({reviewStats._count.id} {locale === 'fr' ? 'avis' : 'reviews'} — 30j)</span>
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">{locale === 'fr' ? 'Note moyenne — 30 derniers jours' : 'Average rating — last 30 days'}</div>
+              </div>
+              <MessageSquare className="h-4 w-4 text-gray-400 flex-shrink-0" />
+            </div>
+          </Link>
+        </div>
+      )}
 
       {/* Row 2 — Service revenues this month */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

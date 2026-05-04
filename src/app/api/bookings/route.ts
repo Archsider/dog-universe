@@ -317,8 +317,8 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
           (mergedEndDate.getTime() - existingContiguous.startDate.getTime()) / (1000 * 60 * 60 * 24)
         );
         const mergePets = existingContiguous.bookingPets.map(bp => bp.pet);
-        const mergeGroomingPrice = existingContiguous.boardingDetail?.groomingPrice ?? 0;
-        const mergeTaxiAddonPrice = existingContiguous.boardingDetail?.taxiAddonPrice ?? 0;
+        const mergeGroomingPrice = Number(existingContiguous.boardingDetail?.groomingPrice ?? 0);
+        const mergeTaxiAddonPrice = Number(existingContiguous.boardingDetail?.taxiAddonPrice ?? 0);
         const mergedTotal = calculateBoardingTotalForExtension(
           mergePets,
           mergedNights,
@@ -339,7 +339,7 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
               });
             } else if (existingContiguous.invoice.status === 'PARTIALLY_PAID') {
               const invoiceUpdate: Record<string, unknown> = { amount: mergedTotal };
-              if (existingContiguous.invoice.paidAmount >= mergedTotal) {
+              if (Number(existingContiguous.invoice.paidAmount) >= mergedTotal) {
                 invoiceUpdate.status = 'PAID';
                 invoiceUpdate.paidAt = existingContiguous.invoice.paidAt ?? new Date();
               }

@@ -28,7 +28,7 @@ export async function GET(_req: Request, { params }: Params) {
   const invoice = await prisma.invoice.findUnique({
     where: { id },
     include: {
-      client: { select: { id: true, name: true, email: true, phone: true } },
+      client: { select: { id: true, name: true, email: true, phone: true, role: true } },
       booking: {
         include: {
           bookingPets: { include: { pet: { select: { name: true, species: true, breed: true } } } },
@@ -44,6 +44,10 @@ export async function GET(_req: Request, { params }: Params) {
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   if (session.user.role === 'CLIENT' && invoice.clientId !== session.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  // Authz cross-role : ADMIN ne peut lire que les factures de clients (CLIENT). SUPERADMIN passe partout.
+  if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
   return NextResponse.json(invoice);
@@ -64,9 +68,10 @@ export async function PATCH(request: Request, { params }: Params) {
   });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // P0: cross-role guard — an ADMIN must not mutate invoices belonging to a SUPERADMIN
+  // Authz cross-role : ADMIN ne peut toucher que les factures de clients (CLIENT).
+  // SUPERADMIN passe partout. Empêche un ADMIN d'éditer la facture d'un autre admin.
   if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
   // Optimistic concurrency: when caller provides `version`, refuse to apply
@@ -234,9 +239,8 @@ export async function DELETE(_req: Request, { params }: Params) {
   });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // P0: cross-role guard — an ADMIN must not delete invoices belonging to a SUPERADMIN
   if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
   // onDelete: Cascade on InvoiceItem and Payment handles related records

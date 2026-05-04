@@ -81,8 +81,8 @@ export async function POST(request: Request, { params }: Params) {
   // (e.g. just added an addon line and is recording the matching payment),
   // so a payment that briefly exceeds the current amount is allowed.
   // allocatePayments() afterwards derives the final status from the items.
-  const alreadyPaid = invoice.payments.reduce((s, p) => s + p.amount, 0);
-  if (invoice.status === 'PAID' && alreadyPaid + parsedAmount > invoice.amount + 0.001) {
+  const alreadyPaid = invoice.payments.reduce((s, p) => s + Number(p.amount), 0);
+  if (invoice.status === 'PAID' && alreadyPaid + parsedAmount > Number(invoice.amount) + 0.001) {
     return NextResponse.json({ error: 'OVERPAYMENT_NOT_ALLOWED' }, { status: 400 });
   }
 

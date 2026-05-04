@@ -250,8 +250,8 @@ export const PATCH = withSchema(
     const mergedNights = Math.floor(
       (newEndDate.getTime() - originalBooking.startDate.getTime()) / (1000 * 60 * 60 * 24)
     );
-    const groomingPriceForExt = originalBooking.boardingDetail?.groomingPrice ?? 0;
-    const taxiAddonPriceForExt = originalBooking.boardingDetail?.taxiAddonPrice ?? 0;
+    const groomingPriceForExt = Number(originalBooking.boardingDetail?.groomingPrice ?? 0);
+    const taxiAddonPriceForExt = Number(originalBooking.boardingDetail?.taxiAddonPrice ?? 0);
     const newTotal = Math.round(
       calculateBoardingTotalForExtension(petsForExt, mergedNights, groomingPriceForExt, taxiAddonPriceForExt, pricingSettingsForExt) * 100
     ) / 100;
@@ -267,7 +267,7 @@ export const PATCH = withSchema(
 
       // Update invoice
       if (originalBooking.invoice && booking.invoice) {
-        const newPaidAmount = Math.round((originalBooking.invoice.paidAmount + booking.invoice.paidAmount) * 100) / 100;
+        const newPaidAmount = Math.round((Number(originalBooking.invoice.paidAmount) + Number(booking.invoice.paidAmount)) * 100) / 100;
         const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
         await tx.invoice.update({
           where: { id: originalBooking.invoice.id },
@@ -283,7 +283,7 @@ export const PATCH = withSchema(
       } else if (!originalBooking.invoice && booking.invoice) {
         await tx.invoice.update({ where: { id: booking.invoice.id }, data: { bookingId: originalBooking.id, amount: newTotal } });
       } else if (originalBooking.invoice && !booking.invoice) {
-        const newPaidAmount = originalBooking.invoice.paidAmount;
+        const newPaidAmount = Number(originalBooking.invoice.paidAmount);
         const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
         await tx.invoice.update({ where: { id: originalBooking.invoice.id }, data: { amount: newTotal, status: newStatus } });
       }
@@ -383,13 +383,13 @@ export const PATCH = withSchema(
     const newNights = Math.floor((newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60 * 24));
 
     // Recalculate price
-    let newTotal = booking.totalPrice;
+    let newTotal = Number(booking.totalPrice);
     if (booking.serviceType === 'BOARDING') {
       const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
       const pricingSettings = await getPricingSettings();
       const pets = booking.bookingPets.map(bp => bp.pet);
-      const groomingPrice = booking.boardingDetail?.groomingPrice ?? 0;
-      const taxiAddonPrice = booking.boardingDetail?.taxiAddonPrice ?? 0;
+      const groomingPrice = Number(booking.boardingDetail?.groomingPrice ?? 0);
+      const taxiAddonPrice = Number(booking.boardingDetail?.taxiAddonPrice ?? 0);
       newTotal = calculateBoardingTotalForExtension(pets, newNights, groomingPrice, taxiAddonPrice, pricingSettings);
     }
 
@@ -439,15 +439,15 @@ export const PATCH = withSchema(
           invoiceItems
             .filter(item => {
               const d = item.description.toLowerCase();
-              return (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi') && item.unitPrice > 0;
+              return (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi') && Number(item.unitPrice) > 0;
             })
             .map(item => tx.invoiceItem.update({
               where: { id: item.id },
-              data: { quantity: newNights, total: newNights * item.unitPrice },
+              data: { quantity: newNights, total: newNights * Number(item.unitPrice) },
             }))
         );
 
-        const newPaidAmount = booking.invoice.paidAmount;
+        const newPaidAmount = Number(booking.invoice.paidAmount);
         const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
         await tx.invoice.update({
           where: { id: booking.invoice.id },
@@ -531,8 +531,8 @@ export const PATCH = withSchema(
 
     const newNights = Math.floor((newEndDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24));
     const pets = booking.bookingPets.map(bp => bp.pet);
-    const groomingPrice = booking.boardingDetail?.groomingPrice ?? 0;
-    const taxiAddonPrice = booking.boardingDetail?.taxiAddonPrice ?? 0;
+    const groomingPrice = Number(booking.boardingDetail?.groomingPrice ?? 0);
+    const taxiAddonPrice = Number(booking.boardingDetail?.taxiAddonPrice ?? 0);
 
     const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
     const pricingSettings = await getPricingSettings();
@@ -579,15 +579,15 @@ export const PATCH = withSchema(
             invoiceItems
               .filter(item => {
                 const d = item.description.toLowerCase();
-                return (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi') && item.unitPrice > 0;
+                return (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi') && Number(item.unitPrice) > 0;
               })
               .map(item => tx.invoiceItem.update({
                 where: { id: item.id },
-                data: { quantity: newNights, total: newNights * item.unitPrice },
+                data: { quantity: newNights, total: newNights * Number(item.unitPrice) },
               }))
           );
 
-          const newPaidAmount = booking.invoice.paidAmount;
+          const newPaidAmount = Number(booking.invoice.paidAmount);
           const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
           await tx.invoice.update({
             where: { id: booking.invoice.id },
@@ -853,7 +853,7 @@ export const PATCH = withSchema(
           prisma.invoice.aggregate({ where: { clientId: booking.clientId, status: 'PAID' }, _sum: { amount: true } }),
           prisma.loyaltyGrade.findUnique({ where: { clientId: booking.clientId } }),
         ]);
-        const suggestedGrade = calculateSuggestedGrade(totalStays, totalPaid._sum.amount ?? 0);
+        const suggestedGrade = calculateSuggestedGrade(totalStays, Number(totalPaid._sum.amount ?? 0));
         if (!currentGrade?.isOverride && currentGrade?.grade !== suggestedGrade) {
           await prisma.loyaltyGrade.upsert({
             where: { clientId: booking.clientId },

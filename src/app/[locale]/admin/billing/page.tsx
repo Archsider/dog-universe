@@ -363,7 +363,7 @@ export default async function AdminBillingPage(props: PageProps) {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {(['CASH', 'CARD', 'CHECK', 'TRANSFER'] as const).map(method => {
             const stat = paymentMethodStats.find(s => s.paymentMethod === method);
-            const amount = stat?._sum.amount ?? 0;
+            const amount = Number(stat?._sum.amount ?? 0);
             const count = stat?._count.id ?? 0;
             const pct = Math.round((amount / totalPaidByMethod) * 100);
             const cfg = METHOD_CONFIG[method];
@@ -460,7 +460,9 @@ export default async function AdminBillingPage(props: PageProps) {
                 </thead>
                 <tbody>
                   {invoices.map(inv => {
-                    const remaining = Math.max(0, inv.amount - inv.paidAmount);
+                    const invAmount = Number(inv.amount);
+                    const invPaidAmount = Number(inv.paidAmount);
+                    const remaining = Math.max(0, invAmount - invPaidAmount);
                     const serviceLabel =
                       inv.serviceType === 'PRODUCT_SALE'
                         ? (isFr ? 'Croquettes / Produits' : 'Croquettes / Products')
@@ -493,8 +495,8 @@ export default async function AdminBillingPage(props: PageProps) {
                         <td className="px-5 py-4 text-sm text-[#8A7E75]">{formatDate(inv.issuedAt, locale)}</td>
                         <td className="px-5 py-4 text-right text-[15px] font-bold text-[#2A2520]">{formatMAD(inv.amount)}</td>
                         <td className="px-5 py-4 text-right text-sm">
-                          {inv.paidAmount > 0 ? (
-                            <span className="text-[#1A7A45] font-semibold">{formatMAD(inv.paidAmount)}</span>
+                          {invPaidAmount > 0 ? (
+                            <span className="text-[#1A7A45] font-semibold">{formatMAD(invPaidAmount)}</span>
                           ) : (
                             <span className="text-[#8A7E75]/30">—</span>
                           )}
@@ -546,8 +548,8 @@ export default async function AdminBillingPage(props: PageProps) {
                               invoiceId={inv.id}
                               currentStatus={inv.status}
                               locale={locale}
-                              invoiceAmount={inv.amount}
-                              paidAmount={inv.paidAmount}
+                              invoiceAmount={invAmount}
+                              paidAmount={invPaidAmount}
                             />
                           </div>
                         </td>

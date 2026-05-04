@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
     if (target.invoice && source.invoice) {
       // Both have invoices → merge paidAmounts, regenerate items, delete source invoice
       const newPaidAmount = Math.round(
-        (target.invoice.paidAmount + source.invoice.paidAmount) * 100
+        (Number(target.invoice.paidAmount) + Number(source.invoice.paidAmount)) * 100
       ) / 100;
       const newStatus =
         newPaidAmount >= newTotal ? 'PAID'
@@ -246,9 +246,10 @@ export async function POST(request: NextRequest) {
           total: item.total,
         })),
       });
+      const targetPaid = Number(target.invoice.paidAmount);
       const newStatus =
-        target.invoice.paidAmount >= newTotal ? 'PAID'
-        : target.invoice.paidAmount > 0 ? 'PARTIALLY_PAID'
+        targetPaid >= newTotal ? 'PAID'
+        : targetPaid > 0 ? 'PARTIALLY_PAID'
         : 'PENDING';
       await tx.invoice.update({
         where: { id: target.invoice.id },

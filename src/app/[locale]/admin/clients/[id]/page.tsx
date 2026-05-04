@@ -61,8 +61,8 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
   const statusLbls = sl[locale] || sl.fr;
   const invStatusLbls: Record<string, string> = isl[locale] || isl.fr;
 
-  const appRevenue = client.invoices.filter(i => i.status === 'PAID').reduce((sum, i) => sum + i.amount, 0);
-  const totalRevenue = appRevenue + (client.historicalSpendMAD ?? 0);
+  const appRevenue = client.invoices.filter(i => i.status === 'PAID').reduce((sum, i) => sum + Number(i.amount), 0);
+  const totalRevenue = appRevenue + Number(client.historicalSpendMAD ?? 0);
   const grade = client.loyaltyGrade?.grade || 'BRONZE';
 
   // Generate a time-limited signed URL for the contract PDF (1 hour)
@@ -126,7 +126,7 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
             <HistoricalDataForm
               clientId={id}
               initialStays={client.historicalStays ?? 0}
-              initialSpend={client.historicalSpendMAD ?? 0}
+              initialSpend={Number(client.historicalSpendMAD ?? 0)}
               initialNote={client.historicalNote ?? null}
               locale={locale}
             />
@@ -246,7 +246,9 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
             {client.invoices.length === 0 ? <p className="text-sm text-gray-400">{l.noInvoices}</p> : (
               <div className="space-y-2">
                 {client.invoices.map(inv => {
-                  const remaining = Math.max(0, inv.amount - inv.paidAmount);
+                  const invAmount = Number(inv.amount);
+                  const invPaidAmount = Number(inv.paidAmount);
+                  const remaining = Math.max(0, invAmount - invPaidAmount);
                   const invStatusColor = inv.status === 'PAID' ? 'text-green-700 bg-green-50' : inv.status === 'PARTIALLY_PAID' ? 'text-orange-600 bg-orange-50' : 'text-amber-700 bg-amber-50';
                   return (
                     <div key={inv.id} className="flex items-center justify-between py-2 border-b border-ivory-100 last:border-0">
@@ -254,9 +256,9 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
                         <span className="font-mono text-xs font-semibold text-charcoal">{inv.invoiceNumber}</span>
                         <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${invStatusColor}`}>{invStatusLbls[inv.status] || inv.status}</span>
                         <div className="text-xs text-gray-400 mt-0.5">
-                          {formatMAD(inv.amount)}
-                          {inv.paidAmount > 0 && inv.status !== 'PAID' && (
-                            <> · <span className="text-green-700">{formatMAD(inv.paidAmount)} {locale === 'fr' ? 'réglé' : 'paid'}</span> · <span className="text-orange-600">{formatMAD(remaining)} {locale === 'fr' ? 'restant' : 'left'}</span></>
+                          {formatMAD(invAmount)}
+                          {invPaidAmount > 0 && inv.status !== 'PAID' && (
+                            <> · <span className="text-green-700">{formatMAD(invPaidAmount)} {locale === 'fr' ? 'réglé' : 'paid'}</span> · <span className="text-orange-600">{formatMAD(remaining)} {locale === 'fr' ? 'restant' : 'left'}</span></>
                           )}
                         </div>
                       </div>

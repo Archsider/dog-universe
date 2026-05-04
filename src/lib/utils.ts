@@ -2,17 +2,21 @@ import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format, formatDistanceToNow, differenceInDays } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
+import { toNumber, type DecimalLike } from '@/lib/decimal';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatMAD(amount: number): string {
+// Accepte number ou Prisma.Decimal (les colonnes monétaires sont DECIMAL(10,2)
+// côté DB et matérialisées en Decimal côté client). Aucun appelant n'a besoin
+// de convertir manuellement avant l'appel.
+export function formatMAD(amount: DecimalLike): string {
   return new Intl.NumberFormat('fr-MA', {
     style: 'decimal',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(amount) + ' MAD';
+  }).format(toNumber(amount)) + ' MAD';
 }
 
 export function formatDate(date: Date | string, locale: string = 'fr'): string {

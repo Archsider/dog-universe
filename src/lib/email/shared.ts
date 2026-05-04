@@ -156,7 +156,8 @@ export type EmailTemplateName =
   | 'admin_new_client'
   | 'weekly_pet_report'
   | 'invoice_overdue_30'
-  | 'invoice_overdue_60';
+  | 'invoice_overdue_60'
+  | 'review_request';
 
 export type EmailPet = { name?: string | null; species?: string | null; gender?: string | null };
 
