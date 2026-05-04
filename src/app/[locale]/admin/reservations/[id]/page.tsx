@@ -17,6 +17,7 @@ import AddonRequestsSection from './AddonRequestsSection';
 import TaxiHeartbeatIndicator from './TaxiHeartbeatIndicator';
 import AdminTaxiLiveMap from './AdminTaxiLiveMap';
 import ExtendBookingSection from './ExtendBookingSection';
+import WhatsAppButton from '@/components/admin/WhatsAppButton';
 import MergeBookingsSection from './MergeBookingsSection';
 import EditDatesSection from './EditDatesSection';
 import EditTaxiAddonSection from './EditTaxiAddonSection';
@@ -396,7 +397,34 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
               {booking.client.name}
             </Link>
             <p className="text-sm text-gray-500">{booking.client.email}</p>
-            {booking.client.phone && <p className="text-sm text-gray-500">{booking.client.phone}</p>}
+            {booking.client.phone && (
+              <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                <p className="text-sm text-gray-500">{booking.client.phone}</p>
+                {/* WhatsApp tracking link for active taxi, generic contact otherwise */}
+                {!isBoarding && booking.status === 'IN_PROGRESS' && standaloneTrip && (() => {
+                  const rawStandalone = booking.taxiTrips.find(t => t.tripType === 'STANDALONE');
+                  if (rawStandalone?.trackingActive && rawStandalone.trackingToken) {
+                    const trackingUrl = `${process.env.NEXTAUTH_URL ?? ''}/taxi/${rawStandalone.trackingToken}`;
+                    return (
+                      <WhatsAppButton
+                        phone={booking.client.phone}
+                        message={`Bonjour ${booking.client.name}, suivez votre taxi en temps réel : ${trackingUrl}`}
+                        label={locale === 'fr' ? 'Envoyer lien tracking' : 'Send tracking link'}
+                        variant="full"
+                      />
+                    );
+                  }
+                  return null;
+                })()}
+                {(isBoarding || booking.status !== 'IN_PROGRESS' || !standaloneTrip) && (
+                  <WhatsAppButton
+                    phone={booking.client.phone}
+                    message={`Bonjour ${booking.client.name}, je vous contacte de la part de Dog Universe. Comment puis-je vous aider ?`}
+                    variant="icon"
+                  />
+                )}
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">

@@ -15,6 +15,7 @@ import HistoricalDataForm from './HistoricalDataForm';
 import RgpdAdminSection from './RgpdAdminSection';
 import AdminCreateBookingModal from '@/components/admin/AdminCreateBookingModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
+import WhatsAppButton from '@/components/admin/WhatsAppButton';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -99,7 +100,16 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
             <div className="space-y-1 mb-3 text-sm text-gray-600">
               <p className="font-medium text-charcoal">{client.name}</p>
               <p className="text-xs">{client.email}</p>
-              {client.phone && <p className="text-xs">{client.phone}</p>}
+              {client.phone && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs">{client.phone}</p>
+                  <WhatsAppButton
+                    phone={client.phone}
+                    message={`Bonjour ${client.name}, je vous contacte de la part de Dog Universe. Comment puis-je vous aider ?`}
+                    variant="icon"
+                  />
+                </div>
+              )}
             </div>
             <EditClientInfoForm
               clientId={id}
