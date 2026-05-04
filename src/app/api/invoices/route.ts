@@ -74,6 +74,18 @@ export async function POST(request: Request) {
       resolvedIssuedAt = d;
     }
 
+    // Resolve periodDate from booking.startDate (revenue bucketing by service period)
+    let resolvedPeriodDate: Date | undefined;
+    if (bookingId) {
+      const bookingForPeriod = await prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { startDate: true },
+      });
+      if (bookingForPeriod?.startDate) {
+        resolvedPeriodDate = bookingForPeriod.startDate;
+      }
+    }
+
     // Validate payment info if markPaid
     const VALID_PAYMENT_METHODS = ['CASH', 'CARD', 'CHECK', 'TRANSFER'];
     if (markPaid && paymentMethod && !VALID_PAYMENT_METHODS.includes(paymentMethod)) {
@@ -139,6 +151,7 @@ export async function POST(request: Request) {
         paidAmount: 0,
         notes: notes?.trim() || null,
         ...(resolvedIssuedAt && { issuedAt: resolvedIssuedAt }),
+        ...(resolvedPeriodDate && { periodDate: resolvedPeriodDate }),
         items: {
           create: items.map((item: { description: string; quantity: number; unitPrice: number; total: number; category?: string }) => ({
             description: item.description,

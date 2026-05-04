@@ -287,6 +287,7 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
               status: 'PENDING',
               paidAmount: 0,
               serviceType,
+              periodDate: new Date(startDate),
               items: {
                 create: [{
                   description: serviceType === 'BOARDING' ? 'Pension' : 'Taxi animalier',
