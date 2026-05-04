@@ -1,3 +1,6 @@
+// next-auth v5 : encore en beta (5.0.0-beta.31 au 2026-05-04). Pas de release GA.
+// Surveille https://github.com/nextauthjs/next-auth/releases — upgrade vers 5.0.0 stable
+// dès disponible. Notre code utilise déjà les API stabilisées (handlers, auth, signIn, signOut).
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
