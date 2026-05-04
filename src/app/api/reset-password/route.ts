@@ -6,13 +6,26 @@ import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { resetPasswordRequestSchema, resetPasswordConfirmSchema, formatZodError } from '@/lib/validation';
 import { APP_URL } from '@/lib/config';
 
+// Floor de temps de réponse — masque l'écart "user existe vs n'existe pas"
+// (timing side-channel qui permettrait l'énumération malgré la réponse uniforme).
+const MIN_RESPONSE_MS = 250;
+
+async function padResponse<T>(start: number, value: T): Promise<T> {
+  const elapsed = Date.now() - start;
+  if (elapsed < MIN_RESPONSE_MS) {
+    await new Promise((r) => setTimeout(r, MIN_RESPONSE_MS - elapsed));
+  }
+  return value;
+}
+
 export async function POST(request: Request) {
+  const start = Date.now();
   try {
     // Anti-enumeration : on parse en safeParse mais on retourne toujours { message: 'ok' }
     // sans révéler les détails de validation.
     const parsed = resetPasswordRequestSchema.safeParse(await request.json().catch(() => ({})));
     if (!parsed.success) {
-      return NextResponse.json({ message: 'ok' });
+      return await padResponse(start, NextResponse.json({ message: 'ok' }));
     }
     const { email, locale } = parsed.data;
 
@@ -40,10 +53,10 @@ export async function POST(request: Request) {
     }
 
     // Always return success to prevent email enumeration
-    return NextResponse.json({ message: 'ok' });
+    return await padResponse(start, NextResponse.json({ message: 'ok' }));
   } catch (error) {
     console.error(JSON.stringify({ level: 'error', service: 'reset-password', message: 'Reset password error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
-    return NextResponse.json({ message: 'ok' }); // Still return ok
+    return await padResponse(start, NextResponse.json({ message: 'ok' })); // Still return ok
   }
 }
 
