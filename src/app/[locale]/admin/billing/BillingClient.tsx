@@ -2,27 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
-
-const MONTH_NAMES_FR = [
-  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
-];
-const MONTH_NAMES_EN = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
+import { formatMonthLabel } from './format-month';
 
 function addMonths(yyyyMm: string, delta: number): string {
   const [y, m] = yyyyMm.split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
   const month = String(d.getMonth() + 1).padStart(2, '0');
   return `${d.getFullYear()}-${month}`;
-}
-
-export function formatMonthLabel(yyyyMm: string, locale: string): string {
-  const [y, m] = yyyyMm.split('-').map(Number);
-  const names = locale === 'fr' ? MONTH_NAMES_FR : MONTH_NAMES_EN;
-  return `${names[m - 1]} ${y}`;
 }
 
 interface MonthNavigatorProps {
@@ -52,8 +38,7 @@ export function MonthNavigator({ locale, currentMonth }: MonthNavigatorProps) {
   for (let yr = currentYear - 1; yr <= currentYear + 1; yr++) {
     for (let m = 1; m <= 12; m++) {
       const val = `${yr}-${String(m).padStart(2, '0')}`;
-      const names = isFr ? MONTH_NAMES_FR : MONTH_NAMES_EN;
-      monthsForDropdown.push({ value: val, label: `${names[m - 1]} ${yr}` });
+      monthsForDropdown.push({ value: val, label: formatMonthLabel(val, isFr ? 'fr' : 'en') });
     }
   }
 

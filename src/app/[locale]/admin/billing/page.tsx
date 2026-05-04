@@ -8,7 +8,8 @@ import PaymentModal from './PaymentModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
 import RecomputeAllocationsButton from '@/components/admin/RecomputeAllocationsButton';
-import { MonthNavigator, CsvDownloadButton, formatMonthLabel } from './BillingClient';
+import { MonthNavigator, CsvDownloadButton } from './BillingClient';
+import { formatMonthLabel } from './format-month';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
