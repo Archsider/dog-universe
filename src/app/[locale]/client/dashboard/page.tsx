@@ -8,6 +8,7 @@ import { MemberCard } from '@/components/shared/MemberCard';
 import { Grade } from '@/lib/loyalty';
 import { PawPrint, Calendar, FileText, History, CheckCircle, AlertCircle } from 'lucide-react';
 import { formatDateShort, formatMAD } from '@/lib/utils';
+import { RebookButton } from '@/components/client/RebookButton';
 
 type Params = { locale: string };
 
@@ -53,9 +54,19 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
     }),
   ]);
 
-  const [totalStays, totalSpent] = await Promise.all([
+  const [totalStays, totalSpent, lastBooking] = await Promise.all([
     prisma.booking.count({ where: { clientId: session.user.id, status: 'COMPLETED', deletedAt: null } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
     prisma.invoice.aggregate({ where: { clientId: session.user.id, status: 'PAID' }, _sum: { amount: true } }),
+    prisma.booking.findFirst({
+      where: { clientId: session.user.id, status: 'COMPLETED', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      orderBy: { endDate: 'desc' },
+      select: {
+        id: true,
+        serviceType: true,
+        totalPrice: true,
+        bookingPets: { select: { pet: { select: { id: true, name: true } } } },
+      },
+    }),
   ]);
 
   const grade = (loyaltyGrade?.grade ?? 'BRONZE') as Grade;
@@ -309,6 +320,19 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           )}
         </div>
       </div>
+
+      {/* Rebook — last completed booking */}
+      {lastBooking && (
+        <div className="bg-white border border-[rgba(196,151,74,0.15)] rounded-2xl p-6 shadow-[0_4px_20px_rgba(196,151,74,0.08)]">
+          <h2 className="text-xl font-serif font-semibold text-[#1C1612] mb-4">
+            {locale === 'fr' ? 'Réserver à nouveau' : 'Book again'}
+          </h2>
+          <RebookButton
+            booking={lastBooking as { id: string; serviceType: 'BOARDING' | 'PET_TAXI'; bookingPets: { pet: { id: string; name: string } }[]; totalPrice: number }}
+            locale={locale}
+          />
+        </div>
+      )}
 
       {/* Recent Invoices — premium */}
       <div className="bg-white border border-[rgba(196,151,74,0.15)] rounded-2xl p-6 shadow-[0_4px_20px_rgba(196,151,74,0.08)]">

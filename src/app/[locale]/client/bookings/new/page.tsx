@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocale } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Check, PawPrint, Car, Package, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -58,6 +59,12 @@ const isValidTaxiTime = (timeStr: string): boolean => {
 
 export default function NewBookingPage() {
   const locale = useLocale();
+  const searchParams = useSearchParams();
+
+  // Prefill params from ?petIds=...&serviceType=...&prefill=1
+  const prefillPetIds = searchParams.get('petIds') ?? '';
+  const prefillServiceType = searchParams.get('serviceType') as BookingType | null;
+  const isPrefill = searchParams.get('prefill') === '1';
 
   const [step, setStep] = useState(1);
   const [pets, setPets] = useState<Pet[]>([]);
@@ -68,8 +75,12 @@ export default function NewBookingPage() {
   const [bookingRef, setBookingRef] = useState('');
 
   // Form state
-  const [bookingType, setBookingType] = useState<BookingType>('BOARDING');
-  const [selectedPets, setSelectedPets] = useState<string[]>([]);
+  const [bookingType, setBookingType] = useState<BookingType>(
+    prefillServiceType === 'BOARDING' || prefillServiceType === 'PET_TAXI' ? prefillServiceType : 'BOARDING',
+  );
+  const [selectedPets, setSelectedPets] = useState<string[]>(
+    prefillPetIds ? prefillPetIds.split(',').filter(Boolean) : [],
+  );
   // Boarding
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -239,6 +250,9 @@ export default function NewBookingPage() {
 
   const l = t[locale as keyof typeof t] || t.fr;
 
+  // Track whether we've already reconciled the prefill pet IDs against loaded pets
+  const prefillSyncedRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     setLoadingPets(true);
@@ -251,8 +265,18 @@ export default function NewBookingPage() {
       .then(data => {
         if (cancelled) return;
         if (!Array.isArray(data)) throw new Error('Invalid response');
-        setPets(data);
+        setPets(data as Pet[]);
         setLoadingPets(false);
+        // Reconcile prefill pet IDs — keep only IDs that actually exist in this client's pets
+        if (isPrefill && prefillPetIds && !prefillSyncedRef.current) {
+          prefillSyncedRef.current = true;
+          const validIds = (data as Pet[]).map((p) => p.id);
+          const requestedIds = prefillPetIds.split(',').filter(Boolean);
+          const reconciled = requestedIds.filter((id) => validIds.includes(id));
+          if (reconciled.length > 0) {
+            setSelectedPets(reconciled);
+          }
+        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -552,6 +576,14 @@ export default function NewBookingPage() {
 
         {/* Step 1: Type */}
         {step === 1 && (
+          <div className="space-y-4">
+          {isPrefill && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+              ✨ {locale === 'fr'
+                ? 'Formulaire pré-rempli depuis votre dernière réservation'
+                : 'Form pre-filled from your last booking'}
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {([['BOARDING', l.boarding, l.boardingDesc, Package], ['PET_TAXI', l.taxi, l.taxiDesc, Car]] as const).map(([type, label, desc, Icon]) => (
               <button
@@ -566,6 +598,7 @@ export default function NewBookingPage() {
                 <div className="text-sm text-gray-500 mt-1">{desc}</div>
               </button>
             ))}
+          </div>
           </div>
         )}
 

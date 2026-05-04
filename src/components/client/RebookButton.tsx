@@ -1,0 +1,45 @@
+'use client';
+
+import Link from 'next/link';
+import { formatMAD } from '@/lib/utils';
+
+type RebookBooking = {
+  id: string;
+  serviceType: 'BOARDING' | 'PET_TAXI';
+  bookingPets: { pet: { id: string; name: string } }[];
+  totalPrice: number;
+};
+
+type Props = {
+  booking: RebookBooking;
+  locale: string;
+  label?: string;
+};
+
+export function RebookButton({ booking, locale, label }: Props) {
+  const petIds = booking.bookingPets.map((bp) => bp.pet.id).join(',');
+  const petNames = booking.bookingPets.map((bp) => bp.pet.name).join(', ');
+
+  const serviceLabel =
+    booking.serviceType === 'BOARDING'
+      ? locale === 'fr' ? 'Pension' : 'Boarding'
+      : locale === 'fr' ? 'Taxi animalier' : 'Pet Taxi';
+
+  const href = `/${locale}/client/bookings/new?petIds=${encodeURIComponent(petIds)}&serviceType=${booking.serviceType}&prefill=1`;
+
+  const defaultLabel = locale === 'fr' ? '🔄 Réserver à nouveau' : '🔄 Book again';
+
+  return (
+    <div className="space-y-2">
+      <Link
+        href={href}
+        className="inline-flex items-center gap-2 border border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37]/10 rounded-lg px-4 py-2 text-sm transition-colors"
+      >
+        {label ?? defaultLabel}
+      </Link>
+      <p className="text-xs text-[#8A7E75]">
+        {petNames} · {serviceLabel} · {formatMAD(booking.totalPrice)}
+      </p>
+    </div>
+  );
+}

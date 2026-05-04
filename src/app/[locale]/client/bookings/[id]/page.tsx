@@ -17,6 +17,7 @@ import RequestExtensionButton from './RequestExtensionButton';
 import RequestAddonButton from './RequestAddonButton';
 import RescheduleBookingButton from './RescheduleBookingButton';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
+import { RebookButton } from '@/components/client/RebookButton';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -751,6 +752,24 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
             </div>
           )}
         </div>
+
+        {/* Rebook — available only on completed bookings */}
+        {booking.status === 'COMPLETED' && (
+          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
+            <h3 className="font-semibold text-charcoal text-sm mb-3">
+              {locale === 'fr' ? 'Réserver à nouveau' : 'Book again'}
+            </h3>
+            <RebookButton
+              booking={{
+                id: booking.id,
+                serviceType: booking.serviceType as 'BOARDING' | 'PET_TAXI',
+                bookingPets: booking.bookingPets.map((bp) => ({ pet: { id: bp.pet.id, name: bp.pet.name } })),
+                totalPrice: booking.totalPrice,
+              }}
+              locale={locale}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
