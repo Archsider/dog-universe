@@ -29,7 +29,8 @@ export type NotificationType =
   | 'BOOKING_WAITLISTED'        // client receives when booking is queued on the waitlist
   | 'BOOKING_WAITLIST_PROMOTED' // client receives when waitlisted booking is promoted to PENDING
   | 'BOOKING_CANCELLED'         // admin receives when a client cancels a booking
-  | 'BOOKING_RESCHEDULE_REQUEST'; // admin receives when a client requests new dates
+  | 'BOOKING_RESCHEDULE_REQUEST' // admin receives when a client requests new dates
+  | 'STAY_PHOTO_ADDED'; // client receives when new stay photos are uploaded (Instagram-like feed)
 
 interface CreateNotificationData {
   userId: string;
@@ -286,6 +287,24 @@ export async function createStayPhotoNotification(
     titleEn: '📸 New stay photos',
     messageFr: `De nouvelles photos de ${petName} ont été publiées pour votre réservation (réf. ${bookingRef}).`,
     messageEn: `New photos of ${petName} have been posted for your booking (ref. ${bookingRef}).`,
+    metadata: { bookingId },
+  });
+}
+
+export async function createStayPhotoAddedNotification(
+  clientId: string,
+  bookingId: string,
+  petNames: string[],
+) {
+  const names = petNames.length > 0 ? petNames.join(', ') : 'votre animal';
+  const namesEn = petNames.length > 0 ? petNames.join(', ') : 'your pet';
+  return createNotification({
+    userId: clientId,
+    type: 'STAY_PHOTO_ADDED',
+    titleFr: '📸 Nouvelles photos de votre séjour',
+    titleEn: '📸 New photos from your stay',
+    messageFr: `De nouvelles photos de ${names} ont été partagées par l'équipe Dog Universe 🐾`,
+    messageEn: `New photos of ${namesEn} were shared by the Dog Universe team 🐾`,
     metadata: { bookingId },
   });
 }
