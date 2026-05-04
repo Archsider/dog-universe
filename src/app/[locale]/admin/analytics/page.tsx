@@ -57,9 +57,13 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
     cashByMonth(lastYear),
     newClientsCount(thisMonthStart, thisMonthEnd, true),
     // Standalone query for avg stay duration — boarding-dominant invoices only
+    // Uses COALESCE(periodDate, issuedAt): periodDate = booking.startDate for accurate period bucketing.
     prisma.invoice.findMany({
       where: {
-        issuedAt: { gte: thisMonthStart, lte: thisMonthEnd },
+        OR: [
+          { periodDate: { gte: thisMonthStart, lte: thisMonthEnd } },
+          { periodDate: null, issuedAt: { gte: thisMonthStart, lte: thisMonthEnd } },
+        ],
         status: { in: ['PAID', 'PARTIALLY_PAID'] },
       },
       select: { items: { select: { category: true, total: true, quantity: true } } },
