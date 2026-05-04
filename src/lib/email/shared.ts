@@ -154,7 +154,9 @@ export type EmailTemplateName =
   | 'contract_reminder'
   | 'welcome'
   | 'admin_new_client'
-  | 'weekly_pet_report';
+  | 'weekly_pet_report'
+  | 'invoice_overdue_30'
+  | 'invoice_overdue_60';
 
 export type EmailPet = { name?: string | null; species?: string | null; gender?: string | null };
 
