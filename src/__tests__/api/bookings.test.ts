@@ -31,7 +31,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 // ---------------------------------------------------------------------------
 const mocks = vi.hoisted(() => {
   const prismaTx = {
-    booking: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), delete: vi.fn(), count: vi.fn() },
+    booking: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), delete: vi.fn(), count: vi.fn() },
     boardingDetail: { create: vi.fn(), upsert: vi.fn(), findUnique: vi.fn() },
     taxiDetail: { create: vi.fn() },
     bookingItem: { createMany: vi.fn(), updateMany: vi.fn() },
@@ -245,7 +245,8 @@ beforeEach(() => {
   mocks.prismaTx.pet.findMany.mockResolvedValue([
     { id: 'pet-1', name: 'Max', species: 'DOG', ownerId: 'client-1' },
   ]);
-  mocks.prismaTx.booking.findFirst.mockResolvedValue(null); // no auto-merge candidate
+  mocks.prismaTx.booking.findFirst.mockResolvedValue(null);  // no auto-merge candidate
+  mocks.prismaTx.booking.findUnique.mockResolvedValue(null); // no existing idempotency key
   mocks.prismaTx.user.findMany.mockResolvedValue([]); // no admins to email
 });
 

@@ -87,9 +87,18 @@ export default async function AdminBillingPage(props: PageProps) {
   const order = (VALID_ORDERS.includes(rawOrder) ? rawOrder : 'desc') as 'asc' | 'desc';
   const clientId = (searchParams.clientId || '').trim();
 
+  // periodDate = booking.startDate (set since 2026-05-04). Factures antérieures
+  // ont periodDate null → fallback sur issuedAt pour compatibilité ascendante.
+  const monthDateFilter = {
+    OR: [
+      { periodDate: { gte: monthStart, lte: monthEnd } },
+      { periodDate: null, issuedAt: { gte: monthStart, lte: monthEnd } },
+    ],
+  };
+
   // Month-scoped where for the invoice list
   const listWhere: Record<string, unknown> = {
-    issuedAt: { gte: monthStart, lte: monthEnd },
+    ...monthDateFilter,
     ...(status ? { status } : {}),
     ...(clientId ? { clientId } : {}),
     ...(search
@@ -106,9 +115,7 @@ export default async function AdminBillingPage(props: PageProps) {
   };
 
   // Unfiltered month where (for KPIs — no status/search/method/category filters)
-  const monthWhere = {
-    issuedAt: { gte: monthStart, lte: monthEnd },
-  };
+  const monthWhere = monthDateFilter;
 
   // Dynamic orderBy
   const orderByMap: Record<string, Record<string, 'asc' | 'desc'>> = {
