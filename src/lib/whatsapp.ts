@@ -3,49 +3,73 @@
  */
 
 /**
- * Converts a Moroccan phone number to E.164 format (+212XXXXXXXXX).
- * Returns null if the number cannot be recognised.
+ * Converts a phone number to E.164 format (`+CCNNNNNNNNN`).
+ * Returns null if the number is empty or cannot be recognised as a valid
+ * international number.
  *
- * Supported inputs:
- *   +212XXXXXXXXX  → unchanged
- *   06XXXXXXXX     → +2126XXXXXXXX
- *   07XXXXXXXX     → +2127XXXXXXXX
- *   05XXXXXXXX     → +2125XXXXXXXX
- *   0X-XX-XX-XX-XX (with dashes/spaces) → stripped then processed
+ * Rules (in order):
+ *   1. Strip spaces, dashes, dots, parentheses.
+ *   2. `00...`   → treated as international prefix, replaced by `+`.
+ *   3. `+...`    → validated (8–15 digits) and returned unchanged.
+ *   4. `06X` / `07X` + 8 digits → Morocco mobile  → `+212` + rest.
+ *   5. `05X`     + 8 digits → France             → `+33`  + rest.
+ *   6. Anything else (digits only, no leading `+`) → default Morocco `+212`
+ *      with a leading `0` stripped if present.
+ *
+ * The function is permissive about formatting whitespace but strict about
+ * the resulting E.164 length (8–15 digits after the `+`, per ITU-T E.164).
  */
-export function toE164Morocco(phone: string): string | null {
+export function toE164(phone: string | null | undefined): string | null {
   if (!phone) return null;
 
-  // Strip spaces, dashes, dots
-  const cleaned = phone.replace(/[\s\-.() ]/g, '');
+  // 1. Strip formatting characters.
+  let cleaned = phone.replace(/[\s\-.()]/g, '');
+  if (!cleaned) return null;
 
-  // Already E.164 with +212
-  if (/^\+212[5-9]\d{8}$/.test(cleaned)) {
-    return cleaned;
+  // 2. `00` international prefix → `+`.
+  if (cleaned.startsWith('00')) {
+    cleaned = `+${cleaned.slice(2)}`;
   }
 
-  // International format without leading +: 212XXXXXXXXX
-  if (/^212[5-9]\d{8}$/.test(cleaned)) {
-    return `+${cleaned}`;
+  // 3. Already in E.164 form: validate and return.
+  if (cleaned.startsWith('+')) {
+    return /^\+\d{8,15}$/.test(cleaned) ? cleaned : null;
   }
 
-  // Local Moroccan mobile: 06/07/05 + 8 digits
-  if (/^0[567]\d{8}$/.test(cleaned)) {
+  // From here on, `cleaned` contains digits only.
+  if (!/^\d+$/.test(cleaned)) return null;
+
+  // 4. Moroccan mobile: 06 / 07 + 8 digits.
+  if (/^0[67]\d{8}$/.test(cleaned)) {
     return `+212${cleaned.slice(1)}`;
   }
 
-  return null;
+  // 5. French number starting with 05 + 8 digits.
+  if (/^05\d{8}$/.test(cleaned)) {
+    return `+33${cleaned.slice(1)}`;
+  }
+
+  // 6. Default: assume Morocco. Strip a leading `0` if present, then prefix +212.
+  const local = cleaned.startsWith('0') ? cleaned.slice(1) : cleaned;
+  const candidate = `+212${local}`;
+  return /^\+\d{8,15}$/.test(candidate) ? candidate : null;
 }
 
 /**
+ * Backwards-compatible alias kept for older imports.
+ * Prefer `toE164` in new code.
+ */
+export const toE164Morocco = toE164;
+
+/**
  * Builds a wa.me deep-link for WhatsApp.
- * Returns null if `phone` is null/empty/unrecognised.
+ * Returns null if `phone` is null/empty/unrecognised — callers should hide
+ * the WhatsApp button entirely in that case.
  *
  * Format: https://wa.me/{E164withoutPlus}?text={encodedMessage}
  */
 export function waLink(phone: string | null | undefined, message: string): string | null {
-  if (!phone) return null;
-  const e164 = toE164Morocco(phone);
+  const e164 = toE164(phone);
   if (!e164) return null;
   const number = e164.replace('+', '');
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
