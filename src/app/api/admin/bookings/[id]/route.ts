@@ -54,11 +54,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 // Top-level envelope for PATCH /api/admin/bookings/[id].
 // This file dispatches on many discriminator fields (patchBoardingDetail,
 // addBookingItems, approveExtension, rejectExtension, editDates, extendEndDate,
-// status, notes, version, ...) with custom error responses per branch. Rather
-// than risk regressing a 1000+ LOC handler, we validate only the top-level
-// shape via Zod (status enum + version type) and let downstream branches keep
-// their existing per-field validation. `.passthrough()` preserves all the
-// other body fields untouched.
+// status, notes, version, ...) with custom error responses per branch. Each
+// dispatch branch keeps its own per-field validation downstream — at this
+// envelope level we whitelist the discriminator names so unknown fields are
+// rejected (no more `.passthrough()` foot-gun on an admin mutation surface).
 const VALID_BOOKING_STATUSES = [
   'PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS',
   'CANCELLED', 'REJECTED', 'COMPLETED', 'NO_SHOW',
@@ -70,8 +69,18 @@ const adminBookingPatchSchema = z
     status: z.enum(VALID_BOOKING_STATUSES).optional(),
     notes: z.string().optional(),
     version: z.number().int().optional(),
+    cancellationReason: z.string().optional(),
+    // Discriminator branches — each one's payload is validated by its own
+    // service downstream. We accept `unknown` here only to gate the field name.
+    patchBoardingDetail: z.unknown().optional(),
+    addBookingItems: z.unknown().optional(),
+    approveExtension: z.unknown().optional(),
+    rejectExtension: z.unknown().optional(),
+    editDates: z.unknown().optional(),
+    extendEndDate: z.unknown().optional(),
+    forcePaidInvoice: z.unknown().optional(),
   })
-  .passthrough();
+  .strict();
 
 const adminBookingParamsSchema = z.object({ id: z.string().min(1) });
 
