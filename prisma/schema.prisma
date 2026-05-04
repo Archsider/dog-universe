@@ -49,6 +49,7 @@ model User {
   benefitClaims    LoyaltyBenefitClaim[]
   reviewedClaims   LoyaltyBenefitClaim[] @relation("ClaimReviewer")
   revenueSummaries MonthlyRevenueSummary[]
+  reviews          Review[]
 
   @@index([deletedAt])
 }
@@ -166,7 +167,7 @@ model Booking {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  client         User           @relation(fields: [clientId], references: [id])
+  client         User           @relation(fields: [clientId], references: [id], onDelete: Restrict)
   bookingPets    BookingPet[]
   bookingItems   BookingItem[]
   boardingDetail BoardingDetail?
@@ -174,6 +175,7 @@ model Booking {
   taxiTrips      TaxiTrip[]
   invoice        Invoice?
   stayPhotos     StayPhoto[]
+  review         Review?
 
   @@index([clientId])
   @@index([status])
@@ -323,7 +325,7 @@ model Invoice {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  client   User          @relation(fields: [clientId], references: [id])
+  client   User          @relation(fields: [clientId], references: [id], onDelete: Restrict)
   booking  Booking?      @relation(fields: [bookingId], references: [id])
   items    InvoiceItem[]
   payments Payment[]
@@ -402,7 +404,7 @@ model LoyaltyGrade {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client User @relation(fields: [clientId], references: [id], onDelete: Restrict)
 }
 
 model LoyaltyBenefitClaim {
@@ -470,6 +472,20 @@ model StayPhoto {
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@index([bookingId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+  clientId  String
+  client    User     @relation(fields: [clientId], references: [id])
+  rating    Int      // 1-5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+  @@index([createdAt])
 }
 
 model PasswordResetToken {

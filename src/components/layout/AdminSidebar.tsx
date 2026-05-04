@@ -25,6 +25,7 @@ import {
   UserCog,
   Gift,
   TrendingUp,
+  Star,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -52,6 +53,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
     { href: `/${locale}/admin/billing`, labelKey: 'billing', icon: Receipt },
     { href: `/${locale}/admin/contracts`, labelKey: 'contracts', icon: FileText },
     { href: `/${locale}/admin/loyalty`, labelKey: 'loyalty', icon: Gift },
+    { href: `/${locale}/admin/reviews`, labelKey: 'reviews', icon: Star },
     { href: `/${locale}/admin/analytics`, labelKey: 'analytics', icon: BarChart3 },
     { href: `/${locale}/admin/logs`, labelKey: 'logs', icon: ScrollText },
     { href: `/${locale}/admin/settings`, labelKey: 'settings', icon: Settings },

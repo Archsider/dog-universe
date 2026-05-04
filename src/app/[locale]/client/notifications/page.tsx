@@ -43,6 +43,9 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   BOOKING_WAITLIST_PROMOTED:{ icon: Sparkles,   color: 'text-emerald-600',bg: 'bg-emerald-50' },
   ADDON_REQUEST:        { icon: Sparkles,       color: 'text-gold-600',   bg: 'bg-gold-50' },
   TAXI_HEARTBEAT_LOST:  { icon: AlertTriangle,  color: 'text-red-600',    bg: 'bg-red-50' },
+  REVIEW_REQUEST:       { icon: Star,           color: 'text-gold-500',   bg: 'bg-gold-50' },
+  TAXI_NEAR_PICKUP:     { icon: Truck,          color: 'text-gold-500',   bg: 'bg-gold-50' },
+  TAXI_ARRIVED:         { icon: CheckCircle2,   color: 'text-green-600',  bg: 'bg-green-50' },
 };
 
 function parseMetadata(raw: string | null): Record<string, unknown> {

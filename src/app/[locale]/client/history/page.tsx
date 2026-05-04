@@ -6,6 +6,7 @@ import { Calendar, PawPrint, Package, Car, Plus, FileText, Clock, CheckCircle2, 
 import Image from 'next/image';
 import { formatDate, formatMAD } from '@/lib/utils';
 import CancelBookingButton from './CancelBookingButton';
+import ReviewButton from '@/components/client/ReviewButton';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -56,6 +57,7 @@ export default async function HistoryPage(props: PageProps) {
       taxiDetail: true,
       invoice: { select: { id: true, invoiceNumber: true, amount: true, status: true } },
       stayPhotos: { orderBy: { createdAt: 'asc' as const } },
+      review: { select: { id: true } },
     },
     orderBy: { startDate: 'desc' },
   });
@@ -254,6 +256,9 @@ export default async function HistoryPage(props: PageProps) {
                     ) : null}
                   </div>
                   {canCancel && <CancelBookingButton bookingId={booking.id} locale={locale} />}
+                  {booking.status === 'COMPLETED' && !booking.review && (
+                    <ReviewButton bookingId={booking.id} locale={locale} />
+                  )}
                 </div>
               </div>
             );

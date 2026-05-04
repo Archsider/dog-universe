@@ -257,4 +257,27 @@ export const bookingTemplates: Record<string, EmailTemplateBuilder> = {
         <p>Kind regards,<br><strong>The Dog Universe Team</strong></p>
       `,
   }),
+
+  review_request: ({ d }) => ({
+    subjectFr: `⭐ Comment s'est passé le séjour ? — Dog Universe`,
+    subjectEn: `⭐ How was the stay? — Dog Universe`,
+    bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Nous espérons que le séjour de <strong>${d.petName}</strong> (réf. ${d.bookingRef}) s'est passé à merveille !</p>
+        <p>Votre avis nous aide à améliorer nos services. Cela ne prend que 30 secondes.</p>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${d.reviewUrl}" style="background: #C9A84C; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold;">Donner mon avis</a>
+        </p>
+        <p>Merci de votre confiance,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+    bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>We hope <strong>${d.petName}</strong>'s stay (ref. ${d.bookingRef}) went wonderfully!</p>
+        <p>Your feedback helps us improve our services. It only takes 30 seconds.</p>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${d.reviewUrl}" style="background: #C9A84C; color: #fff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold;">Leave a review</a>
+        </p>
+        <p>Thank you for your trust,<br><strong>The Dog Universe Team</strong></p>
+      `,
+  }),
 };

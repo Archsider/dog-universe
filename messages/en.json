@@ -69,6 +69,7 @@
       "contracts": "Contracts",
       "users": "Users",
       "loyalty": "Loyalty Claims",
+      "reviews": "Client Reviews",
       "logout": "Sign Out",
       "revenue_summary": "Historical Revenue"
     }
