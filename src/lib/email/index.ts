@@ -10,6 +10,7 @@ import { loyaltyTemplates } from './loyalty';
 import { taxiTemplates } from './taxi';
 import { authTemplates } from './auth';
 import { rgpdTemplates } from './rgpd';
+import { stayTemplates } from './stay';
 
 // Re-exports — preserve the public API of `@/lib/email`.
 export { sendEmail, escapeHtml } from './shared';
@@ -25,6 +26,7 @@ const allTemplates: Record<string, EmailTemplateBuilder> = {
   ...taxiTemplates,
   ...authTemplates,
   ...rgpdTemplates,
+  ...stayTemplates,
 };
 
 /**

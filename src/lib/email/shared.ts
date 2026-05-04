@@ -153,7 +153,8 @@ export type EmailTemplateName =
   | 'loyalty_claim_rejected'
   | 'contract_reminder'
   | 'welcome'
-  | 'admin_new_client';
+  | 'admin_new_client'
+  | 'weekly_pet_report';
 
 export type EmailPet = { name?: string | null; species?: string | null; gender?: string | null };
 

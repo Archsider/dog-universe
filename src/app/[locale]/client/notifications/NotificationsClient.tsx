@@ -47,6 +47,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   TAXI_ARRIVED:          { icon: MapPin,         color: 'text-green-600',  bg: 'bg-green-50' },
   BOOKING_CANCELLED:            { icon: AlertCircle, color: 'text-red-600',   bg: 'bg-red-50' },
   BOOKING_RESCHEDULE_REQUEST:   { icon: RefreshCw,   color: 'text-amber-600', bg: 'bg-amber-50' },
+  WEEKLY_PET_REPORT:            { icon: Sparkles,    color: 'text-emerald-600', bg: 'bg-emerald-50' },
 };
 
 function parseMetadata(raw: string | null): Record<string, unknown> {
