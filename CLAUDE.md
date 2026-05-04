@@ -75,6 +75,10 @@ src/lib/
 | `ClientContract` | Contrat signé par le client |
 | `StayPhoto` | Photos de séjour |
 
+**`Invoice.periodDate`** — date de début du séjour associé (`booking.startDate`), utilisée comme date de référence pour le mois de facturation dans `/admin/billing`. Filtre mensuel billing : `OR [{ periodDate: { gte, lte } }, { periodDate: null, issuedAt: { gte, lte } }]` — priorité à `periodDate` si présent, fallback sur `issuedAt` pour les factures legacy sans `periodDate`.
+
+**`ClientContract` — walk-ins exclus** — Les clients `isWalkIn: true` n'ont pas d'espace portail, donc pas de contrat attendu. Toujours filtrer `isWalkIn: false` dans les pages/APIs qui traitent les contrats. Le cron `contract-reminders` et la page `/admin/contracts` ont ce filtre.
+
 ---
 
 ## SYSTÈME DE FIDÉLITÉ
@@ -343,6 +347,13 @@ try {
 - **Zéro TypeScript errors** : toujours vérifier avec `npx tsc --noEmit` avant commit
 - **Formatage monétaire** : toujours `formatMAD()` de `src/lib/utils`
 - **Dates** : `formatDate()` ou `formatDateShort()` de `src/lib/utils`
+
+### Règle Server Component / Client Component — utilitaires partagés
+**Ne jamais exporter une fonction helper depuis un module `'use client'`.** Next.js 15 wraps tous les exports de ces modules en "client references" — les importer dans un Server Component provoque `"Attempted to call X() from the server but X is on the client"`.
+
+Pattern correct : si un helper est utilisé à la fois par un Server Component et un Client Component, le placer dans un fichier neutre **sans directive** (ex: `format-month.ts`), importé par les deux.
+
+Exemple : `src/app/[locale]/admin/billing/format-month.ts` (extrait de `BillingClient.tsx` pour cette raison).
 
 ---
 

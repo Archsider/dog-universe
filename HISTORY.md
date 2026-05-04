@@ -7,6 +7,28 @@
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### 2026-05-04 (suite) — Session bugs prod + CI fixes
+
+**3 commits sur `claude/work-in-progress-8MYIG` :**
+
+1. **`4868649` fix(billing): extract formatMonthLabel out of 'use client' module** — La page `/admin/billing` crashait avec `"Attempted to call formatMonthLabel() from the server but formatMonthLabel is on the client"`. Cause : `page.tsx` (Server Component) importait `formatMonthLabel` depuis `BillingClient.tsx` marqué `'use client'` — Next.js 15 wraps les exports en "client references" inaccessibles côté serveur. Fix : extraction de `formatMonthLabel` (+ constantes `MONTH_NAMES_FR/EN`) dans un nouveau fichier `format-month.ts` sans directive, importé par `page.tsx` ET `BillingClient.tsx`.
+
+2. **`2afc1fa` fix(tests+billing): add findUnique to tx mock + fix monthly filter** — Deux sous-fixes :
+   - **Tests CI** : 3 tests échouaient avec `tx.booking.findUnique is not a function`. L'agent anti-doublon avait ajouté une vérification `idempotencyKey` via `tx.booking.findUnique` dans `booking-client.service.ts`, mais le mock Vitest dans `bookings.test.ts` ne l'exposait pas. Fix : ajout de `findUnique: vi.fn()` au mock `prismaTx.booking` + `mockResolvedValue(null)` dans `beforeEach`.
+   - **Filtre mensuel billing** : Benjamin et Anas n'apparaissaient pas en mai car leurs factures avaient `periodDate` renseigné (= `booking.startDate`) mais le filtre WHERE ne portait que sur `issuedAt`. Correction : `OR [{ periodDate: { gte, lte } }, { periodDate: null, issuedAt: { gte, lte } }]` — priorité à `periodDate` si présent, fallback sur `issuedAt`.
+
+3. **`0206a06` fix(contracts): exclude walk-in clients from contract tracking page** — Les clients walk-in (`isWalkIn: true`) apparaissaient dans `/admin/contracts` comme "non signés". Or les walk-ins n'ont pas de portail client, donc pas de contrat attendu. Le cron `contract-reminders` avait déjà le filtre `isWalkIn: false` ; seule la page admin en manquait. Ajout de `isWalkIn: false` dans le `where` de `prisma.user.findMany`.
+
+**Diagnostics :**
+- **`[auth][error] JWTSessionError`** sur toutes les pages admin : bruit dans les logs Vercel — cookie de session expiré/corrompu côté navigateur. Pas un bug code. Solution : déconnexion + reconnexion.
+- **Facture Paul CANCELLED** : aucun cascade BOOKING_CANCELLED → INVOICE_CANCELLED dans le code. La facture a été annulée manuellement par l'admin. Comportement normal.
+
+**Décisions techniques :**
+- **Pattern `format-*.ts`** : les utilitaires de formatage utilisés à la fois par des Server Components et des Client Components doivent vivre dans un fichier neutre (sans `'use client'`). Ne jamais exporter des helpers purs depuis un module `'use client'`.
+- **`periodDate` vs `issuedAt`** : `periodDate` = date de début du séjour (semantically correct pour le mois de facturation). Toujours utiliser `periodDate` en priorité dans les filtres, avec fallback `issuedAt: null` pour les factures legacy.
+
+---
+
 ### 2026-05-04 — Session GPS Pet Taxi + audit god-mode P0/P1/P2 + fixes UI
 
 **Fixes ciblés :**
