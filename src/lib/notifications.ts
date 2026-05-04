@@ -1,6 +1,7 @@
 import { prisma } from './prisma';
 import { sendEmail, getEmailTemplate } from './email';
 import { cacheReadThrough, cacheDel, CacheKeys, CacheTTL } from './cache';
+import { NOTIFICATION_MESSAGES } from './notification-messages';
 
 export type NotificationType =
   | 'BOOKING_CONFIRMATION'
@@ -68,14 +69,8 @@ export async function createBookingConfirmationNotification(
   bookingRef: string,
   petName: string
 ) {
-  return createNotification({
-    userId,
-    type: 'BOOKING_CONFIRMATION',
-    titleFr: 'Demande de réservation envoyée',
-    titleEn: 'Booking request sent',
-    messageFr: `Votre demande de réservation pour ${petName} (réf. ${bookingRef}) a bien été reçue. Notre équipe vous confirmera sous 24h.`,
-    messageEn: `Your booking request for ${petName} (ref. ${bookingRef}) has been received. Our team will confirm within 24 hours.`,
-  });
+  const msg = NOTIFICATION_MESSAGES.BOOKING_CONFIRMATION({ petName, bookingRef });
+  return createNotification({ userId, type: 'BOOKING_CONFIRMATION', ...msg });
 }
 
 export async function createBookingValidationNotification(
@@ -84,14 +79,8 @@ export async function createBookingValidationNotification(
   petName: string,
   dates: string
 ) {
-  return createNotification({
-    userId,
-    type: 'BOOKING_VALIDATION',
-    titleFr: 'Réservation confirmée !',
-    titleEn: 'Booking confirmed!',
-    messageFr: `Votre réservation pour ${petName} (${dates}) a été confirmée. Réf. : ${bookingRef}`,
-    messageEn: `Your booking for ${petName} (${dates}) has been confirmed. Ref: ${bookingRef}`,
-  });
+  const msg = NOTIFICATION_MESSAGES.BOOKING_VALIDATION({ petName, bookingRef, dates });
+  return createNotification({ userId, type: 'BOOKING_VALIDATION', ...msg });
 }
 
 export async function createBookingRefusalNotification(
@@ -99,14 +88,8 @@ export async function createBookingRefusalNotification(
   bookingRef: string,
   reason?: string
 ) {
-  return createNotification({
-    userId,
-    type: 'BOOKING_REFUSAL',
-    titleFr: 'Réservation non disponible',
-    titleEn: 'Booking unavailable',
-    messageFr: `Votre réservation (réf. ${bookingRef}) ne peut pas être honorée.${reason ? ` Motif : ${reason}` : ''}`,
-    messageEn: `Your booking (ref. ${bookingRef}) cannot be accommodated.${reason ? ` Reason: ${reason}` : ''}`,
-  });
+  const msg = NOTIFICATION_MESSAGES.BOOKING_REFUSAL({ bookingRef, reason: reason ?? '' });
+  return createNotification({ userId, type: 'BOOKING_REFUSAL', ...msg });
 }
 
 export async function createBookingInProgressNotification(
@@ -116,18 +99,9 @@ export async function createBookingInProgressNotification(
   serviceType: 'BOARDING' | 'PET_TAXI'
 ) {
   const isTaxi = serviceType === 'PET_TAXI';
-  return createNotification({
-    userId,
-    type: 'BOOKING_IN_PROGRESS',
-    titleFr: isTaxi ? 'Animal à bord' : 'Séjour en cours',
-    titleEn: isTaxi ? 'Pet on board' : 'Stay in progress',
-    messageFr: isTaxi
-      ? `${petName} est à bord et en route avec notre équipe (réf. ${bookingRef}).`
-      : `${petName} est bien arrivé(e) dans nos locaux — le séjour a commencé (réf. ${bookingRef}).`,
-    messageEn: isTaxi
-      ? `${petName} is on board and on the way with our team (ref. ${bookingRef}).`
-      : `${petName} has arrived safely at our facility — the stay has begun (ref. ${bookingRef}).`,
-  });
+  const key = isTaxi ? 'BOOKING_IN_PROGRESS_TAXI' : 'BOOKING_IN_PROGRESS_BOARDING';
+  const msg = NOTIFICATION_MESSAGES[key]({ petName, bookingRef });
+  return createNotification({ userId, type: 'BOOKING_IN_PROGRESS', ...msg });
 }
 
 export async function createBookingCompletedNotification(
@@ -138,37 +112,17 @@ export async function createBookingCompletedNotification(
   hasGrooming: boolean = false
 ) {
   const isTaxi = serviceType === 'PET_TAXI';
-
-  let titleFr: string;
-  let titleEn: string;
-  let messageFr: string;
-  let messageEn: string;
-
+  let key: string;
   if (isTaxi) {
-    titleFr = 'Trajet terminé';
-    titleEn = 'Trip completed';
-    messageFr = `${petName} est arrivé(e) à destination (réf. ${bookingRef}).`;
-    messageEn = `${petName} has arrived at the destination (ref. ${bookingRef}).`;
+    key = 'BOOKING_COMPLETED_TAXI';
   } else if (hasGrooming) {
-    titleFr = 'Séjour & toilettage terminés';
-    titleEn = 'Stay & grooming completed';
-    messageFr = `Le séjour et le toilettage de ${petName} sont terminés — votre compagnon est prêt à être récupéré (réf. ${bookingRef}).`;
-    messageEn = `${petName}'s stay and grooming are complete — your companion is ready to be picked up (ref. ${bookingRef}).`;
+    key = 'BOOKING_COMPLETED_WITH_GROOMING';
   } else {
-    titleFr = 'Séjour terminé';
-    titleEn = 'Stay completed';
-    messageFr = `Le séjour de ${petName} est terminé — votre compagnon est prêt à être récupéré (réf. ${bookingRef}).`;
-    messageEn = `${petName}'s stay is complete — your companion is ready to be picked up (ref. ${bookingRef}).`;
+    key = 'BOOKING_COMPLETED_BOARDING';
   }
+  const msg = NOTIFICATION_MESSAGES[key]({ petName, bookingRef });
 
-  const notification = await createNotification({
-    userId,
-    type: 'BOOKING_COMPLETED',
-    titleFr,
-    titleEn,
-    messageFr,
-    messageEn,
-  });
+  const notification = await createNotification({ userId, type: 'BOOKING_COMPLETED', ...msg });
 
   // Send email (non-blocking)
   try {
@@ -201,14 +155,8 @@ export async function createInvoiceNotification(
   invoiceNumber: string,
   amount: string
 ) {
-  return createNotification({
-    userId,
-    type: 'INVOICE_AVAILABLE',
-    titleFr: 'Nouvelle facture disponible',
-    titleEn: 'New invoice available',
-    messageFr: `Votre facture ${invoiceNumber} d'un montant de ${amount} est disponible.`,
-    messageEn: `Your invoice ${invoiceNumber} for ${amount} is now available.`,
-  });
+  const msg = NOTIFICATION_MESSAGES.INVOICE_AVAILABLE({ invoiceNumber, amount });
+  return createNotification({ userId, type: 'INVOICE_AVAILABLE', ...msg });
 }
 
 export async function createInvoicePaidNotification(
@@ -216,14 +164,8 @@ export async function createInvoicePaidNotification(
   invoiceNumber: string,
   amount: string
 ) {
-  const notification = await createNotification({
-    userId,
-    type: 'INVOICE_PAID',
-    titleFr: 'Paiement confirmé',
-    titleEn: 'Payment confirmed',
-    messageFr: `Votre facture ${invoiceNumber} d'un montant de ${amount} a bien été réglée. Merci !`,
-    messageEn: `Your invoice ${invoiceNumber} for ${amount} has been paid. Thank you!`,
-  });
+  const msg = NOTIFICATION_MESSAGES.INVOICE_PAID({ invoiceNumber, amount });
+  const notification = await createNotification({ userId, type: 'INVOICE_PAID', ...msg });
 
   try {
     const client = await prisma.user.findFirst({
@@ -253,21 +195,16 @@ export async function createLoyaltyUpdateNotification(
     fr: { BRONZE: 'Bronze', SILVER: 'Argent', GOLD: 'Or', PLATINUM: 'Platine' },
     en: { BRONZE: 'Bronze', SILVER: 'Silver', GOLD: 'Gold', PLATINUM: 'Platinum' },
   };
-
-  const notification = await createNotification({
-    userId,
-    type: 'LOYALTY_UPDATE',
-    titleFr: 'Grade de fidélité mis à jour',
-    titleEn: 'Loyalty grade updated',
-    messageFr: `Félicitations ! Votre grade de fidélité a été mis à jour : ${gradeLabels.fr[grade] ?? grade}.`,
-    messageEn: `Congratulations! Your loyalty grade has been updated: ${gradeLabels.en[grade] ?? grade}.`,
-  });
+  const gradeFr = gradeLabels.fr[grade] ?? grade;
+  const gradeEn = gradeLabels.en[grade] ?? grade;
+  const msg = NOTIFICATION_MESSAGES.LOYALTY_UPDATE({ gradeFr, gradeEn });
+  const notification = await createNotification({ userId, type: 'LOYALTY_UPDATE', ...msg });
 
   // Send email notification (non-blocking)
   try {
     const client = await prisma.user.findFirst({ where: { id: userId, deletedAt: null }, select: { name: true, email: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
     if (client) {
-      const gradeLabel = locale === 'fr' ? (gradeLabels.fr[grade] ?? grade) : (gradeLabels.en[grade] ?? grade);
+      const gradeLabel = locale === 'fr' ? gradeFr : gradeEn;
       const { subject, html } = getEmailTemplate('loyalty_update', { clientName: client.name, grade: gradeLabel }, locale);
       await sendEmail({ to: client.email, subject, html });
     }
@@ -282,15 +219,8 @@ export async function createStayPhotoNotification(
   bookingRef: string,
   bookingId: string
 ) {
-  return createNotification({
-    userId,
-    type: 'STAY_PHOTO',
-    titleFr: '📸 Nouvelles photos de séjour',
-    titleEn: '📸 New stay photos',
-    messageFr: `De nouvelles photos de ${petName} ont été publiées pour votre réservation (réf. ${bookingRef}).`,
-    messageEn: `New photos of ${petName} have been posted for your booking (ref. ${bookingRef}).`,
-    metadata: { bookingId },
-  });
+  const msg = NOTIFICATION_MESSAGES.STAY_PHOTO({ petName, bookingRef });
+  return createNotification({ userId, type: 'STAY_PHOTO', ...msg, metadata: { bookingId } });
 }
 
 export async function createStayPhotoAddedNotification(
@@ -300,15 +230,8 @@ export async function createStayPhotoAddedNotification(
 ) {
   const names = petNames.length > 0 ? petNames.join(', ') : 'votre animal';
   const namesEn = petNames.length > 0 ? petNames.join(', ') : 'your pet';
-  return createNotification({
-    userId: clientId,
-    type: 'STAY_PHOTO_ADDED',
-    titleFr: '📸 Nouvelles photos de votre séjour',
-    titleEn: '📸 New photos from your stay',
-    messageFr: `De nouvelles photos de ${names} ont été partagées par l'équipe Dog Universe 🐾`,
-    messageEn: `New photos of ${namesEn} were shared by the Dog Universe team 🐾`,
-    metadata: { bookingId },
-  });
+  const msg = NOTIFICATION_MESSAGES.STAY_PHOTO_ADDED({ names, namesEn });
+  return createNotification({ userId: clientId, type: 'STAY_PHOTO_ADDED', ...msg, metadata: { bookingId } });
 }
 
 export async function createAdminMessageNotification(
@@ -336,19 +259,14 @@ export async function createLoyaltyClaimResultNotification(
   rejectionReason?: string | null
 ) {
   const isApproved = status === 'APPROVED';
-
-  const notification = await createNotification({
-    userId,
-    type: 'LOYALTY_UPDATE',
-    titleFr: isApproved ? 'Avantage fidélité accordé' : 'Réclamation d\'avantage refusée',
-    titleEn: isApproved ? 'Loyalty benefit granted' : 'Benefit claim rejected',
-    messageFr: isApproved
-      ? `Votre demande pour « ${benefitLabelFr} » a été acceptée. Notre équipe vous contactera pour la mise en place.`
-      : `Votre demande pour « ${benefitLabelFr} » a été refusée.${rejectionReason ? ` Motif : ${rejectionReason}` : ''}`,
-    messageEn: isApproved
-      ? `Your request for "${benefitLabelEn}" has been approved. Our team will contact you shortly.`
-      : `Your request for "${benefitLabelEn}" has been rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
+  const key = isApproved ? 'LOYALTY_CLAIM_APPROVED' : 'LOYALTY_CLAIM_REJECTED';
+  const msg = NOTIFICATION_MESSAGES[key]({
+    benefitFr: benefitLabelFr,
+    benefitEn: benefitLabelEn,
+    reason: rejectionReason ?? '',
   });
+
+  const notification = await createNotification({ userId, type: 'LOYALTY_UPDATE', ...msg });
 
   // Send email (non-blocking)
   try {
@@ -394,14 +312,8 @@ export async function notifyAdminsNewBooking(
   bookingRef: string,
   bookingId: string
 ) {
-  return createAdminNotifications({
-    type: 'BOOKING_REQUEST',
-    titleFr: 'Nouvelle demande de réservation',
-    titleEn: 'New booking request',
-    messageFr: `${clientName} a soumis une demande de ${serviceTypeFr} pour ${petNames} — réf. ${bookingRef}`,
-    messageEn: `${clientName} submitted a ${serviceTypeEn} request for ${petNames} — ref. ${bookingRef}`,
-    metadata: { bookingId, bookingRef },
-  });
+  const msg = NOTIFICATION_MESSAGES.BOOKING_REQUEST({ clientName, serviceTypeFr, serviceTypeEn, petNames, bookingRef });
+  return createAdminNotifications({ type: 'BOOKING_REQUEST', ...msg, metadata: { bookingId, bookingRef } });
 }
 
 export async function notifyAdminsNewClient(
@@ -412,12 +324,10 @@ export async function notifyAdminsNewClient(
 ) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
   const phonePart = clientPhone ? ` · ${clientPhone}` : '';
+  const msg = NOTIFICATION_MESSAGES.NEW_CLIENT_REGISTRATION({ clientName, clientEmail, phonePart });
   await createAdminNotifications({
     type: 'NEW_CLIENT_REGISTRATION',
-    titleFr: 'Nouveau client inscrit',
-    titleEn: 'New client registered',
-    messageFr: `${clientName} (${clientEmail}${phonePart}) vient de créer un compte.`,
-    messageEn: `${clientName} (${clientEmail}${phonePart}) just created an account.`,
+    ...msg,
     metadata: { clientId, clientUrl: `${appUrl}/fr/admin/clients/${clientId}` },
   });
 
@@ -447,14 +357,8 @@ export async function notifyAdminsNewLoyaltyClaim(
   benefitLabelEn: string,
   claimId: string
 ) {
-  return createAdminNotifications({
-    type: 'LOYALTY_CLAIM_PENDING',
-    titleFr: 'Nouvelle réclamation d\'avantage fidélité',
-    titleEn: 'New loyalty benefit claim',
-    messageFr: `${clientName} demande : « ${benefitLabelFr} »`,
-    messageEn: `${clientName} requests: "${benefitLabelEn}"`,
-    metadata: { claimId },
-  });
+  const msg = NOTIFICATION_MESSAGES.LOYALTY_CLAIM_PENDING({ clientName, benefitFr: benefitLabelFr, benefitEn: benefitLabelEn });
+  return createAdminNotifications({ type: 'LOYALTY_CLAIM_PENDING', ...msg, metadata: { claimId } });
 }
 
 export async function getUnreadCount(userId: string): Promise<number> {
@@ -471,8 +375,6 @@ export async function invalidateNotifCount(userId: string): Promise<void> {
   await cacheDel(CacheKeys.notifCount(userId));
 }
 
-// ─── Extension request notifications ─────────────────────────────────────────
-
 // ─── Taxi heartbeat alerts ───────────────────────────────────────────────────
 
 export async function notifyAdminsTaxiHeartbeatLost(args: {
@@ -481,12 +383,14 @@ export async function notifyAdminsTaxiHeartbeatLost(args: {
   clientName: string;
   petNames: string;
 }) {
+  const msg = NOTIFICATION_MESSAGES.TAXI_HEARTBEAT_LOST({
+    clientName: args.clientName,
+    petNames: args.petNames,
+    bookingRef: args.bookingRef,
+  });
   return createAdminNotifications({
     type: 'TAXI_HEARTBEAT_LOST',
-    titleFr: 'Taxi : signal GPS perdu',
-    titleEn: 'Taxi: GPS signal lost',
-    messageFr: `⚠️ Pas de signal GPS depuis 5 min — ${args.clientName} / ${args.petNames} / Réservation ${args.bookingRef}`,
-    messageEn: `⚠️ No GPS signal for 5 min — ${args.clientName} / ${args.petNames} / Booking ${args.bookingRef}`,
+    ...msg,
     metadata: { bookingId: args.bookingId, bookingRef: args.bookingRef },
   });
 }
@@ -499,13 +403,11 @@ export async function createTaxiNearPickupNotification(
   distance: number,
   _lang: string,
 ) {
+  const msg = NOTIFICATION_MESSAGES.TAXI_NEAR_PICKUP({});
   return createNotification({
     userId,
     type: 'TAXI_NEAR_PICKUP',
-    titleFr: '🚗 Votre chauffeur arrive',
-    titleEn: '🚗 Your driver is arriving',
-    messageFr: 'Votre chauffeur arrive dans environ 5 minutes !',
-    messageEn: 'Your driver is arriving in about 5 minutes!',
+    ...msg,
     metadata: { bookingId, distance: String(Math.round(distance)) },
   });
 }
@@ -515,15 +417,8 @@ export async function createTaxiArrivedNotification(
   bookingId: string,
   _lang: string,
 ) {
-  return createNotification({
-    userId,
-    type: 'TAXI_ARRIVED',
-    titleFr: '✅ Votre chauffeur est arrivé',
-    titleEn: '✅ Your driver has arrived',
-    messageFr: "Votre chauffeur vient d'arriver à votre adresse.",
-    messageEn: 'Your driver has just arrived at your address.',
-    metadata: { bookingId },
-  });
+  const msg = NOTIFICATION_MESSAGES.TAXI_ARRIVED({});
+  return createNotification({ userId, type: 'TAXI_ARRIVED', ...msg, metadata: { bookingId } });
 }
 
 // ─── Addon request notifications ─────────────────────────────────────────────
@@ -569,14 +464,8 @@ export async function notifyAdminsExtensionRequest(
   requestedEndDate: string,
   bookingId: string
 ) {
-  return createAdminNotifications({
-    type: 'EXTENSION_REQUEST',
-    titleFr: 'Demande de prolongation de séjour',
-    titleEn: 'Stay extension request',
-    messageFr: `${clientName} demande une prolongation pour ${petNames} (réf. ${bookingRef}) — nouvelle date de sortie souhaitée : ${requestedEndDate}`,
-    messageEn: `${clientName} requests a stay extension for ${petNames} (ref. ${bookingRef}) — requested new checkout: ${requestedEndDate}`,
-    metadata: { bookingId, bookingRef },
-  });
+  const msg = NOTIFICATION_MESSAGES.EXTENSION_REQUEST({ bookingRef, clientName, petNames, requestedEndDate });
+  return createAdminNotifications({ type: 'EXTENSION_REQUEST', ...msg, metadata: { bookingId, bookingRef } });
 }
 
 export async function createBookingExtendedNotification(
@@ -585,13 +474,11 @@ export async function createBookingExtendedNotification(
   newEndDate: string,
   lang: string
 ) {
+  const msg = NOTIFICATION_MESSAGES.BOOKING_EXTENDED({ bookingRef, newEndDate });
   return createNotification({
     userId: clientId,
     type: 'BOOKING_EXTENDED',
-    titleFr: 'Séjour prolongé',
-    titleEn: 'Stay extended',
-    messageFr: `Votre séjour (réf. ${bookingRef}) a été prolongé. Nouvelle date de sortie : ${newEndDate}.`,
-    messageEn: `Your stay (ref. ${bookingRef}) has been extended. New checkout date: ${newEndDate}.`,
+    ...msg,
     metadata: { bookingId: bookingRef, lang },
   });
 }
@@ -600,34 +487,18 @@ export async function createExtensionRejectedNotification(
   clientId: string,
   bookingRef: string,
 ) {
-  return createNotification({
-    userId: clientId,
-    type: 'BOOKING_REFUSAL',
-    titleFr: 'Demande de prolongation refusée',
-    titleEn: 'Extension request declined',
-    messageFr: `Votre demande de prolongation pour la réservation ${bookingRef} n'a pas pu être acceptée. Contactez-nous pour plus d'informations.`,
-    messageEn: `Your extension request for booking ${bookingRef} could not be approved. Please contact us for more details.`,
-    metadata: { bookingRef },
-  });
+  const msg = NOTIFICATION_MESSAGES.BOOKING_EXTENSION_REJECTED({ bookingRef });
+  return createNotification({ userId: clientId, type: 'BOOKING_REFUSAL', ...msg, metadata: { bookingRef } });
 }
 
 // Booking marked as NO_SHOW by admin — informational message to the client.
-// NO_SHOW bookings do NOT count toward loyalty (totalStays filter is on
-// status='COMPLETED'), so we don't need to deduct anything explicitly.
 export async function createBookingNoShowNotification(
   clientId: string,
   bookingRef: string,
   petName: string,
 ) {
-  return createNotification({
-    userId: clientId,
-    type: 'BOOKING_NO_SHOW',
-    titleFr: 'Réservation marquée comme No Show',
-    titleEn: 'Booking marked as No Show',
-    messageFr: `Votre réservation pour ${petName} (réf. ${bookingRef}) a été marquée No Show suite à une absence non signalée. Contactez-nous pour toute question.`,
-    messageEn: `Your booking for ${petName} (ref. ${bookingRef}) was marked No Show due to unreported absence. Please contact us if you have any questions.`,
-    metadata: { bookingRef },
-  });
+  const msg = NOTIFICATION_MESSAGES.BOOKING_NO_SHOW({ petName, bookingRef });
+  return createNotification({ userId: clientId, type: 'BOOKING_NO_SHOW', ...msg, metadata: { bookingRef } });
 }
 
 // Client booked when boarding is full → automatically placed on the waitlist.
@@ -636,15 +507,8 @@ export async function createBookingWaitlistedNotification(
   bookingRef: string,
   petName: string,
 ) {
-  return createNotification({
-    userId: clientId,
-    type: 'BOOKING_WAITLISTED',
-    titleFr: "Inscription sur liste d'attente",
-    titleEn: 'Added to waitlist',
-    messageFr: `La pension est complète sur ces dates. ${petName} (réf. ${bookingRef}) est en liste d'attente — nous vous contactons dès qu'une place se libère.`,
-    messageEn: `The boarding is full for these dates. ${petName} (ref. ${bookingRef}) is on the waitlist — we'll reach out as soon as a slot opens up.`,
-    metadata: { bookingRef },
-  });
+  const msg = NOTIFICATION_MESSAGES.BOOKING_WAITLISTED({ petName, bookingRef });
+  return createNotification({ userId: clientId, type: 'BOOKING_WAITLISTED', ...msg, metadata: { bookingRef } });
 }
 
 // A slot opened up and this client's waitlisted booking has been promoted
@@ -654,26 +518,14 @@ export async function createWaitlistPromotedNotification(
   bookingRef: string,
   petName: string,
 ) {
-  return createNotification({
-    userId: clientId,
-    type: 'BOOKING_WAITLIST_PROMOTED',
-    titleFr: "Une place s'est libérée !",
-    titleEn: 'A slot just opened up!',
-    messageFr: `Bonne nouvelle : une place s'est libérée pour ${petName} (réf. ${bookingRef}). Votre réservation est maintenant en attente de confirmation.`,
-    messageEn: `Good news: a slot is now available for ${petName} (ref. ${bookingRef}). Your booking is now pending confirmation.`,
-    metadata: { bookingRef },
-  });
+  const msg = NOTIFICATION_MESSAGES.BOOKING_WAITLIST_PROMOTED({ petName, bookingRef });
+  return createNotification({ userId: clientId, type: 'BOOKING_WAITLIST_PROMOTED', ...msg, metadata: { bookingRef } });
 }
 
 // Promotes the oldest WAITLIST booking that overlaps the given window to
 // PENDING and notifies its owner. Called whenever capacity is freed
 // (CANCELLED, REJECTED, NO_SHOW). Returns the promoted booking id, or null
 // if no waitlisted booking matched.
-//
-// Only the FIRST candidate is promoted — multiple WAITLIST entries on the
-// same dates are processed FIFO (createdAt ASC). If after promotion the
-// capacity is still partially full, subsequent transitions will pick up
-// the next ones.
 export async function promoteWaitlistedBooking(args: {
   startDate: Date;
   endDate: Date | null;
