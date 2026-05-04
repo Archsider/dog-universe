@@ -15,7 +15,7 @@ export default async function AdminContractsPage({ params }: PageProps) {
   }
 
   const rawClients = await prisma.user.findMany({
-    where: { role: 'CLIENT' },
+    where: { role: 'CLIENT', deletedAt: null, isWalkIn: false }, // walk-ins n'ont pas d'accès portail, pas de contrat attendu
     include: {
       contract: { select: { id: true, signedAt: true, storageKey: true, version: true } },
     },
