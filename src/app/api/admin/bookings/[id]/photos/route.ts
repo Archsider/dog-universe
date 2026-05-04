@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { uploadFile } from '@/lib/upload';
-import { createStayPhotoNotification } from '@/lib/notifications';
+import { createStayPhotoAddedNotification } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 
@@ -57,11 +57,12 @@ export async function POST(request: NextRequest, { params }: Params) {
     },
   });
 
-  // Notify client
-  const petName = booking.bookingPets[0]?.pet.name ?? 'votre animal';
+  // Notify client (non-blocking — photo is already saved)
+  const petNames = booking.bookingPets.map(bp => bp.pet.name);
+  const petName = petNames[0] ?? 'votre animal';
   const bookingRef = booking.id.slice(0, 8).toUpperCase();
 
-  await createStayPhotoNotification(booking.client.id, petName, bookingRef, booking.id);
+  createStayPhotoAddedNotification(booking.client.id, booking.id, petNames).catch(() => {});
 
   // Non-blocking — photo is already saved; email failure must not cause a false 500
   const locale = booking.client.language ?? 'fr';

@@ -35,6 +35,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   INVOICE_PAID:         { icon: CheckCheck,     color: 'text-green-600',  bg: 'bg-green-50' },
   ADMIN_MESSAGE:        { icon: MessageSquare,  color: 'text-gold-600',   bg: 'bg-gold-50' },
   STAY_PHOTO:           { icon: Camera,         color: 'text-gold-600',   bg: 'bg-gold-50' },
+  STAY_PHOTO_ADDED:     { icon: Camera,         color: 'text-gold-600',   bg: 'bg-gold-50' },
   LOYALTY_UPDATE:       { icon: Star,           color: 'text-gold-500',   bg: 'bg-gold-50' },
   PET_BIRTHDAY:         { icon: Cake,           color: 'text-pink-500',   bg: 'bg-pink-50' },
   BOOKING_EXTENDED:     { icon: CalendarClock,  color: 'text-blue-600',   bg: 'bg-blue-50' },
@@ -133,7 +134,7 @@ export default function NotificationsClient({ initialNotifications, locale }: Pr
             const Icon = cfg.icon;
             const meta = parseMetadata(n.metadata);
             const bookingId = meta.bookingId;
-            const showBookingLink = !!bookingId && (n.type === 'STAY_PHOTO' || n.type === 'ADMIN_MESSAGE');
+            const showBookingLink = !!bookingId && (n.type === 'STAY_PHOTO' || n.type === 'STAY_PHOTO_ADDED' || n.type === 'ADMIN_MESSAGE');
 
             return (
               <div
@@ -167,7 +168,7 @@ export default function NotificationsClient({ initialNotifications, locale }: Pr
                           onClick={e => e.stopPropagation()}
                           className={`flex items-center gap-1 text-xs font-medium ${cfg.color} hover:underline`}
                         >
-                          {n.type === 'STAY_PHOTO' ? l.viewPhotos : l.viewBooking}
+                          {(n.type === 'STAY_PHOTO' || n.type === 'STAY_PHOTO_ADDED') ? l.viewPhotos : l.viewBooking}
                           <ArrowRight className="h-3 w-3" />
                         </Link>
                       )}

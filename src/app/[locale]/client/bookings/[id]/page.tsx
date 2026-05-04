@@ -18,6 +18,7 @@ import RequestAddonButton from './RequestAddonButton';
 import RescheduleBookingButton from './RescheduleBookingButton';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 import { RebookButton } from '@/components/client/RebookButton';
+import StayPhotoFeed from '@/components/client/StayPhotoFeed';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -141,7 +142,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
         orderBy: { createdAt: 'asc' },
       },
       invoice: { include: { items: true } },
-      stayPhotos: { orderBy: { createdAt: 'asc' } },
+      stayPhotos: { orderBy: { createdAt: 'desc' } },
     },
   });
 
@@ -686,40 +687,22 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Stay photos */}
+        {/* Stay photos — Instagram-like feed */}
         {isBoarding && (
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-4">
               <Camera className="h-4 w-4 text-gold-500" />
               <h3 className="font-semibold text-charcoal text-sm">{t.photos}</h3>
-              {booking.stayPhotos.length > 0 && (
-                <span className="text-xs text-gold-600 font-medium ml-auto">{booking.stayPhotos.length}</span>
-              )}
             </div>
-            {booking.stayPhotos.length === 0 ? (
-              <p className="text-sm text-gray-400">{t.noPhotos}</p>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                {booking.stayPhotos.map(photo => (
-                  <div key={photo.id} className="rounded-lg overflow-hidden border border-[#F0D98A]/30 aspect-square">
-                    <Image
-                      src={photo.url}
-                      alt={photo.caption || (locale === 'fr' ? 'Photo de séjour' : 'Stay photo')}
-                      width={200}
-                      height={200}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            {booking.stayPhotos.some(p => p.caption) && (
-              <div className="mt-3 space-y-1">
-                {booking.stayPhotos.filter(p => p.caption).map(photo => (
-                  <p key={photo.id} className="text-xs text-gray-500 italic">• {photo.caption}</p>
-                ))}
-              </div>
-            )}
+            <StayPhotoFeed
+              photos={booking.stayPhotos.map(p => ({
+                id: p.id,
+                url: p.url,
+                caption: p.caption,
+                createdAt: p.createdAt.toISOString(),
+              }))}
+              locale={locale}
+            />
           </div>
         )}
 
