@@ -74,6 +74,7 @@ src/lib/
 | `ActionLog` | Journal d'actions |
 | `ClientContract` | Contrat signé par le client |
 | `StayPhoto` | Photos de séjour |
+| `Review` | Avis post-séjour client (1-to-1 avec Booking, rating 1-5, comment optionnel) |
 
 ---
 
@@ -177,7 +178,8 @@ Modèle `Notification` avec champ `type`. Types existants :
 ```
 BOOKING_CONFIRMATION | BOOKING_VALIDATION | BOOKING_REFUSAL
 STAY_REMINDER | INVOICE_AVAILABLE | ADMIN_MESSAGE | STAY_PHOTO
-LOYALTY_UPDATE | PET_BIRTHDAY
+LOYALTY_UPDATE | PET_BIRTHDAY | REVIEW_REQUEST
+TAXI_NEAR_PICKUP | TAXI_ARRIVED
 ```
 
 Chaque notification a `titleFr`, `titleEn`, `messageFr`, `messageEn`, `metadata` (JSON string).
@@ -195,6 +197,7 @@ Définis dans `vercel.json`, tous à **08h00 UTC** :
 | `/api/cron/reminders` | Quotidien | Rappels J-1 séjour (arrivée + départ) |
 | `/api/cron/birthday-notifications` | Quotidien | Notifications anniversaire des animaux |
 | `/api/cron/contract-reminders` | Lundi (hebdo) | Rappel signature contrat aux clients sans contrat |
+| `/api/cron/review-requests` | Quotidien 10h | Envoie REVIEW_REQUEST aux clients dont le séjour s'est terminé dans les 24h sans avis |
 
 **Protection :** header `x-cron-secret` vérifié contre `CRON_SECRET` (déjà défini sur Vercel).
 Vercel l'injecte automatiquement via `Authorization: Bearer` pour ses propres crons.
@@ -558,6 +561,24 @@ Phrase principale : Nous attendons {_companionFr} avec impatience.
 L'historique complet des sessions de travail et décisions techniques (sécurité, perf, architecture) est consigné dans [HISTORY.md](./HISTORY.md).
 
 **Décision-clé toujours active : Soft-delete via filtres explicites `deletedAt: null`**
+
+---
+
+### 2026-05-04 — Sprint 4 : NPS / mobile sidebar / FK RESTRICT / Arabic / dashboard stats
+
+**2 commits sur `claude/review-markdown-files-fV2pU` :**
+
+1. **`feat(reviews)`** — Modèle `Review` Prisma (`bookingId @unique`, `rating 1-5`, `comment?`). API `POST /api/reviews` (client) + `GET /api/admin/reviews` (admin, paginé, filtres rating/sort). Cron `review-requests` (quotidien 10h, lock Redis, dédupliquer par REVIEW_REQUEST existant). Email template `review_request` bilingue. Composants `ReviewModal.tsx` + `ReviewButton.tsx` dans `src/components/client/`. Badge "Donnez votre avis" sur les réservations COMPLETED sans avis dans `/client/history`. Page `/admin/reviews` (Server Component, étoiles SVG, pagination, filtres). KPI note moyenne 30j sur le dashboard admin (`Promise.all` existant). Lien "Avis clients" dans `AdminSidebar` (icône `Star`). `REVIEW_REQUEST` dans `TYPE_CONFIG` client. Migrations SQL : `20260504_review` + `20260504_restrict_client_fk`. FK `onDelete: Restrict` sur `Booking.clientId`, `Invoice.clientId`, `LoyaltyGrade.clientId` (bloque hard-delete d'un User avec données).
+
+2. **`feat(i18n): arabe RTL`** — Locale `ar` dans `routing.ts` + `request.ts`. `messages/ar.json` (traductions complètes nav, auth, landing, dashboard, bookings, invoices, notifications, profile, admin). `dir="rtl"` conditionnel dans `[locale]/layout.tsx`.
+
+**TÂCHE 2 (mobile sidebar)** : déjà implémentée dans le code de base — `AdminSidebar.tsx` inclut depuis longtemps le hamburger, l'overlay et le slide-in drawer mobile (`mobileOpen` state). Aucune modification nécessaire.
+
+**Décisions techniques :**
+- `Review.bookingId @unique` : garantit un seul avis par réservation sans race condition.
+- Cron `review-requests` distinct de `reminders` : fréquences et logiques différentes, séparation des responsabilités.
+- `onDelete: Restrict` (pas Cascade) sur FK User → préserve l'intégrité comptable ; le soft-delete reste la voie normale.
+- Locale `ar` avec `dir="rtl"` sur `<div>` wrapper (pas sur `<html>`) pour compatibilité avec le Server Component root layout.
 
 ---
 
