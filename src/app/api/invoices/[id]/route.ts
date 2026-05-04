@@ -27,7 +27,7 @@ export async function GET(_req: Request, { params }: Params) {
   const invoice = await prisma.invoice.findUnique({
     where: { id },
     include: {
-      client: { select: { id: true, name: true, email: true, phone: true } },
+      client: { select: { id: true, name: true, email: true, phone: true, role: true } },
       booking: {
         include: {
           bookingPets: { include: { pet: { select: { name: true, species: true, breed: true } } } },
@@ -44,6 +44,10 @@ export async function GET(_req: Request, { params }: Params) {
   if (session.user.role === 'CLIENT' && invoice.clientId !== session.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  // Authz cross-role : ADMIN ne peut lire que les factures de clients (CLIENT). SUPERADMIN passe partout.
+  if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+  }
 
   return NextResponse.json(invoice);
 }
@@ -57,8 +61,17 @@ export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params;
   const body = await request.json();
 
-  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    include: { client: { select: { role: true } } },
+  });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // Authz cross-role : ADMIN ne peut toucher que les factures de clients (CLIENT).
+  // SUPERADMIN passe partout. Empêche un ADMIN d'éditer la facture d'un autre admin.
+  if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+  }
 
   // Optimistic concurrency: when caller provides `version`, refuse to apply
   // the patch if the row was modified since they read it. Backward compatible
@@ -200,8 +213,15 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    include: { client: { select: { role: true } } },
+  });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+  }
 
   // onDelete: Cascade on InvoiceItem and Payment handles related records
   await prisma.invoice.delete({ where: { id } });
