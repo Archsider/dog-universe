@@ -177,7 +177,8 @@ Modèle `Notification` avec champ `type`. Types existants :
 ```
 BOOKING_CONFIRMATION | BOOKING_VALIDATION | BOOKING_REFUSAL
 STAY_REMINDER | INVOICE_AVAILABLE | ADMIN_MESSAGE | STAY_PHOTO
-LOYALTY_UPDATE | PET_BIRTHDAY
+LOYALTY_UPDATE | PET_BIRTHDAY | BOOKING_RESCHEDULE_REQUEST
+TAXI_NEAR_PICKUP | TAXI_ARRIVED
 ```
 
 Chaque notification a `titleFr`, `titleEn`, `messageFr`, `messageEn`, `metadata` (JSON string).
@@ -456,6 +457,10 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | 2FA TOTP ADMIN/SUPERADMIN | **DURCI (2026-05-03)** | Bypass `/api/admin/*` corrigé (middleware retourne 403 `TOTP_REQUIRED`). Setup/disable exigent re-auth password ; disable + rotation exigent aussi un token TOTP courant. Replay protection (`lastTotpToken` + `lastTotpUsedAt`, fenêtre 90 s). Rate-limit `auth` (10/15 min) sur validate / verify-setup / disable. Secrets chiffrés AES-256-GCM via `TOTP_ENCRYPTION_KEY` (32 bytes hex). Migration : `20260503_totp_replay/migration.sql`. **Variable d'env requise en production : `TOTP_ENCRYPTION_KEY` — générer avec `openssl rand -hex 32`.** |
 | Création réservation admin | RÉSOLU (2026-05-03, `f9f5552`) | `POST /api/admin/bookings` + page `/admin/reservations/new` (formulaire walk-in / clients existants, calendrier disponibilités, prix suggéré, auto-facture). Bouton "+ Créer une réservation" dans header `/admin/reservations`. |
 | Routing slug conflict Next.js | RÉSOLU (2026-05-03, `8fc409d`) | `/api/taxi/[bookingId]/heartbeat` et `/api/taxi/[token]/stream` partageaient le même parent → Next.js 15 crashe le dev server au démarrage, toutes requêtes API renvoient HTML d'erreur (`Unexpected token '<'`). Renommé `[bookingId]` → `[token]` sur heartbeat. **Règle Next.js 15 : un seul nom de slug autorisé par niveau hiérarchique de route.** |
+| TOTP UI ne faisait rien au clic | RÉSOLU (2026-05-04, `968e57d`) | `TotpSetupSection.tsx` envoyait `POST /setup` sans body alors que la route exige `{ password }` → API retournait 400 `INVALID_BODY` mais l'erreur n'était rendue que dans le step `'qr'` → silence total. Refonte : nouveau step `'password-setup'` (password + TOTP courant si rotation), errors visibles à chaque step avec labels lisibles. |
+| Loyalty COMPLETED ne crée pas de grade | RÉSOLU (2026-05-04, `dcd2776`) | Guard `if (currentGrade && ...)` empêchait `update` si la row n'existait pas → tous les nouveaux clients restaient BRONZE après leur 1er séjour terminé. Fix : `update` → `upsert`, guard retiré. |
+| Walk-in pets dans le compteur DOB manquant | RÉSOLU (2026-05-04, `38066da`) | `/admin/dashboard` comptait tous les pets sans `dateOfBirth`. Filtre `owner: { isWalkIn: false }` ajouté — walk-in = client one-shot, profil sparse, pas de DOB attendu. |
+| GPS Pet Taxi end-to-end | LIVRÉ (2026-05-04, `c5377ab`) | Client : bouton "📍 Utiliser ma position" + reverse-geocode Nominatim → `pickupLat/Lng/Address`. Admin : boutons Google Maps + Waze sur fiche réservation. Geofencing : heartbeat chauffeur → notifs `TAXI_NEAR_PICKUP` (<1km) + `TAXI_ARRIVED` (<100m), flags Redis NX EX 1h pour dédupliquer, fail-open. Helper `haversineDistance()` dans `src/lib/geo.ts` (5 tests). Migration `20260504_taxi_gps_pickup` (6 colonnes sur `TaxiDetail`). |
 
 ---
 
@@ -549,6 +554,56 @@ Ajouté (2026-05-02) :
 ### Intégrations
 - **Admin** : `/admin/calendar` — deux panneaux côte à côte DOG + CAT, lecture seule
 - **Client** : formulaire de réservation Step 3 (BOARDING) — calendrier lecture seule, `selectedStart/End` miroir des date pickers
+
+---
+
+## GPS PET TAXI — ARCHITECTURE (depuis 2026-05-04)
+
+### Modèle DB (`TaxiDetail`)
+6 colonnes ajoutées via migration `20260504_taxi_gps_pickup` :
+```prisma
+pickupLat       Float?
+pickupLng       Float?
+pickupAddress   String?
+dropoffLat      Float?
+dropoffLng      Float?
+dropoffAddress  String?
+```
+
+### Saisie côté client (`/client/bookings/new`)
+- Bouton "📍 Utiliser ma position" → `navigator.geolocation.getCurrentPosition()` (timeout 10 s)
+- Reverse-geocode via **Nominatim OpenStreetMap** (gratuit, no API key) — header obligatoire `User-Agent: DogUniverse/1.0`
+- Erreurs gérées : code 1 (denied), code 2 (unavailable), code 3 (timeout) → toast warning
+- Coordonnées validées Zod (`lat: -90..90`, `lng: -180..180`, tous nullables)
+- Persistance dans `tx.taxiDetail.create` au sein de la transaction de création de booking
+
+### Navigation côté admin (`/admin/reservations/[id]`)
+`src/components/admin/TaxiNavigationButton.tsx` — affiché uniquement si `serviceType === 'PET_TAXI'`. Sections séparées pickup + dropoff.
+- **Google Maps** : `https://maps.google.com/?daddr={lat},{lng}`
+- **Waze** : `https://waze.com/ul?ll={lat},{lng}&navigate=yes`
+- Fallback (adresse texte sans coords) : `https://www.google.com/maps/search/?api=1&query={encodeURIComponent(addr)}`
+
+### Geofencing (heartbeat chauffeur)
+`POST /api/taxi/[token]/heartbeat` — à chaque ping GPS du chauffeur, si `pickupLat/Lng != null && trip.status === 'DRIVER_EN_ROUTE'` :
+- `< 100 m` → `taxi:arrived_alert:{bookingId}` Redis NX EX 3600 → notif `TAXI_ARRIVED` au client
+- `< 1000 m` (else if) → `taxi:near_alert:{bookingId}` Redis NX EX 3600 → notif `TAXI_NEAR_PICKUP`
+- Wrappé `try/catch` → **fail-open** : Redis down → flag retourne `true` (possible doublon, accepté). Heartbeat ne fail jamais à cause du geofencing.
+
+### Helpers
+- `src/lib/geo.ts` → `haversineDistance(lat1, lng1, lat2, lng2): meters` (5 tests Vitest)
+- `src/lib/cache.ts` → `tryAcquireFlag(key, ttl)` SET NX EX (fail-open)
+- `src/lib/notifications.ts` → `createTaxiNearPickupNotification()` + `createTaxiArrivedNotification()` (bilingual fr/en)
+
+### TYPE_CONFIG client (`NotificationsClient.tsx`)
+| Type | Icon | Couleur |
+|---|---|---|
+| `TAXI_NEAR_PICKUP` | Car | gold |
+| `TAXI_ARRIVED` | MapPin | green |
+
+### Décisions
+- **Nominatim vs Mapbox** : Nominatim choisi tant que volume < 1k req/jour (gratuit, fair-use 1 req/s). Migrer vers Mapbox/Google Geocoding si scale.
+- **`if/else if` 100m/1km** : volontaire — si 1km manqué et chauffeur direct <100m, ARRIVED tire seul. Si 1km déjà envoyé, ARRIVED tire indépendamment (clés Redis distinctes).
+- **Fail-open partout** : heartbeat est dans le chemin critique du chauffeur, jamais bloquer.
 
 ---
 
