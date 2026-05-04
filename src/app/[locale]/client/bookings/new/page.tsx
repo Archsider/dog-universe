@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocale } from 'next-intl';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Check, PawPrint, Car, Package, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -59,6 +59,7 @@ const isValidTaxiTime = (timeStr: string): boolean => {
 
 export default function NewBookingPage() {
   const locale = useLocale();
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   // Prefill params from ?petIds=...&serviceType=...&prefill=1
@@ -66,7 +67,20 @@ export default function NewBookingPage() {
   const prefillServiceType = searchParams.get('serviceType') as BookingType | null;
   const isPrefill = searchParams.get('prefill') === '1';
 
-  const [step, setStep] = useState(1);
+  // Step stored in URL (?step=N) — enables back-button navigation between wizard steps.
+  // Falls back to 1 if not present or out of range.
+  const stepParam = parseInt(searchParams.get('step') ?? '1', 10);
+  const step = stepParam >= 1 && stepParam <= 5 ? stepParam : 1;
+
+  const setStep = useCallback(
+    (nextStep: number | ((prev: number) => number)) => {
+      const next = typeof nextStep === 'function' ? nextStep(step) : nextStep;
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('step', String(next));
+      router.push(`?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams, step],
+  );
   const [pets, setPets] = useState<Pet[]>([]);
   const [loadingPets, setLoadingPets] = useState(true);
   const [petsError, setPetsError] = useState<string | null>(null);
