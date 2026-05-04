@@ -351,6 +351,7 @@ model Invoice {
   @@index([status])
   @@index([createdAt])
   @@index([supplementaryForBookingId])
+  @@index([clientId, status]) // factures impayées par client
 }
 
 enum ItemCategory {
@@ -375,6 +376,7 @@ model InvoiceItem {
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
+  @@index([category]) // billing par catégorie (CA Taxi, Boarding…)
 }
 
 model Payment {
@@ -390,6 +392,7 @@ model Payment {
   @@index([invoiceId])
   @@index([paymentDate])
   @@index([invoiceId, paymentDate])
+  @@index([paymentMethod]) // export factures filtré par méthode
 }
 
 model Notification {
