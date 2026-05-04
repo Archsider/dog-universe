@@ -513,6 +513,41 @@ export default function InvoiceDetailClient({
             </div>
           </div>
 
+          {/* Stay encart — dates + nights */}
+          {invoice.booking?.startDate && (
+            <div className="bg-[#FAF6F0] rounded-xl border border-[#F0D98A]/60 px-4 py-3 flex items-center gap-3">
+              <div className="text-gold-600 text-lg flex-shrink-0">📅</div>
+              <div className="text-sm text-charcoal">
+                {(() => {
+                  const start = new Date(invoice.booking!.startDate!);
+                  const end = invoice.booking!.endDate ? new Date(invoice.booking!.endDate) : null;
+                  const nights = end
+                    ? Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+                    : null;
+                  const fmtDate = (d: Date) =>
+                    d.toLocaleDateString(isFr ? 'fr-MA' : 'en-GB', {
+                      day: 'numeric', month: 'long', year: 'numeric',
+                    });
+                  if (end) {
+                    return (
+                      <>
+                        <span className="font-semibold">
+                          {isFr ? `Du ${fmtDate(start)} au ${fmtDate(end)}` : `From ${fmtDate(start)} to ${fmtDate(end)}`}
+                        </span>
+                        {nights !== null && nights > 0 && (
+                          <span className="text-gray-500 ml-2">
+                            — {nights} {isFr ? (nights > 1 ? 'nuits' : 'nuit') : (nights > 1 ? 'nights' : 'night')}
+                          </span>
+                        )}
+                      </>
+                    );
+                  }
+                  return <span className="font-semibold">{isFr ? `Le ${fmtDate(start)}` : `On ${fmtDate(start)}`}</span>;
+                })()}
+              </div>
+            </div>
+          )}
+
           {/* Line items */}
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card p-4">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
@@ -523,8 +558,8 @@ export default function InvoiceDetailClient({
                 <tr className="border-b border-ivory-100">
                   <th className="text-left py-2 text-xs text-gray-400 font-medium">{isFr ? 'Description' : 'Description'}</th>
                   <th className="text-center py-2 text-xs text-gray-400 font-medium w-14">{isFr ? 'Qté' : 'Qty'}</th>
-                  <th className="text-right py-2 text-xs text-gray-400 font-medium hidden sm:table-cell">{isFr ? 'P.U.' : 'Unit price'}</th>
-                  <th className="text-right py-2 text-xs text-gray-400 font-medium">{isFr ? 'Total' : 'Total'}</th>
+                  <th className="text-right py-2 text-xs text-gray-400 font-medium hidden sm:table-cell">{isFr ? 'Prix unit.' : 'Unit price'}</th>
+                  <th className="text-right py-2 text-xs text-gray-400 font-medium">{isFr ? 'Sous-total' : 'Subtotal'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -533,28 +568,32 @@ export default function InvoiceDetailClient({
                     <td className="py-2.5 text-charcoal">{item.description}</td>
                     <td className="py-2.5 text-center text-gray-500">{item.quantity}</td>
                     <td className="py-2.5 text-right text-gray-500 hidden sm:table-cell">
-                      {item.unitPrice.toFixed(2)} MAD
+                      {formatMAD(item.unitPrice)}
                     </td>
                     <td className="py-2.5 text-right font-semibold text-charcoal">
-                      {item.total.toFixed(2)} MAD
+                      {formatMAD(item.total)}
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t border-ivory-200">
-                  <td colSpan={3} className="py-2.5 text-sm font-semibold text-gray-600 text-right hidden sm:table-cell">
+                <tr className="border-t-2 border-[#F0D98A]">
+                  <td colSpan={3} className="pt-3 pb-1 text-base font-bold text-charcoal text-right hidden sm:table-cell pr-3">
+                    {isFr ? 'Total général' : 'Grand total'}
+                  </td>
+                  <td colSpan={2} className="pt-3 pb-1 text-base font-bold text-charcoal text-right sm:hidden">
                     {isFr ? 'Total' : 'Total'}
                   </td>
-                  <td colSpan={2} className="py-2.5 text-sm font-semibold text-gray-600 text-right sm:hidden">
-                    {isFr ? 'Total' : 'Total'}
-                  </td>
-                  <td className="py-2.5 text-right font-bold text-charcoal">
-                    {invoice.amount.toFixed(2)} MAD
+                  <td className="pt-3 pb-1 text-right text-lg font-bold text-charcoal">
+                    {formatMAD(invoice.amount)}
                   </td>
                 </tr>
               </tfoot>
             </table>
+            {/* Footer branding */}
+            <p className="mt-3 pt-3 border-t border-ivory-100 text-center text-xs text-gray-400 italic">
+              Dog Universe Marrakech — {isFr ? 'Merci de votre confiance 🐾' : 'Thank you for your trust 🐾'}
+            </p>
           </div>
 
           {/* Payment history */}

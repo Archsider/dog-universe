@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Prisma } from '@prisma/client';
+import { Prisma, ItemCategory } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { auth } from '../../../../../auth';
@@ -17,6 +17,7 @@ import { createBookingConfirmationNotification } from '@/lib/notifications';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { revalidateTag } from 'next/cache';
 import { log } from '@/lib/logger';
+import { boardingDescription, taxiDescription } from '@/lib/invoice-descriptions';
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -290,6 +291,51 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
           if (!exists) { invoiceNumber = candidate; break; }
         }
         if (invoiceNumber) {
+          // Build rich per-pet line items for boarding, or a single taxi line.
+          const invoiceItems: {
+            description: string;
+            quantity: number;
+            unitPrice: number;
+            total: number;
+            category: ItemCategory;
+          }[] = [];
+
+          if (serviceType === 'BOARDING' && booking.bookingPets.length > 0 && endDate) {
+            const nights = Math.round(
+              (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24),
+            );
+            // One line per pet if we can resolve per-pet price, otherwise split equally
+            const pricePerPet = Math.round((totalPrice / booking.bookingPets.length) * 100) / 100;
+            const pricePerNight = nights > 0 ? Math.round((pricePerPet / nights) * 100) / 100 : pricePerPet;
+            for (const bp of booking.bookingPets) {
+              const species = (bp.pet.species ?? 'DOG') as 'DOG' | 'CAT';
+              invoiceItems.push({
+                description: boardingDescription(bp.pet.name, species, nights > 0 ? nights : 1, pricePerNight, 'fr'),
+                quantity: nights > 0 ? nights : 1,
+                unitPrice: pricePerNight,
+                total: pricePerPet,
+                category: ItemCategory.BOARDING,
+              });
+            }
+          } else if (serviceType === 'PET_TAXI') {
+            invoiceItems.push({
+              description: taxiDescription('one-way', null, 1, totalPrice, 'fr'),
+              quantity: 1,
+              unitPrice: totalPrice,
+              total: totalPrice,
+              category: ItemCategory.PET_TAXI,
+            });
+          } else {
+            // Fallback for boarding without endDate or pets
+            invoiceItems.push({
+              description: serviceType === 'BOARDING' ? 'Pension' : 'Taxi animalier',
+              quantity: 1,
+              unitPrice: totalPrice,
+              total: totalPrice,
+              category: serviceType === 'BOARDING' ? ItemCategory.BOARDING : ItemCategory.PET_TAXI,
+            });
+          }
+
           await prisma.invoice.create({
             data: {
               invoiceNumber,
@@ -300,15 +346,7 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
               paidAmount: 0,
               serviceType,
               periodDate: new Date(startDate),
-              items: {
-                create: [{
-                  description: serviceType === 'BOARDING' ? 'Pension' : 'Taxi animalier',
-                  quantity: 1,
-                  unitPrice: totalPrice,
-                  total: totalPrice,
-                  category: serviceType === 'BOARDING' ? 'BOARDING' : 'PET_TAXI',
-                }],
-              },
+              items: { create: invoiceItems },
             },
           });
         }

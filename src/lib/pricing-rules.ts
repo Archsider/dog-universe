@@ -3,6 +3,10 @@
 // resulting `PricingSettings` (or relies on `PRICING_DEFAULTS`) into these
 // functions. The boarding rate rules live here so the admin booking form can
 // suggest a price client-side without bundling prisma.
+//
+// Description format (since 2026-05-04):
+//   Boarding: "Pension Max (chien) — 9 nuits × 120 MAD/nuit"
+//   Taxi:     "Pet Taxi aller — Course standard (1 trajet × 150 MAD)"
 
 export interface PricingSettings {
   boarding_dog_per_night: number;

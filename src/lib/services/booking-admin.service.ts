@@ -15,6 +15,7 @@
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { BookingError } from './booking-errors';
+import { taxiDescription } from '@/lib/invoice-descriptions';
 
 // ────────────────────────────────────────────────────────────────────────────
 // patchBoardingDetail
@@ -181,7 +182,8 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
         } else {
           await tx.invoiceItem.create({
             data: {
-              invoiceId, description: 'Pet Taxi — Aller',
+              invoiceId,
+              description: taxiDescription('one-way', null, 1, taxiUnitPrice, 'fr'),
               quantity: 1, unitPrice: taxiUnitPrice, total: taxiUnitPrice,
               category: 'PET_TAXI',
             },
@@ -201,7 +203,8 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
         } else {
           await tx.invoiceItem.create({
             data: {
-              invoiceId, description: 'Pet Taxi — Retour',
+              invoiceId,
+              description: taxiDescription('return', null, 1, taxiUnitPrice, 'fr'),
               quantity: 1, unitPrice: taxiUnitPrice, total: taxiUnitPrice,
               category: 'PET_TAXI',
             },
