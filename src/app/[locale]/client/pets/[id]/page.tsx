@@ -268,7 +268,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
                     )}
                     {pet.antiparasiticProduct && (
                       <div className="border-b border-gray-50 pb-3">
-                        <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{fr ? 'Produit' : 'Product'}</p>
+                        <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{t3('Produit', 'المنتج', 'Product')}</p>
                         <p className="font-medium text-charcoal">{pet.antiparasiticProduct}</p>
                       </div>
                     )}
@@ -287,25 +287,25 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
             {(pet.behaviorWithDogs || pet.behaviorWithCats || pet.behaviorWithHumans) && (
               <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
                 <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide mb-4">
-                  {fr ? 'Comportement' : 'Behavior'}
+                  {t3('Comportement', 'السلوك', 'Behavior')}
                 </h3>
                 <div className="grid sm:grid-cols-3 gap-5">
                   {pet.behaviorWithDogs && (
                     <Field
-                      label={fr ? 'Avec les chiens' : 'With dogs'}
-                      value={BEHAVIOR_LABELS[pet.behaviorWithDogs]?.[locale] ?? pet.behaviorWithDogs}
+                      label={t3('Avec les chiens', 'مع الكلاب', 'With dogs')}
+                      value={BEHAVIOR_LABELS[pet.behaviorWithDogs]?.[(fr ? 'fr' : 'en')] ?? pet.behaviorWithDogs}
                     />
                   )}
                   {pet.behaviorWithCats && (
                     <Field
-                      label={fr ? 'Avec les chats' : 'With cats'}
-                      value={BEHAVIOR_LABELS[pet.behaviorWithCats]?.[locale] ?? pet.behaviorWithCats}
+                      label={t3('Avec les chats', 'مع القطط', 'With cats')}
+                      value={BEHAVIOR_LABELS[pet.behaviorWithCats]?.[(fr ? 'fr' : 'en')] ?? pet.behaviorWithCats}
                     />
                   )}
                   {pet.behaviorWithHumans && (
                     <Field
-                      label={fr ? 'Avec les humains' : 'With humans'}
-                      value={BEHAVIOR_LABELS[pet.behaviorWithHumans]?.[locale] ?? pet.behaviorWithHumans}
+                      label={t3('Avec les humains', 'مع البشر', 'With humans')}
+                      value={BEHAVIOR_LABELS[pet.behaviorWithHumans]?.[(fr ? 'fr' : 'en')] ?? pet.behaviorWithHumans}
                     />
                   )}
                 </div>
@@ -316,7 +316,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
             {pet.notes && (
               <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
                 <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide mb-3">
-                  {fr ? 'Notes spéciales' : 'Special notes'}
+                  {t3('Notes spéciales', 'ملاحظات خاصة', 'Special notes')}
                 </h3>
                 <p className="text-charcoal whitespace-pre-wrap">{pet.notes}</p>
               </div>
