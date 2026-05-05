@@ -294,7 +294,7 @@ export default async function AdminBillingPage(props: PageProps) {
     { value: 'CANCELLED',      label: isFr ? 'Annulées' : 'Cancelled' },
   ];
 
-  const totalPaidByMethod = paymentMethodStats.reduce((s, r) => s + (r._sum.amount ?? 0), 0) || 1;
+  const totalPaidByMethod = paymentMethodStats.reduce((s, r) => s + toNumber(r._sum.amount ?? 0), 0) || 1;
 
   const totalPages = Math.ceil(invoiceCount / limit);
 

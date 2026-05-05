@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { decodeCursor, encodeCursor, parseLimit } from '@/lib/pagination';
+import { toNumber } from '@/lib/decimal';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -81,7 +82,7 @@ export async function GET(request: Request) {
     : [];
   const revenueByClient = new Map<string, number>();
   for (const row of revenueRows) {
-    revenueByClient.set(row.clientId, row._sum.amount ?? 0);
+    revenueByClient.set(row.clientId, toNumber(row._sum.amount ?? 0));
   }
 
   const data = page.map((client) => {
