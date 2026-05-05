@@ -18,8 +18,8 @@ export default async function AdminNotificationsPage({ params }: Props) {
     take: 100,
     select: {
       id: true,
-      titleFr: true, titleEn: true,
-      messageFr: true, messageEn: true,
+      titleFr: true, titleEn: true, titleAr: true,
+      messageFr: true, messageEn: true, messageAr: true,
       type: true,
       metadata: true,
       read: true,

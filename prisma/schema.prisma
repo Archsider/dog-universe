@@ -406,8 +406,10 @@ model Notification {
   type      String   // "BOOKING_CONFIRMATION" | "BOOKING_VALIDATION" | "BOOKING_REFUSAL" | "STAY_REMINDER" | "INVOICE_AVAILABLE" | "ADMIN_MESSAGE" | "STAY_PHOTO" | "STAY_PHOTO_ADDED" | "LOYALTY_UPDATE" | "WEEKLY_PET_REPORT"
   titleFr   String
   titleEn   String
+  titleAr   String?  // nullable: legacy rows pre-2026-05-05 have no AR translation (fallback to EN at render time)
   messageFr String
   messageEn String
+  messageAr String?  // nullable: same as titleAr
   metadata  String?  // JSON string e.g. {"bookingId":"..."}
   read      Boolean  @default(false)
   createdAt DateTime @default(now())

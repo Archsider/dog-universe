@@ -14,8 +14,10 @@ export interface NotificationItem {
   id: string;
   titleFr: string;
   titleEn: string;
+  titleAr: string | null;
   messageFr: string;
   messageEn: string;
+  messageAr: string | null;
   type: string;
   metadata: string | null;
   read: boolean;
@@ -72,8 +74,9 @@ export default function AdminNotificationsClient({ initialNotifications, locale 
     setMarkingAll(false);
   };
 
-  const getTitle = (n: NotificationItem) => isFr ? n.titleFr : n.titleEn;
-  const getMessage = (n: NotificationItem) => isFr ? n.messageFr : n.messageEn;
+  const isAr = locale === 'ar';
+  const getTitle = (n: NotificationItem) => isAr ? (n.titleAr ?? n.titleEn) : isFr ? n.titleFr : n.titleEn;
+  const getMessage = (n: NotificationItem) => isAr ? (n.messageAr ?? n.messageEn) : isFr ? n.messageFr : n.messageEn;
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (

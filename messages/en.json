@@ -363,7 +363,8 @@
     "language": "Language",
     "languageOptions": {
       "fr": "Français",
-      "en": "English"
+      "en": "English",
+      "ar": "العربية"
     },
     "saved": "Profile updated successfully"
   },
