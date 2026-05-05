@@ -83,16 +83,18 @@ const GRADE_STYLES: Record<Grade, {
 };
 
 const GRADE_LABEL: Record<Grade, Record<string, string>> = {
-  BRONZE: { fr: 'Bronze', en: 'Bronze' },
-  SILVER: { fr: 'Argent', en: 'Silver' },
-  GOLD:   { fr: 'Or', en: 'Gold' },
-  PLATINUM: { fr: 'Platine', en: 'Platinum' },
+  BRONZE: { fr: 'Bronze', en: 'Bronze', ar: 'برونزي' },
+  SILVER: { fr: 'Argent', en: 'Silver', ar: 'فضي' },
+  GOLD:   { fr: 'Or', en: 'Gold', ar: 'ذهبي' },
+  PLATINUM: { fr: 'Platine', en: 'Platinum', ar: 'بلاتيني' },
 };
 
 export function MemberCard({
   clientId, clientName, pets, grade, totalStays, totalSpentMAD, locale, claims,
 }: MemberCardProps) {
   const fr = locale === 'fr';
+  const ar = locale === 'ar';
+  const t3 = (frStr: string, arStr: string, enStr: string) => fr ? frStr : ar ? arStr : enStr;
   const style = GRADE_STYLES[grade];
   const Icon = style.icon;
   const nextInfo = getNextGradeInfo(totalStays, grade);
@@ -106,10 +108,10 @@ export function MemberCard({
     const cats = pets.filter((p) => p.species === 'CAT');
     const parts: string[] = [];
     if (dogs.length > 0) {
-      parts.push(`${dogs.map((d) => d.name).join(' · ')} (${dogs.length > 1 ? (fr ? `${dogs.length} chiens` : `${dogs.length} dogs`) : (fr ? 'chien' : 'dog')})`);
+      parts.push(`${dogs.map((d) => d.name).join(' · ')} (${dogs.length > 1 ? t3(`${dogs.length} chiens`, `${dogs.length} كلاب`, `${dogs.length} dogs`) : t3('chien', 'كلب', 'dog')})`);
     }
     if (cats.length > 0) {
-      parts.push(`${cats.map((c) => c.name).join(' · ')} (${cats.length > 1 ? (fr ? `${cats.length} chats` : `${cats.length} cats`) : (fr ? 'chat' : 'cat')})`);
+      parts.push(`${cats.map((c) => c.name).join(' · ')} (${cats.length > 1 ? t3(`${cats.length} chats`, `${cats.length} قطط`, `${cats.length} cats`) : t3('chat', 'قطة', 'cat')})`);
     }
     return parts.join(' — ');
   })();
@@ -145,7 +147,7 @@ export function MemberCard({
             </p>
             <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${style.badgeBg} ${style.badgeText} shadow-sm`}>
               <Icon className="h-3 w-3" />
-              {GRADE_LABEL[grade][locale]}
+              {GRADE_LABEL[grade][locale] ?? GRADE_LABEL[grade]['en']}
             </div>
           </div>
 
@@ -158,7 +160,7 @@ export function MemberCard({
         {/* Client name + pets */}
         <div className="mb-5">
           <p className={`text-[10px] uppercase tracking-widest mb-0.5 font-semibold ${isPlatinum ? 'text-[#D4AF37]/70' : style.textColor + '/40'}`}>
-            {fr ? 'Membre' : 'Member'}
+            {t3('Membre', 'عضو', 'Member')}
           </p>
           <h2 className={`text-2xl font-serif font-bold ${style.titleColor}`}>{clientName}</h2>
           {petLine && (
@@ -173,13 +175,13 @@ export function MemberCard({
           <div>
             <p className={`text-3xl font-serif font-bold ${style.titleColor}`}>{totalStays}</p>
             <p className={`text-[11px] mt-0.5 uppercase tracking-wide ${isPlatinum ? 'text-[#E8E0CC]/60' : style.textColor + '/40'}`}>
-              {fr ? 'séjours' : 'stays'}
+              {t3('séjours', 'إقامات', 'stays')}
             </p>
           </div>
           <div>
             <p className={`text-3xl font-serif font-bold ${style.titleColor}`}>{formatMAD(totalSpentMAD)}</p>
             <p className={`text-[11px] mt-0.5 uppercase tracking-wide ${isPlatinum ? 'text-[#E8E0CC]/60' : style.textColor + '/40'}`}>
-              {fr ? 'dépensés' : 'spent'}
+              {t3('dépensés', 'مُنفَق', 'spent')}
             </p>
           </div>
         </div>
@@ -196,12 +198,14 @@ export function MemberCard({
             <p className={`text-[11px] mt-1.5 ${isPlatinum ? 'text-[#E8E0CC]/60' : style.textColor + '/40'}`}>
               {fr
                 ? `${nextInfo.staysToNext} séjour${nextInfo.staysToNext > 1 ? 's' : ''} pour atteindre ${getGradeLabel(nextInfo.nextGrade, 'fr')}`
+                : ar
+                ? `${nextInfo.staysToNext} إقامة للوصول إلى ${getGradeLabel(nextInfo.nextGrade, 'en')}`
                 : `${nextInfo.staysToNext} stay${nextInfo.staysToNext > 1 ? 's' : ''} to reach ${getGradeLabel(nextInfo.nextGrade, 'en')}`}
             </p>
           </div>
         ) : (
           <p className={`text-xs mt-4 font-semibold uppercase tracking-wide ${style.titleColor}`}>
-            {fr ? '✦ Niveau maximum atteint' : '✦ Maximum level reached'}
+            {t3('✦ Niveau maximum atteint', '✦ تم الوصول إلى أعلى مستوى', '✦ Maximum level reached')}
           </p>
         )}
 
@@ -212,13 +216,13 @@ export function MemberCard({
             {automaticBenefits.length > 0 && (
               <div>
                 <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isPlatinum ? 'text-[#D4AF37]/70' : style.textColor + '/40'}`}>
-                  {fr ? 'Avantages automatiques' : 'Automatic perks'}
+                  {t3('Avantages automatiques', 'المزايا التلقائية', 'Automatic perks')}
                 </p>
                 <ul className="space-y-1.5">
                   {automaticBenefits.map((b) => (
                     <li key={b.key} className={`flex items-center gap-2 text-xs ${isPlatinum ? 'text-[#E8E0CC]/70' : style.textColor + '/70'}`}>
                       <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 bg-gradient-to-r ${style.progressFill}`} />
-                      {fr ? b.labelFr : b.labelEn}
+                      {fr ? b.labelFr : ar ? b.labelFr : b.labelEn}
                     </li>
                   ))}
                 </ul>
@@ -229,7 +233,7 @@ export function MemberCard({
             {claimableBenefits.length > 0 && (
               <div>
                 <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${isPlatinum ? 'text-[#D4AF37]/70' : style.textColor + '/40'}`}>
-                  {fr ? 'Avantages à réclamer' : 'Benefits to claim'}
+                  {t3('Avantages à réclamer', 'المزايا القابلة للمطالبة', 'Benefits to claim')}
                 </p>
                 <ul className="space-y-2">
                   {claimableBenefits.map((b) => (

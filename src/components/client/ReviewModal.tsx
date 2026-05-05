@@ -37,6 +37,18 @@ const labels = {
     error: 'Something went wrong',
     ratingRequired: 'Please select a rating',
   },
+  ar: {
+    title: 'تقييمك',
+    subtitle: 'قيّم تجربتك مع Dog Universe',
+    rating: 'التقييم',
+    comment: 'تعليق (اختياري)',
+    commentPlaceholder: 'شاركنا تجربتك...',
+    submit: 'إرسال التقييم',
+    submitting: 'جارٍ الإرسال...',
+    success: 'شكرًا على تقييمك!',
+    error: 'حدث خطأ',
+    ratingRequired: 'الرجاء اختيار تقييم',
+  },
 };
 
 export default function ReviewModal({ bookingId, locale, onClose, onSuccess }: ReviewModalProps) {
@@ -132,7 +144,7 @@ export default function ReviewModal({ bookingId, locale, onClose, onSuccess }: R
         {/* Footer */}
         <div className="flex gap-3 p-5 border-t border-ivory-100">
           <Button variant="outline" onClick={onClose} className="flex-1" disabled={submitting}>
-            {locale === 'fr' ? 'Annuler' : 'Cancel'}
+            {locale === 'fr' ? 'Annuler' : locale === 'ar' ? 'إلغاء' : 'Cancel'}
           </Button>
           <Button
             onClick={handleSubmit}

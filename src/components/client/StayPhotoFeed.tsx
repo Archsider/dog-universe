@@ -20,12 +20,15 @@ const IS_NEW_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export default function StayPhotoFeed({ photos, locale }: Props) {
   const isFr = locale === 'fr';
+  const isAr = locale === 'ar';
 
   if (photos.length === 0) {
     return (
       <p className="text-sm text-gray-400">
         {isFr
           ? 'Aucune photo partagée pour ce séjour pour l\'instant.'
+          : isAr
+          ? 'لا توجد صور مشاركة لهذه الإقامة حتى الآن.'
           : 'No photos shared for this stay yet.'}
       </p>
     );
@@ -58,18 +61,18 @@ export default function StayPhotoFeed({ photos, locale }: Props) {
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-gold-700 leading-tight">
-                      {isFr ? 'Partagé par l\'équipe Dog Universe 🐾' : 'Shared by the Dog Universe team 🐾'}
+                      {isFr ? 'Partagé par l\'équipe Dog Universe 🐾' : isAr ? 'شاركه فريق Dog Universe 🐾' : 'Shared by the Dog Universe team 🐾'}
                     </p>
                     <p className="text-xs text-gray-400 leading-tight">
                       {formatDate(uploadedAt, locale)}{' '}
-                      {uploadedAt.toLocaleTimeString(isFr ? 'fr-MA' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}
+                      {uploadedAt.toLocaleTimeString(isFr ? 'fr-MA' : isAr ? 'ar-MA' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {isNew && (
                     <span className="text-xs font-bold bg-amber-400 text-white rounded-full px-2 py-0.5 leading-tight">
-                      {isFr ? 'Nouveau' : 'New'}
+                      {isFr ? 'Nouveau' : isAr ? 'جديد' : 'New'}
                     </span>
                   )}
                   <a
@@ -77,7 +80,7 @@ export default function StayPhotoFeed({ photos, locale }: Props) {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 text-xs text-gold-600 hover:text-gold-800 transition-colors"
-                    aria-label={isFr ? 'Télécharger' : 'Download'}
+                    aria-label={isFr ? 'Télécharger' : isAr ? 'تحميل' : 'Download'}
                   >
                     <Download className="h-3.5 w-3.5" />
                   </a>
@@ -88,7 +91,7 @@ export default function StayPhotoFeed({ photos, locale }: Props) {
               <div className="relative w-full bg-gray-50" style={{ aspectRatio: '4/3' }}>
                 <Image
                   src={photo.url}
-                  alt={photo.caption || (isFr ? 'Photo de séjour' : 'Stay photo')}
+                  alt={photo.caption || (isFr ? 'Photo de séjour' : isAr ? 'صورة الإقامة' : 'Stay photo')}
                   fill
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, 640px"

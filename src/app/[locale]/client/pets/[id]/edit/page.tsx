@@ -219,7 +219,7 @@ export default function EditPetPage() {
             </h3>
 
             <div>
-              <Label htmlFor="name">{fr ? 'Nom' : 'Name'} *</Label>
+              <Label htmlFor="name">{t3('Nom', 'الاسم', 'Name')} *</Label>
               <Input id="name" value={form.name} onChange={set('name')} required className="mt-1" />
             </div>
 
@@ -338,7 +338,7 @@ export default function EditPetPage() {
                 <Label>{label}</Label>
                 <Select value={form[field]} onValueChange={setSel(field)}>
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
+                    <SelectValue placeholder={t3('Choisir', 'اختر', 'Choose')} />
                   </SelectTrigger>
                   <SelectContent>
                     {BEHAVIOR_OPTIONS.map(o => (
@@ -379,34 +379,34 @@ export default function EditPetPage() {
             </div>
             {form.antiparasiticProductKey === 'OTHER' && (
               <div>
-                <Label htmlFor="antiCustom">{fr ? 'Nom du produit' : 'Product name'}</Label>
-                <Input id="antiCustom" value={form.antiparasiticCustomProduct} onChange={set('antiparasiticCustomProduct')} className="mt-1" placeholder={fr ? 'Ex: Seresto, Advantix...' : 'Ex: Seresto, Advantix...'} />
+                <Label htmlFor="antiCustom">{t3('Nom du produit', 'اسم المنتج', 'Product name')}</Label>
+                <Input id="antiCustom" value={form.antiparasiticCustomProduct} onChange={set('antiparasiticCustomProduct')} className="mt-1" placeholder="Ex: Seresto, Advantix..." />
               </div>
             )}
             <div>
-              <Label htmlFor="antiNotes">{fr ? 'Notes (optionnel)' : 'Notes (optional)'}</Label>
-              <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" placeholder={fr ? 'Ex: traitement mensuel, réaction passée...' : 'Ex: monthly treatment, past reaction...'} rows={2} />
+              <Label htmlFor="antiNotes">{t3('Notes (optionnel)', 'ملاحظات (اختياري)', 'Notes (optional)')}</Label>
+              <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" placeholder={t3('Ex: traitement mensuel, réaction passée...', 'مثال: علاج شهري، تفاعل سابق...', 'Ex: monthly treatment, past reaction...')} rows={2} />
             </div>
           </section>
 
           {/* Notes */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Notes spéciales' : 'Special notes'}
+              {t3('Notes spéciales', 'ملاحظات خاصة', 'Special notes')}
             </h3>
             <div>
-              <Label htmlFor="notes">{fr ? 'Instructions particulières' : 'Special instructions'}</Label>
-              <Textarea id="notes" value={form.notes} onChange={set('notes')} className="mt-1" placeholder={fr ? 'Régime alimentaire, habitudes, instructions spécifiques...' : 'Diet, habits, specific instructions...'} rows={3} />
+              <Label htmlFor="notes">{t3('Instructions particulières', 'تعليمات خاصة', 'Special instructions')}</Label>
+              <Textarea id="notes" value={form.notes} onChange={set('notes')} className="mt-1" placeholder={t3('Régime alimentaire, habitudes, instructions spécifiques...', 'النظام الغذائي، العادات، التعليمات المحددة...', 'Diet, habits, specific instructions...')} rows={3} />
             </div>
           </section>
 
           <div className="flex gap-3 pt-2">
             <Link href={`/${locale}/client/pets/${petId}`} className="flex-1">
-              <Button type="button" variant="outline" className="w-full">{fr ? 'Annuler' : 'Cancel'}</Button>
+              <Button type="button" variant="outline" className="w-full">{t3('Annuler', 'إلغاء', 'Cancel')}</Button>
             </Link>
             <Button type="submit" className="flex-1" disabled={loading}>
               {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {loading ? (fr ? 'Enregistrement...' : 'Saving...') : (fr ? 'Enregistrer' : 'Save')}
+              {loading ? t3('Enregistrement...', 'جارٍ الحفظ...', 'Saving...') : t3('Enregistrer', 'حفظ', 'Save')}
             </Button>
           </div>
         </form>

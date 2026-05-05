@@ -13,8 +13,8 @@ export default function ReviewButton({ bookingId, locale }: ReviewButtonProps) {
   const [open, setOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const label = locale === 'fr' ? 'Donnez votre avis' : 'Leave a review';
-  const doneLabel = locale === 'fr' ? 'Avis envoyé' : 'Review sent';
+  const label = locale === 'fr' ? 'Donnez votre avis' : locale === 'ar' ? 'أعطِ رأيك' : 'Leave a review';
+  const doneLabel = locale === 'fr' ? 'Avis envoyé' : locale === 'ar' ? 'تم إرسال التقييم' : 'Review sent';
 
   if (submitted) {
     return (

@@ -23,12 +23,12 @@ export function RebookButton({ booking, locale, label }: Props) {
 
   const serviceLabel =
     booking.serviceType === 'BOARDING'
-      ? locale === 'fr' ? 'Pension' : 'Boarding'
-      : locale === 'fr' ? 'Taxi animalier' : 'Pet Taxi';
+      ? locale === 'fr' ? 'Pension' : locale === 'ar' ? 'نزالة' : 'Boarding'
+      : locale === 'fr' ? 'Taxi animalier' : locale === 'ar' ? 'سيارة أجرة للحيوانات' : 'Pet Taxi';
 
   const href = `/${locale}/client/bookings/new?petIds=${encodeURIComponent(petIds)}&serviceType=${booking.serviceType}&prefill=1`;
 
-  const defaultLabel = locale === 'fr' ? '🔄 Réserver à nouveau' : '🔄 Book again';
+  const defaultLabel = locale === 'fr' ? '🔄 Réserver à nouveau' : locale === 'ar' ? '🔄 احجز مجددًا' : '🔄 Book again';
 
   return (
     <div className="space-y-2">

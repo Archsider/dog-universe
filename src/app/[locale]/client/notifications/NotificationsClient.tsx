@@ -84,6 +84,13 @@ const LABELS = {
     viewBooking: 'View booking',
     viewPhotos: 'View photos',
   },
+  ar: {
+    title: 'الإشعارات',
+    empty: 'لا توجد إشعارات',
+    markAllRead: 'تعليم الكل كمقروء',
+    viewBooking: 'عرض الحجز',
+    viewPhotos: 'عرض الصور',
+  },
 };
 
 export default function NotificationsClient({ initialNotifications, locale }: Props) {
@@ -105,8 +112,8 @@ export default function NotificationsClient({ initialNotifications, locale }: Pr
     setMarkingAll(false);
   };
 
-  const getTitle = (n: NotificationData) => locale === 'en' ? n.titleEn : n.titleFr;
-  const getMessage = (n: NotificationData) => locale === 'en' ? n.messageEn : n.messageFr;
+  const getTitle = (n: NotificationData) => locale === 'ar' ? (n.titleFr ?? n.titleEn) : locale === 'en' ? n.titleEn : n.titleFr;
+  const getMessage = (n: NotificationData) => locale === 'ar' ? (n.messageFr ?? n.messageEn) : locale === 'en' ? n.messageEn : n.messageFr;
 
   return (
     <div className="max-w-2xl mx-auto">
