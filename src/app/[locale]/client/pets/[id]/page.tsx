@@ -360,7 +360,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
                       </span>
                       {booking.boardingDetail?.includeGrooming && (
                         <span className="ml-2 text-xs bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5">
-                          {fr ? '+ Toilettage' : '+ Grooming'}
+                          {t3('+ Toilettage', '+ تزيين', '+ Grooming')}
                         </span>
                       )}
                       <span className="text-charcoal/40 text-sm ml-2">
@@ -378,7 +378,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-charcoal/40">
-                      {booking.invoice ? `${fr ? 'Facture' : 'Invoice'}: ${booking.invoice.invoiceNumber}` : ''}
+                      {booking.invoice ? `${t3('Facture', 'فاتورة', 'Invoice')}: ${booking.invoice.invoiceNumber}` : ''}
                     </span>
                     <span className="font-semibold text-gold-700 text-sm">{formatMAD(booking.totalPrice)}</span>
                   </div>

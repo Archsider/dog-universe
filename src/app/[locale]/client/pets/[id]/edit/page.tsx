@@ -59,6 +59,8 @@ export default function EditPetPage() {
   const params = useParams();
   const petId = params.id as string;
   const fr = locale === 'fr';
+  const ar = locale === 'ar';
+  const t3 = (frStr: string, arStr: string, enStr: string) => fr ? frStr : ar ? arStr : enStr;
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>(null);
@@ -118,11 +120,11 @@ export default function EditPetPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.species || !form.dateOfBirth) {
-      toast({ title: fr ? 'Nom, espèce et date de naissance sont obligatoires' : 'Name, species and date of birth are required', variant: 'destructive' });
+      toast({ title: t3('Nom, espèce et date de naissance sont obligatoires', 'الاسم والنوع وتاريخ الميلاد مطلوبة', 'Name, species and date of birth are required'), variant: 'destructive' });
       return;
     }
     if (!form.lastAntiparasiticDate) {
-      toast({ title: fr ? 'La date du dernier traitement antiparasitaire est obligatoire' : 'Last anti-parasitic treatment date is required', variant: 'destructive' });
+      toast({ title: t3('La date du dernier traitement antiparasitaire est obligatoire', 'تاريخ آخر علاج مضاد للطفيليات مطلوب', 'Last anti-parasitic treatment date is required'), variant: 'destructive' });
       return;
     }
     setLoading(true);
@@ -157,13 +159,13 @@ export default function EditPetPage() {
       });
 
       if (res.ok) {
-        toast({ title: fr ? 'Animal modifié !' : 'Pet updated!', variant: 'success' });
+        toast({ title: t3('Animal modifié !', 'تم تعديل الحيوان!', 'Pet updated!'), variant: 'success' });
         router.push(`/${locale}/client/pets/${petId}`);
       } else {
         throw new Error('Failed');
       }
     } catch {
-      toast({ title: fr ? 'Erreur' : 'Error', variant: 'destructive' });
+      toast({ title: t3('Erreur', 'حدث خطأ', 'Error'), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -184,7 +186,7 @@ export default function EditPetPage() {
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <h1 className="text-2xl font-serif font-bold text-charcoal">
-          {fr ? "Modifier l'animal" : 'Edit pet'}
+          {t3("Modifier l'animal", 'تعديل الحيوان', 'Edit pet')}
         </h1>
       </div>
 
@@ -204,7 +206,7 @@ export default function EditPetPage() {
               </div>
               <label className="cursor-pointer flex items-center gap-2 text-sm text-gold-600 hover:text-gold-700 border border-gold-300 rounded-md px-3 py-2 transition-colors">
                 <Upload className="h-4 w-4" />
-                {fr ? 'Changer la photo' : 'Change photo'}
+                {t3('Changer la photo', 'تغيير الصورة', 'Change photo')}
                 <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
               </label>
             </div>
@@ -213,7 +215,7 @@ export default function EditPetPage() {
           {/* Identité */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Identité' : 'Identity'}
+              {t3('Identité', 'الهوية', 'Identity')}
             </h3>
 
             <div>
@@ -223,26 +225,26 @@ export default function EditPetPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>{fr ? 'Espèce' : 'Species'} *</Label>
+                <Label>{t3('Espèce', 'النوع', 'Species')} *</Label>
                 <Select value={form.species} onValueChange={setSel('species')}>
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
+                    <SelectValue placeholder={t3('Choisir', 'اختر', 'Choose')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="DOG">{fr ? 'Chien' : 'Dog'}</SelectItem>
-                    <SelectItem value="CAT">{fr ? 'Chat' : 'Cat'}</SelectItem>
+                    <SelectItem value="DOG">{t3('Chien', 'كلب', 'Dog')}</SelectItem>
+                    <SelectItem value="CAT">{t3('Chat', 'قطة', 'Cat')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>{fr ? 'Sexe' : 'Gender'}</Label>
+                <Label>{t3('Sexe', 'الجنس', 'Gender')}</Label>
                 <Select value={form.gender} onValueChange={setSel('gender')}>
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={fr ? 'Sexe' : 'Gender'} />
+                    <SelectValue placeholder={t3('Sexe', 'الجنس', 'Gender')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MALE">{fr ? 'Mâle' : 'Male'}</SelectItem>
-                    <SelectItem value="FEMALE">{fr ? 'Femelle' : 'Female'}</SelectItem>
+                    <SelectItem value="MALE">{t3('Mâle', 'ذكر', 'Male')}</SelectItem>
+                    <SelectItem value="FEMALE">{t3('Femelle', 'أنثى', 'Female')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -250,29 +252,29 @@ export default function EditPetPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="breed">{fr ? 'Race' : 'Breed'}</Label>
-                <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder={fr ? 'Golden Retriever...' : 'Golden Retriever...'} />
+                <Label htmlFor="breed">{t3('Race', 'السلالة', 'Breed')}</Label>
+                <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder="Golden Retriever..." />
               </div>
               <div>
-                <Label htmlFor="dob">{fr ? 'Date de naissance' : 'Date of birth'} *</Label>
+                <Label htmlFor="dob">{t3('Date de naissance', 'تاريخ الميلاد', 'Date of birth')} *</Label>
                 <Input id="dob" type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} required className="mt-1" max={new Date().toISOString().split('T')[0]} />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="weight">{fr ? 'Poids (kg)' : 'Weight (kg)'}</Label>
+                <Label htmlFor="weight">{t3('Poids (kg)', 'الوزن (كغ)', 'Weight (kg)')}</Label>
                 <Input id="weight" type="number" min="0" step="0.1" value={form.weight} onChange={set('weight')} className="mt-1" placeholder="4.5" />
               </div>
               <div>
-                <Label>{fr ? 'Statut reproductif' : 'Reproductive status'}</Label>
+                <Label>{t3('Statut reproductif', 'الحالة التناسلية', 'Reproductive status')}</Label>
                 <Select value={form.isNeutered} onValueChange={setSel('isNeutered')}>
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
+                    <SelectValue placeholder={t3('Choisir', 'اختر', 'Choose')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="true">{fr ? 'Stérilisé(e) / Castré(e)' : 'Neutered / Spayed'}</SelectItem>
-                    <SelectItem value="false">{fr ? 'Non stérilisé(e)' : 'Not neutered'}</SelectItem>
+                    <SelectItem value="true">{t3('Stérilisé(e) / Castré(e)', 'مُعقَّم / مُخصِيّ', 'Neutered / Spayed')}</SelectItem>
+                    <SelectItem value="false">{t3('Non stérilisé(e)', 'غير مُعقَّم', 'Not neutered')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -280,11 +282,11 @@ export default function EditPetPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="microchip">{fr ? 'N° de puce électronique' : 'Microchip number'}</Label>
+                <Label htmlFor="microchip">{t3('N° de puce électronique', 'رقم الشريحة الإلكترونية', 'Microchip number')}</Label>
                 <Input id="microchip" value={form.microchipNumber} onChange={set('microchipNumber')} className="mt-1" placeholder="250268500000000" />
               </div>
               <div>
-                <Label htmlFor="tattoo">{fr ? 'N° de tatouage' : 'Tattoo number'}</Label>
+                <Label htmlFor="tattoo">{t3('N° de tatouage', 'رقم الوشم', 'Tattoo number')}</Label>
                 <Input id="tattoo" value={form.tattooNumber} onChange={set('tattooNumber')} className="mt-1" placeholder="ABC123" />
               </div>
             </div>
@@ -293,15 +295,15 @@ export default function EditPetPage() {
           {/* Vétérinaire */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Vétérinaire' : 'Veterinarian'}
+              {t3('Vétérinaire', 'الطبيب البيطري', 'Veterinarian')}
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="vetName">{fr ? 'Nom du vétérinaire' : 'Vet name'}</Label>
+                <Label htmlFor="vetName">{t3('Nom du vétérinaire', 'اسم الطبيب البيطري', 'Vet name')}</Label>
                 <Input id="vetName" value={form.vetName} onChange={set('vetName')} className="mt-1" placeholder="Dr. Martin" />
               </div>
               <div>
-                <Label htmlFor="vetPhone">{fr ? 'Téléphone vétérinaire' : 'Vet phone'}</Label>
+                <Label htmlFor="vetPhone">{t3('Téléphone vétérinaire', 'هاتف الطبيب البيطري', 'Vet phone')}</Label>
                 <Input id="vetPhone" value={form.vetPhone} onChange={set('vetPhone')} className="mt-1" placeholder="+212 6 00 00 00 00" />
               </div>
             </div>
