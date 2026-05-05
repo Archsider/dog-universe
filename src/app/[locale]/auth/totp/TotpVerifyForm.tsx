@@ -37,7 +37,13 @@ export function TotpVerifyForm() {
       await update();
       // P0: validate callbackUrl to prevent open redirect to external domains
       const rawCallbackUrl = searchParams.get('callbackUrl') ?? '';
-      const callbackUrl = /^\/(fr|en)\//.test(rawCallbackUrl) ? rawCallbackUrl : '/fr/admin';
+      // Locale-aware: support fr/en/ar prefixes. Default falls back to the
+      // user's locale if we can detect it from the current path.
+      const isSafeCallback = /^\/(fr|en|ar)\//.test(rawCallbackUrl);
+      const localeFromPath = (typeof window !== 'undefined'
+        ? window.location.pathname.match(/^\/(fr|en|ar)\//)?.[1]
+        : null) ?? 'fr';
+      const callbackUrl = isSafeCallback ? rawCallbackUrl : `/${localeFromPath}/admin`;
       router.push(callbackUrl);
       router.refresh();
     } catch {

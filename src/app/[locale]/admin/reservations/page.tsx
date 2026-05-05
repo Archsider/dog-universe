@@ -26,9 +26,26 @@ export default async function AdminReservationsPage(props: PageProps) {
   const limit = 20;
   const skip = (page - 1) * limit;
 
+  // "En cours" : soit status=IN_PROGRESS, soit CONFIRMED dont la fenêtre couvre maintenant.
+  // TODO: also include { isOpenEnded: true } once Agent 1 lands so a confirmed
+  // open-ended booking (no endDate) still shows up here.
+  const now = new Date();
+  const inProgressFilter = status === 'IN_PROGRESS'
+    ? {
+        OR: [
+          { status: 'IN_PROGRESS' },
+          {
+            status: 'CONFIRMED',
+            startDate: { lte: now },
+            endDate: { gte: now },
+          },
+        ],
+      }
+    : null;
+
   const where: Record<string, unknown> = {
     deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
-    ...(status && { status }),
+    ...(inProgressFilter ?? (status && { status })),
     ...(type && { serviceType: type }),
     ...(noInvoice && {
       invoice: null,
@@ -37,8 +54,8 @@ export default async function AdminReservationsPage(props: PageProps) {
   };
 
   const labels = {
-    fr: { title: 'Réservations', all: 'Toutes', pending: 'En attente', confirmed: 'Confirmées', completed: 'Terminées', cancelled: 'Annulées', pendingExtension: 'Extensions', allTypes: 'Tous', boarding: 'Pension', taxi: 'Taxi', client: 'Client', animals: 'Animaux', dates: 'Date', total: 'Total', noBookings: 'Aucune réservation', list: 'Liste', board: 'Board', create: 'Créer une réservation' },
-    en: { title: 'Bookings', all: 'All', pending: 'Pending', confirmed: 'Confirmed', completed: 'Completed', cancelled: 'Cancelled', pendingExtension: 'Extensions', allTypes: 'All', boarding: 'Boarding', taxi: 'Taxi', client: 'Client', animals: 'Pets', dates: 'Date', total: 'Total', noBookings: 'No bookings', list: 'List', board: 'Board', create: 'New booking' },
+    fr: { title: 'Réservations', all: 'Toutes', pending: 'En attente', confirmed: 'Confirmées', inProgress: 'En cours', completed: 'Terminées', cancelled: 'Annulées', pendingExtension: 'Extensions', allTypes: 'Tous', boarding: 'Pension', taxi: 'Taxi', client: 'Client', animals: 'Animaux', dates: 'Date', total: 'Total', noBookings: 'Aucune réservation', list: 'Liste', board: 'Board', create: 'Créer une réservation' },
+    en: { title: 'Bookings', all: 'All', pending: 'Pending', confirmed: 'Confirmed', inProgress: 'In progress', completed: 'Completed', cancelled: 'Cancelled', pendingExtension: 'Extensions', allTypes: 'All', boarding: 'Boarding', taxi: 'Taxi', client: 'Client', animals: 'Pets', dates: 'Date', total: 'Total', noBookings: 'No bookings', list: 'List', board: 'Board', create: 'New booking' },
   };
 
   const sl: Record<string, Record<string, string>> = {
@@ -49,7 +66,7 @@ export default async function AdminReservationsPage(props: PageProps) {
   const l = labels[locale as keyof typeof labels] || labels.fr;
   const statusLbls = sl[locale] || sl.fr;
 
-  const statusFilters = [['', l.all], ['PENDING', l.pending], ['CONFIRMED', l.confirmed], ['COMPLETED', l.completed], ['CANCELLED', l.cancelled], ['PENDING_EXTENSION', l.pendingExtension]];
+  const statusFilters = [['', l.all], ['PENDING', l.pending], ['CONFIRMED', l.confirmed], ['IN_PROGRESS', l.inProgress], ['COMPLETED', l.completed], ['CANCELLED', l.cancelled], ['PENDING_EXTENSION', l.pendingExtension]];
   const typeFilters = [['', l.allTypes], ['BOARDING', l.boarding], ['PET_TAXI', l.taxi]];
 
   // Kanban mode: fetch all active bookings (no pagination, no status/type filter)
