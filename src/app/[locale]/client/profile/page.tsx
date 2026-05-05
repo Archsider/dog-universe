@@ -87,6 +87,26 @@ export default function ProfilePage() {
       passwordTooShort: 'Password must be at least 8 characters',
       error: 'An error occurred',
     },
+    ar: {
+      title: 'ملفي الشخصي',
+      personalInfo: 'المعلومات الشخصية',
+      firstName: 'الاسم الأول',
+      lastName: 'اسم العائلة',
+      email: 'البريد الإلكتروني',
+      phone: 'الهاتف',
+      saveProfile: 'حفظ',
+      saving: 'جارٍ الحفظ...',
+      profileSaved: 'تم تحديث الملف الشخصي!',
+      changePassword: 'تغيير كلمة المرور',
+      oldPassword: 'كلمة المرور الحالية',
+      newPassword: 'كلمة المرور الجديدة',
+      confirmPassword: 'تأكيد كلمة المرور الجديدة',
+      savePassword: 'تحديث',
+      passwordSaved: 'تم تحديث كلمة المرور!',
+      passwordMismatch: 'كلمتا المرور غير متطابقتين',
+      passwordTooShort: 'يجب أن تحتوي كلمة المرور على 8 أحرف على الأقل',
+      error: 'حدث خطأ',
+    },
   };
 
   const l = labels[locale as keyof typeof labels] || labels.fr;
@@ -158,6 +178,8 @@ export default function ProfilePage() {
         setContractError(
           locale === 'fr'
             ? 'Document temporairement indisponible — réessayez dans quelques minutes.'
+            : locale === 'ar'
+            ? 'الوثيقة غير متاحة مؤقتًا — أعد المحاولة خلال بضع دقائق.'
             : 'Document temporarily unavailable — please retry in a few minutes.',
         );
         return;
@@ -169,6 +191,8 @@ export default function ProfilePage() {
       setContractError(
         locale === 'fr'
           ? 'Document temporairement indisponible — réessayez dans quelques minutes.'
+          : locale === 'ar'
+          ? 'الوثيقة غير متاحة مؤقتًا — أعد المحاولة خلال بضع دقائق.'
           : 'Document temporarily unavailable — please retry in a few minutes.',
       );
     } finally {
@@ -259,7 +283,7 @@ export default function ProfilePage() {
         <div className="flex items-center gap-2 mb-4">
           <FileText className="h-5 w-5 text-gold-500" />
           <h2 className="font-semibold text-charcoal">
-            {locale === 'fr' ? 'Contrat de pension' : 'Boarding contract'}
+            {locale === 'fr' ? 'Contrat de pension' : locale === 'ar' ? 'عقد الإيداع' : 'Boarding contract'}
           </h2>
         </div>
         {contract ? (
@@ -267,11 +291,11 @@ export default function ProfilePage() {
             <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
               <div>
                 <p className="text-sm font-medium text-green-800">
-                  {locale === 'fr' ? 'Contrat signé' : 'Contract signed'}
+                  {locale === 'fr' ? 'Contrat signé' : locale === 'ar' ? 'تم توقيع العقد' : 'Contract signed'}
                 </p>
                 <p className="text-xs text-green-600 mt-0.5">
-                  {locale === 'fr' ? 'Le' : 'On'}{' '}
-                  {new Date(contract.signedAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
+                  {locale === 'fr' ? 'Le' : locale === 'ar' ? 'بتاريخ' : 'On'}{' '}
+                  {new Date(contract.signedAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : locale === 'ar' ? 'ar-MA' : 'en-US', {
                     year: 'numeric', month: 'long', day: 'numeric',
                   })}
                   {' — '}v{contract.version}
@@ -291,7 +315,7 @@ export default function ProfilePage() {
                 ) : (
                   <Download className="h-4 w-4" />
                 )}
-                {locale === 'fr' ? 'Télécharger' : 'Download'}
+                {locale === 'fr' ? 'Télécharger' : locale === 'ar' ? 'تحميل' : 'Download'}
               </a>
             </div>
             {contractError && (
@@ -305,6 +329,8 @@ export default function ProfilePage() {
           <p className="text-sm text-gray-500">
             {locale === 'fr'
               ? 'Aucun contrat signé. Vous serez invité à signer à votre prochaine connexion.'
+              : locale === 'ar'
+              ? 'لم يتم توقيع أي عقد بعد. ستتم دعوتك للتوقيع في تسجيل الدخول التالي.'
               : 'No contract signed yet. You will be prompted to sign on your next login.'}
           </p>
         )}
@@ -321,12 +347,12 @@ export default function ProfilePage() {
           <div className="relative">
             <Label htmlFor="old-pw">{l.oldPassword}</Label>
             <Input id="old-pw" type={showOld ? 'text' : 'password'} value={pwForm.oldPassword} onChange={e => setPwForm(p => ({ ...p, oldPassword: e.target.value }))} className="mt-1 pr-10" required />
-            <button type="button" aria-label={showOld ? (locale === 'fr' ? 'Masquer le mot de passe' : 'Hide password') : (locale === 'fr' ? 'Afficher le mot de passe' : 'Show password')} className="absolute right-3 top-8 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-500 rounded" onClick={() => setShowOld(!showOld)}>{showOld ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+            <button type="button" aria-label={showOld ? (locale === 'fr' ? 'Masquer le mot de passe' : locale === 'ar' ? 'إخفاء كلمة المرور' : 'Hide password') : (locale === 'fr' ? 'Afficher le mot de passe' : locale === 'ar' ? 'إظهار كلمة المرور' : 'Show password')} className="absolute right-3 top-8 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-500 rounded" onClick={() => setShowOld(!showOld)}>{showOld ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
           </div>
           <div className="relative">
             <Label htmlFor="new-pw">{l.newPassword}</Label>
             <Input id="new-pw" type={showNew ? 'text' : 'password'} value={pwForm.newPassword} onChange={e => setPwForm(p => ({ ...p, newPassword: e.target.value }))} className="mt-1 pr-10" required minLength={8} />
-            <button type="button" aria-label={showNew ? (locale === 'fr' ? 'Masquer le mot de passe' : 'Hide password') : (locale === 'fr' ? 'Afficher le mot de passe' : 'Show password')} className="absolute right-3 top-8 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-500 rounded" onClick={() => setShowNew(!showNew)}>{showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+            <button type="button" aria-label={showNew ? (locale === 'fr' ? 'Masquer le mot de passe' : locale === 'ar' ? 'إخفاء كلمة المرور' : 'Hide password') : (locale === 'fr' ? 'Afficher le mot de passe' : locale === 'ar' ? 'إظهار كلمة المرور' : 'Show password')} className="absolute right-3 top-8 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-500 rounded" onClick={() => setShowNew(!showNew)}>{showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
           </div>
           <div>
             <Label htmlFor="confirm-pw">{l.confirmPassword}</Label>

@@ -38,8 +38,8 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
 
   const speciesLabel = (species: string) =>
     species === 'DOG'
-      ? locale === 'fr' ? 'Chien' : 'Dog'
-      : locale === 'fr' ? 'Chat' : 'Cat';
+      ? locale === 'fr' ? 'Chien' : locale === 'ar' ? 'كلب' : 'Dog'
+      : locale === 'fr' ? 'Chat' : locale === 'ar' ? 'قطة' : 'Cat';
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -48,7 +48,7 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
         <div>
           <h1 className="text-2xl font-serif font-bold text-charcoal">{t('title')}</h1>
           <p className="text-charcoal/50 text-sm mt-1">
-            {pets.length} {locale === 'fr' ? `animal${pets.length > 1 ? 'aux' : ''}` : `pet${pets.length !== 1 ? 's' : ''}`}
+            {pets.length} {locale === 'fr' ? `animal${pets.length > 1 ? 'aux' : ''}` : locale === 'ar' ? `حيوان${pets.length > 1 ? ' أليف' : ' أليف'}` : `pet${pets.length !== 1 ? 's' : ''}`}
           </p>
         </div>
         <Link
@@ -101,7 +101,7 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
                 {pet.dateOfBirth && (
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-charcoal/50">
-                      {locale === 'fr' ? 'Âge' : 'Age'}
+                      {locale === 'fr' ? 'Âge' : locale === 'ar' ? 'العمر' : 'Age'}
                     </span>
                     <span className="font-medium text-charcoal">{calculateAge(pet.dateOfBirth)}</span>
                   </div>
@@ -109,16 +109,16 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
                 {pet.gender && (
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-charcoal/50">
-                      {locale === 'fr' ? 'Sexe' : 'Gender'}
+                      {locale === 'fr' ? 'Sexe' : locale === 'ar' ? 'الجنس' : 'Gender'}
                     </span>
                     <span className="font-medium text-charcoal">
-                      {pet.gender === 'MALE' ? (locale === 'fr' ? 'Mâle' : 'Male') : (locale === 'fr' ? 'Femelle' : 'Female')}
+                      {pet.gender === 'MALE' ? (locale === 'fr' ? 'Mâle' : locale === 'ar' ? 'ذكر' : 'Male') : (locale === 'fr' ? 'Femelle' : locale === 'ar' ? 'أنثى' : 'Female')}
                     </span>
                   </div>
                 )}
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-charcoal/50">
-                    {locale === 'fr' ? 'Séjours' : 'Stays'}
+                    {locale === 'fr' ? 'Séjours' : locale === 'ar' ? 'الإقامات' : 'Stays'}
                   </span>
                   <span className="font-medium text-charcoal">{pet._count.bookingPets}</span>
                 </div>
@@ -128,7 +128,7 @@ export default async function PetsPage({ params }: { params: Promise<Params> }) 
               {pet.vaccinations[0] && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <p className="text-xs text-charcoal/40">
-                    {locale === 'fr' ? 'Dernier vaccin:' : 'Last vaccine:'} {pet.vaccinations[0].vaccineType}{pet.vaccinations[0].date ? ` · ${formatDateShort(pet.vaccinations[0].date, locale)}` : ''}
+                    {locale === 'fr' ? 'Dernier vaccin:' : locale === 'ar' ? 'آخر تطعيم:' : 'Last vaccine:'} {pet.vaccinations[0].vaccineType}{pet.vaccinations[0].date ? ` · ${formatDateShort(pet.vaccinations[0].date, locale)}` : ''}
                   </p>
                 </div>
               )}

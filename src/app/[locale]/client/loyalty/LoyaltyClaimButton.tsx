@@ -14,9 +14,10 @@ export default function LoyaltyClaimButton({ benefitKey, locale }: Props) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const label = locale === 'fr' ? 'Activer' : 'Activate';
-  const successMsg = locale === 'fr' ? 'Demande envoyée !' : 'Request sent!';
-  const errorMsg = locale === 'fr' ? 'Erreur, réessayez.' : 'Error, please try again.';
+  const isAr = locale === 'ar';
+  const label = locale === 'fr' ? 'Activer' : isAr ? 'تفعيل' : 'Activate';
+  const successMsg = locale === 'fr' ? 'Demande envoyée !' : isAr ? 'تم إرسال الطلب!' : 'Request sent!';
+  const errorMsg = locale === 'fr' ? 'Erreur, réessayez.' : isAr ? 'حدث خطأ، أعد المحاولة.' : 'Error, please try again.';
 
   const handleClaim = async () => {
     setLoading(true);
@@ -31,7 +32,7 @@ export default function LoyaltyClaimButton({ benefitKey, locale }: Props) {
         router.refresh();
       } else {
         const data = await res.json();
-        toast({ title: data.error === 'Already claimed' ? (locale === 'fr' ? 'Déjà réclamé' : 'Already claimed') : errorMsg, variant: 'destructive' });
+        toast({ title: data.error === 'Already claimed' ? (locale === 'fr' ? 'Déjà réclamé' : isAr ? 'تم التفعيل مسبقًا' : 'Already claimed') : errorMsg, variant: 'destructive' });
       }
     } catch {
       toast({ title: errorMsg, variant: 'destructive' });

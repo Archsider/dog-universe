@@ -38,6 +38,8 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
 
   const t = await getTranslations('pets');
   const fr = locale === 'fr';
+  const ar = locale === 'ar';
+  const t3 = (frStr: string, arStr: string, enStr: string) => fr ? frStr : ar ? arStr : enStr;
 
   const rawPet = await prisma.pet.findUnique({
     where: { id },
@@ -104,14 +106,18 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
     redirect(`/${locale}/client/pets`);
   }
 
-  const speciesLabel = pet.species === 'DOG' ? (fr ? 'Chien' : 'Dog') : (fr ? 'Chat' : 'Cat');
-  const genderLabel = pet.gender === 'MALE' ? (fr ? 'Mâle' : 'Male') : pet.gender === 'FEMALE' ? (fr ? 'Femelle' : 'Female') : null;
+  const speciesLabel = pet.species === 'DOG' ? t3('Chien', 'كلب', 'Dog') : t3('Chat', 'قطة', 'Cat');
+  const genderLabel = pet.gender === 'MALE' ? t3('Mâle', 'ذكر', 'Male') : pet.gender === 'FEMALE' ? t3('Femelle', 'أنثى', 'Female') : null;
 
   const serviceLabels: Record<string, string> = fr
     ? { BOARDING: 'Pension', PET_TAXI: 'Taxi' }
+    : ar
+    ? { BOARDING: 'نزالة', PET_TAXI: 'تاكسي' }
     : { BOARDING: 'Boarding', PET_TAXI: 'Taxi' };
   const bookingStatusLabels: Record<string, string> = fr
     ? { PENDING: 'En attente', CONFIRMED: 'Confirmée', COMPLETED: 'Terminée', CANCELLED: 'Annulée' }
+    : ar
+    ? { PENDING: 'قيد الانتظار', CONFIRMED: 'مؤكد', COMPLETED: 'منتهي', CANCELLED: 'ملغى' }
     : { PENDING: 'Pending', CONFIRMED: 'Confirmed', COMPLETED: 'Completed', CANCELLED: 'Cancelled' };
 
   // Helper to render a profile info row
@@ -164,32 +170,32 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
             {/* Identité */}
             <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
               <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide mb-4">
-                {fr ? 'Identité' : 'Identity'}
+                {t3('Identité', 'الهوية', 'Identity')}
               </h3>
               <div className="grid sm:grid-cols-2 gap-5">
-                <Field label={fr ? 'Espèce' : 'Species'} value={speciesLabel} />
-                {pet.breed && <Field label={fr ? 'Race' : 'Breed'} value={pet.breed} />}
+                <Field label={t3('Espèce', 'النوع', 'Species')} value={speciesLabel} />
+                {pet.breed && <Field label={t3('Race', 'السلالة', 'Breed')} value={pet.breed} />}
                 {pet.dateOfBirth && (
                   <Field
-                    label={fr ? 'Naissance' : 'Born'}
+                    label={t3('Naissance', 'تاريخ الميلاد', 'Born')}
                     value={`${formatDateShort(pet.dateOfBirth, locale)} (${calculateAge(pet.dateOfBirth)})`}
                   />
                 )}
-                {genderLabel && <Field label={fr ? 'Sexe' : 'Gender'} value={genderLabel} />}
+                {genderLabel && <Field label={t3('Sexe', 'الجنس', 'Gender')} value={genderLabel} />}
                 {pet.weight !== null && pet.weight !== undefined && (
-                  <Field label={fr ? 'Poids' : 'Weight'} value={`${pet.weight} kg`} />
+                  <Field label={t3('Poids', 'الوزن', 'Weight')} value={`${pet.weight} kg`} />
                 )}
                 {pet.isNeutered !== null && pet.isNeutered !== undefined && (
                   <Field
-                    label={fr ? 'Statut reproductif' : 'Reproductive status'}
+                    label={t3('Statut reproductif', 'الحالة التناسلية', 'Reproductive status')}
                     value={pet.isNeutered
-                      ? (fr ? 'Stérilisé(e) / Castré(e)' : 'Neutered / Spayed')
-                      : (fr ? 'Non stérilisé(e)' : 'Not neutered')}
+                      ? t3('Stérilisé(e) / Castré(e)', 'مُعقَّم / مُخصِيّ', 'Neutered / Spayed')
+                      : t3('Non stérilisé(e)', 'غير مُعقَّم', 'Not neutered')}
                   />
                 )}
-                {pet.microchipNumber && <Field label={fr ? 'N° de puce' : 'Microchip'} value={pet.microchipNumber} />}
-                {pet.tattooNumber && <Field label={fr ? 'Tatouage' : 'Tattoo'} value={pet.tattooNumber} />}
-                <Field label={fr ? 'Séjours' : 'Stays'} value={String(pet.bookingPets.length)} />
+                {pet.microchipNumber && <Field label={t3('N° de puce', 'رقم الشريحة', 'Microchip')} value={pet.microchipNumber} />}
+                {pet.tattooNumber && <Field label={t3('Tatouage', 'الوشم', 'Tattoo')} value={pet.tattooNumber} />}
+                <Field label={t3('Séjours', 'الإقامات', 'Stays')} value={String(pet.bookingPets.length)} />
               </div>
             </div>
 
@@ -197,11 +203,11 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
             {(pet.vetName || pet.vetPhone) && (
               <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
                 <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide mb-4">
-                  {fr ? 'Vétérinaire' : 'Veterinarian'}
+                  {t3('Vétérinaire', 'الطبيب البيطري', 'Veterinarian')}
                 </h3>
                 <div className="grid sm:grid-cols-2 gap-5">
-                  {pet.vetName && <Field label={fr ? 'Nom' : 'Name'} value={pet.vetName} />}
-                  {pet.vetPhone && <Field label={fr ? 'Téléphone' : 'Phone'} value={pet.vetPhone} />}
+                  {pet.vetName && <Field label={t3('Nom', 'الاسم', 'Name')} value={pet.vetName} />}
+                  {pet.vetPhone && <Field label={t3('Téléphone', 'الهاتف', 'Phone')} value={pet.vetPhone} />}
                 </div>
               </div>
             )}
@@ -210,13 +216,13 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
             {(pet.allergies || pet.currentMedication) && (
               <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
                 <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide mb-4">
-                  {fr ? 'Santé' : 'Health'}
+                  {t3('Santé', 'الصحة', 'Health')}
                 </h3>
                 <div className="space-y-4">
                   {pet.allergies && (
                     <div className="border-b border-gray-50 pb-3">
                       <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">
-                        {fr ? 'Allergies / Conditions médicales' : 'Allergies / Medical conditions'}
+                        {t3('Allergies / Conditions médicales', 'الحساسية / الحالات الطبية', 'Allergies / Medical conditions')}
                       </p>
                       <p className="font-medium text-charcoal">{pet.allergies}</p>
                     </div>
@@ -224,7 +230,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
                   {pet.currentMedication && (
                     <div className="border-b border-gray-50 pb-3">
                       <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">
-                        {fr ? 'Médication en cours' : 'Current medication'}
+                        {t3('Médication en cours', 'الدواء الحالي', 'Current medication')}
                       </p>
                       <p className="font-medium text-charcoal">{pet.currentMedication}</p>
                     </div>
@@ -237,28 +243,28 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
             {(() => {
               const status = getAntiparasiticStatus(pet.lastAntiparasiticDate, pet.antiparasiticProduct);
               const statusConfig = {
-                up_to_date:    { label: fr ? 'À jour' : 'Up to date',         cls: 'bg-green-50 text-green-700 border-green-200' },
-                expiring_soon: { label: fr ? 'Expire bientôt' : 'Expiring soon', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-                expired:       { label: fr ? 'Expiré' : 'Expired',            cls: 'bg-red-50 text-red-700 border-red-200' },
-                unknown:       { label: fr ? 'Non renseigné' : 'Not recorded', cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+                up_to_date:    { label: t3('À jour', 'محدَّث', 'Up to date'),             cls: 'bg-green-50 text-green-700 border-green-200' },
+                expiring_soon: { label: t3('Expire bientôt', 'ينتهي قريبًا', 'Expiring soon'), cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+                expired:       { label: t3('Expiré', 'منتهي الصلاحية', 'Expired'),     cls: 'bg-red-50 text-red-700 border-red-200' },
+                unknown:       { label: t3('Non renseigné', 'غير مُسجَّل', 'Not recorded'), cls: 'bg-gray-50 text-gray-500 border-gray-200' },
               };
               const cfg = statusConfig[status];
               return (
                 <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xs font-semibold text-charcoal/50 uppercase tracking-wide">
-                      {fr ? 'Antiparasitaire' : 'Anti-parasitic treatment'}
+                      {t3('Antiparasitaire', 'مضاد الطفيليات', 'Anti-parasitic treatment')}
                     </h3>
                     <span className={`text-xs font-semibold border rounded-full px-3 py-1 ${cfg.cls}`}>{cfg.label}</span>
                   </div>
                   <div className="space-y-3">
                     {pet.lastAntiparasiticDate ? (
                       <div className="border-b border-gray-50 pb-3">
-                        <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{fr ? 'Dernière application' : 'Last treatment'}</p>
+                        <p className="text-xs text-charcoal/40 uppercase tracking-wide mb-1">{t3('Dernière application', 'آخر علاج', 'Last treatment')}</p>
                         <p className="font-medium text-charcoal">{formatDateShort(pet.lastAntiparasiticDate, locale)}</p>
                       </div>
                     ) : (
-                      <p className="text-sm text-charcoal/40 italic">{fr ? 'Aucune date enregistrée — pensez à mettre à jour le profil.' : 'No date recorded — remember to update the profile.'}</p>
+                      <p className="text-sm text-charcoal/40 italic">{t3('Aucune date enregistrée — pensez à mettre à jour le profil.', 'لم يتم تسجيل تاريخ — تذكر تحديث الملف الشخصي.', 'No date recorded — remember to update the profile.')}</p>
                     )}
                     {pet.antiparasiticProduct && (
                       <div className="border-b border-gray-50 pb-3">

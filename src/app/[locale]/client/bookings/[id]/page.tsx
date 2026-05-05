@@ -24,18 +24,18 @@ interface PageProps { params: Promise<{ locale: string; id: string }> }
 
 // Stepper steps par pipeline
 const BOARDING_STEPS = [
-  { status: 'PENDING',     labelFr: 'Demande reçue',       labelEn: 'Request received',   descFr: 'Votre demande est en cours de traitement',        descEn: 'Your request is being processed' },
-  { status: 'CONFIRMED',   labelFr: 'Séjour confirmé',      labelEn: 'Stay confirmed',      descFr: 'Notre équipe a confirmé votre réservation',        descEn: 'Our team confirmed your booking' },
-  { status: 'IN_PROGRESS', labelFr: 'Dans nos murs',        labelEn: 'Currently staying',   descFr: 'Votre animal est avec nous',                       descEn: 'Your pet is with us' },
-  { status: 'COMPLETED',   labelFr: 'Séjour terminé',       labelEn: 'Stay completed',      descFr: 'Le séjour s\'est terminé avec succès',             descEn: 'The stay completed successfully' },
+  { status: 'PENDING',     labelFr: 'Demande reçue',       labelEn: 'Request received',   labelAr: 'تم استلام الطلب',       descFr: 'Votre demande est en cours de traitement',        descEn: 'Your request is being processed',      descAr: 'طلبك قيد المعالجة' },
+  { status: 'CONFIRMED',   labelFr: 'Séjour confirmé',      labelEn: 'Stay confirmed',      labelAr: 'تأكيد الإقامة',         descFr: 'Notre équipe a confirmé votre réservation',        descEn: 'Our team confirmed your booking',       descAr: 'أكد فريقنا حجزك' },
+  { status: 'IN_PROGRESS', labelFr: 'Dans nos murs',        labelEn: 'Currently staying',   labelAr: 'في رعايتنا',            descFr: 'Votre animal est avec nous',                       descEn: 'Your pet is with us',                   descAr: 'حيوانك الأليف معنا' },
+  { status: 'COMPLETED',   labelFr: 'Séjour terminé',       labelEn: 'Stay completed',      labelAr: 'انتهت الإقامة',         descFr: 'Le séjour s\'est terminé avec succès',             descEn: 'The stay completed successfully',       descAr: 'انتهت الإقامة بنجاح' },
 ];
 
 const TAXI_STEPS = [
-  { status: 'PENDING',     labelFr: 'Transport planifié',              labelEn: 'Transport planned',    descFr: 'Votre transport a été programmé',                  descEn: 'Your transport has been scheduled' },
-  { status: 'CONFIRMED',   labelFr: 'Véhicule en route vers le point de départ', labelEn: 'Vehicle en route to pickup', descFr: 'Le véhicule est en chemin vers le point de départ', descEn: 'The vehicle is heading to the pickup point' },
-  { status: 'AT_PICKUP',   labelFr: 'Véhicule sur place',              labelEn: 'Vehicle on site',      descFr: 'Le véhicule est arrivé au point de départ',        descEn: 'The vehicle has arrived at the pickup point' },
-  { status: 'IN_PROGRESS', labelFr: 'Animal à bord',                   labelEn: 'Pet on board',         descFr: 'Votre animal est dans le véhicule',                descEn: 'Your pet is in the vehicle' },
-  { status: 'COMPLETED',   labelFr: 'Arrivé à destination',            labelEn: 'Arrived',              descFr: 'Votre animal est arrivé à destination',            descEn: 'Your pet has arrived safely' },
+  { status: 'PENDING',     labelFr: 'Transport planifié',              labelEn: 'Transport planned',    labelAr: 'النقل مجدول',            descFr: 'Votre transport a été programmé',                  descEn: 'Your transport has been scheduled',   descAr: 'تم جدولة نقلك' },
+  { status: 'CONFIRMED',   labelFr: 'Véhicule en route vers le point de départ', labelEn: 'Vehicle en route to pickup', labelAr: 'السيارة في الطريق', descFr: 'Le véhicule est en chemin vers le point de départ', descEn: 'The vehicle is heading to the pickup point', descAr: 'السيارة في طريقها إلى نقطة الانطلاق' },
+  { status: 'AT_PICKUP',   labelFr: 'Véhicule sur place',              labelEn: 'Vehicle on site',      labelAr: 'السيارة في المكان',      descFr: 'Le véhicule est arrivé au point de départ',        descEn: 'The vehicle has arrived at the pickup point', descAr: 'وصلت السيارة إلى نقطة الانطلاق' },
+  { status: 'IN_PROGRESS', labelFr: 'Animal à bord',                   labelEn: 'Pet on board',         labelAr: 'الحيوان على متن السيارة', descFr: 'Votre animal est dans le véhicule',                descEn: 'Your pet is in the vehicle',          descAr: 'حيوانك الأليف في السيارة' },
+  { status: 'COMPLETED',   labelFr: 'Arrivé à destination',            labelEn: 'Arrived',              labelAr: 'وصل إلى الوجهة',         descFr: 'Votre animal est arrivé à destination',            descEn: 'Your pet has arrived safely',         descAr: 'وصل حيوانك الأليف بأمان' },
 ];
 
 const BOARDING_STATUS_ORDER = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED'];
@@ -51,6 +51,7 @@ function BookingStepper({
   locale: string;
 }) {
   const isFr = locale === 'fr';
+  const isAr = locale === 'ar';
   const isCancelled = status === 'CANCELLED' || status === 'REJECTED';
   const steps = serviceType === 'PET_TAXI' ? TAXI_STEPS : BOARDING_STEPS;
   const statusOrder = serviceType === 'PET_TAXI' ? TAXI_STATUS_ORDER : BOARDING_STATUS_ORDER;
@@ -63,11 +64,11 @@ function BookingStepper({
         <div>
           <p className="font-semibold text-red-700 text-sm">
             {status === 'CANCELLED'
-              ? (isFr ? 'Réservation annulée' : 'Booking cancelled')
-              : (isFr ? 'Réservation refusée' : 'Booking refused')}
+              ? (isFr ? 'Réservation annulée' : isAr ? 'تم إلغاء الحجز' : 'Booking cancelled')
+              : (isFr ? 'Réservation refusée' : isAr ? 'تم رفض الحجز' : 'Booking refused')}
           </p>
           <p className="text-xs text-red-500 mt-0.5">
-            {isFr ? 'Cette réservation n\'est plus active.' : 'This booking is no longer active.'}
+            {isFr ? 'Cette réservation n\'est plus active.' : isAr ? 'هذا الحجز لم يعد نشطًا.' : 'This booking is no longer active.'}
           </p>
         </div>
       </div>
@@ -111,11 +112,11 @@ function BookingStepper({
               <p className={`text-sm font-semibold leading-tight mt-1 ${
                 isDone ? 'text-green-700' : isActive ? 'text-charcoal' : 'text-gray-300'
               }`}>
-                {isFr ? step.labelFr : step.labelEn}
+                {isFr ? step.labelFr : isAr ? step.labelAr : step.labelEn}
               </p>
               {isActive && (
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {isFr ? step.descFr : step.descEn}
+                  {isFr ? step.descFr : isAr ? step.descAr : step.descEn}
                 </p>
               )}
             </div>
@@ -265,6 +266,48 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
       pickup: 'Pickup',
       dropoff: 'Dropoff',
     },
+    ar: {
+      back: 'حجوزاتي',
+      service: 'الخدمة',
+      boarding: 'نزالة',
+      taxi: 'سيارة أجرة للحيوانات',
+      pets: 'الحيوانات',
+      dates: 'التواريخ',
+      duration: 'المدة',
+      nights: 'ليلة',
+      arrival: 'الوصول',
+      departure: 'المغادرة',
+      grooming: 'تزيين',
+      yes: 'مشمول',
+      no: 'لا',
+      taxiType: 'نوع الرحلة',
+      notes: 'ملاحظات',
+      pricing: 'تفاصيل السعر',
+      perNight: '/ليلة',
+      invoice: 'الفاتورة',
+      noPdf: 'تحميل PDF',
+      photos: 'صور الإقامة',
+      noPhotos: 'لم تُنشر أي صور بعد',
+      messages: 'رسائل من Dog Universe',
+      noMessages: 'لا توجد رسائل بعد',
+      cancel: 'إلغاء الحجز',
+      progression: 'تتبع حجزك',
+      supplementaryInvoice: 'ملحق التمديد',
+      invoiceNumber: 'الفاتورة',
+      amount: 'المبلغ',
+      paid: 'مدفوع',
+      remaining: 'المتبقي',
+      statusPaid: 'مدفوعة',
+      statusPending: 'معلقة',
+      statusPartial: 'مدفوعة جزئيًا',
+      statusLabels: {
+        PENDING: 'قيد الانتظار', CONFIRMED: 'مؤكد', IN_PROGRESS: 'جارٍ',
+        COMPLETED: 'منتهي', CANCELLED: 'ملغى', REJECTED: 'مرفوض',
+      },
+      taxiTypes: { STANDARD: 'رحلة عادية', VET: 'نقل بيطري', AIRPORT: 'مكوك المطار' },
+      pickup: 'نقطة الانطلاق',
+      dropoff: 'نقطة الوصول',
+    },
   };
   const t = l[locale as keyof typeof l] || l.fr;
 
@@ -321,11 +364,15 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
             <p className="text-sm font-semibold text-amber-800">
               {locale === 'fr'
                 ? 'Votre demande de modification est en cours d\'examen'
+                : locale === 'ar'
+                ? 'طلب التعديل قيد المراجعة'
                 : 'Your reschedule request is under review'}
             </p>
             <p className="mt-0.5 text-xs text-amber-700">
               {locale === 'fr'
                 ? 'Notre équipe va traiter votre demande de modification de dates rapidement.'
+                : locale === 'ar'
+                ? 'سيعالج فريقنا طلب تغيير التواريخ قريبًا.'
                 : 'Our team will process your date change request shortly.'}
             </p>
           </div>
@@ -408,7 +455,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                 {booking.boardingDetail?.taxiGoEnabled && (
                   <>
                     <div className="mt-2 pt-2 border-t border-ivory-100">
-                      <p className="text-xs font-semibold text-orange-700 mb-1">{locale === 'fr' ? 'Taxi aller — dépôt à la pension' : 'Taxi go — drop-off at facility'}</p>
+                      <p className="text-xs font-semibold text-orange-700 mb-1">{locale === 'fr' ? 'Taxi aller — dépôt à la pension' : locale === 'ar' ? 'تاكسي الذهاب — التوصيل إلى الحضيرة' : 'Taxi go — drop-off at facility'}</p>
                     </div>
                     {booking.boardingDetail.taxiGoDate && (
                       <div className="flex justify-between">
@@ -418,7 +465,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                     )}
                     {booking.boardingDetail.taxiGoAddress && (
                       <div className="flex justify-between gap-4">
-                        <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-orange-400" />{locale === 'fr' ? 'Adresse' : 'Address'}</span>
+                        <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-orange-400" />{locale === 'fr' ? 'Adresse' : locale === 'ar' ? 'العنوان' : 'Address'}</span>
                         <span className="font-medium text-charcoal text-right">{booking.boardingDetail.taxiGoAddress}</span>
                       </div>
                     )}
@@ -427,7 +474,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                 {booking.boardingDetail?.taxiReturnEnabled && (
                   <>
                     <div className="mt-2 pt-2 border-t border-ivory-100">
-                      <p className="text-xs font-semibold text-orange-700 mb-1">{locale === 'fr' ? 'Taxi retour — récupération à domicile' : 'Taxi return — pick-up at home'}</p>
+                      <p className="text-xs font-semibold text-orange-700 mb-1">{locale === 'fr' ? 'Taxi retour — récupération à domicile' : locale === 'ar' ? 'تاكسي العودة — الاستلام من المنزل' : 'Taxi return — pick-up at home'}</p>
                     </div>
                     {booking.boardingDetail.taxiReturnDate && (
                       <div className="flex justify-between">
@@ -437,7 +484,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                     )}
                     {booking.boardingDetail.taxiReturnAddress && (
                       <div className="flex justify-between gap-4">
-                        <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-orange-400" />{locale === 'fr' ? 'Adresse' : 'Address'}</span>
+                        <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-orange-400" />{locale === 'fr' ? 'Adresse' : locale === 'ar' ? 'العنوان' : 'Address'}</span>
                         <span className="font-medium text-charcoal text-right">{booking.boardingDetail.taxiReturnAddress}</span>
                       </div>
                     )}
@@ -447,7 +494,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                 {goTrip && (
                   <div className="mt-3 pt-3 border-t border-ivory-100">
                     <p className="text-xs font-semibold text-orange-700 mb-2">
-                      {locale === 'fr' ? '↗ Taxi aller' : '↗ Taxi go'}
+                      {locale === 'fr' ? '↗ Taxi aller' : locale === 'ar' ? '↗ تاكسي الذهاب' : '↗ Taxi go'}
                     </p>
                     <TaxiTimeline trip={goTrip} readOnly locale={locale} />
                   </div>
@@ -455,7 +502,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                 {returnTrip && (
                   <div className="mt-3 pt-3 border-t border-ivory-100">
                     <p className="text-xs font-semibold text-orange-700 mb-2">
-                      {locale === 'fr' ? '↙ Taxi retour' : '↙ Taxi return'}
+                      {locale === 'fr' ? '↙ Taxi retour' : locale === 'ar' ? '↙ تاكسي العودة' : '↙ Taxi return'}
                     </p>
                     <TaxiTimeline trip={returnTrip} readOnly locale={locale} />
                   </div>
@@ -545,11 +592,13 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-3">
             <div>
               <p className="font-semibold text-charcoal text-sm">
-                {locale === 'fr' ? 'Un service en plus ?' : 'Need an extra service?'}
+                {locale === 'fr' ? 'Un service en plus ?' : locale === 'ar' ? 'تحتاج خدمة إضافية؟' : 'Need an extra service?'}
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
                 {locale === 'fr'
                   ? 'Pet Taxi, toilettage ou autre — nous vous contactons rapidement.'
+                  : locale === 'ar'
+                  ? 'سيارة أجرة، تزيين أو غيره — سنتواصل معك قريبًا.'
                   : 'Pet Taxi, grooming or other — we\'ll get back to you shortly.'}
               </p>
             </div>
@@ -619,10 +668,10 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                     : 'bg-amber-100 text-amber-700'
                 }`}>
                   {booking.invoice.status === 'PAID'
-                    ? (locale === 'fr' ? 'Payée' : 'Paid')
+                    ? (locale === 'fr' ? 'Payée' : locale === 'ar' ? 'مدفوعة' : 'Paid')
                     : booking.invoice.status === 'PARTIALLY_PAID'
-                    ? (locale === 'fr' ? 'Partiellement payée' : 'Partially paid')
-                    : (locale === 'fr' ? 'En attente' : 'Pending')}
+                    ? (locale === 'fr' ? 'Partiellement payée' : locale === 'ar' ? 'مدفوعة جزئيًا' : 'Partially paid')
+                    : (locale === 'fr' ? 'En attente' : locale === 'ar' ? 'معلقة' : 'Pending')}
                 </span>
               </div>
               <a
@@ -645,7 +694,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
               <FileText className="h-4 w-4 text-amber-500" />
               <h3 className="font-semibold text-charcoal text-sm">{t.supplementaryInvoice}</h3>
               <span className="ml-auto text-xs px-2 py-0.5 rounded font-medium bg-amber-100 text-amber-700">
-                {locale === 'fr' ? `Réservation #${booking.id.slice(0, 8).toUpperCase()}` : `Booking #${booking.id.slice(0, 8).toUpperCase()}`}
+                {locale === 'fr' ? `Réservation #${booking.id.slice(0, 8).toUpperCase()}` : locale === 'ar' ? `حجز #${booking.id.slice(0, 8).toUpperCase()}` : `Booking #${booking.id.slice(0, 8).toUpperCase()}`}
               </span>
             </div>
             <div className="space-y-2 text-sm">
@@ -730,6 +779,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                   <p className="text-sm text-charcoal">
                     {locale === 'en' ? msg.messageEn : msg.messageFr}
                   </p>
+                  {/* Note: Arabic falls back to French for notification messages (no titleAr/messageAr in DB) */}
                 </div>
               ))}
             </div>
@@ -740,7 +790,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
         {booking.status === 'COMPLETED' && (
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
             <h3 className="font-semibold text-charcoal text-sm mb-3">
-              {locale === 'fr' ? 'Réserver à nouveau' : 'Book again'}
+              {locale === 'fr' ? 'Réserver à nouveau' : locale === 'ar' ? 'احجز مجددًا' : 'Book again'}
             </h3>
             <RebookButton
               booking={{

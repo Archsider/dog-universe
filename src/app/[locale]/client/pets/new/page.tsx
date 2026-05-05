@@ -35,6 +35,8 @@ export default function NewPetPage() {
   const router = useRouter();
   const t = useTranslations('pets');
   const fr = locale === 'fr';
+  const ar = locale === 'ar';
+  const t3 = (frStr: string, arStr: string, enStr: string) => fr ? frStr : ar ? arStr : enStr;
 
   const [form, setForm] = useState<FormState>({
     name: '', species: '', breed: '', dateOfBirth: '', gender: '',
@@ -67,7 +69,7 @@ export default function NewPetPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.species || !form.dateOfBirth) {
-      toast({ title: fr ? 'Nom, espèce et date de naissance sont obligatoires' : 'Name, species and date of birth are required', variant: 'destructive' });
+      toast({ title: t3('Nom, espèce et date de naissance sont obligatoires', 'الاسم والنوع وتاريخ الميلاد مطلوبة', 'Name, species and date of birth are required'), variant: 'destructive' });
       return;
     }
     setLoading(true);
@@ -96,13 +98,13 @@ export default function NewPetPage() {
       });
 
       if (res.ok) {
-        toast({ title: fr ? 'Animal ajouté !' : 'Pet added!', variant: 'success' });
+        toast({ title: t3('Animal ajouté !', 'تمت إضافة الحيوان!', 'Pet added!'), variant: 'success' });
         router.push(`/${locale}/client/pets`);
       } else {
         throw new Error('Failed');
       }
     } catch {
-      toast({ title: fr ? 'Erreur' : 'Error', variant: 'destructive' });
+      toast({ title: t3('Erreur', 'حدث خطأ', 'Error'), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -142,7 +144,7 @@ export default function NewPetPage() {
           {/* Section 1 : Identité */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Identité' : 'Identity'}
+              {t3('Identité', 'الهوية', 'Identity')}
             </h3>
 
             <div>
@@ -154,7 +156,7 @@ export default function NewPetPage() {
               <div>
                 <Label htmlFor="species">{t('form.species')} *</Label>
                 <select id="species" value={form.species} onChange={setSel('species')} className={SELECT_CLASS}>
-                  <option value="" disabled>{fr ? 'Choisir' : 'Choose'}</option>
+                  <option value="" disabled>{t3('Choisir', 'اختر', 'Choose')}</option>
                   <option value="DOG">{t('form.speciesOptions.DOG')}</option>
                   <option value="CAT">{t('form.speciesOptions.CAT')}</option>
                 </select>
@@ -162,7 +164,7 @@ export default function NewPetPage() {
               <div>
                 <Label htmlFor="gender">{t('form.gender')}</Label>
                 <select id="gender" value={form.gender} onChange={setSel('gender')} className={SELECT_CLASS}>
-                  <option value="" disabled>{fr ? 'Sexe' : 'Gender'}</option>
+                  <option value="" disabled>{t3('Sexe', 'الجنس', 'Gender')}</option>
                   <option value="MALE">{t('form.genderOptions.MALE')}</option>
                   <option value="FEMALE">{t('form.genderOptions.FEMALE')}</option>
                 </select>
@@ -172,7 +174,7 @@ export default function NewPetPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="breed">{t('form.breed')}</Label>
-                <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder={fr ? 'Golden Retriever...' : 'Golden Retriever...'} />
+                <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder="Golden Retriever..." />
               </div>
               <div>
                 <Label htmlFor="dob">{t('form.dateOfBirth')} *</Label>
@@ -182,26 +184,26 @@ export default function NewPetPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="weight">{fr ? 'Poids (kg)' : 'Weight (kg)'}</Label>
+                <Label htmlFor="weight">{t3('Poids (kg)', 'الوزن (كغ)', 'Weight (kg)')}</Label>
                 <Input id="weight" type="number" min="0" step="0.1" value={form.weight} onChange={set('weight')} className="mt-1" placeholder="4.5" />
               </div>
               <div>
-                <Label htmlFor="isNeutered">{fr ? 'Statut reproductif' : 'Reproductive status'}</Label>
+                <Label htmlFor="isNeutered">{t3('Statut reproductif', 'الحالة التناسلية', 'Reproductive status')}</Label>
                 <select id="isNeutered" value={form.isNeutered} onChange={setSel('isNeutered')} className={SELECT_CLASS}>
-                  <option value="" disabled>{fr ? 'Choisir' : 'Choose'}</option>
-                  <option value="true">{fr ? 'Stérilisé(e) / Castré(e)' : 'Neutered / Spayed'}</option>
-                  <option value="false">{fr ? 'Non stérilisé(e)' : 'Not neutered'}</option>
+                  <option value="" disabled>{t3('Choisir', 'اختر', 'Choose')}</option>
+                  <option value="true">{t3('Stérilisé(e) / Castré(e)', 'مُعقَّم / مُخصِيّ', 'Neutered / Spayed')}</option>
+                  <option value="false">{t3('Non stérilisé(e)', 'غير مُعقَّم', 'Not neutered')}</option>
                 </select>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="microchip">{fr ? 'N° de puce électronique' : 'Microchip number'}</Label>
+                <Label htmlFor="microchip">{t3('N° de puce électronique', 'رقم الشريحة الإلكترونية', 'Microchip number')}</Label>
                 <Input id="microchip" value={form.microchipNumber} onChange={set('microchipNumber')} className="mt-1" placeholder="250268500000000" />
               </div>
               <div>
-                <Label htmlFor="tattoo">{fr ? 'N° de tatouage' : 'Tattoo number'}</Label>
+                <Label htmlFor="tattoo">{t3('N° de tatouage', 'رقم الوشم', 'Tattoo number')}</Label>
                 <Input id="tattoo" value={form.tattooNumber} onChange={set('tattooNumber')} className="mt-1" placeholder="ABC123" />
               </div>
             </div>
@@ -210,15 +212,15 @@ export default function NewPetPage() {
           {/* Section 2 : Vétérinaire */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Vétérinaire' : 'Veterinarian'}
+              {t3('Vétérinaire', 'الطبيب البيطري', 'Veterinarian')}
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="vetName">{fr ? 'Nom du vétérinaire' : 'Vet name'}</Label>
+                <Label htmlFor="vetName">{t3('Nom du vétérinaire', 'اسم الطبيب البيطري', 'Vet name')}</Label>
                 <Input id="vetName" value={form.vetName} onChange={set('vetName')} className="mt-1" placeholder="Dr. Martin" />
               </div>
               <div>
-                <Label htmlFor="vetPhone">{fr ? 'Téléphone vétérinaire' : 'Vet phone'}</Label>
+                <Label htmlFor="vetPhone">{t3('Téléphone vétérinaire', 'هاتف الطبيب البيطري', 'Vet phone')}</Label>
                 <Input id="vetPhone" value={form.vetPhone} onChange={set('vetPhone')} className="mt-1" placeholder="+212 6 00 00 00 00" />
               </div>
             </div>
@@ -227,34 +229,34 @@ export default function NewPetPage() {
           {/* Section 3 : Santé */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Santé' : 'Health'}
+              {t3('Santé', 'الصحة', 'Health')}
             </h3>
             <div>
-              <Label htmlFor="allergies">{fr ? 'Allergies / Conditions médicales' : 'Allergies / Medical conditions'}</Label>
-              <Textarea id="allergies" value={form.allergies} onChange={set('allergies')} className="mt-1" placeholder={fr ? 'Ex: allergie au poulet, dermatite...' : 'Ex: chicken allergy, dermatitis...'} rows={2} />
+              <Label htmlFor="allergies">{t3('Allergies / Conditions médicales', 'الحساسية / الحالات الطبية', 'Allergies / Medical conditions')}</Label>
+              <Textarea id="allergies" value={form.allergies} onChange={set('allergies')} className="mt-1" placeholder={t3('Ex: allergie au poulet, dermatite...', 'مثال: حساسية الدجاج، التهاب الجلد...', 'Ex: chicken allergy, dermatitis...')} rows={2} />
             </div>
             <div>
-              <Label htmlFor="medication">{fr ? 'Médication en cours' : 'Current medication'}</Label>
-              <Textarea id="medication" value={form.currentMedication} onChange={set('currentMedication')} className="mt-1" placeholder={fr ? 'Ex: Apoquel 5mg, 1 cp/jour...' : 'Ex: Apoquel 5mg, 1 tab/day...'} rows={2} />
+              <Label htmlFor="medication">{t3('Médication en cours', 'الدواء الحالي', 'Current medication')}</Label>
+              <Textarea id="medication" value={form.currentMedication} onChange={set('currentMedication')} className="mt-1" placeholder={t3('Ex: Apoquel 5mg, 1 cp/jour...', 'مثال: Apoquel 5mg، قرص/يوم...', 'Ex: Apoquel 5mg, 1 tab/day...')} rows={2} />
             </div>
           </section>
 
           {/* Section 4 : Comportement */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Comportement' : 'Behavior'}
+              {t3('Comportement', 'السلوك', 'Behavior')}
             </h3>
             {[
-              { field: 'behaviorWithDogs' as const, label: fr ? 'Avec les chiens' : 'With dogs' },
-              { field: 'behaviorWithCats' as const, label: fr ? 'Avec les chats' : 'With cats' },
-              { field: 'behaviorWithHumans' as const, label: fr ? 'Avec les humains' : 'With humans' },
+              { field: 'behaviorWithDogs' as const, label: t3('Avec les chiens', 'مع الكلاب', 'With dogs') },
+              { field: 'behaviorWithCats' as const, label: t3('Avec les chats', 'مع القطط', 'With cats') },
+              { field: 'behaviorWithHumans' as const, label: t3('Avec les humains', 'مع البشر', 'With humans') },
             ].map(({ field, label }) => (
               <div key={field}>
                 <Label htmlFor={field}>{label}</Label>
                 <select id={field} value={form[field]} onChange={setSel(field)} className={SELECT_CLASS}>
-                  <option value="" disabled>{fr ? 'Choisir' : 'Choose'}</option>
+                  <option value="" disabled>{t3('Choisir', 'اختر', 'Choose')}</option>
                   {BEHAVIOR_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{fr ? o.fr : o.en}</option>
+                    <option key={o.value} value={o.value}>{fr ? o.fr : ar ? (o.value === 'SOCIABLE' ? 'اجتماعي' : o.value === 'TOLERANT' ? 'متسامح' : o.value === 'MONITOR' ? 'يحتاج مراقبة' : 'متهيج') : o.en}</option>
                   ))}
                 </select>
               </div>
@@ -264,44 +266,44 @@ export default function NewPetPage() {
           {/* Section 5 : Antiparasitaire */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Antiparasitaire' : 'Anti-parasitic treatment'}
+              {t3('Antiparasitaire', 'مضاد الطفيليات', 'Anti-parasitic treatment')}
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="antiDate">{fr ? 'Dernière application' : 'Last treatment date'}</Label>
+                <Label htmlFor="antiDate">{t3('Dernière application', 'تاريخ آخر علاج', 'Last treatment date')}</Label>
                 <Input id="antiDate" type="date" value={form.lastAntiparasiticDate} onChange={set('lastAntiparasiticDate')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
               </div>
               <div>
-                <Label htmlFor="antiProduct">{fr ? 'Produit utilisé' : 'Product used'}</Label>
-                <Input id="antiProduct" value={form.antiparasiticProduct} onChange={set('antiparasiticProduct')} className="mt-1" placeholder={fr ? 'Ex: Frontline, Bravecto...' : 'Ex: Frontline, Bravecto...'} />
+                <Label htmlFor="antiProduct">{t3('Produit utilisé', 'المنتج المستخدم', 'Product used')}</Label>
+                <Input id="antiProduct" value={form.antiparasiticProduct} onChange={set('antiparasiticProduct')} className="mt-1" placeholder="Ex: Frontline, Bravecto..." />
               </div>
             </div>
             <div>
-              <Label htmlFor="antiNotes">{fr ? 'Notes (optionnel)' : 'Notes (optional)'}</Label>
-              <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" placeholder={fr ? 'Ex: traitement mensuel, réaction passée...' : 'Ex: monthly treatment, past reaction...'} rows={2} />
+              <Label htmlFor="antiNotes">{t3('Notes (optionnel)', 'ملاحظات (اختياري)', 'Notes (optional)')}</Label>
+              <Textarea id="antiNotes" value={form.antiparasiticNotes} onChange={set('antiparasiticNotes')} className="mt-1" placeholder={t3('Ex: traitement mensuel, réaction passée...', 'مثال: علاج شهري، رد فعل سابق...', 'Ex: monthly treatment, past reaction...')} rows={2} />
             </div>
           </section>
 
           {/* Section 6 : Notes */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Notes spéciales' : 'Special notes'}
+              {t3('Notes spéciales', 'ملاحظات خاصة', 'Special notes')}
             </h3>
             <div>
-              <Label htmlFor="notes">{fr ? 'Instructions particulières' : 'Special instructions'}</Label>
-              <Textarea id="notes" value={form.notes} onChange={set('notes')} className="mt-1" placeholder={fr ? 'Régime alimentaire, habitudes, instructions spécifiques...' : 'Diet, habits, specific instructions...'} rows={3} />
+              <Label htmlFor="notes">{t3('Instructions particulières', 'تعليمات خاصة', 'Special instructions')}</Label>
+              <Textarea id="notes" value={form.notes} onChange={set('notes')} className="mt-1" placeholder={t3('Régime alimentaire, habitudes, instructions spécifiques...', 'النظام الغذائي، العادات، تعليمات محددة...', 'Diet, habits, specific instructions...')} rows={3} />
             </div>
           </section>
 
           <div className="flex gap-3 pt-2">
             <Link href={`/${locale}/client/pets`} className="flex-1">
               <Button type="button" variant="outline" className="w-full">
-                {fr ? 'Annuler' : 'Cancel'}
+                {t3('Annuler', 'إلغاء', 'Cancel')}
               </Button>
             </Link>
             <Button type="submit" className="flex-1" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {fr ? 'Enregistrer' : 'Save'}
+              {t3('Enregistrer', 'حفظ', 'Save')}
             </Button>
           </div>
         </form>
