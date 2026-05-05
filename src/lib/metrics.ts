@@ -285,13 +285,17 @@ export async function currentBoarders(): Promise<{
 }> {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Active stay = within window OR open-ended (walk-in awaiting checkout).
+  // endDate compared to startOfDay so a stay ending today still counts until
+  // the day is over (pet hasn't physically left yet).
   const boardingFilter = {
     serviceType: 'BOARDING' as const,
-    status: 'IN_PROGRESS' as const,
+    status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
     startDate: { lte: now },
-    // Compare to startOfDay: a stay ending today (endDate = midnight) must still
-    // count until the day is over — pet hasn't physically left yet.
-    endDate: { gte: todayStart },
+    OR: [
+      { endDate: { gte: todayStart } },
+      { isOpenEnded: true },
+    ],
     deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
   };
   const [cat, dog] = await Promise.all([
