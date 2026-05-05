@@ -55,7 +55,8 @@ export function applyI18nAndCsp(request: NextRequest): NextResponse {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
   // Detect locale from URL path for html[lang] attribute in root layout
-  const locale = path.startsWith('/en') ? 'en' : 'fr';
+  const localeMatch = path.match(/^\/(fr|en|ar)(\/|$)/);
+  const locale = localeMatch?.[1] ?? 'fr';
   requestHeaders.set('x-locale', locale);
   // Required by next-intl so requestLocale resolves correctly in getRequestConfig
   requestHeaders.set('x-next-intl-locale', locale);
