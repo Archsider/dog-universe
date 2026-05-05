@@ -312,27 +312,27 @@ export default function EditPetPage() {
           {/* Santé */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Santé' : 'Health'}
+              {t3('Santé', 'الصحة', 'Health')}
             </h3>
             <div>
-              <Label htmlFor="allergies">{fr ? 'Allergies / Conditions médicales' : 'Allergies / Medical conditions'}</Label>
-              <Textarea id="allergies" value={form.allergies} onChange={set('allergies')} className="mt-1" placeholder={fr ? 'Ex: allergie au poulet, dermatite...' : 'Ex: chicken allergy, dermatitis...'} rows={2} />
+              <Label htmlFor="allergies">{t3('Allergies / Conditions médicales', 'الحساسية / الحالات الطبية', 'Allergies / Medical conditions')}</Label>
+              <Textarea id="allergies" value={form.allergies} onChange={set('allergies')} className="mt-1" placeholder={t3('Ex: allergie au poulet, dermatite...', 'مثال: حساسية الدجاج، التهاب الجلد...', 'Ex: chicken allergy, dermatitis...')} rows={2} />
             </div>
             <div>
-              <Label htmlFor="medication">{fr ? 'Médication en cours' : 'Current medication'}</Label>
-              <Textarea id="medication" value={form.currentMedication} onChange={set('currentMedication')} className="mt-1" placeholder={fr ? 'Ex: Apoquel 5mg, 1 cp/jour...' : 'Ex: Apoquel 5mg, 1 tab/day...'} rows={2} />
+              <Label htmlFor="medication">{t3('Médication en cours', 'الدواء الحالي', 'Current medication')}</Label>
+              <Textarea id="medication" value={form.currentMedication} onChange={set('currentMedication')} className="mt-1" placeholder={t3('Ex: Apoquel 5mg, 1 cp/jour...', 'مثال: Apoquel 5mg، قرص/يوم...', 'Ex: Apoquel 5mg, 1 tab/day...')} rows={2} />
             </div>
           </section>
 
           {/* Comportement */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Comportement' : 'Behavior'}
+              {t3('Comportement', 'السلوك', 'Behavior')}
             </h3>
             {[
-              { field: 'behaviorWithDogs' as const, label: fr ? 'Avec les chiens' : 'With dogs' },
-              { field: 'behaviorWithCats' as const, label: fr ? 'Avec les chats' : 'With cats' },
-              { field: 'behaviorWithHumans' as const, label: fr ? 'Avec les humains' : 'With humans' },
+              { field: 'behaviorWithDogs' as const, label: t3('Avec les chiens', 'مع الكلاب', 'With dogs') },
+              { field: 'behaviorWithCats' as const, label: t3('Avec les chats', 'مع القطط', 'With cats') },
+              { field: 'behaviorWithHumans' as const, label: t3('Avec les humains', 'مع البشر', 'With humans') },
             ].map(({ field, label }) => (
               <div key={field}>
                 <Label>{label}</Label>
@@ -342,7 +342,7 @@ export default function EditPetPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {BEHAVIOR_OPTIONS.map(o => (
-                      <SelectItem key={o.value} value={o.value}>{fr ? o.fr : o.en}</SelectItem>
+                      <SelectItem key={o.value} value={o.value}>{fr ? o.fr : ar ? (o.value === 'SOCIABLE' ? 'اجتماعي' : o.value === 'TOLERANT' ? 'متسامح' : o.value === 'MONITOR' ? 'يحتاج مراقبة' : 'متهيج') : o.en}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -353,26 +353,26 @@ export default function EditPetPage() {
           {/* Antiparasitaire */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
-              {fr ? 'Antiparasitaire' : 'Anti-parasitic treatment'}
+              {t3('Antiparasitaire', 'مضاد الطفيليات', 'Anti-parasitic treatment')}
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="antiDate">{fr ? 'Dernière application' : 'Last treatment date'} *</Label>
+                <Label htmlFor="antiDate">{t3('Dernière application', 'تاريخ آخر علاج', 'Last treatment date')} *</Label>
                 <Input id="antiDate" type="date" value={form.lastAntiparasiticDate} onChange={set('lastAntiparasiticDate')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
               </div>
               <div>
-                <Label>{fr ? 'Produit utilisé' : 'Product used'}</Label>
+                <Label>{t3('Produit utilisé', 'المنتج المستخدم', 'Product used')}</Label>
                 <Select value={form.antiparasiticProductKey} onValueChange={v => setForm(p => ({ ...p, antiparasiticProductKey: v, antiparasiticCustomProduct: v !== 'OTHER' ? '' : p.antiparasiticCustomProduct }))}>
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={fr ? 'Choisir' : 'Choose'} />
+                    <SelectValue placeholder={t3('Choisir', 'اختر', 'Choose')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">{fr ? '— Non renseigné' : '— Not specified'}</SelectItem>
+                    <SelectItem value="__none__">{t3('— Non renseigné', '— غير محدد', '— Not specified')}</SelectItem>
                     <SelectItem value="NexGard">NexGard</SelectItem>
                     <SelectItem value="Simparica">Simparica</SelectItem>
                     <SelectItem value="Bravecto">Bravecto</SelectItem>
                     <SelectItem value="Frontline">Frontline</SelectItem>
-                    <SelectItem value="OTHER">{fr ? 'Autre…' : 'Other…'}</SelectItem>
+                    <SelectItem value="OTHER">{t3('Autre…', 'أخرى…', 'Other…')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
