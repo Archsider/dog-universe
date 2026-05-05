@@ -131,10 +131,14 @@ export interface CreateBookingTxArgs {
   taxiGoDate: string | null;
   taxiGoTime: string | null;
   taxiGoAddress: string | null;
+  taxiGoLat?: number | null;
+  taxiGoLng?: number | null;
   taxiReturnEnabled: boolean;
   taxiReturnDate: string | null;
   taxiReturnTime: string | null;
   taxiReturnAddress: string | null;
+  taxiReturnLat?: number | null;
+  taxiReturnLng?: number | null;
   taxiAddonPrice: number;
   // Taxi standalone
   taxiType: string;
@@ -237,10 +241,14 @@ export async function createBookingTx(args: CreateBookingTxArgs) {
             taxiGoDate: args.taxiGoDate,
             taxiGoTime: args.taxiGoTime,
             taxiGoAddress: args.taxiGoAddress,
+            taxiGoLat: args.taxiGoLat ?? null,
+            taxiGoLng: args.taxiGoLng ?? null,
             taxiReturnEnabled: args.taxiReturnEnabled,
             taxiReturnDate: args.taxiReturnDate,
             taxiReturnTime: args.taxiReturnTime,
             taxiReturnAddress: args.taxiReturnAddress,
+            taxiReturnLat: args.taxiReturnLat ?? null,
+            taxiReturnLng: args.taxiReturnLng ?? null,
             taxiAddonPrice: args.taxiAddonPrice,
           },
         });

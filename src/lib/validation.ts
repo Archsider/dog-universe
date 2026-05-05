@@ -126,6 +126,10 @@ export const bookingCreateSchema = z.object({
   taxiReturnDate: dateStringSchema.optional().nullable(),
   taxiReturnTime: z.string().max(20).optional().nullable(),
   taxiReturnAddress: z.string().max(500).optional().nullable(),
+  taxiGoLat: z.number().min(-90).max(90).optional().nullable(),
+  taxiGoLng: z.number().min(-180).max(180).optional().nullable(),
+  taxiReturnLat: z.number().min(-90).max(90).optional().nullable(),
+  taxiReturnLng: z.number().min(-180).max(180).optional().nullable(),
   taxiAddonPrice: z.number().nonnegative().optional(),
   // Taxi
   taxiType: taxiTypeSchema.optional(),

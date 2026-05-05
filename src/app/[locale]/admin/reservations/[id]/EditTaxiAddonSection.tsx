@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 import TaxiTrackingButton from '@/components/admin/TaxiTrackingButton';
+import { TaxiNavBlock } from '@/components/admin/TaxiNavigationButton';
 import AdminTaxiLiveMap from './AdminTaxiLiveMap';
 
 interface BoardingDetailTaxi {
@@ -14,10 +15,14 @@ interface BoardingDetailTaxi {
   taxiGoDate: string | null;
   taxiGoTime: string | null;
   taxiGoAddress: string | null;
+  taxiGoLat?: number | null;
+  taxiGoLng?: number | null;
   taxiReturnEnabled: boolean;
   taxiReturnDate: string | null;
   taxiReturnTime: string | null;
   taxiReturnAddress: string | null;
+  taxiReturnLat?: number | null;
+  taxiReturnLng?: number | null;
 }
 
 interface EditTaxiAddonSectionProps {
@@ -272,6 +277,12 @@ export default function EditTaxiAddonSection({
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                 </div>
+                {(boardingDetail?.taxiGoLat || boardingDetail?.taxiGoAddress) && (
+                  <div className="pt-2 border-t border-gray-100 mt-2">
+                    <p className="text-xs text-gray-400 mb-2">📍 Navigation</p>
+                    <TaxiNavBlock lat={boardingDetail.taxiGoLat ?? null} lng={boardingDetail.taxiGoLng ?? null} address={boardingDetail.taxiGoAddress} locale={locale === 'en' ? 'en' : 'fr'} />
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -333,6 +344,12 @@ export default function EditTaxiAddonSection({
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                   </div>
                 </div>
+                {(boardingDetail?.taxiReturnLat || boardingDetail?.taxiReturnAddress) && (
+                  <div className="pt-2 border-t border-gray-100 mt-2">
+                    <p className="text-xs text-gray-400 mb-2">📍 Navigation</p>
+                    <TaxiNavBlock lat={boardingDetail.taxiReturnLat ?? null} lng={boardingDetail.taxiReturnLng ?? null} address={boardingDetail.taxiReturnAddress} locale={locale === 'en' ? 'en' : 'fr'} />
+                  </div>
+                )}
               </>
             )}
           </div>

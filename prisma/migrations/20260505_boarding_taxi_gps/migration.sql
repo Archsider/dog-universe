@@ -1,0 +1,6 @@
+-- GPS coordinates for taxi addon on boarding stays
+ALTER TABLE "BoardingDetail"
+  ADD COLUMN IF NOT EXISTS "taxiGoLat"     DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS "taxiGoLng"     DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS "taxiReturnLat" DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS "taxiReturnLng" DOUBLE PRECISION;

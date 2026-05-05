@@ -108,10 +108,16 @@ export default function NewBookingPage() {
   const [taxiGoDate, setTaxiGoDate] = useState('');
   const [taxiGoTime, setTaxiGoTime] = useState('');
   const [taxiGoAddress, setTaxiGoAddress] = useState('');
+  const [taxiGoLat, setTaxiGoLat] = useState<number | null>(null);
+  const [taxiGoLng, setTaxiGoLng] = useState<number | null>(null);
+  const [geolocatingGo, setGeolocatingGo] = useState(false);
   const [taxiReturnEnabled, setTaxiReturnEnabled] = useState(false);
   const [taxiReturnDate, setTaxiReturnDate] = useState('');
   const [taxiReturnTime, setTaxiReturnTime] = useState('');
   const [taxiReturnAddress, setTaxiReturnAddress] = useState('');
+  const [taxiReturnLat, setTaxiReturnLat] = useState<number | null>(null);
+  const [taxiReturnLng, setTaxiReturnLng] = useState<number | null>(null);
+  const [geolocatingReturn, setGeolocatingReturn] = useState(false);
   // Taxi standalone
   const [taxiType, setTaxiType] = useState<TaxiType>('STANDARD');
   const [taxiDate, setTaxiDate] = useState('');
@@ -504,10 +510,14 @@ export default function NewBookingPage() {
         body.taxiGoDate = taxiGoEnabled ? taxiGoDate : null;
         body.taxiGoTime = taxiGoEnabled ? taxiGoTime : null;
         body.taxiGoAddress = taxiGoEnabled ? taxiGoAddress : null;
+        body.taxiGoLat = taxiGoEnabled ? taxiGoLat : null;
+        body.taxiGoLng = taxiGoEnabled ? taxiGoLng : null;
         body.taxiReturnEnabled = taxiReturnEnabled;
         body.taxiReturnDate = taxiReturnEnabled ? taxiReturnDate : null;
         body.taxiReturnTime = taxiReturnEnabled ? taxiReturnTime : null;
         body.taxiReturnAddress = taxiReturnEnabled ? taxiReturnAddress : null;
+        body.taxiReturnLat = taxiReturnEnabled ? taxiReturnLat : null;
+        body.taxiReturnLng = taxiReturnEnabled ? taxiReturnLng : null;
         body.taxiAddonPrice = (taxiGoEnabled ? TAXI_ADDON_PRICE : 0) + (taxiReturnEnabled ? TAXI_ADDON_PRICE : 0);
       } else {
         body.startDate = taxiDate; // date only — pas de conversion UTC pour éviter le décalage horaire
@@ -814,12 +824,50 @@ export default function NewBookingPage() {
                       />
                     </div>
                     <div className="col-span-2">
-                      <Label className="text-xs">{l.taxiAddress} *</Label>
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="text-xs">{l.taxiAddress} *</Label>
+                        <button
+                          type="button"
+                          disabled={geolocatingGo}
+                          onClick={() => {
+                            if (typeof navigator === 'undefined' || !navigator.geolocation) {
+                              toast({ title: l.geoDenied, variant: 'destructive' });
+                              return;
+                            }
+                            setGeolocatingGo(true);
+                            navigator.geolocation.getCurrentPosition(
+                              async (pos) => {
+                                const { latitude, longitude } = pos.coords;
+                                setTaxiGoLat(latitude);
+                                setTaxiGoLng(longitude);
+                                try {
+                                  const res = await fetch(
+                                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${locale}`,
+                                    { headers: { 'User-Agent': 'DogUniverse/1.0' } },
+                                  );
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    if (typeof data?.display_name === 'string') setTaxiGoAddress(data.display_name);
+                                  }
+                                } catch { /* silent */ } finally { setGeolocatingGo(false); }
+                              },
+                              (err) => {
+                                setGeolocatingGo(false);
+                                toast({ title: err.code === 3 ? l.geoTimeout : l.geoDenied, variant: 'destructive' });
+                              },
+                              { timeout: 10_000, enableHighAccuracy: true },
+                            );
+                          }}
+                          className="text-xs text-gold-600 hover:text-gold-700 disabled:opacity-50"
+                        >
+                          {geolocatingGo ? l.locating : l.useMyLocation}
+                        </button>
+                      </div>
                       <Input
                         value={taxiGoAddress}
                         onChange={e => setTaxiGoAddress(e.target.value)}
                         placeholder={l.taxiAddressPlaceholder}
-                        className="mt-1 text-sm"
+                        className="text-sm"
                       />
                     </div>
                   </div>
@@ -868,12 +916,50 @@ export default function NewBookingPage() {
                       />
                     </div>
                     <div className="col-span-2">
-                      <Label className="text-xs">{l.taxiAddress} *</Label>
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="text-xs">{l.taxiAddress} *</Label>
+                        <button
+                          type="button"
+                          disabled={geolocatingReturn}
+                          onClick={() => {
+                            if (typeof navigator === 'undefined' || !navigator.geolocation) {
+                              toast({ title: l.geoDenied, variant: 'destructive' });
+                              return;
+                            }
+                            setGeolocatingReturn(true);
+                            navigator.geolocation.getCurrentPosition(
+                              async (pos) => {
+                                const { latitude, longitude } = pos.coords;
+                                setTaxiReturnLat(latitude);
+                                setTaxiReturnLng(longitude);
+                                try {
+                                  const res = await fetch(
+                                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${locale}`,
+                                    { headers: { 'User-Agent': 'DogUniverse/1.0' } },
+                                  );
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    if (typeof data?.display_name === 'string') setTaxiReturnAddress(data.display_name);
+                                  }
+                                } catch { /* silent */ } finally { setGeolocatingReturn(false); }
+                              },
+                              (err) => {
+                                setGeolocatingReturn(false);
+                                toast({ title: err.code === 3 ? l.geoTimeout : l.geoDenied, variant: 'destructive' });
+                              },
+                              { timeout: 10_000, enableHighAccuracy: true },
+                            );
+                          }}
+                          className="text-xs text-gold-600 hover:text-gold-700 disabled:opacity-50"
+                        >
+                          {geolocatingReturn ? l.locating : l.useMyLocation}
+                        </button>
+                      </div>
                       <Input
                         value={taxiReturnAddress}
                         onChange={e => setTaxiReturnAddress(e.target.value)}
                         placeholder={l.taxiAddressPlaceholder}
-                        className="mt-1 text-sm"
+                        className="text-sm"
                       />
                     </div>
                   </div>

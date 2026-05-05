@@ -240,10 +240,14 @@ model BoardingDetail {
   taxiGoDate        String?
   taxiGoTime        String?
   taxiGoAddress     String?
+  taxiGoLat         Float?
+  taxiGoLng         Float?
   taxiReturnEnabled Boolean @default(false)
   taxiReturnDate    String?
   taxiReturnTime    String?
   taxiReturnAddress String?
+  taxiReturnLat     Float?
+  taxiReturnLng     Float?
   taxiAddonPrice    Decimal @default(0) @db.Decimal(10, 2)
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
