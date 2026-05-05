@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { formatMAD } from '@/lib/utils';
+import type { DecimalLike } from '@/lib/decimal';
 import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import RecordPaymentButton from '@/app/[locale]/admin/billing/CreateInvoiceButton';
 
@@ -7,8 +8,8 @@ interface InvoiceData {
   id: string;
   invoiceNumber: string;
   status: string;
-  amount: number;
-  paidAmount: number;
+  amount: DecimalLike;
+  paidAmount: DecimalLike;
   version: number;
 }
 
