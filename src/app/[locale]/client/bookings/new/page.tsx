@@ -115,9 +115,22 @@ export default function NewBookingPage() {
     }
     setLoading(true);
     toast({ title: labels.locating, description: '…', duration: 3000 });
+    // Manual watchdog: some browsers (Chrome desktop, certain proxies) silently
+    // hang on getCurrentPosition without ever firing success/error. Force a
+    // resolution after 9s to guarantee the user gets feedback.
+    let settled = false;
+    const watchdog = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      setLoading(false);
+      toast({ title: labels.geoTimeout, variant: 'destructive' });
+    }, 9_000);
     try {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(watchdog);
           const { latitude, longitude } = pos.coords;
           onCoords(latitude, longitude);
           try {
@@ -132,6 +145,9 @@ export default function NewBookingPage() {
           } catch { /* silent: lat/lng captured */ } finally { setLoading(false); }
         },
         (err) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(watchdog);
           setLoading(false);
           const msg =
             err.code === 1 ? labels.geoDenied :
@@ -143,8 +159,12 @@ export default function NewBookingPage() {
         { timeout: 8_000, enableHighAccuracy: false, maximumAge: 30_000 },
       );
     } catch {
-      setLoading(false);
-      toast({ title: labels.geoUnavailable, variant: 'destructive' });
+      if (!settled) {
+        settled = true;
+        clearTimeout(watchdog);
+        setLoading(false);
+        toast({ title: labels.geoUnavailable, variant: 'destructive' });
+      }
     }
   };
   // Pre-flight capacity status for the selected range (computed via /api/availability)
