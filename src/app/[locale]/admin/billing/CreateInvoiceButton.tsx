@@ -4,14 +4,15 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, Loader2, Banknote, CreditCard, Receipt, Building2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import type { Decimal } from '@prisma/client/runtime/library';
 
 interface Props {
   invoiceId: string;
   invoiceVersion: number;
   currentStatus: string;
   locale: string;
-  invoiceAmount: number;
-  paidAmount: number;
+  invoiceAmount: number | Decimal;
+  paidAmount: number | Decimal;
 }
 
 const PAYMENT_METHODS = [
@@ -25,7 +26,9 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function CreateInvoiceButton({ invoiceId, invoiceVersion, currentStatus, locale, invoiceAmount, paidAmount }: Props) {
+export default function CreateInvoiceButton({ invoiceId, invoiceVersion, currentStatus, locale, invoiceAmount: invoiceAmountProp, paidAmount: paidAmountProp }: Props) {
+  const invoiceAmount = Number(invoiceAmountProp);
+  const paidAmount = Number(paidAmountProp);
   const remaining = Math.max(0, invoiceAmount - paidAmount);
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<string>('CASH');

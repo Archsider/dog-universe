@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { formatMAD } from '@/lib/utils';
+import type { Decimal } from '@prisma/client/runtime/library';
 
 type RebookBooking = {
   id: string;
   serviceType: 'BOARDING' | 'PET_TAXI';
   bookingPets: { pet: { id: string; name: string } }[];
-  totalPrice: number;
+  totalPrice: number | Decimal;
 };
 
 type Props = {

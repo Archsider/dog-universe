@@ -1,5 +1,6 @@
 import { formatDate, formatMAD } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
+import type { Decimal } from '@prisma/client/runtime/library';
 
 const CANCELLATION_REASONS: Record<string, { fr: string; en: string }> = {
   plans_changed: { fr: 'Changement de plans',       en: 'Plans changed' },
@@ -14,8 +15,8 @@ interface BookingItem {
   id: string;
   description: string;
   quantity: number;
-  unitPrice: number;
-  total: number;
+  unitPrice: number | Decimal;
+  total: number | Decimal;
 }
 
 interface BoardingDetail {

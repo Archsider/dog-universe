@@ -10,6 +10,7 @@ import {
 import { toast } from '@/hooks/use-toast';
 import { formatDate, formatMAD, getInvoiceStatusColor, getInitials } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import type { Decimal } from '@prisma/client/runtime/library';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,16 +37,16 @@ interface InvoiceItemData {
   id: string;
   description: string;
   quantity: number;
-  unitPrice: number;
-  total: number;
-  allocatedAmount: number;
+  unitPrice: number | Decimal;
+  total: number | Decimal;
+  allocatedAmount: number | Decimal;
   status: string;
   category?: ItemCategory;
 }
 
 interface PaymentData {
   id: string;
-  amount: number;
+  amount: number | Decimal;
   paymentMethod: string;
   paymentDate: Date | string;
 }
@@ -62,8 +63,8 @@ export interface InvoiceData {
   id: string;
   version: number;
   invoiceNumber: string;
-  amount: number;
-  paidAmount: number;
+  amount: number | Decimal;
+  paidAmount: number | Decimal;
   status: string;
   issuedAt: Date | string;
   paidAt: Date | string | null;
@@ -165,7 +166,7 @@ export default function InvoiceDetailClient({
     setEditItems(invoice.items.map(it => ({
       description: it.description,
       quantity: it.quantity,
-      unitPrice: it.unitPrice,
+      unitPrice: Number(it.unitPrice),
       category: (it.category ?? 'OTHER') as ItemCategory,
     })));
     setEditIssuedAt(toDateStr(invoice.issuedAt));
@@ -174,7 +175,7 @@ export default function InvoiceDetailClient({
     setEditClientName(invoice.clientDisplayName ?? invoice.client.name);
     setEditClientPhone((invoice.clientDisplayPhone ?? invoice.client.phone) ?? '');
     setEditClientEmail(getDisplayEmail(invoice));
-    const remaining = Math.max(0, invoice.amount - invoice.paidAmount);
+    const remaining = Math.max(0, Number(invoice.amount) - Number(invoice.paidAmount));
     setNewPaymentAmount(remaining > 0 ? remaining.toFixed(2) : '');
     setNewPaymentDate(new Date().toISOString().slice(0, 10));
     setNewPaymentMethod('CASH');
@@ -301,7 +302,7 @@ export default function InvoiceDetailClient({
         throw new Error(data.error || (isFr ? 'Erreur serveur' : 'Server error'));
       }
       await refetchInvoice();
-      const rem = Math.max(0, invoice.amount - invoice.paidAmount);
+      const rem = Math.max(0, Number(invoice.amount) - Number(invoice.paidAmount));
       setNewPaymentAmount(rem > 0 ? rem.toFixed(2) : '');
       setNewPaymentDate(new Date().toISOString().slice(0, 10));
       toast({ title: isFr ? 'Paiement ajouté' : 'Payment added', variant: 'success' });
@@ -361,7 +362,7 @@ export default function InvoiceDetailClient({
     }
   };
 
-  const remaining = Math.max(0, invoice.amount - invoice.paidAmount);
+  const remaining = Math.max(0, Number(invoice.amount) - Number(invoice.paidAmount));
 
   return (
     <>
@@ -493,8 +494,8 @@ export default function InvoiceDetailClient({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">{isFr ? 'Montant réglé' : 'Amount paid'}</span>
-                  <span className={`font-semibold ${invoice.paidAmount > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                    {invoice.paidAmount > 0 ? formatMAD(invoice.paidAmount) : '—'}
+                  <span className={`font-semibold ${Number(invoice.paidAmount) > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                    {Number(invoice.paidAmount) > 0 ? formatMAD(invoice.paidAmount) : '—'}
                   </span>
                 </div>
                 {remaining > 0 && (

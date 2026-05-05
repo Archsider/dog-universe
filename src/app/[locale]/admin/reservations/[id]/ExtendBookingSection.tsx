@@ -6,6 +6,7 @@ import { CalendarPlus, Check, X, ChevronDown, ChevronUp, AlertTriangle } from 'l
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { formatDate } from '@/lib/utils';
+import type { Decimal } from '@prisma/client/runtime/library';
 
 interface ExtendBookingSectionProps {
   booking: {
@@ -13,7 +14,7 @@ interface ExtendBookingSectionProps {
     version: number;
     startDate: Date;
     endDate: Date | null;
-    totalPrice: number;
+    totalPrice: number | Decimal;
     hasExtensionRequest: boolean;
     extensionRequestedEndDate: Date | null;
     extensionRequestNote: string | null;

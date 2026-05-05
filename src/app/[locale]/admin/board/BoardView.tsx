@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import type { Decimal } from '@prisma/client/runtime/library';
 
 interface BookingCard {
   id: string;
@@ -19,7 +20,7 @@ interface BookingCard {
   startDate: string;
   endDate: string | null;
   arrivalTime: string | null;
-  totalPrice: number;
+  totalPrice: number | Decimal;
   clientName: string;
   clientId: string;
   pets: { name: string; species: string; photoUrl: string | null }[];

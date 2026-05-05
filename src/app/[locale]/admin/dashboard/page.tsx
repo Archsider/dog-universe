@@ -93,12 +93,14 @@ export default async function AdminDashboardPage({ params }: PageProps) {
       _sum: { amount: true },
       _count: { id: true },
     }),
-    prisma.booking.count({
+    prisma.booking.findMany({
       where: {
         status: { in: ['CONFIRMED', 'COMPLETED', 'IN_PROGRESS'] },
         invoice: null,
         deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       },
+      select: { id: true },
+      take: 2,
     }),
     prisma.booking.findMany({
       where: {
@@ -205,6 +207,10 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   const loyalClients = loyalClientsGroups.length;
   const pendingInvoicesAmount = Number(pendingInvoicesAgg._sum.amount ?? 0);
   const pendingInvoicesCount = pendingInvoicesAgg._count.id ?? 0;
+  const bookingsWithoutInvoiceCount = bookingsWithoutInvoice.length;
+  const bookingsWithoutInvoiceHref = bookingsWithoutInvoice.length === 1
+    ? `/${locale}/admin/reservations/${bookingsWithoutInvoice[0].id}`
+    : `/${locale}/admin/reservations?noInvoice=1`;
 
   const labels = {
     fr: {
@@ -455,7 +461,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
       </div>
 
       {/* Row 2b — Finance alerts */}
-      {(pendingInvoicesCount > 0 || bookingsWithoutInvoice > 0) && (
+      {(pendingInvoicesCount > 0 || bookingsWithoutInvoiceCount > 0) && (
         <div className="grid grid-cols-2 gap-4 mb-6">
           {pendingInvoicesCount > 0 && (
             <Link href={`/${locale}/admin/billing?status=PENDING`}>
@@ -470,14 +476,14 @@ export default async function AdminDashboardPage({ params }: PageProps) {
               </div>
             </Link>
           )}
-          {bookingsWithoutInvoice > 0 && (
-            <Link href={`/${locale}/admin/reservations?noInvoice=1`}>
+          {bookingsWithoutInvoiceCount > 0 && (
+            <Link href={bookingsWithoutInvoiceHref}>
               <div className="bg-white rounded-xl border border-red-200/60 p-4 shadow-card hover:shadow-card-hover transition-shadow flex items-center gap-4">
                 <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
                   <FileWarning className="h-5 w-5 text-red-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-lg font-bold text-charcoal">{bookingsWithoutInvoice}</div>
+                  <div className="text-lg font-bold text-charcoal">{bookingsWithoutInvoiceCount}</div>
                   <div className="text-xs text-gray-500">{l.noInvoice}</div>
                 </div>
               </div>

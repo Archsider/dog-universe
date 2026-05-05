@@ -2,6 +2,7 @@ import React from 'react';
 import path from 'path';
 import { renderToBuffer, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 import { formatDateShort, formatMAD } from '@/lib/utils';
+import type { Decimal } from '@prisma/client/runtime/library';
 
 const LOGO_PATH = path.resolve(process.cwd(), 'public', 'logo_rgba.png');
 
@@ -147,7 +148,7 @@ const styles = StyleSheet.create({
 });
 
 interface PaymentRow {
-  amount: number;
+  amount: number | Decimal;
   paymentMethod: string;
   paymentDate: Date;
   notes?: string | null;
@@ -155,8 +156,8 @@ interface PaymentRow {
 
 interface InvoiceData {
   invoiceNumber: string;
-  amount: number;
-  paidAmount?: number | null;
+  amount: number | Decimal;
+  paidAmount?: number | Decimal | null;
   status: string;
   issuedAt: Date;
   paidAt?: Date | null;
@@ -172,9 +173,9 @@ interface InvoiceData {
   items: {
     description: string;
     quantity: number;
-    unitPrice: number;
-    total: number;
-    allocatedAmount?: number;
+    unitPrice: number | Decimal;
+    total: number | Decimal;
+    allocatedAmount?: number | Decimal;
     status?: string;
   }[];
   payments?: PaymentRow[];
@@ -218,8 +219,8 @@ function ItemStatusBadge({ status }: { status?: string }) {
 function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
   const isPaid = invoice.status === 'PAID';
   const isPartial = invoice.status === 'PARTIALLY_PAID';
-  const paidAmount = invoice.paidAmount ?? 0;
-  const remaining = Math.max(0, invoice.amount - paidAmount);
+  const paidAmount = Number(invoice.paidAmount ?? 0);
+  const remaining = Math.max(0, Number(invoice.amount) - paidAmount);
   const payments = (invoice.payments ?? []).slice().sort(
     (a, b) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime()
   );
@@ -319,16 +320,19 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
 
             {/* Rows — PARTIAL items are split into two visual lines (paid / pending) */}
             {invoice.items.flatMap((item, i) => {
-              if (item.status === 'PARTIAL' && item.allocatedAmount != null && item.unitPrice > 0) {
-                const paidQty = Math.floor(item.allocatedAmount / item.unitPrice);
-                const paidAmt = paidQty * item.unitPrice;
+              const itemUnitPrice = Number(item.unitPrice);
+              const itemTotal = Number(item.total);
+              const itemAllocated = Number(item.allocatedAmount ?? 0);
+              if (item.status === 'PARTIAL' && item.allocatedAmount != null && itemUnitPrice > 0) {
+                const paidQty = Math.floor(itemAllocated / itemUnitPrice);
+                const paidAmt = paidQty * itemUnitPrice;
                 const pendingQty = item.quantity - paidQty;
-                const pendingAmt = item.total - paidAmt;
+                const pendingAmt = itemTotal - paidAmt;
                 return [
                   <View key={`${i}-a`} style={styles.tableRow}>
                     <Text style={[{ fontSize: 10 }, styles.colDescription]}>{item.description}</Text>
                     <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colQty]}>{paidQty}</Text>
-                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(item.unitPrice)}</Text>
+                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(itemUnitPrice)}</Text>
                     <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(paidAmt)}</Text>
                     <View style={[styles.colStatus, { alignItems: 'center' }]}>
                       <ItemStatusBadge status="PAID" />
@@ -337,7 +341,7 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
                   <View key={`${i}-b`} style={styles.tableRow}>
                     <Text style={[{ fontSize: 10 }, styles.colDescription]}>{item.description}</Text>
                     <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colQty]}>{pendingQty}</Text>
-                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(item.unitPrice)}</Text>
+                    <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(itemUnitPrice)}</Text>
                     <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(pendingAmt)}</Text>
                     <View style={[styles.colStatus, { alignItems: 'center' }]}>
                       <ItemStatusBadge status="PENDING" />
@@ -349,8 +353,8 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
                 <View key={i} style={styles.tableRow}>
                   <Text style={[{ fontSize: 10 }, styles.colDescription]}>{item.description}</Text>
                   <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colQty]}>{item.quantity}</Text>
-                  <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(item.unitPrice)}</Text>
-                  <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(item.total)}</Text>
+                  <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colUnit]}>{formatMAD(itemUnitPrice)}</Text>
+                  <Text style={[{ fontSize: 10, textAlign: 'right' }, styles.colTotal]}>{formatMAD(itemTotal)}</Text>
                   <View style={[styles.colStatus, { alignItems: 'center' }]}>
                     <ItemStatusBadge status={item.status} />
                   </View>
@@ -362,11 +366,11 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
             <View style={{ paddingTop: 6, paddingHorizontal: 8, gap: 3 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 32 }}>
                 <Text style={{ fontSize: 9, color: '#6B7280' }}>Montant HT</Text>
-                <Text style={{ fontSize: 9, color: '#6B7280', minWidth: 60, textAlign: 'right' }}>{formatMAD(Math.round(invoice.amount / 1.2))}</Text>
+                <Text style={{ fontSize: 9, color: '#6B7280', minWidth: 60, textAlign: 'right' }}>{formatMAD(Math.round(Number(invoice.amount) / 1.2))}</Text>
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 32 }}>
                 <Text style={{ fontSize: 9, color: '#6B7280' }}>TVA 20%</Text>
-                <Text style={{ fontSize: 9, color: '#6B7280', minWidth: 60, textAlign: 'right' }}>{formatMAD(invoice.amount - Math.round(invoice.amount / 1.2))}</Text>
+                <Text style={{ fontSize: 9, color: '#6B7280', minWidth: 60, textAlign: 'right' }}>{formatMAD(Number(invoice.amount) - Math.round(Number(invoice.amount) / 1.2))}</Text>
               </View>
             </View>
 

@@ -6,12 +6,13 @@ import { GitMerge, ChevronDown, ChevronUp, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { formatDate, formatMAD } from '@/lib/utils';
+import type { Decimal } from '@prisma/client/runtime/library';
 
 interface AdjacentBooking {
   id: string;
   startDate: Date;
   endDate: Date | null;
-  totalPrice: number;
+  totalPrice: number | Decimal;
   status: string;
   pets: string;
   relation: 'before' | 'after'; // relative to current booking

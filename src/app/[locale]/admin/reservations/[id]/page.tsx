@@ -1,6 +1,7 @@
 import { auth } from '../../../../../../auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import type { Decimal } from '@prisma/client/runtime/library';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -81,7 +82,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
     id: string;
     startDate: Date;
     endDate: Date | null;
-    totalPrice: number;
+    totalPrice: number | Decimal;
     status: string;
     pets: string;
     relation: 'before' | 'after';

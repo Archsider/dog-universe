@@ -7,10 +7,11 @@ import {
   Building2, Trash2, ChevronDown,
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import type { Decimal } from '@prisma/client/runtime/library';
 
 interface Payment {
   id: string;
-  amount: number;
+  amount: number | Decimal;
   paymentMethod: string;
   paymentDate: string;
   notes: string | null;
@@ -20,8 +21,8 @@ interface Props {
   invoiceId: string;
   currentStatus: string;
   locale: string;
-  invoiceAmount: number;
-  paidAmount: number;
+  invoiceAmount: number | Decimal;
+  paidAmount: number | Decimal;
 }
 
 const PAYMENT_METHODS = [
@@ -43,10 +44,12 @@ function todayIso() {
 }
 
 export default function PaymentModal({
-  invoiceId, currentStatus, locale, invoiceAmount, paidAmount,
+  invoiceId, currentStatus, locale, invoiceAmount: invoiceAmountProp, paidAmount: paidAmountProp,
 }: Props) {
   const isFr = locale === 'fr';
   const router = useRouter();
+  const invoiceAmount = Number(invoiceAmountProp);
+  const paidAmount = Number(paidAmountProp);
 
   const [open, setOpen] = useState(false);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -60,7 +63,7 @@ export default function PaymentModal({
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Recompute remaining from live payments (may differ from paidAmount prop after actions)
-  const livePaid = payments.reduce((s, p) => s + p.amount, 0);
+  const livePaid = payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = Math.max(0, invoiceAmount - livePaid);
   const [inputAmount, setInputAmount] = useState(paidAmount > 0 ? (invoiceAmount - paidAmount).toFixed(2) : invoiceAmount.toFixed(2));
 
@@ -71,7 +74,7 @@ export default function PaymentModal({
       if (res.ok) {
         const data = await res.json();
         setPayments(data);
-        const paid = data.reduce((s: number, p: Payment) => s + p.amount, 0);
+        const paid = data.reduce((s: number, p: Payment) => s + Number(p.amount), 0);
         setInputAmount(Math.max(0, invoiceAmount - paid).toFixed(2));
       }
     } finally {
@@ -305,7 +308,7 @@ export default function PaymentModal({
                               )}
                             </div>
                             <div className="flex items-center gap-2 shrink-0 ml-3">
-                              <span className="font-semibold text-charcoal">-{p.amount.toFixed(2)} MAD</span>
+                              <span className="font-semibold text-charcoal">-{Number(p.amount).toFixed(2)} MAD</span>
                               <button
                                 onClick={() => handleDelete(p.id)}
                                 disabled={deletingId === p.id}
