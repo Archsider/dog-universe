@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { FileText, Download, Eye, Pencil } from 'lucide-react';
 import { formatDate, formatMAD } from '@/lib/utils';
+import { toNumber } from '@/lib/decimal';
 import PaymentModal from './PaymentModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
@@ -174,10 +175,10 @@ export default async function AdminBillingPage(props: PageProps) {
     }),
   ]);
 
-  const kpiTotalBilled = monthInvoicesAgg._sum.amount ?? 0;
-  const kpiTotalPaid = monthInvoicesAgg._sum.paidAmount ?? 0;
+  const kpiTotalBilled = toNumber(monthInvoicesAgg._sum.amount ?? 0);
+  const kpiTotalPaid = toNumber(monthInvoicesAgg._sum.paidAmount ?? 0);
   const kpiRemaining = Math.max(0, kpiTotalBilled - kpiTotalPaid);
-  const kpiCollected = totalCollected._sum.amount ?? 0;
+  const kpiCollected = toNumber(totalCollected._sum.amount ?? 0);
 
   // ── CSV export URL ─────────────────────────────────────────────────────────
   const exportParams = new URLSearchParams({
