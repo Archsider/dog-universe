@@ -428,7 +428,13 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             cancellationReason={booking.cancellationReason}
             boardingDetail={booking.boardingDetail}
             taxiDetail={booking.taxiDetail}
-            bookingItems={booking.bookingItems}
+            bookingItems={booking.bookingItems.map(i => ({
+              id: i.id,
+              description: i.description,
+              quantity: i.quantity,
+              unitPrice: Number(i.unitPrice),
+              total: Number(i.total),
+            }))}
             labels={{
               type: l.type,
               boarding: l.boarding,
