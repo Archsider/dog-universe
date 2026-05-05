@@ -98,6 +98,49 @@ export default function NewBookingPage() {
   // Boarding
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
+  // Shared geolocation handler — used by 3 buttons (taxi addon aller, taxi addon retour, taxi standalone)
+  const requestGeo = (
+    onCoords: (lat: number, lng: number) => void,
+    onAddress: (addr: string) => void,
+    setLoading: (v: boolean) => void,
+    labels: { geoDenied: string; geoUnavailable: string; geoInsecure: string; geoTimeout: string },
+  ) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      toast({ title: labels.geoUnavailable, variant: 'destructive' });
+      return;
+    }
+    if (typeof window !== 'undefined' && window.isSecureContext === false) {
+      toast({ title: labels.geoInsecure, variant: 'destructive' });
+      return;
+    }
+    setLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        onCoords(latitude, longitude);
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${locale}`,
+            { headers: { 'User-Agent': 'DogUniverse/1.0' } },
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (typeof data?.display_name === 'string') onAddress(data.display_name);
+          }
+        } catch { /* silent: lat/lng captured */ } finally { setLoading(false); }
+      },
+      (err) => {
+        setLoading(false);
+        const msg =
+          err.code === 1 ? labels.geoDenied :
+          err.code === 2 ? labels.geoUnavailable :
+          err.code === 3 ? labels.geoTimeout :
+          labels.geoUnavailable;
+        toast({ title: msg, variant: 'destructive' });
+      },
+      { timeout: 10_000, enableHighAccuracy: true, maximumAge: 60_000 },
+    );
+  };
   // Pre-flight capacity status for the selected range (computed via /api/availability)
   const [capacityStatus, setCapacityStatus] = useState<'ok' | 'limited' | 'full' | null>(null);
   const [groomingPets, setGroomingPets] = useState<Record<string, boolean>>({});
@@ -171,7 +214,9 @@ export default function NewBookingPage() {
       dropoff: 'Adresse d\'arrivée',
       useMyLocation: '📍 Utiliser ma position',
       locating: 'Localisation…',
-      geoDenied: 'Géolocalisation refusée. Saisissez l\'adresse manuellement.',
+      geoDenied: 'Géolocalisation refusée. Autorisez-la dans les réglages du navigateur (icône cadenas) ou saisissez l\'adresse manuellement.',
+      geoUnavailable: 'Position indisponible. Vérifiez votre GPS / Wi-Fi ou saisissez l\'adresse manuellement.',
+      geoInsecure: 'Géolocalisation indisponible : la page doit être en HTTPS. Saisissez l\'adresse manuellement.',
       geoTimeout: 'Localisation lente, saisissez l\'adresse manuellement.',
       notes: 'Notes particulières',
       notesPlaceholder: 'Allergies, médicaments, préférences...',
@@ -239,7 +284,9 @@ export default function NewBookingPage() {
       dropoff: 'Dropoff address',
       useMyLocation: '📍 Use my location',
       locating: 'Locating…',
-      geoDenied: 'Geolocation denied. Please enter the address manually.',
+      geoDenied: 'Geolocation denied. Allow it in your browser settings (lock icon) or enter the address manually.',
+      geoUnavailable: 'Position unavailable. Check your GPS / Wi-Fi, or enter the address manually.',
+      geoInsecure: 'Geolocation unavailable: the page must be served over HTTPS. Please enter the address manually.',
       geoTimeout: 'Slow geolocation, please enter the address manually.',
       notes: 'Special notes',
       notesPlaceholder: 'Allergies, medications, preferences...',
@@ -829,35 +876,12 @@ export default function NewBookingPage() {
                         <button
                           type="button"
                           disabled={geolocatingGo}
-                          onClick={() => {
-                            if (typeof navigator === 'undefined' || !navigator.geolocation) {
-                              toast({ title: l.geoDenied, variant: 'destructive' });
-                              return;
-                            }
-                            setGeolocatingGo(true);
-                            navigator.geolocation.getCurrentPosition(
-                              async (pos) => {
-                                const { latitude, longitude } = pos.coords;
-                                setTaxiGoLat(latitude);
-                                setTaxiGoLng(longitude);
-                                try {
-                                  const res = await fetch(
-                                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${locale}`,
-                                    { headers: { 'User-Agent': 'DogUniverse/1.0' } },
-                                  );
-                                  if (res.ok) {
-                                    const data = await res.json();
-                                    if (typeof data?.display_name === 'string') setTaxiGoAddress(data.display_name);
-                                  }
-                                } catch { /* silent */ } finally { setGeolocatingGo(false); }
-                              },
-                              (err) => {
-                                setGeolocatingGo(false);
-                                toast({ title: err.code === 3 ? l.geoTimeout : l.geoDenied, variant: 'destructive' });
-                              },
-                              { timeout: 10_000, enableHighAccuracy: true },
-                            );
-                          }}
+                          onClick={() => requestGeo(
+                            (lat, lng) => { setTaxiGoLat(lat); setTaxiGoLng(lng); },
+                            setTaxiGoAddress,
+                            setGeolocatingGo,
+                            l,
+                          )}
                           className="text-xs text-gold-600 hover:text-gold-700 disabled:opacity-50"
                         >
                           {geolocatingGo ? l.locating : l.useMyLocation}
@@ -921,35 +945,12 @@ export default function NewBookingPage() {
                         <button
                           type="button"
                           disabled={geolocatingReturn}
-                          onClick={() => {
-                            if (typeof navigator === 'undefined' || !navigator.geolocation) {
-                              toast({ title: l.geoDenied, variant: 'destructive' });
-                              return;
-                            }
-                            setGeolocatingReturn(true);
-                            navigator.geolocation.getCurrentPosition(
-                              async (pos) => {
-                                const { latitude, longitude } = pos.coords;
-                                setTaxiReturnLat(latitude);
-                                setTaxiReturnLng(longitude);
-                                try {
-                                  const res = await fetch(
-                                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${locale}`,
-                                    { headers: { 'User-Agent': 'DogUniverse/1.0' } },
-                                  );
-                                  if (res.ok) {
-                                    const data = await res.json();
-                                    if (typeof data?.display_name === 'string') setTaxiReturnAddress(data.display_name);
-                                  }
-                                } catch { /* silent */ } finally { setGeolocatingReturn(false); }
-                              },
-                              (err) => {
-                                setGeolocatingReturn(false);
-                                toast({ title: err.code === 3 ? l.geoTimeout : l.geoDenied, variant: 'destructive' });
-                              },
-                              { timeout: 10_000, enableHighAccuracy: true },
-                            );
-                          }}
+                          onClick={() => requestGeo(
+                            (lat, lng) => { setTaxiReturnLat(lat); setTaxiReturnLng(lng); },
+                            setTaxiReturnAddress,
+                            setGeolocatingReturn,
+                            l,
+                          )}
                           className="text-xs text-gold-600 hover:text-gold-700 disabled:opacity-50"
                         >
                           {geolocatingReturn ? l.locating : l.useMyLocation}
@@ -1029,45 +1030,12 @@ export default function NewBookingPage() {
                 <button
                   type="button"
                   disabled={geolocating}
-                  onClick={() => {
-                    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-                      toast({ title: l.geoDenied, variant: 'destructive' });
-                      return;
-                    }
-                    setGeolocating(true);
-                    navigator.geolocation.getCurrentPosition(
-                      async (pos) => {
-                        const { latitude, longitude } = pos.coords;
-                        setPickupLat(latitude);
-                        setPickupLng(longitude);
-                        try {
-                          const res = await fetch(
-                            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${locale}`,
-                            { headers: { 'User-Agent': 'DogUniverse/1.0' } },
-                          );
-                          if (res.ok) {
-                            const data = await res.json();
-                            if (typeof data?.display_name === 'string') {
-                              setPickupAddress(data.display_name);
-                            }
-                          }
-                        } catch {
-                          // silent: lat/lng captured, user can type address manually
-                        } finally {
-                          setGeolocating(false);
-                        }
-                      },
-                      (err) => {
-                        setGeolocating(false);
-                        if (err.code === 3) {
-                          toast({ title: l.geoTimeout, variant: 'destructive' });
-                        } else {
-                          toast({ title: l.geoDenied, variant: 'destructive' });
-                        }
-                      },
-                      { timeout: 10_000, enableHighAccuracy: true },
-                    );
-                  }}
+                  onClick={() => requestGeo(
+                    (lat, lng) => { setPickupLat(lat); setPickupLng(lng); },
+                    setPickupAddress,
+                    setGeolocating,
+                    l,
+                  )}
                   className="text-xs text-gold-600 hover:text-gold-700 disabled:opacity-50"
                 >
                   {geolocating ? l.locating : l.useMyLocation}
