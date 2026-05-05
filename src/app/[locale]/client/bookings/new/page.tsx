@@ -128,23 +128,45 @@ export default function NewBookingPage() {
     try {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
+          // [DEBUG] Step 1 — GPS callback fired
+          console.log('[GEOLOC] ✅ callback success', pos.coords.latitude, pos.coords.longitude, 'accuracy:', pos.coords.accuracy);
+          toast({ title: `[DEBUG] GPS OK: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`, duration: 4000 });
+
           if (settled) return;
           settled = true;
           clearTimeout(watchdog);
           const { latitude, longitude } = pos.coords;
           onCoords(latitude, longitude);
+
+          // [DEBUG] Step 2 — reverse geocoding
+          console.log('[GEOLOC] 🌐 starting Nominatim reverse geocode...');
           try {
             const res = await fetch(
               `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${locale}`,
               { headers: { 'User-Agent': 'DogUniverse/1.0' } },
             );
+            console.log('[GEOLOC] 🌐 Nominatim response status:', res.status);
             if (res.ok) {
               const data = await res.json();
-              if (typeof data?.display_name === 'string') onAddress(data.display_name);
+              console.log('[GEOLOC] 🌐 Nominatim display_name:', data?.display_name);
+              if (typeof data?.display_name === 'string') {
+                onAddress(data.display_name);
+              } else {
+                toast({ title: '[DEBUG] Nominatim: pas de display_name', variant: 'destructive', duration: 4000 });
+              }
+            } else {
+              toast({ title: `[DEBUG] Nominatim erreur HTTP ${res.status}`, variant: 'destructive', duration: 4000 });
             }
-          } catch { /* silent: lat/lng captured */ } finally { setLoading(false); }
+          } catch (geocodeErr) {
+            console.error('[GEOLOC] 🌐 Nominatim fetch error:', geocodeErr);
+            toast({ title: `[DEBUG] Nominatim fetch échoué: ${String(geocodeErr)}`, variant: 'destructive', duration: 5000 });
+          } finally { setLoading(false); }
         },
         (err) => {
+          // [DEBUG] Step 1 — GPS callback fired with error
+          console.log('[GEOLOC] ❌ error callback', err.code, err.message);
+          toast({ title: `[DEBUG] GPS erreur code ${err.code}: ${err.message}`, variant: 'destructive', duration: 5000 });
+
           if (settled) return;
           settled = true;
           clearTimeout(watchdog);
@@ -158,7 +180,9 @@ export default function NewBookingPage() {
         },
         { timeout: 8_000, enableHighAccuracy: false, maximumAge: 30_000 },
       );
-    } catch {
+    } catch (syncErr) {
+      console.error('[GEOLOC] 💥 getCurrentPosition threw synchronously:', syncErr);
+      toast({ title: `[DEBUG] Exception sync: ${String(syncErr)}`, variant: 'destructive', duration: 5000 });
       if (!settled) {
         settled = true;
         clearTimeout(watchdog);
