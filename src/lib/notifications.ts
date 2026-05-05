@@ -41,8 +41,10 @@ interface CreateNotificationData {
   type: NotificationType;
   titleFr: string;
   titleEn: string;
+  titleAr?: string;
   messageFr: string;
   messageEn: string;
+  messageAr?: string;
   metadata?: Record<string, string>;
 }
 
@@ -53,8 +55,10 @@ export async function createNotification(data: CreateNotificationData) {
       type: data.type,
       titleFr: data.titleFr,
       titleEn: data.titleEn,
+      titleAr: data.titleAr,
       messageFr: data.messageFr,
       messageEn: data.messageEn,
+      messageAr: data.messageAr,
       metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
       read: false,
     },
@@ -246,8 +250,11 @@ export async function createAdminMessageNotification(
     type: 'ADMIN_MESSAGE',
     titleFr: 'Message de Dog Universe',
     titleEn: 'Message from Dog Universe',
+    titleAr: 'رسالة من Dog Universe',
     messageFr,
     messageEn,
+    // No AR-translated body for ad-hoc admin messages — fallback to EN at render.
+    messageAr: messageEn,
     metadata: bookingId ? { bookingId } : undefined,
   });
 }
@@ -442,12 +449,15 @@ export async function notifyAdminsAddonRequest(args: {
   const labels = ADDON_LABELS[args.serviceType];
   const messageSuffixFr = args.message ? ` — « ${args.message} »` : '';
   const messageSuffixEn = args.message ? ` — "${args.message}"` : '';
+  const messageSuffixAr = args.message ? ` — «${args.message}»` : '';
   return createAdminNotifications({
     type: 'ADDON_REQUEST',
     titleFr: `Demande d'addon — ${labels.fr}`,
     titleEn: `Addon request — ${labels.en}`,
+    titleAr: `طلب خدمة إضافية — ${labels.en}`,
     messageFr: `${args.clientName} demande ${labels.fr} pour ${args.petNames} (réf. ${args.bookingRef})${messageSuffixFr}`,
     messageEn: `${args.clientName} requests ${labels.en} for ${args.petNames} (ref. ${args.bookingRef})${messageSuffixEn}`,
+    messageAr: `${args.clientName} يطلب ${labels.en} من أجل ${args.petNames} (المرجع ${args.bookingRef})${messageSuffixAr}`,
     metadata: {
       bookingId: args.bookingId,
       bookingRef: args.bookingRef,

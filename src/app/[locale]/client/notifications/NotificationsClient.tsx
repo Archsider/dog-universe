@@ -15,8 +15,10 @@ export interface NotificationData {
   id: string;
   titleFr: string;
   titleEn: string;
+  titleAr: string | null;
   messageFr: string;
   messageEn: string;
+  messageAr: string | null;
   type: string;
   metadata: string | null;
   read: boolean;
@@ -112,8 +114,8 @@ export default function NotificationsClient({ initialNotifications, locale }: Pr
     setMarkingAll(false);
   };
 
-  const getTitle = (n: NotificationData) => locale === 'ar' ? (n.titleFr ?? n.titleEn) : locale === 'en' ? n.titleEn : n.titleFr;
-  const getMessage = (n: NotificationData) => locale === 'ar' ? (n.messageFr ?? n.messageEn) : locale === 'en' ? n.messageEn : n.messageFr;
+  const getTitle = (n: NotificationData) => locale === 'ar' ? (n.titleAr ?? n.titleEn) : locale === 'en' ? n.titleEn : n.titleFr;
+  const getMessage = (n: NotificationData) => locale === 'ar' ? (n.messageAr ?? n.messageEn) : locale === 'en' ? n.messageEn : n.messageFr;
 
   return (
     <div className="max-w-2xl mx-auto">

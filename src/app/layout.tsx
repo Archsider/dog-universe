@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Playfair_Display, Inter } from 'next/font/google';
+import { Playfair_Display, Inter, Noto_Sans_Arabic } from 'next/font/google';
 import { headers } from 'next/headers';
 import { PWAInstaller } from '@/components/shared/PWAInstaller';
 import './globals.css';
@@ -15,6 +15,13 @@ const inter = Inter({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700'],
   variable: '--font-inter',
+  display: 'swap',
+});
+
+const notoArabic = Noto_Sans_Arabic({
+  subsets: ['arabic'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-noto-arabic',
   display: 'swap',
 });
 
@@ -42,8 +49,8 @@ export default async function RootLayout({
   const lang = h.get('x-locale') ?? 'fr';
 
   return (
-    <html lang={lang} suppressHydrationWarning nonce={nonce} className={`${playfair.variable} ${inter.variable}`}>
-      <body>
+    <html lang={lang} dir={lang === 'ar' ? 'rtl' : 'ltr'} suppressHydrationWarning nonce={nonce} className={`${playfair.variable} ${inter.variable} ${notoArabic.variable}`}>
+      <body className={lang === 'ar' ? 'font-arabic' : ''}>
         <PWAInstaller />
         {children}
       </body>
