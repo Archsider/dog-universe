@@ -7,6 +7,7 @@ import { createNotification } from '@/lib/notifications';
 import { acquireCronLock } from '@/lib/cron-lock';
 import { APP_URL } from '@/lib/config';
 import { formatMAD } from '@/lib/utils';
+import { toNumber } from '@/lib/decimal';
 import { log } from '@/lib/logger';
 
 export const maxDuration = 60;
@@ -114,7 +115,7 @@ export async function GET(req: NextRequest) {
         const dedupKey = `${invoice.id}:${reminder.kind}`;
         if (alreadySent.has(dedupKey)) { skipped++; return; }
 
-        const remaining = Math.max(0, (invoice.amount ?? 0) - (invoice.paidAmount ?? 0));
+        const remaining = Math.max(0, toNumber(invoice.amount) - toNumber(invoice.paidAmount));
         if (remaining <= 0) { skipped++; return; }
 
         const locale = invoice.client.language ?? 'fr';
