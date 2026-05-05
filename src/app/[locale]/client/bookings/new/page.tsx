@@ -103,43 +103,49 @@ export default function NewBookingPage() {
     onCoords: (lat: number, lng: number) => void,
     onAddress: (addr: string) => void,
     setLoading: (v: boolean) => void,
-    labels: { geoDenied: string; geoUnavailable: string; geoInsecure: string; geoTimeout: string },
+    labels: { geoDenied: string; geoUnavailable: string; geoInsecure: string; geoTimeout: string; locating: string },
   ) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       toast({ title: labels.geoUnavailable, variant: 'destructive' });
       return;
     }
-    if (typeof window !== 'undefined' && window.isSecureContext === false) {
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
       toast({ title: labels.geoInsecure, variant: 'destructive' });
       return;
     }
     setLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        onCoords(latitude, longitude);
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${locale}`,
-            { headers: { 'User-Agent': 'DogUniverse/1.0' } },
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (typeof data?.display_name === 'string') onAddress(data.display_name);
-          }
-        } catch { /* silent: lat/lng captured */ } finally { setLoading(false); }
-      },
-      (err) => {
-        setLoading(false);
-        const msg =
-          err.code === 1 ? labels.geoDenied :
-          err.code === 2 ? labels.geoUnavailable :
-          err.code === 3 ? labels.geoTimeout :
-          labels.geoUnavailable;
-        toast({ title: msg, variant: 'destructive' });
-      },
-      { timeout: 10_000, enableHighAccuracy: true, maximumAge: 60_000 },
-    );
+    toast({ title: labels.locating, description: '…', duration: 3000 });
+    try {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+          onCoords(latitude, longitude);
+          try {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=${locale}`,
+              { headers: { 'User-Agent': 'DogUniverse/1.0' } },
+            );
+            if (res.ok) {
+              const data = await res.json();
+              if (typeof data?.display_name === 'string') onAddress(data.display_name);
+            }
+          } catch { /* silent: lat/lng captured */ } finally { setLoading(false); }
+        },
+        (err) => {
+          setLoading(false);
+          const msg =
+            err.code === 1 ? labels.geoDenied :
+            err.code === 2 ? labels.geoUnavailable :
+            err.code === 3 ? labels.geoTimeout :
+            labels.geoUnavailable;
+          toast({ title: msg, variant: 'destructive' });
+        },
+        { timeout: 8_000, enableHighAccuracy: false, maximumAge: 30_000 },
+      );
+    } catch {
+      setLoading(false);
+      toast({ title: labels.geoUnavailable, variant: 'destructive' });
+    }
   };
   // Pre-flight capacity status for the selected range (computed via /api/availability)
   const [capacityStatus, setCapacityStatus] = useState<'ok' | 'limited' | 'full' | null>(null);
