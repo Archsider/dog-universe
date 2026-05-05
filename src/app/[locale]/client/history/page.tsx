@@ -129,30 +129,33 @@ export default async function HistoryPage(props: PageProps) {
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-bold text-charcoal">{t.title}</h1>
-        <Link href={`/${locale}/client/bookings/new`}>
-          <button className="flex items-center gap-2 px-4 py-2 bg-charcoal text-white rounded-lg hover:bg-charcoal/90 text-sm font-medium transition-colors">
-            <Plus className="h-4 w-4" />
-            {t.newBooking}
-          </button>
+        <Link
+          href={`/${locale}/client/bookings/new`}
+          className="flex items-center gap-2 px-4 py-2 bg-charcoal text-white rounded-lg hover:bg-charcoal/90 text-sm font-medium transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          {t.newBooking}
         </Link>
       </div>
 
       {tabs.length > 1 && (
         <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
           {tabs.map(tab => (
-            <Link key={tab.key} href={`?status=${tab.key}`}>
-              <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+            <Link
+              key={tab.key}
+              href={`?status=${tab.key}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
                 statusFilter === tab.key
                   ? 'bg-charcoal text-white'
                   : 'bg-white border border-ivory-200 text-gray-600 hover:border-gold-300'
+              }`}
+            >
+              {tab.label}
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                statusFilter === tab.key ? 'bg-white/20 text-white' : 'bg-ivory-100 text-gray-500'
               }`}>
-                {tab.label}
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                  statusFilter === tab.key ? 'bg-white/20 text-white' : 'bg-ivory-100 text-gray-500'
-                }`}>
-                  {tab.count}
-                </span>
-              </button>
+                {tab.count}
+              </span>
             </Link>
           ))}
         </div>
@@ -163,10 +166,11 @@ export default async function HistoryPage(props: PageProps) {
           <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-300" />
           <p className="font-medium text-charcoal mb-1">{t.noBookings}</p>
           <p className="text-sm text-gray-400 mb-5">{t.noBookingsDesc}</p>
-          <Link href={`/${locale}/client/bookings/new`}>
-            <button className="inline-flex items-center gap-2 px-4 py-2 bg-charcoal text-white rounded-lg text-sm font-medium hover:bg-charcoal/90">
-              <Plus className="h-4 w-4" />{t.newBooking}
-            </button>
+          <Link
+            href={`/${locale}/client/bookings/new`}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-charcoal text-white rounded-lg text-sm font-medium hover:bg-charcoal/90"
+          >
+            <Plus className="h-4 w-4" />{t.newBooking}
           </Link>
         </div>
       ) : (
