@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { log } from '@/lib/logger';
 import { getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
+import { NOTIFICATION_MESSAGES } from '@/lib/notification-messages';
 import { petPossessive } from '@/lib/sms';
 import { enqueueEmail, enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
@@ -294,14 +295,13 @@ export async function GET(request: Request) {
         createNotification({
           userId: booking.clientId,
           type: 'STAY_END_REMINDER',
-          titleFr: 'Fin de séjour demain',
-          titleEn: 'Stay ending tomorrow',
-          messageFr: hasTaxi
-            ? `Le séjour de ${petNames} se termine demain (${endDateFr}). Nous vous ${articleFr} ramenons à la maison.`
-            : `Le séjour de ${petNames} se termine demain (${endDateFr}). On vous attend à la pension pour les retrouvailles.`,
-          messageEn: hasTaxi
-            ? `${petNames}'s stay ends tomorrow (${endDateEn}). We bring them home.`
-            : `${petNames}'s stay ends tomorrow (${endDateEn}). See you at the boarding for the reunion.`,
+          ...NOTIFICATION_MESSAGES.STAY_END_REMINDER({
+            petName: petNames,
+            endDateFr,
+            endDateEn,
+            hasTaxi: hasTaxi ? '1' : '',
+            articleFr,
+          }),
           metadata: { bookingId: booking.id, hasTaxi: hasTaxi ? '1' : '0' },
         }),
         enqueueSms(
@@ -319,10 +319,11 @@ export async function GET(request: Request) {
         ops.push(createNotification({
           userId: admin.id,
           type: 'STAY_END_REMINDER',
-          titleFr: `Départ demain — ${petNames}`,
-          titleEn: `Check-out tomorrow — ${petNames}`,
-          messageFr: `${booking.client.name} récupère ${petNames} demain (réf. ${bookingRef}).`,
-          messageEn: `${booking.client.name} picks up ${petNames} tomorrow (ref. ${bookingRef}).`,
+          ...NOTIFICATION_MESSAGES.STAY_END_REMINDER_ADMIN({
+            clientName: booking.client.name,
+            petNames,
+            bookingRef,
+          }),
           metadata: { bookingId: booking.id },
         }));
         const { subject: aSubject, html: aHtml } = getEmailTemplate(

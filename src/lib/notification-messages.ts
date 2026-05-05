@@ -151,6 +151,29 @@ export const NOTIFICATION_MESSAGES: Record<string, MessageFactory> = {
     messageEn: `Your request for "${benefitEn}" has been rejected.${reason ? ` Reason: ${reason}` : ''}`,
   }),
 
+  // ── Stay end reminder (J-1) — taxi/no-taxi conditional ─────────────────────
+
+  STAY_END_REMINDER: ({ petName, endDateFr, endDateEn, hasTaxi, articleFr }) => {
+    const taxi = hasTaxi === '1';
+    return {
+      titleFr: 'Fin de séjour demain',
+      titleEn: 'Stay ending tomorrow',
+      messageFr: taxi
+        ? `Le séjour de ${petName} se termine demain (${endDateFr}). Nous vous ${articleFr} ramenons à la maison.`
+        : `Le séjour de ${petName} se termine demain (${endDateFr}). On vous attend à la pension pour les retrouvailles.`,
+      messageEn: taxi
+        ? `${petName}'s stay ends tomorrow (${endDateEn}). We bring them home.`
+        : `${petName}'s stay ends tomorrow (${endDateEn}). See you at the boarding for the reunion.`,
+    };
+  },
+
+  STAY_END_REMINDER_ADMIN: ({ clientName, petNames, bookingRef }) => ({
+    titleFr: `Départ demain — ${petNames}`,
+    titleEn: `Check-out tomorrow — ${petNames}`,
+    messageFr: `${clientName} récupère ${petNames} demain (réf. ${bookingRef}).`,
+    messageEn: `${clientName} picks up ${petNames} tomorrow (ref. ${bookingRef}).`,
+  }),
+
   // ── Stay media ─────────────────────────────────────────────────────────────
 
   STAY_PHOTO: ({ petName, bookingRef }) => ({
