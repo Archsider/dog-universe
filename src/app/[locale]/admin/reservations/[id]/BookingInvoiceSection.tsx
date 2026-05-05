@@ -75,8 +75,8 @@ export default function BookingInvoiceSection({
               invoiceVersion={invoice.version}
               currentStatus={invoice.status}
               locale={locale}
-              invoiceAmount={invoice.amount}
-              paidAmount={invoice.paidAmount}
+              invoiceAmount={toNumber(invoice.amount)}
+              paidAmount={toNumber(invoice.paidAmount)}
             />
             <Link href={`/${locale}/admin/billing?status=`} className="text-xs text-gray-400 hover:text-gold-600">
               {locale === 'fr' ? 'Voir facturation' : 'View billing'}
@@ -155,8 +155,8 @@ export default function BookingInvoiceSection({
             invoiceVersion={supplementaryInvoice.version}
             currentStatus={supplementaryInvoice.status}
             locale={locale}
-            invoiceAmount={supplementaryInvoice.amount}
-            paidAmount={supplementaryInvoice.paidAmount}
+            invoiceAmount={toNumber(supplementaryInvoice.amount)}
+            paidAmount={toNumber(supplementaryInvoice.paidAmount)}
           />
         </div>
       )}
