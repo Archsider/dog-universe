@@ -7,11 +7,11 @@ import LoyaltyClaimButton from './LoyaltyClaimButton';
 
 type Params = { locale: string };
 
-const GRADE_LABELS: Record<Grade, { fr: string; en: string; color: string; bg: string; border: string; barColor: string }> = {
-  BRONZE:   { fr: 'Bronze',   en: 'Bronze',   color: 'text-amber-700',  bg: 'bg-amber-50',   border: 'border-amber-200',  barColor: 'bg-amber-700' },
-  SILVER:   { fr: 'Argent',   en: 'Silver',   color: 'text-slate-600',  bg: 'bg-slate-50',   border: 'border-slate-200',  barColor: 'bg-slate-600' },
-  GOLD:     { fr: 'Or',       en: 'Gold',     color: 'text-yellow-700', bg: 'bg-yellow-50',  border: 'border-yellow-200', barColor: 'bg-yellow-700' },
-  PLATINUM: { fr: 'Platine',  en: 'Platinum', color: 'text-purple-700', bg: 'bg-purple-50',  border: 'border-purple-200', barColor: 'bg-purple-700' },
+const GRADE_LABELS: Record<Grade, { fr: string; en: string; ar: string; color: string; bg: string; border: string; barColor: string }> = {
+  BRONZE:   { fr: 'Bronze',   en: 'Bronze',   ar: 'برونز',    color: 'text-amber-700',  bg: 'bg-amber-50',   border: 'border-amber-200',  barColor: 'bg-amber-700' },
+  SILVER:   { fr: 'Argent',   en: 'Silver',   ar: 'فضي',      color: 'text-slate-600',  bg: 'bg-slate-50',   border: 'border-slate-200',  barColor: 'bg-slate-600' },
+  GOLD:     { fr: 'Or',       en: 'Gold',     ar: 'ذهبي',     color: 'text-yellow-700', bg: 'bg-yellow-50',  border: 'border-yellow-200', barColor: 'bg-yellow-700' },
+  PLATINUM: { fr: 'Platine',  en: 'Platinum', ar: 'بلاتيني',  color: 'text-purple-700', bg: 'bg-purple-50',  border: 'border-purple-200', barColor: 'bg-purple-700' },
 };
 
 export default async function LoyaltyPage({ params }: { params: Promise<Params> }) {
@@ -36,6 +36,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
   const nextGrade = getNextGradeInfo(totalStays, grade);
 
   const isFr = locale === 'fr';
+  const isAr = locale === 'ar';
 
   // Map claim status by benefitKey (most recent)
   const claimByKey = new Map(allClaims.map((c) => [c.benefitKey, c]));
@@ -77,14 +78,32 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
       reason: 'Rejection reason',
       claimedOn: 'Requested on',
     },
+    ar: {
+      title: 'مزايا الولاء',
+      subtitle: 'اعرض وفعّل المزايا المرتبطة بدرجتك.',
+      grade: 'درجتك',
+      automatic: 'مزايا تلقائية',
+      automaticDesc: 'هذه المزايا تُطبق تلقائيًا دون أي إجراء منك.',
+      claimable: 'مزايا للتفعيل',
+      claimableDesc: 'انقر على "تفعيل" لتقديم طلب — سيعالجه فريقنا خلال 48 ساعة.',
+      noBenefits: 'لا توجد مزايا متاحة لدرجة البرونز. واصل حجوزاتك للترقي!',
+      nextGradeLabel: 'التقدم نحو',
+      staysToNext: (n: number) => `${n} إقامة أخرى للوصول إلى`,
+      maxGrade: 'لقد وصلت إلى أعلى درجة.',
+      history: 'سجل الطلبات',
+      noHistory: 'لم يتم تقديم أي طلب بعد.',
+      statusLabels: { PENDING: 'قيد الانتظار', APPROVED: 'موافق عليه', REJECTED: 'مرفوض' },
+      reason: 'سبب الرفض',
+      claimedOn: 'طُلب في',
+    },
   };
-  const l = labels[isFr ? 'fr' : 'en'];
+  const l = labels[isFr ? 'fr' : isAr ? 'ar' : 'en'];
 
   const automaticBenefits = benefits.filter((b) => !b.claimable);
   const claimableBenefits = benefits.filter((b) => b.claimable);
 
   const formatDate = (d: Date) =>
-    new Intl.DateTimeFormat(isFr ? 'fr-MA' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(d));
+    new Intl.DateTimeFormat(isFr ? 'fr-MA' : isAr ? 'ar-MA' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(d));
 
   const statusConfig = {
     PENDING:  { icon: Clock,        color: 'text-amber-600',  bg: 'bg-amber-50',  label: l.statusLabels.PENDING },
@@ -107,7 +126,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
         </div>
         <div>
           <p className="text-xs text-charcoal/50 uppercase tracking-wide font-medium">{l.grade}</p>
-          <p className={`text-xl font-serif font-bold ${gradeInfo.color}`}>{isFr ? gradeInfo.fr : gradeInfo.en}</p>
+          <p className={`text-xl font-serif font-bold ${gradeInfo.color}`}>{isFr ? gradeInfo.fr : isAr ? gradeInfo.ar : gradeInfo.en}</p>
         </div>
       </div>
 
@@ -119,7 +138,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
             <span className="text-sm font-medium text-charcoal">
               {l.staysToNext(nextGrade.staysToNext)}{' '}
               <span className={GRADE_LABELS[nextGrade.nextGrade].color + ' font-semibold'}>
-                {isFr ? GRADE_LABELS[nextGrade.nextGrade].fr : GRADE_LABELS[nextGrade.nextGrade].en}
+                {isFr ? GRADE_LABELS[nextGrade.nextGrade].fr : isAr ? GRADE_LABELS[nextGrade.nextGrade].ar : GRADE_LABELS[nextGrade.nextGrade].en}
               </span>
             </span>
           </div>
@@ -130,7 +149,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
             />
           </div>
           <div className="flex justify-between text-xs text-charcoal/40 mt-1.5">
-            <span>{nextGrade.currentStays} séjour{nextGrade.currentStays > 1 ? 's' : ''}</span>
+            <span>{nextGrade.currentStays} {isFr ? `séjour${nextGrade.currentStays > 1 ? 's' : ''}` : isAr ? 'إقامة' : `stay${nextGrade.currentStays > 1 ? 's' : ''}`}</span>
             <span>{nextGrade.currentStays + nextGrade.staysToNext}</span>
           </div>
         </div>
@@ -159,7 +178,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
                 {automaticBenefits.map((b) => (
                   <li key={b.key} className="flex items-center gap-3 p-3 rounded-lg bg-[#FAF6F0]">
                     <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                    <span className="text-sm text-charcoal">{isFr ? b.labelFr : b.labelEn}</span>
+                    <span className="text-sm text-charcoal">{isFr ? b.labelFr : isAr ? ((b as unknown as Record<string, string>).labelAr ?? b.labelEn) : b.labelEn}</span>
                   </li>
                 ))}
               </ul>
@@ -183,7 +202,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
 
                   return (
                     <li key={b.key} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[#F0D98A]/30 hover:bg-[#FAF6F0] transition-colors">
-                      <span className="text-sm text-charcoal font-medium">{isFr ? b.labelFr : b.labelEn}</span>
+                      <span className="text-sm text-charcoal font-medium">{isFr ? b.labelFr : isAr ? ((b as unknown as Record<string, string>).labelAr ?? b.labelEn) : b.labelEn}</span>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {cfg && StatusIcon ? (
                           <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.color}`}>
@@ -216,7 +235,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-charcoal">
-                        {isFr ? claim.benefitLabelFr : claim.benefitLabelEn}
+                        {isFr ? claim.benefitLabelFr : isAr ? (claim.benefitLabelFr) : claim.benefitLabelEn}
                       </p>
                       <p className="text-xs text-charcoal/50 mt-0.5">
                         {l.claimedOn} {formatDate(claim.claimedAt)}

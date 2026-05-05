@@ -28,6 +28,15 @@ const REASONS_EN = [
   { value: 'other', label: 'Other' },
 ];
 
+const REASONS_AR = [
+  { value: 'plans_changed', label: 'تغيير الخطط' },
+  { value: 'emergency', label: 'طارئ شخصي' },
+  { value: 'found_other', label: 'وجدت حلاً آخر' },
+  { value: 'dates_changed', label: 'تغيير التواريخ' },
+  { value: 'price', label: 'سبب مالي' },
+  { value: 'other', label: 'أخرى' },
+];
+
 export default function CancelBookingButton({ bookingId, locale }: Props) {
   const [confirm, setConfirm] = useState(false);
   const [reason, setReason] = useState('');
@@ -35,32 +44,47 @@ export default function CancelBookingButton({ bookingId, locale }: Props) {
   const router = useRouter();
 
   const isEn = locale === 'en';
-  const reasons = isEn ? REASONS_EN : REASONS_FR;
-  const l = isEn
-    ? {
-        btn: 'Cancel',
-        title: 'Cancel this booking?',
-        desc: 'This action cannot be undone. Please select a reason.',
-        reasonLabel: 'Reason for cancellation',
-        reasonPlaceholder: 'Select a reason...',
-        no: 'Keep booking',
-        yes: 'Yes, cancel',
-        success: 'Booking cancelled',
-        error: 'Error',
-        reasonRequired: 'Please select a reason',
-      }
-    : {
-        btn: 'Annuler',
-        title: 'Annuler cette réservation ?',
-        desc: 'Cette action est irréversible. Veuillez sélectionner un motif.',
-        reasonLabel: "Motif d'annulation",
-        reasonPlaceholder: 'Sélectionner un motif...',
-        no: 'Garder',
-        yes: 'Oui, annuler',
-        success: 'Réservation annulée',
-        error: 'Erreur',
-        reasonRequired: 'Veuillez sélectionner un motif',
-      };
+  const isAr = locale === 'ar';
+  const reasons = isEn ? REASONS_EN : isAr ? REASONS_AR : REASONS_FR;
+  const labels = {
+    fr: {
+      btn: 'Annuler',
+      title: 'Annuler cette réservation ?',
+      desc: 'Cette action est irréversible. Veuillez sélectionner un motif.',
+      reasonLabel: "Motif d'annulation",
+      reasonPlaceholder: 'Sélectionner un motif...',
+      no: 'Garder',
+      yes: 'Oui, annuler',
+      success: 'Réservation annulée',
+      error: 'Erreur',
+      reasonRequired: 'Veuillez sélectionner un motif',
+    },
+    en: {
+      btn: 'Cancel',
+      title: 'Cancel this booking?',
+      desc: 'This action cannot be undone. Please select a reason.',
+      reasonLabel: 'Reason for cancellation',
+      reasonPlaceholder: 'Select a reason...',
+      no: 'Keep booking',
+      yes: 'Yes, cancel',
+      success: 'Booking cancelled',
+      error: 'Error',
+      reasonRequired: 'Please select a reason',
+    },
+    ar: {
+      btn: 'إلغاء',
+      title: 'إلغاء هذا الحجز؟',
+      desc: 'هذا الإجراء لا يمكن التراجع عنه. الرجاء اختيار سبب.',
+      reasonLabel: 'سبب الإلغاء',
+      reasonPlaceholder: 'اختر سببًا...',
+      no: 'الاحتفاظ بالحجز',
+      yes: 'نعم، إلغاء',
+      success: 'تم إلغاء الحجز',
+      error: 'حدث خطأ',
+      reasonRequired: 'الرجاء اختيار سبب',
+    },
+  };
+  const l = isEn ? labels.en : isAr ? labels.ar : labels.fr;
 
   const handleCancel = async () => {
     if (!reason) {

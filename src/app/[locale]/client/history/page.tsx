@@ -108,6 +108,25 @@ export default async function HistoryPage(props: PageProps) {
       estimated: 'estimated',
       statusLabels: { PENDING: 'Pending', CONFIRMED: 'Confirmed', AT_PICKUP: 'Vehicle on site', IN_PROGRESS: 'In progress', COMPLETED: 'Completed', CANCELLED: 'Cancelled', REJECTED: 'Rejected' },
     },
+    ar: {
+      title: 'حجوزاتي',
+      newBooking: 'حجز جديد',
+      all: 'الكل',
+      photos: 'صور الإقامة',
+      noBookings: 'لا توجد حجوزات',
+      noBookingsDesc: 'لم تقم بأي حجز بعد.',
+      boarding: 'نزالة',
+      taxi: 'سيارة أجرة للحيوانات',
+      nights: 'ليالٍ',
+      night: 'ليلة',
+      from: 'من',
+      to: 'إلى',
+      invoicePaid: 'مدفوعة',
+      invoicePending: 'معلقة',
+      notes: 'ملاحظات',
+      estimated: 'تقديري',
+      statusLabels: { PENDING: 'قيد الانتظار', CONFIRMED: 'مؤكد', AT_PICKUP: 'السيارة في المكان', IN_PROGRESS: 'جارٍ', COMPLETED: 'منتهي', CANCELLED: 'ملغى', REJECTED: 'مرفوض' },
+    },
   };
   const t = l[locale as keyof typeof l] || l.fr;
 

@@ -61,6 +61,22 @@ export default async function InvoicesPage({ params }: PageProps) {
       paymentMethods: { CASH: 'Cash', CARD: 'Credit card', CHECK: 'Check', TRANSFER: 'Bank transfer' },
       paymentBy: 'Paid by',
     },
+    ar: {
+      title: 'فواتيري',
+      noInvoices: 'لا توجد فواتير بعد.',
+      download: 'تحميل PDF',
+      issued: 'صدرت في',
+      paid: 'مدفوعة في',
+      pending: 'في انتظار الدفع',
+      boarding: 'نزالة',
+      taxi: 'سيارة أجرة للحيوانات',
+      total: 'المجموع',
+      statusPaid: 'مدفوعة',
+      statusPending: 'معلقة',
+      statusCancelled: 'ملغاة',
+      paymentMethods: { CASH: 'نقدًا', CARD: 'بطاقة بنكية', CHECK: 'شيك', TRANSFER: 'تحويل بنكي' },
+      paymentBy: 'دُفع بواسطة',
+    },
   };
   const t = l[locale as keyof typeof l] || l.fr;
 
@@ -76,7 +92,7 @@ export default async function InvoicesPage({ params }: PageProps) {
           <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
           <p className="text-gray-500">{t.noInvoices}</p>
           <Link href={`/${locale}/client/history`} className="text-sm text-gold-600 mt-2 inline-block">
-            ← {locale === 'fr' ? 'Voir mes réservations' : 'View my bookings'}
+            ← {locale === 'fr' ? 'Voir mes réservations' : locale === 'ar' ? 'عرض حجوزاتي' : 'View my bookings'}
           </Link>
         </div>
       ) : (
@@ -160,11 +176,11 @@ export default async function InvoicesPage({ params }: PageProps) {
                   <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg mb-4 text-sm text-amber-700">
                     <Receipt className="h-3.5 w-3.5 flex-shrink-0" />
                     <span className="font-medium">
-                      {locale === 'fr' ? 'Supplément prolongation' : 'Extension supplement'}
+                      {locale === 'fr' ? 'Supplément prolongation' : locale === 'ar' ? 'ملحق التمديد' : 'Extension supplement'}
                     </span>
                     <span className="text-amber-400">·</span>
                     <span>
-                      {locale === 'fr' ? 'Réservation' : 'Booking'} #{invoice.notes.replace('EXTENSION_SURCHARGE:', '').slice(0, 8).toUpperCase()}
+                      {locale === 'fr' ? 'Réservation' : locale === 'ar' ? 'حجز' : 'Booking'} #{invoice.notes.replace('EXTENSION_SURCHARGE:', '').slice(0, 8).toUpperCase()}
                     </span>
                   </div>
                 )}
