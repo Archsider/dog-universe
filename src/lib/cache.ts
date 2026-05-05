@@ -98,31 +98,6 @@ export async function cacheReadThrough<T>(
   return fresh;
 }
 
-// ─── One-shot flag helpers (SET NX EX) ─────────────────────────────────────
-
-/**
- * Atomically sets `key` only if it does not already exist, with TTL.
- * Returns true on first successful write (caller should fire the side-
- * effect), false if another caller already set the flag, OR if Redis is
- * unconfigured / errors. **Fail-open**: callers must accept that without
- * Redis we may produce duplicate side-effects — preferred over silently
- * suppressing them.
- */
-export async function tryAcquireFlag(
-  key: string,
-  ttlSeconds: number,
-): Promise<boolean> {
-  const redis = getRedis();
-  if (!redis) return true; // fail-open
-  try {
-    const result = await redis.set(key, '1', { nx: true, ex: ttlSeconds });
-    return result === 'OK';
-  } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'tryAcquireFlag failed (fail-open)', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
-    return true;
-  }
-}
-
 // ─── Key builders ──────────────────────────────────────────────────────────
 // Centralised so refactors don't desync readers from invalidators.
 
