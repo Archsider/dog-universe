@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { formatMAD } from '@/lib/utils';
-import type { DecimalLike } from '@/lib/decimal';
+import { toNumber, type DecimalLike } from '@/lib/decimal';
 import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import RecordPaymentButton from '@/app/[locale]/admin/billing/CreateInvoiceButton';
 
@@ -54,7 +54,7 @@ export default function BookingInvoiceSection({
               <span className="text-gray-500">Total</span>
               <span className="font-bold text-charcoal">{formatMAD(invoice.amount)}</span>
             </div>
-            {invoice.paidAmount > 0 && (
+            {toNumber(invoice.paidAmount) > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-500">{locale === 'fr' ? 'Payé' : 'Paid'}</span>
                 <span className="font-medium text-green-700">{formatMAD(invoice.paidAmount)}</span>
@@ -64,7 +64,7 @@ export default function BookingInvoiceSection({
               <div className="flex justify-between border-t border-ivory-100 pt-1">
                 <span className="text-gray-600 font-medium">{locale === 'fr' ? 'Restant' : 'Remaining'}</span>
                 <span className="font-bold text-orange-600">
-                  {formatMAD(Math.max(0, invoice.amount - invoice.paidAmount))}
+                  {formatMAD(Math.max(0, toNumber(invoice.amount) - toNumber(invoice.paidAmount)))}
                 </span>
               </div>
             )}
@@ -111,7 +111,7 @@ export default function BookingInvoiceSection({
               <span className="text-gray-500">Total</span>
               <span className="font-bold text-charcoal">{formatMAD(supplementaryInvoice.amount)}</span>
             </div>
-            {supplementaryInvoice.paidAmount > 0 && (
+            {toNumber(supplementaryInvoice.paidAmount) > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-500">{locale === 'fr' ? 'Payé' : 'Paid'}</span>
                 <span className="font-medium text-green-700">{formatMAD(supplementaryInvoice.paidAmount)}</span>
@@ -121,7 +121,7 @@ export default function BookingInvoiceSection({
               <div className="flex justify-between border-t border-ivory-100 pt-1">
                 <span className="text-gray-600 font-medium">{locale === 'fr' ? 'Restant' : 'Remaining'}</span>
                 <span className="font-bold text-orange-600">
-                  {formatMAD(Math.max(0, supplementaryInvoice.amount - supplementaryInvoice.paidAmount))}
+                  {formatMAD(Math.max(0, toNumber(supplementaryInvoice.amount) - toNumber(supplementaryInvoice.paidAmount)))}
                 </span>
               </div>
             )}
