@@ -1,4 +1,5 @@
 import { formatDate, formatMAD } from '@/lib/utils';
+import { toNumber } from '@/lib/decimal';
 
 const CANCELLATION_REASONS: Record<string, { fr: string; en: string }> = {
   plans_changed: { fr: 'Changement de plans',       en: 'Plans changed' },
@@ -183,7 +184,7 @@ export default function BookingServiceSection({
                 {locale === 'fr' ? 'Sous-total additionnels' : 'Extras subtotal'}
               </span>
               <span className="font-bold text-gold-600">
-                {formatMAD(bookingItems.reduce((s, i) => s + i.total, 0))}
+                {formatMAD(bookingItems.reduce((s, i) => s + toNumber(i.total), 0))}
               </span>
             </div>
           </div>
