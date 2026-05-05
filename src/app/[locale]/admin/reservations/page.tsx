@@ -9,7 +9,7 @@ import { ReservationsKanban, type KanbanBooking } from './ReservationsKanban';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ status?: string; type?: string; page?: string; view?: string }>;
+  searchParams: Promise<{ status?: string; type?: string; page?: string; view?: string; noInvoice?: string }>;
 }
 
 export default async function AdminReservationsPage(props: PageProps) {
@@ -20,6 +20,7 @@ export default async function AdminReservationsPage(props: PageProps) {
 
   const status = searchParams.status || '';
   const type = searchParams.type || '';
+  const noInvoice = searchParams.noInvoice === '1';
   const page = parseInt(searchParams.page || '1');
   const view = searchParams.view || 'list';
   const limit = 20;
@@ -29,6 +30,10 @@ export default async function AdminReservationsPage(props: PageProps) {
     deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
     ...(status && { status }),
     ...(type && { serviceType: type }),
+    ...(noInvoice && {
+      invoice: null,
+      status: { in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },
+    }),
   };
 
   const labels = {

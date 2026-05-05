@@ -284,11 +284,14 @@ export async function currentBoarders(): Promise<{
   total: number;
 }> {
   const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const boardingFilter = {
     serviceType: 'BOARDING' as const,
     status: 'IN_PROGRESS' as const,
     startDate: { lte: now },
-    endDate: { gte: now },
+    // Compare to startOfDay: a stay ending today (endDate = midnight) must still
+    // count until the day is over — pet hasn't physically left yet.
+    endDate: { gte: todayStart },
     deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
   };
   const [cat, dog] = await Promise.all([

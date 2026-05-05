@@ -471,7 +471,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
             </Link>
           )}
           {bookingsWithoutInvoice > 0 && (
-            <Link href={`/${locale}/admin/billing`}>
+            <Link href={`/${locale}/admin/reservations?noInvoice=1`}>
               <div className="bg-white rounded-xl border border-red-200/60 p-4 shadow-card hover:shadow-card-hover transition-shadow flex items-center gap-4">
                 <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
                   <FileWarning className="h-5 w-5 text-red-400" />
