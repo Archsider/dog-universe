@@ -2,14 +2,27 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { Calendar, ChevronRight, Package, Car, LayoutList, LayoutGrid, Plus } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
+import { LayoutList, LayoutGrid } from 'lucide-react';
+import { startOfMonth, endOfMonth } from 'date-fns';
 import { ReservationsKanban, type KanbanBooking } from './ReservationsKanban';
+import ReservationsList, { type ReservationRow } from './ReservationsList';
+import { toNumber } from '@/lib/decimal';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ status?: string; type?: string; page?: string; view?: string; noInvoice?: string }>;
+  searchParams: Promise<{ status?: string; type?: string; view?: string; noInvoice?: string; f?: string }>;
+}
+
+const VALID_FILTERS = ['ALL', 'IN_PROGRESS', 'PENDING', 'WALKIN', 'BOARDING', 'PET_TAXI'] as const;
+type Filter = typeof VALID_FILTERS[number];
+
+function deriveInitialFilter(sp: { status?: string; type?: string; f?: string; noInvoice?: string }): Filter {
+  if (sp.f && (VALID_FILTERS as readonly string[]).includes(sp.f)) return sp.f as Filter;
+  if (sp.status === 'PENDING') return 'PENDING';
+  if (sp.status === 'IN_PROGRESS') return 'IN_PROGRESS';
+  if (sp.type === 'BOARDING') return 'BOARDING';
+  if (sp.type === 'PET_TAXI') return 'PET_TAXI';
+  return 'ALL';
 }
 
 export default async function AdminReservationsPage(props: PageProps) {
@@ -18,66 +31,21 @@ export default async function AdminReservationsPage(props: PageProps) {
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
-  const status = searchParams.status || '';
-  const type = searchParams.type || '';
-  const noInvoice = searchParams.noInvoice === '1';
-  const page = parseInt(searchParams.page || '1');
-  const view = searchParams.view || 'list';
-  const limit = 20;
-  const skip = (page - 1) * limit;
-
-  // "En cours" : soit status=IN_PROGRESS, soit CONFIRMED dont la fenêtre couvre maintenant.
-  // TODO: also include { isOpenEnded: true } once Agent 1 lands so a confirmed
-  // open-ended booking (no endDate) still shows up here.
-  const now = new Date();
-  const inProgressFilter = status === 'IN_PROGRESS'
-    ? {
-        OR: [
-          { status: 'IN_PROGRESS' },
-          {
-            status: 'CONFIRMED',
-            startDate: { lte: now },
-            endDate: { gte: now },
-          },
-        ],
-      }
-    : null;
-
-  const where: Record<string, unknown> = {
-    deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
-    ...(inProgressFilter ?? (status && { status })),
-    ...(type && { serviceType: type }),
-    ...(noInvoice && {
-      invoice: null,
-      status: { in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },
-    }),
-  };
+  const view = searchParams.view === 'board' ? 'board' : 'list';
 
   const labels = {
-    fr: { title: 'Réservations', all: 'Toutes', pending: 'En attente', confirmed: 'Confirmées', inProgress: 'En cours', completed: 'Terminées', cancelled: 'Annulées', pendingExtension: 'Extensions', allTypes: 'Tous', boarding: 'Pension', taxi: 'Taxi', client: 'Client', animals: 'Animaux', dates: 'Date', total: 'Total', noBookings: 'Aucune réservation', list: 'Liste', board: 'Board', create: 'Créer une réservation' },
-    en: { title: 'Bookings', all: 'All', pending: 'Pending', confirmed: 'Confirmed', inProgress: 'In progress', completed: 'Completed', cancelled: 'Cancelled', pendingExtension: 'Extensions', allTypes: 'All', boarding: 'Boarding', taxi: 'Taxi', client: 'Client', animals: 'Pets', dates: 'Date', total: 'Total', noBookings: 'No bookings', list: 'List', board: 'Board', create: 'New booking' },
+    fr: { list: 'Liste', board: 'Board' },
+    en: { list: 'List', board: 'Board' },
   };
-
-  const sl: Record<string, Record<string, string>> = {
-    fr: { PENDING: 'En attente', CONFIRMED: 'Confirmé', AT_PICKUP: 'Sur place', CANCELLED: 'Annulé', REJECTED: 'Refusé', COMPLETED: 'Terminé', IN_PROGRESS: 'En cours', PENDING_EXTENSION: 'Extension' },
-    en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', AT_PICKUP: 'At pickup', CANCELLED: 'Cancelled', REJECTED: 'Rejected', COMPLETED: 'Completed', IN_PROGRESS: 'In progress', PENDING_EXTENSION: 'Extension' },
-  };
-
   const l = labels[locale as keyof typeof labels] || labels.fr;
-  const statusLbls = sl[locale] || sl.fr;
 
-  const statusFilters = [['', l.all], ['PENDING', l.pending], ['CONFIRMED', l.confirmed], ['IN_PROGRESS', l.inProgress], ['COMPLETED', l.completed], ['CANCELLED', l.cancelled], ['PENDING_EXTENSION', l.pendingExtension]];
-  const typeFilters = [['', l.allTypes], ['BOARDING', l.boarding], ['PET_TAXI', l.taxi]];
-
-  // Kanban mode: fetch all active bookings (no pagination, no status/type filter)
-  let kanbanBookings: KanbanBooking[] = [];
+  // ── Kanban view (unchanged) ────────────────────────────────────────────
   if (view === 'board') {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
     const raw = await prisma.booking.findMany({
       where: {
-        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        deletedAt: null,
         OR: [
           { status: { in: ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'] } },
           { status: 'COMPLETED', updatedAt: { gte: sevenDaysAgo } },
@@ -89,8 +57,7 @@ export default async function AdminReservationsPage(props: PageProps) {
       },
       orderBy: { startDate: 'asc' },
     });
-
-    kanbanBookings = raw.map((b) => ({
+    const kanbanBookings: KanbanBooking[] = raw.map((b) => ({
       id: b.id,
       version: b.version,
       serviceType: b.serviceType as 'BOARDING' | 'PET_TAXI',
@@ -103,138 +70,124 @@ export default async function AdminReservationsPage(props: PageProps) {
       clientId: b.client.id,
       pets: b.bookingPets.map((bp) => bp.pet.name).join(', '),
     }));
+
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-serif font-bold text-charcoal">{locale === 'fr' ? 'Réservations' : 'Bookings'}</h1>
+          <ViewToggle locale={locale} view={view} l={l} />
+        </div>
+        <ReservationsKanban bookings={kanbanBookings} locale={locale} />
+      </div>
+    );
   }
 
-  // List mode: paginated query
-  const [bookings, total] = view === 'board'
-    ? [[], 0]
-    : await Promise.all([
-        prisma.booking.findMany({
-          where,
-          include: {
-            client: { select: { id: true, name: true, email: true } },
-            bookingPets: { include: { pet: { select: { name: true } } } },
-            taxiDetail: true,
-            boardingDetail: { select: { taxiGoEnabled: true, taxiGoDate: true, taxiReturnEnabled: true, taxiReturnDate: true } },
-            invoice: { select: { amount: true } },
-          },
-          orderBy: { startDate: 'desc' },
-          skip,
-          take: limit,
-        }),
-        prisma.booking.count({ where }),
-      ]);
+  // ── List view ──────────────────────────────────────────────────────────
+  const now = new Date();
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+
+  const [bookingsRaw, monthRevenueAgg] = await Promise.all([
+    prisma.booking.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        status: true,
+        serviceType: true,
+        startDate: true,
+        endDate: true,
+        isOpenEnded: true,
+        totalPrice: true,
+        client: {
+          select: { id: true, firstName: true, lastName: true, phone: true, isWalkIn: true },
+        },
+        bookingPets: { select: { pet: { select: { name: true, species: true } } } },
+        taxiDetail: { select: { id: true } },
+        boardingDetail: { select: { taxiGoEnabled: true, taxiReturnEnabled: true } },
+        taxiTrips: { select: { tripType: true } },
+        invoice: { select: { amount: true } },
+      },
+      orderBy: { startDate: 'desc' },
+      take: 500,
+    }),
+    prisma.invoice.aggregate({
+      where: {
+        status: { in: ['PAID', 'PARTIALLY_PAID'] },
+        OR: [
+          { periodDate: { gte: monthStart, lte: monthEnd } },
+          { periodDate: null, issuedAt: { gte: monthStart, lte: monthEnd } },
+        ],
+      },
+      _sum: { paidAmount: true },
+    }),
+  ]);
+
+  const bookings: ReservationRow[] = bookingsRaw.map((b) => {
+    const hasBoardingTaxi = !!(b.boardingDetail?.taxiGoEnabled || b.boardingDetail?.taxiReturnEnabled);
+    const hasStandaloneTaxi = b.serviceType === 'PET_TAXI' && !!b.taxiDetail;
+    const hasTaxi = hasBoardingTaxi || hasStandaloneTaxi;
+    const taxiReturn =
+      (b.boardingDetail?.taxiReturnEnabled ?? false) ||
+      (hasStandaloneTaxi && b.taxiTrips.some((t) => t.tripType === 'RETURN'));
+    return {
+      id: b.id,
+      status: b.status,
+      serviceType: b.serviceType as 'BOARDING' | 'PET_TAXI',
+      startDate: b.startDate.toISOString(),
+      endDate: b.endDate?.toISOString() ?? null,
+      isOpenEnded: b.isOpenEnded,
+      totalPrice: toNumber(b.totalPrice),
+      invoiceAmount: b.invoice ? toNumber(b.invoice.amount) : null,
+      client: {
+        id: b.client.id,
+        firstName: b.client.firstName,
+        lastName: b.client.lastName,
+        phone: b.client.phone ?? null,
+        isWalkIn: b.client.isWalkIn,
+      },
+      pets: b.bookingPets.map((bp) => ({
+        name: bp.pet.name,
+        species: (bp.pet.species === 'CAT' ? 'CAT' : 'DOG') as 'CAT' | 'DOG',
+      })),
+      hasTaxi,
+      taxiReturn,
+      taxiAddon: hasBoardingTaxi,
+    };
+  });
+
+  const monthlyRevenue = toNumber(monthRevenueAgg._sum.paidAmount);
+  const initialFilter = deriveInitialFilter(searchParams);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
-        <div className="flex items-center gap-2">
-          {view === 'list' && <span className="text-sm text-gray-500">{total}</span>}
-          {/* View toggle */}
-          <div className="flex rounded-lg border border-ivory-200 overflow-hidden">
-            <Link href={`?status=${status}&type=${type}&view=list`}>
-              <button className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors ${view === 'list' ? 'bg-charcoal text-white' : 'bg-white text-gray-600 hover:bg-ivory-50'}`}>
-                <LayoutList className="h-3.5 w-3.5" />
-                {l.list}
-              </button>
-            </Link>
-            <Link href={`?view=board`}>
-              <button className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors border-l border-ivory-200 ${view === 'board' ? 'bg-charcoal text-white' : 'bg-white text-gray-600 hover:bg-ivory-50'}`}>
-                <LayoutGrid className="h-3.5 w-3.5" />
-                {l.board}
-              </button>
-            </Link>
-          </div>
-          <Link href={`/${locale}/admin/reservations/new`}>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-gold-500 text-white rounded-lg hover:bg-gold-600 transition-colors">
-              <Plus className="h-3.5 w-3.5" />
-              {l.create}
-            </button>
-          </Link>
-        </div>
+      <div className="flex items-center justify-end mb-2">
+        <ViewToggle locale={locale} view={view} l={l} />
       </div>
+      <ReservationsList
+        bookings={bookings}
+        locale={locale}
+        monthlyRevenue={monthlyRevenue}
+        initialFilter={initialFilter}
+      />
+    </div>
+  );
+}
 
-      {view === 'board' ? (
-        <ReservationsKanban bookings={kanbanBookings} locale={locale} />
-      ) : (
-        <>
-          <div className="flex gap-2 mb-4 flex-wrap">
-            {statusFilters.map(([val, lbl]) => (
-              <Link key={val} href={`?status=${val}&type=${type}&view=list`}>
-                <button className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${status === val ? 'bg-charcoal text-white' : 'bg-white border border-ivory-200 text-gray-600 hover:border-gold-300'}`}>{lbl}</button>
-              </Link>
-            ))}
-            <div className="h-5 w-px bg-ivory-200 self-center mx-1" />
-            {typeFilters.map(([val, lbl]) => (
-              <Link key={val} href={`?status=${status}&type=${val}&view=list`}>
-                <button className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${type === val ? 'bg-charcoal text-white' : 'bg-white border border-ivory-200 text-gray-600 hover:border-gold-300'}`}>{lbl}</button>
-              </Link>
-            ))}
-          </div>
-
-          <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card overflow-hidden">
-            {bookings.length === 0 ? (
-              <div className="text-center py-12 text-gray-400"><Calendar className="h-10 w-10 mx-auto mb-3 opacity-30" /><p>{l.noBookings}</p></div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-ivory-200 bg-ivory-50">
-                      <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">ID</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">{l.client}</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden sm:table-cell">{l.animals}</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden md:table-cell">{l.dates}</th>
-                      <th className="text-center text-xs font-semibold text-gray-500 px-4 py-3">Statut</th>
-                      <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3 hidden lg:table-cell">{l.total}</th>
-                      <th className="px-4 py-3 w-8" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bookings.map(booking => {
-                      const isBoarding = booking.serviceType === 'BOARDING';
-                      const taxiGo = isBoarding && booking.boardingDetail?.taxiGoEnabled;
-                      const taxiReturn = isBoarding && booking.boardingDetail?.taxiReturnEnabled;
-                      const hasTaxiAddon = taxiGo || taxiReturn;
-                      return (
-                        <tr key={booking.id} className="border-b border-ivory-100 last:border-0 hover:bg-ivory-50 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1.5">
-                              {isBoarding ? <Package className="h-4 w-4 text-gold-400" /> : <Car className="h-4 w-4 text-blue-400" />}
-                              <span className="font-mono text-xs text-gray-500">{booking.id.slice(0, 8)}</span>
-                              {hasTaxiAddon && (
-                                <span className="text-xs bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full font-medium" title={[taxiGo ? `Taxi aller${booking.boardingDetail?.taxiGoDate ? ': ' + booking.boardingDetail.taxiGoDate : ''}` : '', taxiReturn ? `Taxi retour${booking.boardingDetail?.taxiReturnDate ? ': ' + booking.boardingDetail.taxiReturnDate : ''}` : ''].filter(Boolean).join(' | ')}>
-                                  Taxi {[taxiGo && 'aller', taxiReturn && 'retour'].filter(Boolean).join('+')}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <Link href={`/${locale}/admin/clients/${booking.client.id}`} className="text-sm font-medium text-charcoal hover:text-gold-600">{booking.client.name}</Link>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{booking.bookingPets.map(bp => bp.pet.name).join(', ')}</td>
-                          <td className="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">
-                            {formatDate(booking.startDate, locale)}{booking.endDate ? ` → ${formatDate(booking.endDate, locale)}` : ''}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <Badge className={`text-xs ${getBookingStatusColor(booking.status)}`}>{statusLbls[booking.status] ?? booking.status}</Badge>
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm font-medium text-charcoal hidden lg:table-cell">
-                            {booking.invoice ? formatMAD(booking.invoice.amount) : '—'}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Link href={`/${locale}/admin/reservations/${booking.id}`}><ChevronRight className="h-4 w-4 text-gray-400 hover:text-gold-500" /></Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
-      )}
+function ViewToggle({ locale, view, l }: { locale: string; view: 'list' | 'board'; l: { list: string; board: string } }) {
+  return (
+    <div className="flex rounded-lg border border-ivory-200 overflow-hidden">
+      <Link href={`/${locale}/admin/reservations?view=list`}>
+        <button className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors ${view === 'list' ? 'bg-charcoal text-white' : 'bg-white text-gray-600 hover:bg-ivory-50'}`}>
+          <LayoutList className="h-3.5 w-3.5" />
+          {l.list}
+        </button>
+      </Link>
+      <Link href={`/${locale}/admin/reservations?view=board`}>
+        <button className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors border-l border-ivory-200 ${view === 'board' ? 'bg-charcoal text-white' : 'bg-white text-gray-600 hover:bg-ivory-50'}`}>
+          <LayoutGrid className="h-3.5 w-3.5" />
+          {l.board}
+        </button>
+      </Link>
     </div>
   );
 }
