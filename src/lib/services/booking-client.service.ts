@@ -146,6 +146,8 @@ export interface CreateBookingTxArgs {
   taxiDropoffAddress?: string | null;
   // Admin-only billing extras
   bookingItems: { description: string; quantity: number; unitPrice: number }[];
+  // Open-ended boarding (walk-in): no endDate, closed manually via checkout
+  isOpenEnded?: boolean;
 }
 
 /**
@@ -209,6 +211,7 @@ export async function createBookingTx(args: CreateBookingTxArgs) {
           status: resolvedStatus,
           startDate: args.startDate,
           endDate: args.endDate,
+          isOpenEnded: args.isOpenEnded ?? false,
           arrivalTime: args.arrivalTime,
           notes: args.notes,
           totalPrice: args.totalPrice,

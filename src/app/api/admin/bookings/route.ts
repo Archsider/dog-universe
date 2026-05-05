@@ -110,9 +110,10 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
       totalPrice,
       notes,
       createInvoice,
+      isOpenEnded,
     } = body;
 
-    if (serviceType === 'BOARDING' && !endDate) {
+    if (serviceType === 'BOARDING' && !endDate && !isOpenEnded) {
       return NextResponse.json({ error: 'END_DATE_REQUIRED' }, { status: 400 });
     }
 
@@ -236,7 +237,8 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
           isAdmin: true,
           waitlistFallback: false,
           startDate: new Date(startDate),
-          endDate: endDate ? new Date(endDate) : null,
+          endDate: isOpenEnded ? null : endDate ? new Date(endDate) : null,
+          isOpenEnded: !!isOpenEnded,
           arrivalTime: arrivalTime ?? null,
           notes: notes?.trim() || null,
           totalPrice,

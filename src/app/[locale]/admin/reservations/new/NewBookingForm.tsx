@@ -198,7 +198,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
       if (selectedPetIds.length === 0) return t.petsRequired;
     }
     if (!startDate) return t.startDate;
-    if (serviceType === 'BOARDING' && !endDate) return t.endDate;
+    if (serviceType === 'BOARDING' && !endDate && !walkInMode) return t.endDate;
     if (serviceType === 'PET_TAXI') {
       const d = new Date(startDate + 'T00:00:00');
       if (d.getDay() === 0) return t.sundayInvalid;
@@ -222,14 +222,16 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
     }
     setSubmitting(true);
     try {
+      const openEnded = walkInMode && serviceType === 'BOARDING';
       const payload: Record<string, unknown> = {
         serviceType,
         startDate,
-        endDate: serviceType === 'BOARDING' ? endDate : null,
+        endDate: serviceType === 'BOARDING' && !openEnded ? endDate : null,
         arrivalTime: serviceType === 'PET_TAXI' ? arrivalTime : null,
         totalPrice: parseFloat(totalPrice),
         notes: notes.trim() || null,
         createInvoice,
+        isOpenEnded: openEnded,
       };
       if (walkInMode) {
         payload.walkIn = {
@@ -505,13 +507,14 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
           </div>
           {serviceType === 'BOARDING' ? (
             <div>
-              <Label htmlFor="end">{t.endDate} *</Label>
+              <Label htmlFor="end">{t.endDate}{!walkInMode && ' *'}</Label>
               <Input
                 id="end"
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                required
+                required={!walkInMode}
+                disabled={walkInMode}
               />
             </div>
           ) : (

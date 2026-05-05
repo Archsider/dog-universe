@@ -171,6 +171,7 @@ export const adminBookingCreateSchema = z.object({
   totalPrice: z.number().min(0).max(1_000_000),
   notes: z.string().max(2000).optional().nullable(),
   createInvoice: z.boolean().optional().default(true),
+  isOpenEnded: z.boolean().optional().default(false),
 }).refine(
   d => !!d.clientId || !!d.walkIn,
   { message: 'clientId or walkIn required' },
