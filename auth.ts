@@ -47,6 +47,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role: user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN',
           language: user.language,
           totpPending,
+          totpEnabled: totpPending,
         };
       },
     }),
@@ -62,6 +63,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
         token.language = (user as { language?: string }).language ?? 'fr';
         token.totpPending = (user as { totpPending?: boolean }).totpPending ?? false;
+        token.totpEnabled = (user as { totpEnabled?: boolean }).totpEnabled ?? false;
         // Store tokenVersion at login time — used to detect password changes
         const dbUserAtLogin = await prisma.user.findUnique({
           where: { id: user.id! },
@@ -80,6 +82,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (dbUser.tokenVersion !== token.tokenVersion) return null;
         token.role = dbUser.role as 'ADMIN' | 'CLIENT' | 'SUPERADMIN';
         token.language = dbUser.language ?? 'fr';
+        token.totpEnabled = dbUser.totpEnabled;
         // Si TOTP pending mais vérifié depuis le login → clear
         if (token.totpPending && dbUser.totpVerifiedAt) {
           const issuedAt = new Date((token.iat as number) * 1000);
@@ -100,6 +103,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role;
         session.user.language = token.language ?? 'fr';
         session.user.totpPending = token.totpPending ?? false;
+        session.user.totpEnabled = (token as { totpEnabled?: boolean }).totpEnabled ?? false;
       }
       return session;
     },
