@@ -160,6 +160,7 @@ model Booking {
   status      String   @default("PENDING") // "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "CANCELLED" | "REJECTED" | "COMPLETED" | "NO_SHOW" | "WAITLIST" | "PENDING_EXTENSION"
   startDate   DateTime
   endDate     DateTime?
+  isOpenEnded Boolean  @default(false) // séjour à durée indéterminée — endDate fixé au checkout
   arrivalTime String?
   notes              String?
   cancellationReason String?
@@ -540,6 +541,22 @@ model ClientContract {
   createdAt   DateTime @default(now())
 
   client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+// Catalogue produits — vendus à la carte sur les séjours walk-in.
+// Stock décrémenté à la création d'un InvoiceItem produit.
+model Product {
+  id        String   @id @default(cuid())
+  name      String
+  brand     String?
+  reference String?
+  price     Decimal  @db.Decimal(10, 2)
+  stock     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
 }
 
 // Historical revenue summaries — for pre-production data entry (Jan/Feb/Mar/etc.)

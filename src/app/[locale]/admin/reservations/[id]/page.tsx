@@ -25,6 +25,9 @@ import BookingClientSection from './BookingClientSection';
 import BookingPetsSection from './BookingPetsSection';
 import BookingInvoiceSection from './BookingInvoiceSection';
 import BookingServiceSection from './BookingServiceSection';
+import AddProductSection from './AddProductSection';
+import CheckoutBookingButton from './CheckoutBookingButton';
+import { toNumber } from '@/lib/decimal';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -44,7 +47,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
         include: { history: { orderBy: { timestamp: 'asc' } } },
         orderBy: { createdAt: 'asc' },
       },
-      invoice: true,
+      invoice: { include: { items: { orderBy: { id: 'asc' } } } },
       bookingItems: { orderBy: { id: 'asc' } },
       stayPhotos: { orderBy: { createdAt: 'desc' }, take: 200 },
     },
@@ -560,6 +563,31 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                 groomingSize: booking.boardingDetail.groomingSize,
                 groomingStatus: booking.boardingDetail.groomingStatus,
               } : null}
+              locale={locale}
+            />
+          )}
+
+          {/* Open-ended checkout — visible only for active open-ended boarding stays */}
+          {isBoarding && booking.isOpenEnded && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
+            <CheckoutBookingButton bookingId={booking.id} locale={locale} />
+          )}
+
+          {/* Add product to invoice — walk-in friendly. Available on any boarding booking with an invoice. */}
+          {isBoarding && !isPendingExtension && (
+            <AddProductSection
+              bookingId={booking.id}
+              hasInvoice={!!booking.invoice}
+              initialItems={(booking.invoice?.items ?? []).map((it) => ({
+                id: it.id,
+                description: it.description,
+                quantity: it.quantity,
+                total: toNumber(it.total),
+                category: it.category,
+              }))}
+              startDate={booking.startDate.toISOString()}
+              endDate={booking.endDate ? booking.endDate.toISOString() : null}
+              isOpenEnded={booking.isOpenEnded}
+              pricePerNight={toNumber(booking.boardingDetail?.pricePerNight ?? 0)}
               locale={locale}
             />
           )}
