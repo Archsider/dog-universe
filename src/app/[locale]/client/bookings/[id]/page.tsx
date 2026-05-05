@@ -747,7 +747,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
                 id: booking.id,
                 serviceType: booking.serviceType as 'BOARDING' | 'PET_TAXI',
                 bookingPets: booking.bookingPets.map((bp) => ({ pet: { id: bp.pet.id, name: bp.pet.name } })),
-                totalPrice: booking.totalPrice,
+                totalPrice: Number(booking.totalPrice),
               }}
               locale={locale}
             />

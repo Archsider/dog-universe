@@ -330,7 +330,12 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
             {locale === 'fr' ? 'Réserver à nouveau' : 'Book again'}
           </h2>
           <RebookButton
-            booking={lastBooking as { id: string; serviceType: 'BOARDING' | 'PET_TAXI'; bookingPets: { pet: { id: string; name: string } }[]; totalPrice: number }}
+            booking={{
+              id: lastBooking.id,
+              serviceType: lastBooking.serviceType as 'BOARDING' | 'PET_TAXI',
+              bookingPets: lastBooking.bookingPets,
+              totalPrice: Number(lastBooking.totalPrice),
+            }}
             locale={locale}
           />
         </div>
