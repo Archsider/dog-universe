@@ -85,10 +85,30 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   const updateData: Record<string, unknown> = {};
-  if (body.name !== undefined) {
-    const name = String(body.name).trim().slice(0, 255);
-    if (!name) return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 });
-    updateData.name = name;
+
+  // firstName / lastName — sync `name` whenever either changes.
+  let nextFirstName: string | undefined;
+  let nextLastName: string | undefined;
+  if (body.firstName !== undefined) {
+    const fn = String(body.firstName).trim().slice(0, 120);
+    if (fn.length < 2) return NextResponse.json({ error: 'INVALID_VALUE', field: 'firstName' }, { status: 400 });
+    updateData.firstName = fn;
+    nextFirstName = fn;
+  }
+  if (body.lastName !== undefined) {
+    const ln = String(body.lastName).trim().slice(0, 120);
+    if (ln.length < 2) return NextResponse.json({ error: 'INVALID_VALUE', field: 'lastName' }, { status: 400 });
+    updateData.lastName = ln;
+    nextLastName = ln;
+  }
+  if (nextFirstName !== undefined || nextLastName !== undefined) {
+    const current = await prisma.user.findUnique({
+      where: { id },
+      select: { firstName: true, lastName: true },
+    });
+    const fn = nextFirstName ?? current?.firstName ?? '';
+    const ln = nextLastName  ?? current?.lastName  ?? '';
+    updateData.name = `${fn} ${ln}`.trim();
   }
   if (body.phone !== undefined) {
     updateData.phone = body.phone ? String(body.phone).trim().slice(0, 20) : null;

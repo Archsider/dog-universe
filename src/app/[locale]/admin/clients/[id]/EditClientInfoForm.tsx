@@ -9,32 +9,42 @@ import { toast } from '@/hooks/use-toast';
 
 interface Props {
   clientId: string;
-  initialName: string;
+  initialFirstName: string;
+  initialLastName: string;
   initialEmail: string;
   initialPhone: string | null;
   locale: string;
 }
 
-export default function EditClientInfoForm({ clientId, initialName, initialEmail, initialPhone, locale }: Props) {
+export default function EditClientInfoForm({ clientId, initialFirstName, initialLastName, initialEmail, initialPhone, locale }: Props) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(initialName);
+  const [firstName, setFirstName] = useState(initialFirstName);
+  const [lastName, setLastName] = useState(initialLastName);
   const [email, setEmail] = useState(initialEmail);
   const [phone, setPhone] = useState(initialPhone ?? '');
   const [saving, setSaving] = useState(false);
 
   const l = locale === 'fr'
-    ? { edit: 'Modifier', save: 'Enregistrer', cancel: 'Annuler', name: 'Nom complet', email: 'Email', phone: 'Téléphone', success: 'Informations mises à jour', errorEmpty: 'Le nom ne peut pas être vide', errorEmail: 'Email invalide', errorTaken: 'Cet email est déjà utilisé', errorGeneric: 'Erreur lors de la mise à jour' }
-    : { edit: 'Edit', save: 'Save', cancel: 'Cancel', name: 'Full name', email: 'Email', phone: 'Phone', success: 'Info updated', errorEmpty: 'Name cannot be empty', errorEmail: 'Invalid email', errorTaken: 'Email already in use', errorGeneric: 'Update failed' };
+    ? { edit: 'Modifier', save: 'Enregistrer', cancel: 'Annuler', firstName: 'Prénom', lastName: 'Nom', email: 'Email', phone: 'Téléphone', success: 'Informations mises à jour', errorEmpty: 'Le prénom et le nom sont requis', errorEmail: 'Email invalide', errorTaken: 'Cet email est déjà utilisé', errorGeneric: 'Erreur lors de la mise à jour' }
+    : { edit: 'Edit', save: 'Save', cancel: 'Cancel', firstName: 'First name', lastName: 'Last name', email: 'Email', phone: 'Phone', success: 'Info updated', errorEmpty: 'First and last name are required', errorEmail: 'Invalid email', errorTaken: 'Email already in use', errorGeneric: 'Update failed' };
 
   const handleSave = async () => {
-    if (!name.trim()) { toast({ title: l.errorEmpty, variant: 'destructive' }); return; }
+    if (firstName.trim().length < 2 || lastName.trim().length < 2) {
+      toast({ title: l.errorEmpty, variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`/api/admin/clients/${clientId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), phone: phone.trim() || null }),
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: email.trim(),
+          phone: phone.trim() || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -54,7 +64,8 @@ export default function EditClientInfoForm({ clientId, initialName, initialEmail
   };
 
   const handleCancel = () => {
-    setName(initialName);
+    setFirstName(initialFirstName);
+    setLastName(initialLastName);
     setEmail(initialEmail);
     setPhone(initialPhone ?? '');
     setEditing(false);
@@ -76,14 +87,25 @@ export default function EditClientInfoForm({ clientId, initialName, initialEmail
 
   return (
     <div className="space-y-2">
-      <div>
-        <label className="text-xs text-gray-500 mb-1 block">{l.name}</label>
-        <Input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          className="text-sm h-8"
-          placeholder="Prénom Nom"
-        />
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">{l.firstName}</label>
+          <Input
+            value={firstName}
+            onChange={e => setFirstName(e.target.value)}
+            className="text-sm h-8"
+            placeholder={locale === 'fr' ? 'Marie' : 'Jane'}
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">{l.lastName}</label>
+          <Input
+            value={lastName}
+            onChange={e => setLastName(e.target.value)}
+            className="text-sm h-8"
+            placeholder={locale === 'fr' ? 'Dupont' : 'Smith'}
+          />
+        </div>
       </div>
       <div>
         <label className="text-xs text-gray-500 mb-1 block">{l.email}</label>

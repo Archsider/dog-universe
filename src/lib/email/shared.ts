@@ -166,11 +166,15 @@ export type EmailTemplateBodies = {
   subjectEn: string;
   bodyFr: string;
   bodyEn: string;
+  // AR variants are optional — falls back to EN when missing.
+  subjectAr?: string;
+  bodyAr?: string;
 };
 
 export type EmailTemplateContext = {
   d: Record<string, string>;
   isFr: boolean;
+  isAr: boolean;
   _companion: string;
   _CompanionCap: string;
   _verbPres: string;
@@ -297,10 +301,12 @@ export function buildTemplateContext(
   const _dateRangeEn = d.endDate ? `From ${d.startDate} to ${d.endDate}` : `On ${d.startDate}`;
 
   const isFr = locale === 'fr';
+  const isAr = locale === 'ar';
 
   return {
     d,
     isFr,
+    isAr,
     _companion,
     _CompanionCap,
     _verbPres,

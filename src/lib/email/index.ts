@@ -50,8 +50,18 @@ export function getEmailTemplate(
   const ctx = buildTemplateContext(data, pets, locale);
   const tpl = builder(ctx);
 
-  const subject = ctx.isFr ? tpl.subjectFr : tpl.subjectEn;
-  const body = ctx.isFr ? tpl.bodyFr : tpl.bodyEn;
+  // AR uses bodyAr/subjectAr when the template provides them, otherwise falls
+  // back to EN (sane default for a multi-locale UI that hasn't translated every
+  // template yet).
+  let subject: string;
+  let body: string;
+  if (ctx.isAr && tpl.subjectAr && tpl.bodyAr) {
+    subject = tpl.subjectAr;
+    body = tpl.bodyAr;
+  } else {
+    subject = ctx.isFr ? tpl.subjectFr : tpl.subjectEn;
+    body = ctx.isFr ? tpl.bodyFr : tpl.bodyEn;
+  }
 
   return { subject, html: wrapEmailHtml(body) };
 }

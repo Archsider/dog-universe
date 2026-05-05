@@ -155,22 +155,52 @@ export const bookingTemplates: Record<string, EmailTemplateBuilder> = {
       `,
   }),
 
-  stay_end_reminder: ({ d, _companion }) => ({
-    subjectFr: `🏠 Fin de séjour demain — ${d.petName} — Dog Universe`,
-    subjectEn: `🏠 Stay ending tomorrow — ${d.petName} — Dog Universe`,
-    bodyFr: `
-        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
-        <p>Le séjour de <strong>${d.petName}</strong> (réf. <strong>${d.bookingRef}</strong>) se termine <strong>demain</strong>, le <strong>${d.endDate}</strong>.</p>
-        <p>Pensez à prévoir votre venue pour récupérer ${_companion}. N'hésitez pas à nous contacter pour convenir de l'heure.</p>
-        <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
-      `,
-    bodyEn: `
-        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
-        <p><strong>${d.petName}</strong>'s stay (ref. <strong>${d.bookingRef}</strong>) ends <strong>tomorrow</strong>, on <strong>${d.endDate}</strong>.</p>
-        <p>Please plan your visit to pick up your companion. Feel free to contact us to arrange a pick-up time.</p>
-        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
-      `,
-  }),
+  stay_end_reminder: ({ d }) => {
+    const hasTaxi = d.hasTaxi === '1';
+    const articleFr = d.articleFr || 'le/la';
+    const reposeFr = d.reposeFr || 'reposé(e)';
+    const chouchoutFr = d.chouchoutFr || 'chouchouté(e)';
+    const pretFr = d.pretFr || 'prêt(e)';
+    const ilElleFr = d.ilElleFr || 'il/elle';
+
+    const phraseFr = hasTaxi
+      ? `Demain, nous vous ${articleFr} ramenons à la maison — ${reposeFr}, ${chouchoutFr}, et ${pretFr} à vous retrouver.`
+      : `Demain, ${ilElleFr} vous attend les pattes impatientes. On se retrouve à la pension pour les retrouvailles.`;
+
+    const phraseEn = hasTaxi
+      ? `Tomorrow we bring them home — rested, pampered, and ready to be reunited with you.`
+      : `Tomorrow they're waiting for you with eager paws. See you at the boarding for the reunion.`;
+
+    const phraseAr = hasTaxi
+      ? `غداً سنعيدهم إلى المنزل — مرتاحين، مدللين، وجاهزين للقائكم.`
+      : `غداً ينتظرونكم في الفندق. نراكم في موعد اللقاء.`;
+
+    return {
+      subjectFr: `🏠 Fin de séjour demain — ${d.petName} — Dog Universe`,
+      subjectEn: `🏠 Stay ending tomorrow — ${d.petName} — Dog Universe`,
+      subjectAr: `🏠 نهاية الإقامة غداً — ${d.petName} — Dog Universe`,
+      bodyFr: `
+          <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+          <p>Le séjour de <strong>${d.petName}</strong> (réf. <strong>${d.bookingRef}</strong>) touche à sa fin, le <strong>${d.endDate}</strong>.</p>
+          <p>${phraseFr}</p>
+          <p>À très bientôt,<br><strong>L'équipe Dog Universe 🐾</strong></p>
+        `,
+      bodyEn: `
+          <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+          <p><strong>${d.petName}</strong>'s stay (ref. <strong>${d.bookingRef}</strong>) is coming to an end, on <strong>${d.endDate}</strong>.</p>
+          <p>${phraseEn}</p>
+          <p>See you soon,<br><strong>The Dog Universe Team 🐾</strong></p>
+        `,
+      bodyAr: `
+          <div dir="rtl" style="text-align: right;">
+            <h2 style="color: #2C2C2C;">مرحباً ${d.clientName}،</h2>
+            <p>إقامة <strong>${d.petName}</strong> (المرجع <strong>${d.bookingRef}</strong>) تقترب من نهايتها، في <strong>${d.endDate}</strong>.</p>
+            <p>${phraseAr}</p>
+            <p>إلى اللقاء قريباً،<br><strong>فريق Dog Universe 🐾</strong></p>
+          </div>
+        `,
+    };
+  },
 
   admin_stay_reminder: ({ d }) => ({
     subjectFr: `📋 Rappel séjour demain — ${d.petName} (${d.clientName}) — Dog Universe`,

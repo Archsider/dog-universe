@@ -198,8 +198,9 @@ export async function GET(request: Request) {
       deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
     },
     include: {
-      client: { select: { name: true, email: true, language: true, phone: true } },
+      client: { select: { name: true, firstName: true, email: true, language: true, phone: true } },
       bookingPets: { include: { pet: { select: { name: true, gender: true } } } },
+      taxiDetail: { select: { id: true } }, // taxi addon presence drives end-reminder copy (see SMS/email below)
     },
   });
 
@@ -235,22 +236,58 @@ export async function GET(request: Request) {
       const endDate = locale === 'fr' ? endDateFr : endDateEn;
       const bookingRef = booking.id.slice(0, 8).toUpperCase();
 
-      // Client email
+      const hasTaxi = booking.taxiDetail != null;
+      const isPlural = pets.length > 1;
+
+      // Gender resolution (le/la, reposé/reposée). Falls back to neutral form if unknown.
+      const firstPet = pets[0];
+      const isFemale = !isPlural && firstPet?.gender === 'FEMALE';
+      const isMale = !isPlural && firstPet?.gender === 'MALE';
+      const articleFr = isFemale ? 'la' : isMale ? 'le' : 'le/la';
+      const reposeFr = isFemale ? 'reposée' : isMale ? 'reposé' : 'reposé(e)';
+      const chouchoutFr = isFemale ? 'chouchoutée' : isMale ? 'chouchouté' : 'chouchouté(e)';
+      const pretFr = isFemale ? 'prête' : isMale ? 'prêt' : 'prêt(e)';
+      const ilElleFr = isPlural ? 'ils/elles' : isFemale ? 'elle' : isMale ? 'il' : 'il/elle';
+
+      // Client email — taxi/no-taxi conditional rendered in the template.
       const { subject, html } = getEmailTemplate(
         'stay_end_reminder',
         {
-          clientName: booking.client.name ?? booking.client.email,
+          clientName: booking.client.firstName ?? booking.client.name ?? booking.client.email,
           bookingRef,
           petName: petNames,
           endDate,
+          hasTaxi: hasTaxi ? '1' : '',
+          articleFr,
+          reposeFr,
+          chouchoutFr,
+          pretFr,
+          ilElleFr,
         },
         locale,
         pets,
       );
 
       const clientName = booking.client.name ?? booking.client.email;
-      const firstName = clientName.split(' ')[0] || clientName;
-      const isPlural = pets.length > 1;
+      const firstName = booking.client.firstName
+        ?? clientName.split(' ')[0]
+        ?? booking.client.email;
+
+      // SMS body — FR / EN / AR with taxi conditional.
+      let smsMessage: string;
+      if (locale === 'ar') {
+        smsMessage = hasTaxi
+          ? `مرحباً ${firstName}، إقامة ${petNames} تقترب من نهايتها. غداً سنعيد ${isPlural ? 'هم' : 'ه/ها'} إلى المنزل — مرتاح${isFemale ? 'ة' : ''}، مدلل${isFemale ? 'ة' : ''}، وجاهز${isFemale ? 'ة' : ''} للقائكم. — Dog Universe 🐾`
+          : `مرحباً ${firstName}، إقامة ${petNames} تقترب من نهايتها. غداً ${isPlural ? 'ينتظرونكم' : 'ينتظركم'} في الفندق. نراكم في الموعد. — Dog Universe 🐾`;
+      } else if (locale === 'en') {
+        smsMessage = hasTaxi
+          ? `Hello ${firstName}, ${petNames}'s stay is coming to an end. Tomorrow we bring ${isPlural ? 'them' : 'them'} home — rested, pampered, and ready to be reunited with you. — Dog Universe 🐾`
+          : `Hello ${firstName}, ${petNames}'s stay is coming to an end. Tomorrow ${isPlural ? 'they are' : 'they are'} waiting for you with eager paws. See you at the boarding for the reunion. — Dog Universe 🐾`;
+      } else {
+        smsMessage = hasTaxi
+          ? `Bonjour ${firstName}, le séjour de ${petNames} touche à sa fin. Demain, nous vous ${articleFr} ramenons à la maison — ${reposeFr}, ${chouchoutFr}, et ${pretFr} à vous retrouver. — Dog Universe 🐾`
+          : `Bonjour ${firstName}, le séjour de ${petNames} touche à sa fin. Demain, ${ilElleFr} vous attend${isPlural ? 'ent' : ''} les pattes impatientes. On se retrouve à la pension pour les retrouvailles. — Dog Universe 🐾`;
+      }
 
       const ops: Promise<unknown>[] = [
         enqueueEmail({ to: booking.client.email, subject, html }, `reminder:end:${booking.id}:client-email`),
@@ -259,15 +296,16 @@ export async function GET(request: Request) {
           type: 'STAY_END_REMINDER',
           titleFr: 'Fin de séjour demain',
           titleEn: 'Stay ending tomorrow',
-          messageFr: `Le séjour de ${petNames} se termine demain (${endDateFr}). Pensez à prévoir votre venue.`,
-          messageEn: `${petNames}'s stay ends tomorrow (${endDateEn}). Please plan your pick-up.`,
-          metadata: { bookingId: booking.id },
+          messageFr: hasTaxi
+            ? `Le séjour de ${petNames} se termine demain (${endDateFr}). Nous vous ${articleFr} ramenons à la maison.`
+            : `Le séjour de ${petNames} se termine demain (${endDateFr}). On vous attend à la pension pour les retrouvailles.`,
+          messageEn: hasTaxi
+            ? `${petNames}'s stay ends tomorrow (${endDateEn}). We bring them home.`
+            : `${petNames}'s stay ends tomorrow (${endDateEn}). See you at the boarding for the reunion.`,
+          metadata: { bookingId: booking.id, hasTaxi: hasTaxi ? '1' : '0' },
         }),
         enqueueSms(
-          {
-            to: booking.client.phone,
-            message: `Bonjour ${firstName} ! ${petNames} rentre${isPlural ? 'nt' : ''} demain à la maison. Ce fut un bonheur de ${isPlural ? 'les' : "l'"} avoir. À très bientôt ! — Dog Universe 🐾`,
-          },
+          { to: booking.client.phone, message: smsMessage },
           `reminder:end:${booking.id}:client-sms`,
         ),
         enqueueSms(

@@ -27,13 +27,18 @@ export const passwordChangeSchema = z.object({
 
 // Inscription nouveau client
 export const registerSchema = z.object({
-  name: z
+  firstName: z
     .string()
     .min(1)
-    .max(255)
+    .max(120)
     .transform(v => v.trim())
-    .refine(v => v.length > 0, 'name required')
-    .refine(v => v.split(/\s+/).length >= 2, 'first AND last name required'),
+    .refine(v => v.length >= 2, 'firstName required (min 2 chars)'),
+  lastName: z
+    .string()
+    .min(1)
+    .max(120)
+    .transform(v => v.trim())
+    .refine(v => v.length >= 2, 'lastName required (min 2 chars)'),
   email: z.string().email('invalid email').max(254).transform(v => v.toLowerCase().trim()),
   phone: z
     .string()
@@ -61,11 +66,17 @@ export const resetPasswordConfirmSchema = z.object({
 
 // Update profil client (champs limités)
 export const profileUpdateSchema = z.object({
-  name: z
+  firstName: z
     .string()
-    .max(255)
+    .max(120)
     .transform(v => v.trim())
-    .refine(v => v.length > 0, 'name cannot be empty')
+    .refine(v => v.length >= 2, 'firstName required (min 2 chars)')
+    .optional(),
+  lastName: z
+    .string()
+    .max(120)
+    .transform(v => v.trim())
+    .refine(v => v.length >= 2, 'lastName required (min 2 chars)')
     .optional(),
   phone: z
     .string()

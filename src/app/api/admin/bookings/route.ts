@@ -160,11 +160,18 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
 
       const passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
 
+      const walkInName = walkIn.name.trim();
+      const walkInParts = walkInName.split(/\s+/);
+      const walkInFirstName = walkInParts[0] || walkInName;
+      const walkInLastName = walkInParts.slice(1).join(' ') || walkInFirstName;
+
       const created = await prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
             email: placeholderEmail,
-            name: walkIn.name.trim(),
+            firstName: walkInFirstName,
+            lastName: walkInLastName,
+            name: walkInName,
             phone: walkIn.phone.trim(),
             passwordHash,
             role: 'CLIENT',

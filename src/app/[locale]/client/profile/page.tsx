@@ -13,6 +13,8 @@ import RgpdSection from './RgpdSection';
 interface UserProfile {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string | null;
 }
@@ -38,7 +40,7 @@ export default function ProfilePage() {
   const [showOld, setShowOld] = useState(false);
   const [showNew, setShowNew] = useState(false);
 
-  const [form, setForm] = useState({ name: '', phone: '' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '' });
   const [pwForm, setPwForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const [contract, setContract] = useState<ContractInfo | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -48,7 +50,8 @@ export default function ProfilePage() {
     fr: {
       title: 'Mon profil',
       personalInfo: 'Informations personnelles',
-      name: 'Nom complet',
+      firstName: 'Prénom',
+      lastName: 'Nom',
       email: 'Email',
       phone: 'Téléphone',
       saveProfile: 'Enregistrer',
@@ -67,7 +70,8 @@ export default function ProfilePage() {
     en: {
       title: 'My profile',
       personalInfo: 'Personal information',
-      name: 'Full name',
+      firstName: 'First name',
+      lastName: 'Last name',
       email: 'Email',
       phone: 'Phone',
       saveProfile: 'Save',
@@ -93,7 +97,11 @@ export default function ProfilePage() {
       fetch('/api/contracts/sign').then(r => r.json()),
     ]).then(([profileData, contractData]) => {
       setProfile(profileData);
-      setForm({ name: profileData.name || '', phone: profileData.phone || '' });
+      setForm({
+        firstName: profileData.firstName || '',
+        lastName: profileData.lastName || '',
+        phone: profileData.phone || '',
+      });
       if (contractData.contract) setContract(contractData.contract);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -221,9 +229,15 @@ export default function ProfilePage() {
         <form onSubmit={handleSaveProfile} className="space-y-4">
           {profileError && <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg"><AlertCircle className="h-4 w-4" />{profileError}</div>}
           {profileSuccess && <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 p-3 rounded-lg"><CheckCircle className="h-4 w-4" />{l.profileSaved}</div>}
-          <div>
-            <Label htmlFor="name">{l.name}</Label>
-            <Input id="name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className="mt-1" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="firstName">{l.firstName}</Label>
+              <Input id="firstName" value={form.firstName} onChange={e => setForm(p => ({ ...p, firstName: e.target.value }))} className="mt-1" minLength={2} required />
+            </div>
+            <div>
+              <Label htmlFor="lastName">{l.lastName}</Label>
+              <Input id="lastName" value={form.lastName} onChange={e => setForm(p => ({ ...p, lastName: e.target.value }))} className="mt-1" minLength={2} required />
+            </div>
           </div>
           <div>
             <Label>{l.email}</Label>

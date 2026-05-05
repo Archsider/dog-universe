@@ -86,8 +86,16 @@ export async function POST(request: Request) {
   const uid = randomUUID().replace(/-/g, '').slice(0, 16);
   const email = `walkin-${uid}@internal.doguniverse.local`;
 
+  // Walk-in : name often a single word (e.g. "Paul"). Split when possible,
+  // otherwise reuse the same value for both — required by NOT NULL on firstName/lastName.
+  const parts = trimmedName.split(/\s+/);
+  const walkInFirstName = parts[0] || trimmedName;
+  const walkInLastName = parts.slice(1).join(' ') || walkInFirstName;
+
   const user = await prisma.user.create({
     data: {
+      firstName: walkInFirstName,
+      lastName: walkInLastName,
       name: trimmedName,
       phone: trimmedPhone,
       email,

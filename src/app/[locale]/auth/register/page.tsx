@@ -16,7 +16,7 @@ export default function RegisterPage() {
   const locale = useLocale();
   const router = useRouter();
 
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', password: '', confirmPassword: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,8 +29,8 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
-    if (form.name.trim().split(/\s+/).length < 2) {
-      setError(locale === 'fr' ? 'Veuillez entrer votre prénom et nom de famille.' : 'Please enter your first and last name.');
+    if (form.firstName.trim().length < 2 || form.lastName.trim().length < 2) {
+      setError(locale === 'fr' ? 'Veuillez entrer votre prénom et votre nom de famille.' : 'Please enter your first and last name.');
       return;
     }
     if (form.password !== form.confirmPassword) {
@@ -49,7 +49,8 @@ export default function RegisterPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: form.name.trim(),
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
           email: form.email.toLowerCase().trim(),
           phone: form.phone.trim(),
           password: form.password,
@@ -101,18 +102,35 @@ export default function RegisterPage() {
         {/* Card */}
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-gold p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="name">{t('name')}</Label>
-              <Input
-                id="name"
-                name="name"
-                type="text"
-                value={form.name}
-                onChange={handleChange}
-                placeholder={locale === 'fr' ? 'Prénom Nom (ex: Marie Dupont)' : 'First Last (e.g. Jane Smith)'}
-                required
-                className="mt-1"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="firstName">{locale === 'fr' ? 'Prénom' : 'First name'}</Label>
+                <Input
+                  id="firstName"
+                  name="firstName"
+                  type="text"
+                  value={form.firstName}
+                  onChange={handleChange}
+                  placeholder={locale === 'fr' ? 'Marie' : 'Jane'}
+                  required
+                  minLength={2}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="lastName">{locale === 'fr' ? 'Nom' : 'Last name'}</Label>
+                <Input
+                  id="lastName"
+                  name="lastName"
+                  type="text"
+                  value={form.lastName}
+                  onChange={handleChange}
+                  placeholder={locale === 'fr' ? 'Dupont' : 'Smith'}
+                  required
+                  minLength={2}
+                  className="mt-1"
+                />
+              </div>
             </div>
 
             <div>

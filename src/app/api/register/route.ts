@@ -13,7 +13,8 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json(formatZodError(parsed.error), { status: 400 });
     }
-    const { name, email, phone, password, language } = parsed.data;
+    const { firstName, lastName, email, phone, password, language } = parsed.data;
+    const name = `${firstName} ${lastName}`;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -25,7 +26,9 @@ export async function POST(request: Request) {
     const user = await prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
         data: {
-          name,            // déjà trimmé par Zod
+          firstName,
+          lastName,
+          name,            // synced = firstName + ' ' + lastName
           email,           // déjà lowercased + trimmé
           phone,           // déjà trimmé / converti en null si vide
           passwordHash,

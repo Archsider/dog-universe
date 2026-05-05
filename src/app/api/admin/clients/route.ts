@@ -108,11 +108,13 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { password, language } = body;
 
-  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 255) : '';
+  const firstName = typeof body.firstName === 'string' ? body.firstName.trim().slice(0, 120) : '';
+  const lastName  = typeof body.lastName  === 'string' ? body.lastName.trim().slice(0, 120)  : '';
   const email = typeof body.email === 'string' ? body.email.toLowerCase().trim().slice(0, 255) : '';
   const phone = typeof body.phone === 'string' ? body.phone.trim().slice(0, 20) : null;
+  const name = `${firstName} ${lastName}`.trim();
 
-  if (!name || !email || !password) {
+  if (firstName.length < 2 || lastName.length < 2 || !email || !password) {
     return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
   }
   if (
@@ -133,6 +135,8 @@ export async function POST(request: Request) {
 
   const user = await prisma.user.create({
     data: {
+      firstName,
+      lastName,
       name,
       email,
       phone: phone || null,

@@ -12,13 +12,13 @@ interface Props {
 export default function CreateClientModal({ locale }: Props) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', language: 'fr' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', password: '', language: 'fr' });
   const [error, setError] = useState('');
   const router = useRouter();
 
   const l = locale === 'en'
-    ? { btn: 'New client', title: 'Create client', name: 'Full name', email: 'Email', phone: 'Phone (optional)', password: 'Temporary password', lang: 'Language', cancel: 'Cancel', create: 'Create', success: 'Client created', errTaken: 'Email already in use', errWeak: 'Password must be 8+ characters', errMissing: 'Required fields missing' }
-    : { btn: 'Nouveau client', title: 'Créer un client', name: 'Nom complet', email: 'Email', phone: 'Téléphone (optionnel)', password: 'Mot de passe temporaire', lang: 'Langue', cancel: 'Annuler', create: 'Créer', success: 'Client créé', errTaken: 'Email déjà utilisé', errWeak: 'Mot de passe trop court (8 min)', errMissing: 'Champs requis manquants' };
+    ? { btn: 'New client', title: 'Create client', firstName: 'First name', lastName: 'Last name', email: 'Email', phone: 'Phone (optional)', password: 'Temporary password', lang: 'Language', cancel: 'Cancel', create: 'Create', success: 'Client created', errTaken: 'Email already in use', errWeak: 'Password must be 8+ characters', errMissing: 'Required fields missing' }
+    : { btn: 'Nouveau client', title: 'Créer un client', firstName: 'Prénom', lastName: 'Nom', email: 'Email', phone: 'Téléphone (optionnel)', password: 'Mot de passe temporaire', lang: 'Langue', cancel: 'Annuler', create: 'Créer', success: 'Client créé', errTaken: 'Email déjà utilisé', errWeak: 'Mot de passe trop court (8 min)', errMissing: 'Champs requis manquants' };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +39,7 @@ export default function CreateClientModal({ locale }: Props) {
       }
       toast({ title: l.success, variant: 'success' });
       setOpen(false);
-      setForm({ name: '', email: '', phone: '', password: '', language: 'fr' });
+      setForm({ firstName: '', lastName: '', email: '', phone: '', password: '', language: 'fr' });
       router.refresh();
     } catch {
       setError(l.errMissing);
@@ -70,14 +70,27 @@ export default function CreateClientModal({ locale }: Props) {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{l.name} *</label>
-                <input
-                  required
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-ivory-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{l.firstName} *</label>
+                  <input
+                    required
+                    minLength={2}
+                    value={form.firstName}
+                    onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))}
+                    className="w-full px-3 py-2 border border-ivory-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{l.lastName} *</label>
+                  <input
+                    required
+                    minLength={2}
+                    value={form.lastName}
+                    onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))}
+                    className="w-full px-3 py-2 border border-ivory-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{l.email} *</label>

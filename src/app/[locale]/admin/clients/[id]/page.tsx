@@ -113,7 +113,8 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
             </div>
             <EditClientInfoForm
               clientId={id}
-              initialName={client.name ?? ''}
+              initialFirstName={client.firstName ?? ''}
+              initialLastName={client.lastName ?? ''}
               initialEmail={client.email}
               initialPhone={client.phone}
               locale={locale}

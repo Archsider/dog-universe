@@ -29,6 +29,8 @@ async function main() {
   const admin = await prisma.user.create({
     data: {
       email: 'admin@doguniverse.ma',
+      firstName: 'Dog Universe',
+      lastName: 'Admin',
       name: 'Dog Universe Admin',
       phone: '+212 600 000 000',
       passwordHash: adminPassword,
@@ -43,6 +45,8 @@ async function main() {
   const marie = await prisma.user.create({
     data: {
       email: 'marie.dupont@email.com',
+      firstName: 'Marie',
+      lastName: 'Dupont',
       name: 'Marie Dupont',
       phone: '+33 6 12 34 56 78',
       passwordHash: clientPassword,
@@ -485,6 +489,8 @@ async function main() {
     update: {},
     create: {
       email: 'passage@doguniverse.ma',
+      firstName: 'Client',
+      lastName: 'de passage',
       name: 'Client de passage',
       passwordHash: passagePassword,
       role: 'CLIENT',
