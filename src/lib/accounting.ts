@@ -62,6 +62,17 @@ function nightsOverlap(bStart: Date, bEnd: Date, wStart: Date, wEnd: Date): numb
   return nightsBetween(start, end);
 }
 
+// Nuits réellement consommées dans la fenêtre [monthStart, monthEnd] pour un
+// séjour [startDate, endDate]. Open-ended (endDate null) → on borne au mois.
+export function countNightsInMonth(
+  startDate: Date,
+  endDate: Date | null,
+  monthStart: Date,
+  monthEnd: Date,
+): number {
+  return nightsOverlap(startDate, endDate ?? monthEnd, monthStart, monthEnd);
+}
+
 function isWithin(d: Date, start: Date, end: Date): boolean {
   return d.getTime() >= start.getTime() && d.getTime() <= end.getTime();
 }
@@ -125,12 +136,15 @@ function bucketOf(category: string, description?: string | null): keyof Category
 }
 
 // Décomposition par catégorie pour un (invoice, items, mois cible).
-// Stratégie d'allocation, items pondérés par item.total :
-//   - CAS 2/3 : chaque Payment du mois alloué proportionnellement aux items.
-//   - CAS 1   : invoice.amount alloué proportionnellement aux items, puis :
-//       BOARDING items → prorata par nuits dans le mois,
-//       autres        → bucket sur le mois de booking.startDate (jamais issuedAt
-//                       quand le booking existe, jamais createdAt).
+// Règle métier unique — la caisse prime :
+//   1. encaisséMois = SUM(Payment.amount) où paymentDate ∈ [monthStart, monthEnd]
+//   2. Si encaisséMois = 0 ET payments.length = 0 (CAS 1, aucun paiement enregistré) :
+//      encaisséMois = invoice.amount × (nightsInMonth / totalNights)
+//      Ouvert (endDate null/isOpenEnded) → totalNights = (now - startDate),
+//      borné au mois pour nightsInMonth. Pas de booking → bucket sur issuedAt.
+//   3. Si encaisséMois = 0 ET payments.length > 0 → 0 (paiements existent
+//      mais hors mois cible).
+//   4. Ventilation par catégorie au prorata des items.total.
 export function computeMonthlyRevenueByCategory(
   payments: AccountingPayment[],
   invoice: AccountingInvoice,
@@ -143,33 +157,34 @@ export function computeMonthlyRevenueByCategory(
   const itemsTotal = items.reduce((s, it) => s + toNumber(it.total), 0);
   if (itemsTotal <= 0) return result;
 
-  // CAS 2 & 3 — paiements présents.
-  if (payments.length > 0) {
-    for (const p of payments) {
-      if (!isWithin(p.paymentDate, monthStart, monthEnd)) continue;
-      const amt = toNumber(p.amount);
-      for (const it of items) {
-        const share = amt * (toNumber(it.total) / itemsTotal);
-        result[bucketOf(it.category, it.description)] += share;
-      }
+  let cashThisMonth = 0;
+  for (const p of payments) {
+    if (isWithin(p.paymentDate, monthStart, monthEnd)) {
+      cashThisMonth += toNumber(p.amount);
     }
-    return result;
   }
 
-  // CAS 1 — pas de paiement : prorata nuits pour BOARDING, single-bucket
-  // pour les autres lignes.
-  const invAmt = toNumber(invoice.amount);
-  for (const it of items) {
-    const share = invAmt * (toNumber(it.total) / itemsTotal);
-    const b = bucketOf(it.category, it.description);
-    if (b === 'boarding' && booking && booking.endDate && !booking.isOpenEnded) {
-      const totalNights = Math.max(1, nightsBetween(booking.startDate, booking.endDate));
-      const inMonth = nightsOverlap(booking.startDate, booking.endDate, monthStart, monthEnd);
-      if (inMonth > 0) result[b] += share * (inMonth / totalNights);
-    } else {
-      const ref = booking?.startDate ?? invoice.issuedAt;
-      if (isWithin(ref, monthStart, monthEnd)) result[b] += share;
+  // CAS 1 — aucun paiement n'a jamais été enregistré → prorata nuits sur
+  // l'intégralité de invoice.amount (taxi/grooming/produits inclus, on suit
+  // l'estimation comptable jusqu'au moment où un Payment réel arrive).
+  if (cashThisMonth === 0 && payments.length === 0) {
+    const invAmt = toNumber(invoice.amount);
+    if (booking) {
+      const start = booking.startDate;
+      const endRef = booking.endDate ?? new Date();
+      const totalNights = Math.max(1, nightsBetween(start, endRef));
+      const inMonth = countNightsInMonth(start, booking.endDate, monthStart, monthEnd);
+      if (inMonth > 0) cashThisMonth = invAmt * (inMonth / totalNights);
+    } else if (isWithin(invoice.issuedAt, monthStart, monthEnd)) {
+      cashThisMonth = invAmt;
     }
+  }
+
+  if (cashThisMonth === 0) return result;
+
+  for (const it of items) {
+    const share = cashThisMonth * (toNumber(it.total) / itemsTotal);
+    result[bucketOf(it.category, it.description)] += share;
   }
   return result;
 }
