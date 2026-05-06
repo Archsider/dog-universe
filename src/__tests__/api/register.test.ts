@@ -51,40 +51,30 @@ vi.mock('@/lib/email', () => ({
 
 vi.mock('@/lib/log', () => ({
   logAction: mocks.logAction,
-  LOG_ACTIONS: {
-    USER_REGISTER: 'USER_REGISTER',
-  },
+  LOG_ACTIONS: { USER_REGISTER: 'USER_REGISTER' },
 }));
 
 vi.mock('@/lib/notifications', () => ({
   notifyAdminsNewClient: mocks.notifyAdminsNewClient,
-  createBookingConfirmationNotification: vi.fn(),
-  createBookingWaitlistedNotification: vi.fn(),
-  createBookingValidationNotification: vi.fn(),
-  createBookingRefusalNotification: vi.fn(),
-  createBookingInProgressNotification: vi.fn(),
-  createBookingCompletedNotification: vi.fn(),
-  createBookingNoShowNotification: vi.fn(),
-  notifyAdminsNewBooking: vi.fn(),
-  promoteWaitlistedBooking: vi.fn(),
 }));
 
-// Import handler AFTER mocks
+// ---------------------------------------------------------------------------
+// Import route under test AFTER mocks are set up
+// ---------------------------------------------------------------------------
 import { POST } from '@/app/api/register/route';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function makeRequest(body: unknown): Request {
-  return new Request('https://example.com/api/register', {
+function makeRequest(body: Record<string, unknown>) {
+  return new Request('http://localhost/api/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
 }
 
+// Schema uses firstName + lastName (split from the old "name" field)
 const validBody = {
-  name: 'Alice Dupont',
+  firstName: 'Alice',
+  lastName: 'Dupont',
   email: 'alice@example.com',
   password: 'SecurePassword123',
   phone: '+212600000001',
@@ -124,8 +114,17 @@ describe('POST /api/register — validation', () => {
     expect(json.error).toBeDefined();
   });
 
-  it('returns 400 when name has only one word (first AND last required)', async () => {
-    const res = await POST(makeRequest({ ...validBody, name: 'Alice' }));
+  it('returns 400 when firstName is missing', async () => {
+    const { firstName: _f, ...bodyWithoutFirst } = validBody;
+    const res = await POST(makeRequest(bodyWithoutFirst));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBeDefined();
+  });
+
+  it('returns 400 when lastName is missing', async () => {
+    const { lastName: _l, ...bodyWithoutLast } = validBody;
+    const res = await POST(makeRequest(bodyWithoutLast));
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBeDefined();
@@ -143,12 +142,6 @@ describe('POST /api/register — validation', () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBeDefined();
-  });
-
-  it('returns 400 when name is missing', async () => {
-    const { name: _name, ...bodyWithoutName } = validBody;
-    const res = await POST(makeRequest(bodyWithoutName));
-    expect(res.status).toBe(400);
   });
 
   it('returns 400 when email is missing', async () => {
@@ -220,6 +213,8 @@ describe('POST /api/register — success', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           passwordHash: 'hashed-password-xyz',
+          firstName: 'Alice',
+          lastName: 'Dupont',
         }),
       }),
     );
