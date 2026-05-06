@@ -91,8 +91,6 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
             date: updatedBd.taxiGoDate ?? undefined,
             time: updatedBd.taxiGoTime ?? undefined,
             address: updatedBd.taxiGoAddress ?? undefined,
-            pickupLat: updatedBd.taxiGoLat ?? undefined,
-            pickupLng: updatedBd.taxiGoLng ?? undefined,
           },
         });
         await tx.taxiStatusHistory.create({
@@ -105,8 +103,6 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
             date: updatedBd.taxiGoDate ?? undefined,
             time: updatedBd.taxiGoTime ?? undefined,
             address: updatedBd.taxiGoAddress ?? undefined,
-            pickupLat: updatedBd.taxiGoLat ?? undefined,
-            pickupLng: updatedBd.taxiGoLng ?? undefined,
           },
         });
       }
@@ -119,8 +115,6 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
             date: updatedBd.taxiReturnDate ?? undefined,
             time: updatedBd.taxiReturnTime ?? undefined,
             address: updatedBd.taxiReturnAddress ?? undefined,
-            pickupLat: updatedBd.taxiReturnLat ?? undefined,
-            pickupLng: updatedBd.taxiReturnLng ?? undefined,
           },
         });
         await tx.taxiStatusHistory.create({
@@ -133,8 +127,6 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
             date: updatedBd.taxiReturnDate ?? undefined,
             time: updatedBd.taxiReturnTime ?? undefined,
             address: updatedBd.taxiReturnAddress ?? undefined,
-            pickupLat: updatedBd.taxiReturnLat ?? undefined,
-            pickupLng: updatedBd.taxiReturnLng ?? undefined,
           },
         });
       }
