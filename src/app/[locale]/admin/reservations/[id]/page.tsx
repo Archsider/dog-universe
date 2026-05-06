@@ -16,6 +16,7 @@ import AdminMessageSection from './AdminMessageSection';
 import AddonRequestsSection from './AddonRequestsSection';
 import TaxiHeartbeatIndicator from './TaxiHeartbeatIndicator';
 import AdminTaxiLiveMap from './AdminTaxiLiveMap';
+import AdminTaxiReplay from './AdminTaxiReplay';
 import ExtendBookingSection from './ExtendBookingSection';
 import MergeBookingsSection from './MergeBookingsSection';
 import EditDatesSection from './EditDatesSection';
@@ -511,6 +512,21 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                 )}
                 {rawStandalone?.trackingActive && rawStandalone.trackingToken && (
                   <AdminTaxiLiveMap trackingToken={rawStandalone.trackingToken} locale={locale} />
+                )}
+                {/* REPLAY mode — visible once the trip reaches a terminal status
+                    (driver arrived at destination) and live tracking is off. */}
+                {rawStandalone && !rawStandalone.trackingActive && (
+                  rawStandalone.status === 'ARRIVED_AT_PENSION' ||
+                  rawStandalone.status === 'ARRIVED_AT_CLIENT' ||
+                  rawStandalone.status === 'COMPLETED' ||
+                  booking.status === 'COMPLETED'
+                ) && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold text-charcoal/70 uppercase tracking-wider">
+                      {locale === 'fr' ? 'Replay du trajet' : 'Trip replay'}
+                    </h4>
+                    <AdminTaxiReplay taxiTripId={rawStandalone.id} locale={locale} />
+                  </div>
                 )}
                 {/* Persistent cumulative distance — survives tracking stop and page refresh. */}
                 {rawStandalone && rawStandalone.distanceKm > 0 && (

@@ -50,6 +50,9 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
   const [carIcon, setCarIcon] = useState<unknown>(null);
   const [streamLive, setStreamLive] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Trail of past positions, capped at 200 (oldest dropped). Loaded from
+  // /history on mount, then appended as 'location' events come in.
+  const [trail, setTrail] = useState<[number, number][]>([]);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<LeafletMarker | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -87,10 +90,17 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
     import('leaflet').then((L) => {
       if (cancelled) return;
       setCarIcon(L.divIcon({
-        html: '<div style="width:22px;height:22px;border-radius:50%;border:3px solid white;background:#C4974A;box-shadow:0 2px 10px rgba(196,151,74,0.6);"></div>',
+        html: `<div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;">
+  <div data-rotor style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;transition:transform 0.3s ease-out;">
+    <svg width="26" height="26" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="14" cy="14" r="11" fill="#C4974A" stroke="white" stroke-width="3" />
+      <path d="M14 6 L18 14 L14 12 L10 14 Z" fill="white" />
+    </svg>
+  </div>
+</div>`,
         className: '',
-        iconSize: [22, 22],
-        iconAnchor: [11, 11],
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
       }));
     });
     return () => { cancelled = true; };
@@ -103,6 +113,17 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
     // Initial REST fetch — guarantees the map shows the last-known position
     // even before SSE warms up (or if Redis is empty / unconfigured).
     void fetchOnce();
+
+    // Charge l'historique du trail (max 200 derniers points) en parallèle.
+    void (async () => {
+      try {
+        const res = await fetch(`/api/taxi-tracking/${trackingToken}/history`, { cache: 'no-store' });
+        if (!res.ok || aborted) return;
+        const json = (await res.json()) as { positions?: { lat: number; lng: number }[] };
+        if (aborted || !json.positions) return;
+        setTrail(json.positions.map(p => [p.lat, p.lng] as [number, number]));
+      } catch { /* swallow */ }
+    })();
 
     const startFallback = () => {
       const tick = async () => {
@@ -126,6 +147,10 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
         const payload = JSON.parse((ev as MessageEvent).data) as Snapshot;
         // Merge so a position event without distanceKm doesn't blank the counter.
         setSnap(prev => mergeSnapshot(prev, payload));
+        setTrail(prev => {
+          const next: [number, number][] = [...prev, [payload.lat, payload.lng]];
+          return next.length > 200 ? next.slice(next.length - 200) : next;
+        });
       } catch { /* ignore */ }
     });
     // Server-side soft-timeout (~54s) sends 'reconnect' before closing the
@@ -173,6 +198,9 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
           mapRef={mapRef}
           markerRef={markerRef}
           carIcon={carIcon}
+          heading={snap.heading ?? null}
+          trailPositions={trail}
+          recenterLabel={isFr ? 'Recentrer' : 'Recenter'}
         />
       </div>
       <div className="flex items-center justify-between text-xs text-charcoal/60 px-1">

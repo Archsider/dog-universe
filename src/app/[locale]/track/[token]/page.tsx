@@ -48,6 +48,8 @@ export default function TrackPage() {
   const [data, setData] = useState<TrackResponse | null>(null);
   const [status, setStatus] = useState<'loading' | 'ok' | 'inactive' | 'notfound' | 'error'>('loading');
   const [carIcon, setCarIcon] = useState<LeafletDivIcon | null>(null);
+  // Trail of past positions (for the gold polyline). Capped at 200 points.
+  const [trail, setTrail] = useState<[number, number][]>([]);
   // Polling : setTimeout récursif (plus fiable que setInterval pour les requêtes lentes)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -63,11 +65,21 @@ export default function TrackPage() {
     let cancelled = false;
     import('leaflet').then((L) => {
       if (cancelled) return;
+      // Heading-aware icon: the inner element with [data-rotor] is rotated
+      // by MapView via CSS transform whenever a new heading arrives. The
+      // arrow tip points "up" at heading=0 (North).
       const icon = L.divIcon({
-        html: '<div style="width:24px;height:24px;border-radius:50%;border:3px solid white;background:#C4974A;box-shadow:0 2px 12px rgba(196,151,74,0.6);"></div>',
+        html: `<div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;">
+  <div data-rotor style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;transition:transform 0.3s ease-out;">
+    <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="14" cy="14" r="11" fill="#C4974A" stroke="white" stroke-width="3" />
+      <path d="M14 6 L18 14 L14 12 L10 14 Z" fill="white" />
+    </svg>
+  </div>
+</div>`,
         className: '',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
       });
       setCarIcon(icon);
     });
@@ -85,6 +97,19 @@ export default function TrackPage() {
   useEffect(() => {
     if (!token) return;
     let aborted = false;
+
+    // Charge le trail historique (max 200 derniers points) avant le branchement
+    // SSE — la polyline est ainsi visible immédiatement à l'ouverture du lien.
+    const fetchHistory = async () => {
+      try {
+        const res = await fetch(`/api/taxi-tracking/${token}/history`, { cache: 'no-store' });
+        if (!res.ok || aborted) return;
+        const json = (await res.json()) as { positions?: { lat: number; lng: number }[] };
+        if (aborted || !json.positions) return;
+        setTrail(json.positions.map(p => [p.lat, p.lng] as [number, number]));
+      } catch { /* swallow */ }
+    };
+    void fetchHistory();
 
     // Initial REST fetch: récupère le nom client/animaux (le stream ne les
     // envoie pas) + statut "active". Si 404 → notfound, on s'arrête.
@@ -164,6 +189,10 @@ export default function TrackPage() {
               createdAt: new Date(payload.timestamp).toISOString(),
             },
           }));
+          setTrail((prev) => {
+            const next: [number, number][] = [...prev, [payload.lat, payload.lng]];
+            return next.length > 200 ? next.slice(next.length - 200) : next;
+          });
           setStatus('ok');
         } catch { /* malformed event — ignore */ }
       });
@@ -292,6 +321,9 @@ export default function TrackPage() {
             mapRef={mapRef}
             markerRef={markerRef}
             carIcon={carIcon}
+            heading={last?.heading ?? null}
+            trailPositions={trail}
+            recenterLabel={isFr ? 'Recentrer' : 'Recenter'}
           />
         ) : (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6 gap-4">
