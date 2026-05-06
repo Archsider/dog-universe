@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { FileText, Download, Eye, Pencil } from 'lucide-react';
 import { formatDate, formatMAD } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
+import { computeMonthlyRevenue, getMonthlyInvoicesFilter } from '@/lib/accounting';
 import PaymentModal from './PaymentModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
@@ -88,48 +89,11 @@ export default async function AdminBillingPage(props: PageProps) {
   const order = (VALID_ORDERS.includes(rawOrder) ? rawOrder : 'desc') as 'asc' | 'desc';
   const clientId = (searchParams.clientId || '').trim();
 
-  // Règle métier : une facture appartient au mois si son séjour tombe ou
-  // chevauche le mois. Le filtre n'utilise PLUS issuedAt (≠ date de création
-  // de la facture) — exemple : facture émise 21 avr pour un séjour
-  // 24 avr → 6 mai apparaît désormais en mai.
-  //
-  //   - bookingId IS NOT NULL → fenêtre = [booking.startDate .. booking.endDate]
-  //     (ou indéfini si isOpenEnded / endDate=null).
-  //   - bookingId IS NULL (facture manuelle) → fallback sur invoice.issuedAt.
-  const monthDateFilter = {
-    OR: [
-      {
-        bookingId: { not: null },
-        booking: {
-          OR: [
-            // Séjour qui démarre dans le mois.
-            { startDate: { gte: monthStart, lte: monthEnd } },
-            // Séjour qui chevauche le mois (commence avant fin de mois ET
-            // continue après début de mois OU est open-ended).
-            {
-              startDate: { lte: monthEnd },
-              OR: [
-                { endDate: { gte: monthStart } },
-                { isOpenEnded: true },
-                { endDate: null },
-              ],
-            },
-          ],
-        },
-      },
-      {
-        bookingId: null,
-        issuedAt: { gte: monthStart, lte: monthEnd },
-      },
-    ],
-  };
-
-  // Pour les agrégats sur Payment : un paiement est rattaché au mois via la
-  // facture sous-jacente, jamais via paymentDate (un paiement encaissé en
-  // avril pour un séjour de mai compte en mai).
-  const paymentMonthFilter = {
-    invoice: monthDateFilter,
-  };
+  // Règle métier unique : une facture appartient au mois selon les dates du
+  // séjour (bookingId présent) OU son issuedAt (facture manuelle). Filtre
+  // partagé entre la liste affichée et les KPIs en tête de page — jamais deux
+  // requêtes divergentes (cf. lib/accounting.getMonthlyInvoicesFilter).
+  const monthDateFilter = getMonthlyInvoicesFilter(monthStart, monthEnd);
 
   // Month-scoped where for the invoice list
   const listWhere: Record<string, unknown> = {
@@ -166,12 +130,10 @@ export default async function AdminBillingPage(props: PageProps) {
   const [
     invoices,
     invoiceCount,
-    // KPI: all invoices of the month (unfiltered)
-    monthInvoicesAgg,
-    // Payment method stats (payments made in this month)
-    paymentMethodStats,
-    // Total encaissé (payments made in this month)
-    totalCollected,
+    // KPI : tous les invoices du mois (même filtre que la liste, jamais
+    // divergent — cf. FIX 4). On charge payments + booking pour calculer
+    // computeMonthlyRevenue (FIX 3 : caisse prime, prorata si zero payment).
+    monthInvoicesFull,
     allClients,
   ] = await Promise.all([
     prisma.invoice.findMany({
@@ -185,19 +147,16 @@ export default async function AdminBillingPage(props: PageProps) {
       take: limit,
     }),
     prisma.invoice.count({ where: listWhere }),
-    prisma.invoice.aggregate({
-      _sum: { amount: true, paidAmount: true },
+    prisma.invoice.findMany({
       where: monthWhere,
-    }),
-    prisma.payment.groupBy({
-      by: ['paymentMethod'],
-      _sum: { amount: true },
-      _count: { id: true },
-      where: paymentMonthFilter,
-    }),
-    prisma.payment.aggregate({
-      _sum: { amount: true },
-      where: paymentMonthFilter,
+      select: {
+        id: true,
+        amount: true,
+        issuedAt: true,
+        payments: { select: { amount: true, paymentDate: true, paymentMethod: true } },
+        booking: { select: { startDate: true, endDate: true, isOpenEnded: true } },
+      },
+      take: 5000,
     }),
     prisma.user.findMany({
       where: { role: 'CLIENT', deletedAt: null },
@@ -207,10 +166,45 @@ export default async function AdminBillingPage(props: PageProps) {
     }),
   ]);
 
-  const kpiTotalBilled = toNumber(monthInvoicesAgg._sum.amount ?? 0);
-  const kpiTotalPaid = toNumber(monthInvoicesAgg._sum.paidAmount ?? 0);
-  const kpiRemaining = Math.max(0, kpiTotalBilled - kpiTotalPaid);
-  const kpiCollected = toNumber(totalCollected._sum.amount ?? 0);
+  // Total facturé = somme exacte des invoice.amount sur la liste affichée.
+  // Total encaissé = somme du computeMonthlyRevenue de chaque facture (caisse
+  // prime, prorata fallback). Reste à encaisser = différence.
+  let kpiTotalBilled = 0;
+  let kpiCollected = 0;
+  // Répartition par méthode : ne compte que les paiements dont paymentDate
+  // tombe dans le mois (CAS 2/3 — la caisse), restreints aux factures du mois.
+  const methodAgg: Record<string, { amount: number; count: number }> = {
+    CASH: { amount: 0, count: 0 },
+    CARD: { amount: 0, count: 0 },
+    CHECK: { amount: 0, count: 0 },
+    TRANSFER: { amount: 0, count: 0 },
+  };
+  for (const inv of monthInvoicesFull) {
+    kpiTotalBilled += toNumber(inv.amount);
+    const monthRev = computeMonthlyRevenue(
+      inv.payments,
+      { amount: inv.amount, issuedAt: inv.issuedAt },
+      inv.booking,
+      monthStart,
+      monthEnd,
+    );
+    kpiCollected += toNumber(monthRev);
+    for (const p of inv.payments) {
+      if (p.paymentDate < monthStart || p.paymentDate > monthEnd) continue;
+      const m = methodAgg[p.paymentMethod];
+      if (!m) continue;
+      m.amount += toNumber(p.amount);
+      m.count += 1;
+    }
+  }
+  const kpiRemaining = Math.max(0, kpiTotalBilled - kpiCollected);
+  const paymentMethodStats = (Object.entries(methodAgg) as [string, { amount: number; count: number }][])
+    .filter(([, v]) => v.count > 0)
+    .map(([paymentMethod, v]) => ({
+      paymentMethod,
+      _sum: { amount: v.amount },
+      _count: { id: v.count },
+    }));
 
   // ── CSV export URL ─────────────────────────────────────────────────────────
   const exportParams = new URLSearchParams({

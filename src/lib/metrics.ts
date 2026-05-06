@@ -1,6 +1,11 @@
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
-import { ACTIVE_STAY_STATUSES, nightsBetween, nightsOverlap } from '@/lib/booking-status';
+import { ACTIVE_STAY_STATUSES } from '@/lib/booking-status';
+import {
+  computeMonthlyRevenueByCategory,
+  getMonthlyInvoicesFilter,
+  type CategoryBreakdown as AccountingCategoryBreakdown,
+} from '@/lib/accounting';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -8,41 +13,10 @@ export function deltaPercent(cur: number, prev: number): number {
   return prev === 0 ? 0 : Math.round(((cur - prev) / prev) * 1000) / 10;
 }
 
-// ItemCategory → display key.
-// Falls back to description-based inference for items created before category was
-// required (those were persisted with category=OTHER by the invoice creation route).
-function categoryKey(
-  cat: string,
-  description?: string,
-): 'boarding' | 'taxi' | 'grooming' | 'croquettes' | null {
-  if (cat === 'BOARDING') return 'boarding';
-  if (cat === 'PET_TAXI') return 'taxi';
-  if (cat === 'GROOMING') return 'grooming';
-  if (cat === 'PRODUCT') return 'croquettes';
-  if (description) {
-    const d = description.toLowerCase();
-    if (d.includes('pension') || d.includes('boarding') || d.includes('nuit') || d.includes('hébergement')) return 'boarding';
-    if (d.includes('taxi') || d.includes('transport') || d.includes('aller') || d.includes('retour')) return 'taxi';
-    if (d.includes('toilettage') || d.includes('grooming') || d.includes('soin') || d.includes('bain') || d.includes('coupe')) return 'grooming';
-    if (d.includes('croquette') || d.includes('kibble') || d.includes('nourriture') || d.includes('royal') || d.includes('grain')) return 'croquettes';
-  }
-  return null;
-}
-
-// Public counterpart returning the canonical ItemCategory (uppercase) so callers
-// outside metrics.ts (e.g. the analytics drill-down) can re-categorize legacy
-// OTHER rows using the same description heuristics as the revenue charts.
-export function inferItemCategory(
-  cat: string,
-  description?: string,
-): 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' {
-  const k = categoryKey(cat, description);
-  if (k === 'boarding') return 'BOARDING';
-  if (k === 'taxi') return 'PET_TAXI';
-  if (k === 'grooming') return 'GROOMING';
-  if (k === 'croquettes') return 'PRODUCT';
-  return 'OTHER';
-}
+import { categoryKey } from '@/lib/category';
+// Re-export pour rétro-compat des call sites existants (analytics, etc.).
+export { inferItemCategory } from '@/lib/category';
+export { categoryKey };
 
 // ── Cash family ───────────────────────────────────────────────────────────────
 // Base = Payment.amount. Use for cash KPIs and cash-over-time charts only.
@@ -164,31 +138,24 @@ export async function revenueByCategoryProrata(
   start: Date,
   end: Date,
 ): Promise<CategoryBreakdown> {
-  const expandStart = new Date(start);
-  expandStart.setDate(expandStart.getDate() - 90);
-  const expandEnd = new Date(end);
-  expandEnd.setDate(expandEnd.getDate() + 90);
-
+  // Source de vérité = caisse. La sélection des factures suit la règle métier
+  // unique getMonthlyInvoicesFilter (séjour qui chevauche le mois, ou facture
+  // manuelle issuedAt dans le mois). On rapatrie aussi les factures payées
+  // dont le paymentDate tombe dans la fenêtre — un client qui paie en avril
+  // un séjour de mars produit du CA en avril (CAS 2 / 3).
   const invoices = await prisma.invoice.findMany({
     where: {
-      status: { in: ['PAID', 'PARTIALLY_PAID'] },
-      payments: { some: {} },
+      status: { in: ['PAID', 'PARTIALLY_PAID', 'PENDING'] },
       OR: [
-        { booking: { startDate: { gte: expandStart, lte: expandEnd } } },
-        {
-          booking: null,
-          OR: [
-            { periodDate: { gte: expandStart, lte: expandEnd } },
-            { periodDate: null, issuedAt: { gte: expandStart, lte: expandEnd } },
-          ],
-        },
+        getMonthlyInvoicesFilter(start, end),
+        { payments: { some: { paymentDate: { gte: start, lte: end } } } },
       ],
     },
     select: {
-      periodDate: true,
+      amount: true,
       issuedAt: true,
       items: { select: { category: true, description: true, total: true } },
-      payments: { select: { amount: true } },
+      payments: { select: { amount: true, paymentDate: true } },
       booking: { select: { startDate: true, endDate: true, isOpenEnded: true } },
     },
     take: 2000,
@@ -199,32 +166,19 @@ export async function revenueByCategoryProrata(
   };
 
   for (const inv of invoices) {
-    const paid = inv.payments.reduce((s, p) => s + toNumber(p.amount), 0);
-    if (paid <= 0) continue;
-    const itemsTotal = inv.items.reduce((s, i) => s + toNumber(i.total), 0);
-    if (itemsTotal <= 0) continue;
-
-    const refStart = inv.booking?.startDate ?? inv.periodDate ?? inv.issuedAt;
-    const bookingEnd = inv.booking?.endDate ?? null;
-    const isOpen = !!inv.booking?.isOpenEnded || (inv.booking != null && bookingEnd == null);
-
-    for (const item of inv.items) {
-      const itemRev = paid * (toNumber(item.total) / itemsTotal);
-      const k = categoryKey(item.category, item.description);
-      const bucket: keyof CategoryBreakdown = k ?? 'other';
-
-      if (k === 'boarding' && bookingEnd && !isOpen) {
-        const totalNights = nightsBetween(refStart, bookingEnd);
-        const inWindow = nightsOverlap(refStart, bookingEnd, start, end);
-        if (totalNights > 0 && inWindow > 0) {
-          result[bucket] += itemRev * (inWindow / totalNights);
-        }
-      } else {
-        if (refStart >= start && refStart <= end) {
-          result[bucket] += itemRev;
-        }
-      }
-    }
+    const sub: AccountingCategoryBreakdown = computeMonthlyRevenueByCategory(
+      inv.payments,
+      { amount: inv.amount, issuedAt: inv.issuedAt },
+      inv.items,
+      inv.booking,
+      start,
+      end,
+    );
+    result.boarding   += sub.boarding;
+    result.taxi       += sub.taxi;
+    result.grooming   += sub.grooming;
+    result.croquettes += sub.croquettes;
+    result.other      += sub.other;
   }
 
   // Fallback historique pour les mois pré-prod sans payments réels.

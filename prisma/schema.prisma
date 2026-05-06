@@ -377,11 +377,17 @@ model InvoiceItem {
   allocatedAmount Decimal      @default(0) @db.Decimal(10, 2)   // Montant alloué par allocatePayments()
   status          String       @default("PENDING") // "PENDING" | "PARTIAL" | "PAID"
   category        ItemCategory @default(OTHER)
+  // Lien optionnel vers le produit du stock. Quand `productId` est non null,
+  // `category` DOIT valoir 'PRODUCT' — règle métier appliquée à la création
+  // (voir resolveItemCategory dans src/lib/accounting.ts).
+  productId       String?
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([category]) // billing par catégorie (CA Taxi, Boarding…)
+  @@index([productId])
 }
 
 model Payment {
@@ -557,6 +563,8 @@ model Product {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  invoiceItems InvoiceItem[]
 
   @@index([active])
 }
