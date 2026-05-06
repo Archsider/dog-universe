@@ -24,6 +24,7 @@ const MapView = dynamic(() => import('./MapView'), {
 
 interface TrackResponse {
   active?: boolean;
+  distanceKm?: number;
   lastLocation?: {
     lat: number;
     lng: number;
@@ -136,6 +137,11 @@ export default function TrackPage() {
       eventSourceRef.current = es;
 
       es.addEventListener('connected', () => { consecutiveErrors = 0; });
+      // Server soft-timeouts (~54s) emit 'reconnect' before closing the
+      // stream. EventSource then auto-reconnects transparently. Without
+      // this listener, the implicit error from the close would accumulate
+      // and switch us to slow polling fallback.
+      es.addEventListener('reconnect', () => { consecutiveErrors = 0; });
 
       es.addEventListener('location', (ev) => {
         if (aborted) return;
@@ -143,10 +149,13 @@ export default function TrackPage() {
           const payload = JSON.parse((ev as MessageEvent).data) as {
             lat: number; lng: number; timestamp: number;
             heading?: number | null; speed?: number | null;
+            distanceKm?: number;
           };
           setData((prev) => ({
             ...prev,
             active: true,
+            // Preserve previous distanceKm if the new event doesn't include it.
+            distanceKm: typeof payload.distanceKm === 'number' ? payload.distanceKm : prev?.distanceKm,
             lastLocation: {
               lat: payload.lat,
               lng: payload.lng,
@@ -309,9 +318,18 @@ export default function TrackPage() {
               <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
               {isFr ? 'Mise à jour' : 'Updated'} : {updatedAt}
             </span>
-            {typeof last.speed === 'number' && last.speed >= 0 && (
-              <span>{Math.round(last.speed * 3.6)} km/h</span>
-            )}
+            <span className="flex items-center gap-3">
+              {typeof data?.distanceKm === 'number' && data.distanceKm > 0 && (
+                <span className="font-medium text-[#C4974A]">
+                  {data.distanceKm >= 10
+                    ? `${data.distanceKm.toFixed(1)} km`
+                    : `${data.distanceKm.toFixed(2)} km`}
+                </span>
+              )}
+              {typeof last.speed === 'number' && last.speed >= 0 && (
+                <span>{Math.round(last.speed * 3.6)} km/h</span>
+              )}
+            </span>
           </div>
         </footer>
       )}

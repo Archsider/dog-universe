@@ -35,8 +35,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
+  // Distance is cumulative and persistent — return it even when tracking is
+  // stopped so the admin dashboard can keep showing the total km traveled
+  // after the trip ends.
   if (!trip.trackingActive) {
-    return NextResponse.json({ active: false });
+    return NextResponse.json({ active: false, distanceKm: trip.distanceKm });
   }
 
   const last = trip.locations[0];

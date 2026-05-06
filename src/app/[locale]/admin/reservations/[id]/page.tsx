@@ -512,6 +512,19 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                 {rawStandalone?.trackingActive && rawStandalone.trackingToken && (
                   <AdminTaxiLiveMap trackingToken={rawStandalone.trackingToken} locale={locale} />
                 )}
+                {/* Persistent cumulative distance — survives tracking stop and page refresh. */}
+                {rawStandalone && rawStandalone.distanceKm > 0 && (
+                  <div className="flex items-center justify-between text-xs px-3 py-2 bg-[#FEFCF9] rounded-lg border border-[rgba(196,151,74,0.2)]">
+                    <span className="text-charcoal/60">
+                      {locale === 'fr' ? 'Distance totale parcourue' : 'Total distance traveled'}
+                    </span>
+                    <span className="font-semibold text-[#C4974A]">
+                      {rawStandalone.distanceKm >= 10
+                        ? `${rawStandalone.distanceKm.toFixed(1)} km`
+                        : `${rawStandalone.distanceKm.toFixed(2)} km`}
+                    </span>
+                  </div>
+                )}
               </div>
             );
           })()}

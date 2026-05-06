@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import { RefreshCw } from 'lucide-react';
 import type { Map as LeafletMap, Marker as LeafletMarker } from 'leaflet';
 
 // Reuses the same MapView wrapper as the public tracking page — Leaflet stays
@@ -32,15 +33,54 @@ interface Snapshot {
   distanceKm?: number;
 }
 
+// Merge an incoming partial snapshot into the current state, preserving
+// fields (like distanceKm) that the new event may not include.
+function mergeSnapshot(prev: Snapshot | null, next: Snapshot): Snapshot {
+  return {
+    ...next,
+    distanceKm: typeof next.distanceKm === 'number' ? next.distanceKm : prev?.distanceKm,
+    heading: next.heading ?? prev?.heading ?? null,
+    speed: next.speed ?? prev?.speed ?? null,
+  };
+}
+
 export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
   const isFr = locale !== 'en';
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [carIcon, setCarIcon] = useState<unknown>(null);
   const [streamLive, setStreamLive] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<LeafletMarker | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchOnce = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/taxi-tracking/${trackingToken}`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const json = await res.json() as { distanceKm?: number; lastLocation?: { lat: number; lng: number; heading: number | null; speed: number | null; createdAt: string } | null };
+      if (json.lastLocation) {
+        setSnap(prev => mergeSnapshot(prev, {
+          lat: json.lastLocation!.lat,
+          lng: json.lastLocation!.lng,
+          timestamp: new Date(json.lastLocation!.createdAt).getTime(),
+          heading: json.lastLocation!.heading,
+          speed: json.lastLocation!.speed,
+          distanceKm: json.distanceKm,
+        }));
+      } else if (typeof json.distanceKm === 'number') {
+        // No new position but distance available — preserve the prior snap and
+        // just update the cumulative distance counter.
+        setSnap(prev => prev ? { ...prev, distanceKm: json.distanceKm } : prev);
+      }
+    } catch { /* swallow */ }
+  }, [trackingToken]);
+
+  const handleManualRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await fetchOnce(); } finally { setRefreshing(false); }
+  }, [fetchOnce]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,44 +102,12 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
 
     // Initial REST fetch — guarantees the map shows the last-known position
     // even before SSE warms up (or if Redis is empty / unconfigured).
-    void (async () => {
-      try {
-        const res = await fetch(`/api/taxi-tracking/${trackingToken}`, { cache: 'no-store' });
-        if (!aborted && res.ok) {
-          const json = await res.json() as { distanceKm?: number; lastLocation?: { lat: number; lng: number; heading: number | null; speed: number | null; createdAt: string } | null };
-          if (json.lastLocation) {
-            setSnap({
-              lat: json.lastLocation.lat,
-              lng: json.lastLocation.lng,
-              timestamp: new Date(json.lastLocation.createdAt).getTime(),
-              heading: json.lastLocation.heading,
-              speed: json.lastLocation.speed,
-              distanceKm: json.distanceKm,
-            });
-          }
-        }
-      } catch { /* SSE will recover */ }
-    })();
+    void fetchOnce();
 
     const startFallback = () => {
       const tick = async () => {
         if (aborted) return;
-        try {
-          const res = await fetch(`/api/taxi-tracking/${trackingToken}`, { cache: 'no-store' });
-          if (!aborted && res.ok) {
-            const json = await res.json() as { distanceKm?: number; lastLocation?: { lat: number; lng: number; heading: number | null; speed: number | null; createdAt: string } | null };
-            if (json.lastLocation) {
-              setSnap({
-                lat: json.lastLocation.lat,
-                lng: json.lastLocation.lng,
-                timestamp: new Date(json.lastLocation.createdAt).getTime(),
-                heading: json.lastLocation.heading,
-                speed: json.lastLocation.speed,
-                distanceKm: json.distanceKm,
-              });
-            }
-          }
-        } catch { /* swallow */ }
+        await fetchOnce();
         if (!aborted) fallbackTimerRef.current = setTimeout(tick, FALLBACK_POLL_MS);
       };
       void tick();
@@ -116,9 +124,14 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
       if (aborted) return;
       try {
         const payload = JSON.parse((ev as MessageEvent).data) as Snapshot;
-        setSnap(payload);
+        // Merge so a position event without distanceKm doesn't blank the counter.
+        setSnap(prev => mergeSnapshot(prev, payload));
       } catch { /* ignore */ }
     });
+    // Server-side soft-timeout (~54s) sends 'reconnect' before closing the
+    // stream. EventSource auto-reconnects transparently — make sure the error
+    // counter is reset so we don't escalate to polling on every cycle.
+    es.addEventListener('reconnect', () => { consecutiveErrors = 0; });
     es.addEventListener('completed', () => { setStreamLive(false); es.close(); });
     es.onerror = () => {
       consecutiveErrors += 1;
@@ -135,7 +148,7 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
       if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
       if (eventSourceRef.current) { eventSourceRef.current.close(); eventSourceRef.current = null; }
     };
-  }, [trackingToken]);
+  }, [trackingToken, fetchOnce]);
 
   if (!snap) {
     return (
@@ -169,9 +182,19 @@ export default function AdminTaxiLiveMap({ trackingToken, locale }: Props) {
             ? (isFr ? 'Direct' : 'Live')
             : (isFr ? 'Polling 10s' : 'Polling 10s')}
           <span className="ml-2">{isFr ? 'Mis à jour' : 'Updated'} {updatedAt}</span>
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            className="ml-1 p-1 rounded hover:bg-charcoal/5 disabled:opacity-50 transition-colors"
+            aria-label={isFr ? 'Rafraîchir' : 'Refresh'}
+            title={isFr ? 'Rafraîchir' : 'Refresh'}
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
         </span>
         <span className="flex items-center gap-3">
-          {typeof snap.distanceKm === 'number' && snap.distanceKm > 0 && (
+          {typeof snap.distanceKm === 'number' && (
             <span className="font-medium text-[#C4974A]">
               {snap.distanceKm >= 10
                 ? `${snap.distanceKm.toFixed(1)} km`

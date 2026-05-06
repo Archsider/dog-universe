@@ -50,11 +50,19 @@ function sseEvent(event: string, data: unknown): string {
 async function readLatest(bookingId: string, tripId: string): Promise<TaxiLocationSnapshot | null> {
   const cached = await getLocation(bookingId);
   if (cached) return cached;
-  const row = await prisma.taxiLocation.findFirst({
-    where: { taxiTripId: tripId },
-    orderBy: { createdAt: 'desc' },
-    select: { latitude: true, longitude: true, heading: true, speed: true, createdAt: true },
-  }).catch(() => null);
+  // Postgres fallback: join the TaxiTrip to also surface cumulative distance.
+  // Without this, after a Redis cache miss the client would lose distanceKm.
+  const [row, trip] = await Promise.all([
+    prisma.taxiLocation.findFirst({
+      where: { taxiTripId: tripId },
+      orderBy: { createdAt: 'desc' },
+      select: { latitude: true, longitude: true, heading: true, speed: true, createdAt: true },
+    }).catch(() => null),
+    prisma.taxiTrip.findUnique({
+      where: { id: tripId },
+      select: { distanceKm: true },
+    }).catch(() => null),
+  ]);
   if (!row) return null;
   return {
     lat: row.latitude,
@@ -62,6 +70,7 @@ async function readLatest(bookingId: string, tripId: string): Promise<TaxiLocati
     timestamp: row.createdAt.getTime(),
     heading: row.heading,
     speed: row.speed,
+    distanceKm: trip?.distanceKm ?? undefined,
   };
 }
 
