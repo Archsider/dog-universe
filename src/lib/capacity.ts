@@ -87,20 +87,13 @@ export async function countOverlappingPets(
           serviceType: 'BOARDING',
           status: { in: [...ACTIVE_STATUSES] },
           deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
-          // A booking blocks capacity if either:
-          //   (a) it has a closed [start..end] range that overlaps the requested window, OR
-          //   (b) it is open-ended (isOpenEnded=true) AND has started before window.endDate.
-          //       Open-ended bookings have no endDate and occupy the slot until checkout.
-          OR: [
-            {
-              startDate: { lte: window.endDate! },
-              endDate: { gte: window.startDate, not: null },
-            },
-            {
-              isOpenEnded: true,
-              startDate: { lte: window.endDate! },
-            },
-          ],
+          // Only closed-range bookings consume capacity for a future date window.
+          // Open-ended bookings (isOpenEnded=true OR endDate=null) are excluded
+          // by date — admin manages overbooking manually when a walk-in or a
+          // registered client without a known return date is in-house.
+          isOpenEnded: false,
+          startDate: { lte: window.endDate! },
+          endDate: { gte: window.startDate, not: null },
           ...(options.excludeBookingId ? { id: { not: options.excludeBookingId } } : {}),
         },
         select: {

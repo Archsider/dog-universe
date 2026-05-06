@@ -567,8 +567,9 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             />
           )}
 
-          {/* Open-ended checkout — visible only for active open-ended boarding stays */}
-          {isBoarding && booking.isOpenEnded && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
+          {/* Open-ended checkout — visible for any active boarding stay without
+              a known endDate (walk-in flag OR endDate=null are treated identically). */}
+          {isBoarding && (booking.isOpenEnded || booking.endDate == null) && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
             <CheckoutBookingButton bookingId={booking.id} locale={locale} />
           )}
 
@@ -586,7 +587,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
               }))}
               startDate={booking.startDate.toISOString()}
               endDate={booking.endDate ? booking.endDate.toISOString() : null}
-              isOpenEnded={booking.isOpenEnded}
+              isOpenEnded={booking.isOpenEnded || booking.endDate == null}
               pricePerNight={toNumber(booking.boardingDetail?.pricePerNight ?? 0)}
               locale={locale}
             />

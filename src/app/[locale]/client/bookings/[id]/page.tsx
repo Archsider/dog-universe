@@ -338,12 +338,10 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
     ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
 
-  // Compteur "en cours" — si le séjour est actif (IN_PROGRESS, ou CONFIRMED dont
-  // la fenêtre couvre maintenant), on calcule un total provisoire :
-  //   nuits écoulées × tarif/nuit + items facturés non-BOARDING (produits, taxi, etc.).
-  // TODO: also handle { isOpenEnded: true } once Agent 1 lands — pour les
-  // séjours sans endDate, on doit toujours compter à partir de startDate jusqu'à
-  // aujourd'hui même si endDate est null.
+  // Compteur "en cours" — séjour actif = status CONFIRMED/IN_PROGRESS et
+  // startDate dépassée. endDate jamais utilisé (admin déclenche COMPLETED).
+  // Open-ended (isOpenEnded OR endDate=null) traités identiquement : on
+  // compte les nuits depuis startDate jusqu'à aujourd'hui.
   const nowForCounter = new Date();
   const isStayActive =
     isBoarding &&

@@ -45,22 +45,23 @@ async function computeAvailability(
   const end = new Date(year, monthNum, 0);
   end.setHours(23, 59, 59, 999);
 
-  // Fetch all BOARDING bookings overlapping the month.
-  // Includes open-ended (no endDate) bookings, which occupy the slot indefinitely.
+  // Fetch all closed-range BOARDING bookings overlapping the month.
+  // Open-ended bookings (isOpenEnded=true OR endDate=null) are intentionally
+  // excluded — without a known checkout we can't project them on a calendar
+  // without blocking all future dates. Admin manages overbooking manually
+  // while an open-ended booking is in-house.
   const bookings = await prisma.booking.findMany({
     where: {
       serviceType: 'BOARDING',
       status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
       deletedAt: null,
-      OR: [
-        { startDate: { lte: end }, endDate: { gte: start } },
-        { startDate: { lte: end }, isOpenEnded: true },
-      ],
+      isOpenEnded: false,
+      startDate: { lte: end },
+      endDate: { gte: start, not: null },
     },
     select: {
       startDate: true,
       endDate: true,
-      isOpenEnded: true,
       bookingPets: {
         select: { pet: { select: { species: true } } },
       },
@@ -68,12 +69,10 @@ async function computeAvailability(
     take: 2000,
   });
 
-  // Count only pets of the requested species per booking. Open-ended bookings
-  // get a synthetic far-future endDate so they project on every day from their
-  // start onward.
+  // Count only pets of the requested species per booking.
   const filtered = bookings.map((b) => ({
     startDate: b.startDate,
-    endDate: b.endDate ?? (b.isOpenEnded ? new Date(8640000000000000) : null),
+    endDate: b.endDate,
     petCount: b.bookingPets.filter((bp) => bp.pet.species === species).length,
   })).filter((b): b is { startDate: Date; endDate: Date; petCount: number } => b.endDate !== null && b.petCount > 0);
 
