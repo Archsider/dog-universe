@@ -284,6 +284,8 @@ model TaxiTrip {
   date      String?
   time      String?
   address   String?
+  pickupLat Float?
+  pickupLng Float?
   taxiType  String?  // "STANDARD" | "VET" | "AIRPORT" — STANDALONE only
   price     Decimal  @default(0) @db.Decimal(10, 2)
   // GPS tracking — controlled per-trip by admin

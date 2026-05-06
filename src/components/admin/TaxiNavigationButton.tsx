@@ -47,8 +47,9 @@ function NavBlock({
   const hasAddress = typeof address === 'string' && address.trim().length > 0;
 
   if (hasCoords) {
-    const gmaps = `https://maps.google.com/?daddr=${lat},${lng}`;
+    const gmaps = `https://maps.google.com/?q=${lat},${lng}`;
     const waze = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+    const staticMap = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=15&size=400x200&markers=${lat},${lng},red-pushpin`;
     return (
       <div className="space-y-3">
         <div className="text-sm space-y-1">
@@ -65,6 +66,15 @@ function NavBlock({
             </div>
           )}
         </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={staticMap}
+          alt="Position sur la carte"
+          width={400}
+          height={200}
+          className="w-full rounded-lg border border-gray-200 object-cover"
+          loading="lazy"
+        />
         <div className="flex flex-col sm:flex-row gap-2">
           <a
             href={gmaps}
