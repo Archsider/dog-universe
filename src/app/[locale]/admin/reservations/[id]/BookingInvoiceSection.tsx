@@ -78,7 +78,7 @@ export default function BookingInvoiceSection({
               invoiceAmount={toNumber(invoice.amount)}
               paidAmount={toNumber(invoice.paidAmount)}
             />
-            <Link href={`/${locale}/admin/billing?status=`} className="text-xs text-gray-400 hover:text-gold-600">
+            <Link href={`/${locale}/admin/billing?invoiceId=${invoice.id}`} className="text-xs text-gray-400 hover:text-gold-600">
               {locale === 'fr' ? 'Voir facturation' : 'View billing'}
             </Link>
           </div>

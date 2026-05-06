@@ -228,6 +228,20 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
     }
 
     // ── Atomic booking creation (capacity-checked under Serializable) ──
+    // Compute pricePerNight from totalPrice / petCount / nights so that
+    // BoardingDetail.pricePerNight reflects the actual unit price, used by
+    // /admin/reservations/[id] to display the provisional total ("Nuits ×
+    // pricePerNight × petCount"). For PET_TAXI or open-ended without endDate,
+    // there are no nights, so pricePerNight stays 0.
+    const computedPricePerNight = (() => {
+      if (serviceType !== 'BOARDING' || !endDate || isOpenEnded) return 0;
+      const nights = Math.round(
+        (new Date(endDate).getTime() - new Date(startDate).getTime()) / 86_400_000,
+      );
+      const petCount = resolvedPetIds.length;
+      if (nights <= 0 || petCount <= 0) return 0;
+      return Math.round((totalPrice / petCount / nights) * 100) / 100;
+    })();
     let booking: Awaited<ReturnType<typeof createBookingTx>>;
     try {
       booking = await runWithSerializableRetry(() =>
@@ -250,7 +264,7 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
           includeGrooming: false,
           groomingSize: null,
           groomingPrice: 0,
-          pricePerNight: 0,
+          pricePerNight: computedPricePerNight,
           taxiGoEnabled: false,
           taxiGoDate: null,
           taxiGoTime: null,

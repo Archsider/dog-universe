@@ -622,6 +622,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
               endDate={booking.endDate ? booking.endDate.toISOString() : null}
               isOpenEnded={booking.isOpenEnded || booking.endDate == null}
               pricePerNight={toNumber(booking.boardingDetail?.pricePerNight ?? 0)}
+              petCount={booking.bookingPets.length}
               locale={locale}
             />
           )}

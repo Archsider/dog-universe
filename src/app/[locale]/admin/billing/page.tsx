@@ -12,6 +12,7 @@ import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
 import RecomputeAllocationsButton from '@/components/admin/RecomputeAllocationsButton';
 import { MonthNavigator, CsvDownloadButton } from './BillingClient';
 import { formatMonthLabel } from './format-month';
+import InvoiceHighlight from './InvoiceHighlight';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -25,6 +26,7 @@ interface PageProps {
     sort?: string;
     order?: string;
     clientId?: string;
+    invoiceId?: string;
   }>;
 }
 
@@ -88,6 +90,8 @@ export default async function AdminBillingPage(props: PageProps) {
   const rawOrder = searchParams.order || '';
   const order = (VALID_ORDERS.includes(rawOrder) ? rawOrder : 'desc') as 'asc' | 'desc';
   const clientId = (searchParams.clientId || '').trim();
+  // Highlight target invoice when navigating from a booking page.
+  const highlightInvoiceId = (searchParams.invoiceId || '').trim();
 
   // Règle métier unique : une facture appartient au mois selon les dates du
   // séjour (bookingId présent) OU son issuedAt (facture manuelle). Filtre
@@ -326,6 +330,7 @@ export default async function AdminBillingPage(props: PageProps) {
 
   return (
     <div className="space-y-6">
+      {highlightInvoiceId && <InvoiceHighlight invoiceId={highlightInvoiceId} />}
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -506,7 +511,10 @@ export default async function AdminBillingPage(props: PageProps) {
                     return (
                       <tr
                         key={inv.id}
-                        className="border-b border-[rgba(196,151,74,0.07)] last:border-0 hover:bg-[#FEFCF9] transition-colors"
+                        id={`invoice-row-${inv.id}`}
+                        className={`border-b border-[rgba(196,151,74,0.07)] last:border-0 hover:bg-[#FEFCF9] transition-colors ${
+                          highlightInvoiceId === inv.id ? 'invoice-row-highlight' : ''
+                        }`}
                       >
                         <td className="px-5 py-4">
                           <span className="font-mono text-sm font-bold text-[#9A7235]">{inv.invoiceNumber}</span>

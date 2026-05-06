@@ -31,6 +31,7 @@ interface AddProductSectionProps {
   endDate: string | null;     // ISO or null
   isOpenEnded: boolean;
   pricePerNight: number;
+  petCount: number;
   locale: string;
 }
 
@@ -44,6 +45,7 @@ export default function AddProductSection({
   endDate,
   isOpenEnded,
   pricePerNight,
+  petCount,
   locale,
 }: AddProductSectionProps) {
   const router = useRouter();
@@ -71,15 +73,18 @@ export default function AddProductSection({
     };
   }, []);
 
-  // Provisional total = real_nights × pricePerNight + sum(invoice items)
+  // Provisional total = nights × pricePerNight × petCount + sum(non-boarding items)
+  // Règle métier : pension = pricePerNight × bookingPets.length × nbNuits.
   const start = new Date(startDate);
   const end = endDate ? new Date(endDate) : new Date();
   const diffMs = Math.max(0, end.getTime() - start.getTime());
   const provisionalNights = Math.max(1, Math.ceil(diffMs / MS_PER_DAY));
+  const safePetCount = Math.max(1, petCount);
+  const boardingTotal = provisionalNights * pricePerNight * safePetCount;
   const productsTotal = items
     .filter((i) => i.category !== 'BOARDING')
     .reduce((acc, i) => acc + i.total, 0);
-  const provisionalTotal = provisionalNights * pricePerNight + productsTotal;
+  const provisionalTotal = boardingTotal + productsTotal;
 
   const t = (fr: string, en: string) => (locale === 'en' ? en : fr);
 
@@ -218,10 +223,11 @@ export default function AddProductSection({
       <div className="mt-3 pt-3 border-t border-ivory-100 text-sm">
         <div className="flex justify-between text-gray-500">
           <span>
-            {t('Nuits', 'Nights')} ({provisionalNights}) × {formatMAD(pricePerNight)}
+            {t('Nuits', 'Nights')} ({provisionalNights}) × {formatMAD(pricePerNight)} ×{' '}
+            {safePetCount} {safePetCount > 1 ? t('animaux', 'pets') : t('animal', 'pet')}
             {(isOpenEnded || !endDate) && <span className="ml-1 italic">— {t('en cours', 'in progress')}</span>}
           </span>
-          <span>{formatMAD(provisionalNights * pricePerNight)}</span>
+          <span>{formatMAD(boardingTotal)}</span>
         </div>
         <div className="flex justify-between text-gray-500">
           <span>{t('Produits', 'Products')}</span>
