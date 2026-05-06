@@ -5,6 +5,7 @@ import {
   computeMonthlyRevenueByCategory,
   type CategoryBreakdown as AccountingCategoryBreakdown,
 } from '@/lib/accounting';
+import { getMonthlyInvoicesWhere } from '@/lib/billing';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -137,18 +138,14 @@ export async function revenueByCategoryProrata(
   start: Date,
   end: Date,
 ): Promise<CategoryBreakdown> {
-  // Source de vérité = caisse. La sélection des factures suit la règle métier
-  // unique getMonthlyInvoicesFilter (séjour qui chevauche le mois, ou facture
-  // manuelle issuedAt dans le mois). On rapatrie aussi les factures payées
-  // dont le paymentDate tombe dans la fenêtre — un client qui paie en avril
-  // un séjour de mars produit du CA en avril (CAS 2 / 3).
-  // On ne charge que les factures dont au moins un Payment tombe dans la
-  // fenêtre — la règle métier définitive est « la caisse prime », un mois
-  // sans paiement = 0 (jamais de prorata fictif).
+  // SOURCE DE VÉRITÉ = lib/billing.getMonthlyInvoicesWhere — même filtre que
+  // /admin/billing pour ne jamais diverger entre liste et KPIs.
+  // Les factures sans paiement ce mois retournent 0 dans
+  // computeMonthlyRevenueByCategory (caisse prime, jamais de prorata fictif).
   const invoices = await prisma.invoice.findMany({
     where: {
-      status: { in: ['PAID', 'PARTIALLY_PAID'] },
-      payments: { some: { paymentDate: { gte: start, lte: end } } },
+      status: { in: ['PAID', 'PARTIALLY_PAID', 'PENDING'] },
+      ...getMonthlyInvoicesWhere(start, end),
     },
     select: {
       // Items ordonnés chronologiquement (cuid asc ≈ created order) — l'ordre
@@ -218,8 +215,8 @@ export async function volumeByCategory(
 ): Promise<CategoryBreakdown> {
   const invoices = await prisma.invoice.findMany({
     where: {
-      status: { in: ['PAID', 'PARTIALLY_PAID'] },
-      payments: { some: { paymentDate: { gte: start, lte: end } } },
+      status: { in: ['PAID', 'PARTIALLY_PAID', 'PENDING'] },
+      ...getMonthlyInvoicesWhere(start, end),
     },
     select: { items: { select: { category: true, description: true, unitPrice: true, quantity: true } } },
   });
@@ -251,11 +248,11 @@ export async function volumeByCategory(
 }
 
 // Average basket = SUM(invoice.amount) / count(invoices) for PAID+PARTIALLY_PAID
-// invoices issued in [start, end].
+// invoices belonging to [start, end] per getMonthlyInvoicesWhere.
 export async function avgBasket(start: Date, end: Date): Promise<number> {
   const result = await prisma.invoice.aggregate({
     where: {
-      issuedAt: { gte: start, lte: end },
+      ...getMonthlyInvoicesWhere(start, end),
       status: { in: ['PAID', 'PARTIALLY_PAID'] },
     },
     _sum: { amount: true },

@@ -17,6 +17,11 @@ interface CategoryItem {
     clientDisplayName: string | null;
     client: { name: string } | null;
   };
+  // Encaissé sur le mois courant (allocation séquentielle Payment → InvoiceItem).
+  // Ne pas confondre avec quantity × unitPrice qui est le facturé. Items à 0
+  // encaissé sont déjà filtrés en amont (page.tsx).
+  amount: number;
+  paymentDate: Date | string | null;
 }
 
 const DRILL_CATS: { key: DrillCategory; labelFr: string; labelEn: string; icon: string; unitFr: string; unitEn: string }[] = [
@@ -150,12 +155,13 @@ export default function AnalyticsCharts({
   const [activeCategory, setActiveCategory] = useState<DrillCategory | null>(null);
 
   // Aggregated stats per drill category
+  // total = ENCAISSÉ (somme des Payment alloués), pas le facturé.
   const drillStats = DRILL_CATS.map(cat => {
     const items = categoryItems.filter(i => i.category === cat.key);
     const count = cat.key === 'BOARDING'
       ? new Set(items.map(i => i.invoice.invoiceNumber)).size
       : items.reduce((s, i) => s + i.quantity, 0);
-    const total = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+    const total = items.reduce((s, i) => s + i.amount, 0);
     return { ...cat, count, total };
   });
 
@@ -273,11 +279,9 @@ export default function AnalyticsCharts({
                 <tr className="bg-[#FEFCF9] border-b border-[rgba(196,151,74,0.12)]">
                   <th className="text-left text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Facture' : 'Invoice'}</th>
                   <th className="text-left text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Client' : 'Client'}</th>
-                  <th className="text-left text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Date' : 'Date'}</th>
+                  <th className="text-left text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Date paiement' : 'Payment date'}</th>
                   <th className="text-left text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Description' : 'Description'}</th>
-                  <th className="text-right text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Qté' : 'Qty'}</th>
-                  <th className="text-right text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'P.U.' : 'Unit'}</th>
-                  <th className="text-right text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Total' : 'Total'}</th>
+                  <th className="text-right text-[11px] font-semibold text-[#7A6E65] px-5 py-3 uppercase tracking-wider">{isFr ? 'Encaissé ce mois' : 'Collected this month'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -285,7 +289,6 @@ export default function AnalyticsCharts({
                   const clientName = it.invoice.clientDisplayName
                     ?? it.invoice.client?.name
                     ?? (isFr ? 'Client de passage' : 'Walk-in client');
-                  const lineTotal = it.quantity * it.unitPrice;
                   return (
                     <tr
                       key={`${it.invoice.invoiceNumber}-${i}`}
@@ -293,18 +296,16 @@ export default function AnalyticsCharts({
                     >
                       <td className="px-5 py-3 font-mono text-sm font-bold text-[#9A7235]">{it.invoice.invoiceNumber}</td>
                       <td className="px-5 py-3 text-sm text-[#2A2520]">{clientName}</td>
-                      <td className="px-5 py-3 text-sm text-[#8A7E75]">{fmtDate(it.invoice.issuedAt)}</td>
+                      <td className="px-5 py-3 text-sm text-[#8A7E75]">{it.paymentDate ? fmtDate(it.paymentDate) : '—'}</td>
                       <td className="px-5 py-3 text-sm text-[#2A2520]">{it.description}</td>
-                      <td className="px-5 py-3 text-sm text-right text-[#2A2520]">{it.quantity}</td>
-                      <td className="px-5 py-3 text-sm text-right text-[#2A2520]">{formatMAD(it.unitPrice)}</td>
-                      <td className="px-5 py-3 text-sm text-right font-bold text-[#2A2520]">{formatMAD(lineTotal)}</td>
+                      <td className="px-5 py-3 text-sm text-right font-bold text-[#2A2520]">{formatMAD(it.amount)}</td>
                     </tr>
                   );
                 })}
                 {activeItems.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-5 py-8 text-center text-sm text-[#8A7E75]">
-                      {isFr ? 'Aucun item pour cette catégorie ce mois' : 'No items for this category this month'}
+                    <td colSpan={5} className="px-5 py-8 text-center text-sm text-[#8A7E75]">
+                      {isFr ? 'Aucun encaissement pour cette catégorie ce mois' : 'No collections for this category this month'}
                     </td>
                   </tr>
                 )}

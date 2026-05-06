@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { FileText, Download, Eye, Pencil } from 'lucide-react';
 import { formatDate, formatMAD } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
-import { computeMonthlyRevenue, getMonthlyInvoicesFilter } from '@/lib/accounting';
+import { computeMonthlyRevenue } from '@/lib/accounting';
+import { getMonthlyInvoicesWhere } from '@/lib/billing';
 import PaymentModal from './PaymentModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
 import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
@@ -93,11 +94,11 @@ export default async function AdminBillingPage(props: PageProps) {
   // Highlight target invoice when navigating from a booking page.
   const highlightInvoiceId = (searchParams.invoiceId || '').trim();
 
-  // Règle métier unique : une facture appartient au mois selon les dates du
-  // séjour (bookingId présent) OU son issuedAt (facture manuelle). Filtre
-  // partagé entre la liste affichée et les KPIs en tête de page — jamais deux
-  // requêtes divergentes (cf. lib/accounting.getMonthlyInvoicesFilter).
-  const monthDateFilter = getMonthlyInvoicesFilter(monthStart, monthEnd);
+  // Règle métier unique : SOURCE DE VÉRITÉ comptable = lib/billing.getMonthlyInvoicesWhere.
+  // Une facture appartient au mois si (1) elle a un paiement ce mois, (2) le séjour est
+  // actif ce mois sans paiement, ou (3) c'est une facture manuelle émise ce mois.
+  // Filtre partagé entre liste + KPIs — jamais de divergence.
+  const monthDateFilter = getMonthlyInvoicesWhere(monthStart, monthEnd);
 
   // Month-scoped where for the invoice list
   const listWhere: Record<string, unknown> = {

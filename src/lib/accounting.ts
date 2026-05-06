@@ -175,33 +175,7 @@ export function computeMonthlyRevenueByCategory(
   return result;
 }
 
-// Filtre Prisma partagé liste + KPIs : une facture appartient au mois si ses
-// dates de séjour tombent ou chevauchent le mois. Fallback issuedAt pour les
-// factures manuelles (bookingId IS NULL).
-export function getMonthlyInvoicesFilter(monthStart: Date, monthEnd: Date): Prisma.InvoiceWhereInput {
-  return {
-    OR: [
-      {
-        bookingId: { not: null },
-        booking: {
-          OR: [
-            { startDate: { gte: monthStart, lte: monthEnd } },
-            {
-              startDate: { lte: monthEnd },
-              OR: [
-                { endDate: { gte: monthStart } },
-                { isOpenEnded: true },
-                { endDate: null },
-              ],
-            },
-          ],
-        },
-      },
-      {
-        bookingId: null,
-        issuedAt: { gte: monthStart, lte: monthEnd },
-      },
-    ],
-  };
-}
+// Filtre mensuel comptabilité : déplacé dans `src/lib/billing.ts` —
+// `getMonthlyInvoicesWhere(monthStart, monthEnd)`. Source de vérité unique
+// pour TOUT rattachement de facture à un mois (caisse + en attente + manuel).
 

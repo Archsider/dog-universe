@@ -3,6 +3,7 @@ import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
+import { resolveItemCategory } from '@/lib/billing';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -74,9 +75,9 @@ export async function POST(request: NextRequest, { params }: Params) {
           quantity,
           unitPrice: new Prisma.Decimal(unitPrice),
           total: new Prisma.Decimal(total),
-          // productId présent → category forcée à 'PRODUCT' (règle métier).
           productId,
-          category: 'PRODUCT',
+          // Règle verrouillée : productId présent ⇒ PRODUCT obligatoire.
+          category: resolveItemCategory(productId, 'PRODUCT'),
         },
       });
 

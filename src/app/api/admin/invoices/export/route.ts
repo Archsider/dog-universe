@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { getMonthlyInvoicesWhere } from '@/lib/billing';
 
 function escapeCsv(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
@@ -66,15 +67,19 @@ export async function GET(request: Request) {
   const amountMinValid = !isNaN(amountMinParsed) && amountMinParsed >= 0 ? amountMinParsed : null;
   const amountMaxValid = !isNaN(amountMaxParsed) && amountMaxParsed >= 0 ? amountMaxParsed : null;
 
-  const issuedAtFilter: Record<string, Date> = {};
-  if (dateFromValid) issuedAtFilter.gte = dateFromValid;
-  if (dateToValid) issuedAtFilter.lte = dateToValid;
-  // Fallback legacy: if no explicit date range, honour `year` param
-  if (!Object.keys(issuedAtFilter).length && year) {
+  // Source de vérité comptable : si dateFrom/dateTo correspondent à une fenêtre,
+  // on utilise getMonthlyInvoicesWhere() pour aligner liste exportée + KPIs.
+  // Fallback legacy `year` → fenêtre annuelle via le même filtre.
+  let monthRangeWhere: Record<string, unknown> | null = null;
+  if (dateFromValid && dateToValid) {
+    monthRangeWhere = getMonthlyInvoicesWhere(dateFromValid, dateToValid) as Record<string, unknown>;
+  } else if (year) {
     const y = parseInt(year);
     if (!isNaN(y)) {
-      issuedAtFilter.gte = new Date(`${y}-01-01`);
-      issuedAtFilter.lte = new Date(`${y}-12-31T23:59:59.999Z`);
+      monthRangeWhere = getMonthlyInvoicesWhere(
+        new Date(`${y}-01-01T00:00:00.000Z`),
+        new Date(`${y}-12-31T23:59:59.999Z`),
+      ) as Record<string, unknown>;
     }
   }
 
@@ -83,6 +88,7 @@ export async function GET(request: Request) {
   if (amountMaxValid !== null) amountFilter.lte = amountMaxValid;
 
   const where: Record<string, unknown> = {
+    ...(monthRangeWhere ?? {}),
     ...(status && VALID_STATUSES.includes(status) ? { status } : {}),
     ...(clientId ? { clientId } : {}),
     ...(search
@@ -94,7 +100,6 @@ export async function GET(request: Request) {
           ],
         }
       : {}),
-    ...(Object.keys(issuedAtFilter).length ? { issuedAt: issuedAtFilter } : {}),
     ...(paymentMethod && VALID_PAYMENT_METHODS.includes(paymentMethod) ? { payments: { some: { paymentMethod } } } : {}),
     ...(category && VALID_CATEGORIES.includes(category) ? { items: { some: { category } } } : {}),
     ...(Object.keys(amountFilter).length ? { amount: amountFilter } : {}),

@@ -12,6 +12,9 @@ import {
   newClientsCount,
   inferItemCategory,
 } from '@/lib/metrics';
+import { getMonthlyInvoicesWhere } from '@/lib/billing';
+import { computeMonthlyRevenueByCategory } from '@/lib/accounting';
+import { toNumber } from '@/lib/decimal';
 // AnalyticsCharts is a 'use client' component that already lazy-loads its
 // Recharts sub-components internally via next/dynamic — no outer wrapper needed.
 import AnalyticsCharts from './AnalyticsCharts';
@@ -60,43 +63,105 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
     // Uses COALESCE(periodDate, issuedAt): periodDate = booking.startDate for accurate period bucketing.
     prisma.invoice.findMany({
       where: {
-        OR: [
-          { periodDate: { gte: thisMonthStart, lte: thisMonthEnd } },
-          { periodDate: null, issuedAt: { gte: thisMonthStart, lte: thisMonthEnd } },
-        ],
+        ...getMonthlyInvoicesWhere(thisMonthStart, thisMonthEnd),
         status: { in: ['PAID', 'PARTIALLY_PAID'] },
       },
       select: { items: { select: { category: true, total: true, quantity: true } } },
     }),
     // Drill-down items for category cards on Analytics.
-    // No category filter on the query — legacy items persisted with OTHER are
-    // re-categorized below via description heuristics (inferItemCategory) so
-    // a "Pet Taxi — Aller" line on a BOARDING invoice still surfaces under taxi.
-    prisma.invoiceItem.findMany({
+    // ENCAISSÉ per item this month — sequential allocation Payment → InvoiceItem
+    // via computeMonthlyRevenueByCategory ; un item à 0 encaissé est exclu.
+    prisma.invoice.findMany({
       where: {
-        invoice: {
-          status: { in: ['PAID', 'PARTIALLY_PAID'] },
-          payments: { some: { paymentDate: { gte: thisMonthStart, lte: thisMonthEnd } } },
-        },
+        ...getMonthlyInvoicesWhere(thisMonthStart, thisMonthEnd),
+        status: { in: ['PAID', 'PARTIALLY_PAID', 'PENDING'] },
       },
       select: {
-        description: true,
-        quantity: true,
-        unitPrice: true,
-        category: true,
-        invoice: {
-          select: {
-            invoiceNumber: true,
-            issuedAt: true,
-            clientDisplayName: true,
-            client: { select: { name: true } },
-          },
+        invoiceNumber: true,
+        issuedAt: true,
+        clientDisplayName: true,
+        client: { select: { name: true } },
+        payments: {
+          select: { amount: true, paymentDate: true },
+          orderBy: { paymentDate: 'asc' },
+        },
+        items: {
+          select: { id: true, description: true, quantity: true, unitPrice: true, category: true, total: true },
+          orderBy: { id: 'asc' },
         },
       },
-      orderBy: { invoice: { issuedAt: 'desc' } },
-    }).then(items => items
-      .map(it => ({ ...it, unitPrice: Number(it.unitPrice), category: inferItemCategory(it.category, it.description) }))
-      .filter(it => it.category !== 'OTHER')),
+      take: 2000,
+    }).then(invoices => {
+      type Row = {
+        description: string;
+        quantity: number;
+        unitPrice: number;
+        category: 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT';
+        invoice: {
+          invoiceNumber: string;
+          issuedAt: Date;
+          clientDisplayName: string | null;
+          client: { name: string } | null;
+        };
+        amount: number;
+        paymentDate: Date | null;
+      };
+      const out: Row[] = [];
+      for (const inv of invoices) {
+        if (inv.payments.length === 0 || inv.items.length === 0) continue;
+        // Sequential allocation Payment → InvoiceItem (cuid asc = chronological).
+        const sortedPayments = [...inv.payments].sort(
+          (a, b) => a.paymentDate.getTime() - b.paymentDate.getTime(),
+        );
+        const slots = inv.items.map((it) => ({ remaining: toNumber(it.total) }));
+        const itemAllocations = inv.items.map(() => ({ amount: 0, lastPaidAt: null as Date | null }));
+        let itemIdx = 0;
+        for (const payment of sortedPayments) {
+          const inMonth =
+            payment.paymentDate >= thisMonthStart && payment.paymentDate <= thisMonthEnd;
+          let remaining = toNumber(payment.amount);
+          while (remaining > 0 && itemIdx < inv.items.length) {
+            const slot = slots[itemIdx];
+            const allocated = Math.min(remaining, slot.remaining);
+            if (inMonth && allocated > 0) {
+              itemAllocations[itemIdx].amount += allocated;
+              itemAllocations[itemIdx].lastPaidAt = payment.paymentDate;
+            }
+            remaining -= allocated;
+            slot.remaining -= allocated;
+            if (slot.remaining <= 0) itemIdx += 1;
+          }
+        }
+        for (let i = 0; i < inv.items.length; i++) {
+          const alloc = itemAllocations[i];
+          if (alloc.amount <= 0) continue;
+          const it = inv.items[i];
+          const cat = inferItemCategory(it.category, it.description);
+          if (cat === 'OTHER') continue;
+          out.push({
+            description: it.description,
+            quantity: it.quantity,
+            unitPrice: toNumber(it.unitPrice),
+            category: cat,
+            amount: Number(alloc.amount.toFixed(2)),
+            paymentDate: alloc.lastPaidAt,
+            invoice: {
+              invoiceNumber: inv.invoiceNumber,
+              issuedAt: inv.issuedAt,
+              clientDisplayName: inv.clientDisplayName,
+              client: inv.client,
+            },
+          });
+        }
+      }
+      // Trier par paymentDate desc (plus récent d'abord).
+      out.sort((a, b) => {
+        const da = a.paymentDate?.getTime() ?? 0;
+        const db = b.paymentDate?.getTime() ?? 0;
+        return db - da;
+      });
+      return out;
+    }),
   ]);
 
   const delta = deltaPercent(thisAmt, lastAmt);

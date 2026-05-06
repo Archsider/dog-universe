@@ -339,6 +339,31 @@ try {
 
 ---
 
+## RÈGLES MÉTIER COMPTABILITÉ (verrouillées)
+
+**Filtre mensuel unique :** toute requête comptable filtrant des `Invoice`
+sur un mois DOIT passer par `getMonthlyInvoicesWhere(monthStart, monthEnd)`
+de `src/lib/billing.ts`. Ne **jamais** filtrer par `issuedAt`, `createdAt`
+ou `periodDate` directement pour la comptabilité — ces champs sont des
+détails techniques, pas la source de vérité.
+
+Les trois cas couverts :
+1. Au moins un `Payment.paymentDate ∈ [monthStart, monthEnd]` (caisse prime)
+2. Aucun paiement, séjour `CONFIRMED`/`IN_PROGRESS` chevauchant le mois
+3. Facture manuelle (`bookingId = null`) émise ce mois
+
+**Catégories d'`InvoiceItem` :** si `productId` est non-null, `category` DOIT
+être `'PRODUCT'`. Toute création d'`InvoiceItem` lié à un produit passe par
+`resolveItemCategory(productId, fallback)` de `src/lib/billing.ts`. La
+migration `20260507_cleanup_categories` normalise les rows legacy.
+
+**Détail encaissé (analytics) :** le drill-down par catégorie sur
+`/admin/analytics` affiche l'**encaissé** ce mois (allocation séquentielle
+Payment → InvoiceItem via `computeMonthlyRevenueByCategory`), jamais le
+facturé. Les items à 0 encaissé sont exclus.
+
+---
+
 ## CONVENTIONS DE CODE
 
 - **Langue des variables/fonctions** : anglais

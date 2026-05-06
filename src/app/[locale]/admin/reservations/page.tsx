@@ -7,6 +7,7 @@ import { startOfMonth, endOfMonth } from 'date-fns';
 import { ReservationsKanban, type KanbanBooking } from './ReservationsKanban';
 import ReservationsList, { type ReservationRow } from './ReservationsList';
 import { toNumber } from '@/lib/decimal';
+import { getMonthlyInvoicesWhere } from '@/lib/billing';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -113,10 +114,7 @@ export default async function AdminReservationsPage(props: PageProps) {
     prisma.invoice.aggregate({
       where: {
         status: { in: ['PAID', 'PARTIALLY_PAID'] },
-        OR: [
-          { periodDate: { gte: monthStart, lte: monthEnd } },
-          { periodDate: null, issuedAt: { gte: monthStart, lte: monthEnd } },
-        ],
+        ...getMonthlyInvoicesWhere(monthStart, monthEnd),
       },
       _sum: { paidAmount: true },
     }),
