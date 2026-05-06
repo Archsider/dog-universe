@@ -85,12 +85,17 @@ function nightsSince(startIso: string): number {
   return Math.max(0, Math.floor(ms / 86_400_000));
 }
 
+// Active stay = status only, gated on startDate (don't surface a future
+// CONFIRMED booking as "in progress"). endDate is intentionally NOT used:
+// the admin transitions to COMPLETED when the pet leaves.
 function isInProgressNow(b: ReservationRow): boolean {
   if (b.status !== 'CONFIRMED' && b.status !== 'IN_PROGRESS') return false;
-  const now = Date.now();
-  if (new Date(b.startDate).getTime() > now) return false;
-  if (b.isOpenEnded) return true;
-  return !!b.endDate && new Date(b.endDate).getTime() >= now;
+  return new Date(b.startDate).getTime() <= Date.now();
+}
+
+// Open-ended = walk-in flag OR no endDate set. Both treated identically.
+function isOpenEndedRow(b: ReservationRow): boolean {
+  return b.isOpenEnded || b.endDate == null;
 }
 
 export default function ReservationsList({ bookings, locale, monthlyRevenue, initialFilter = 'ALL' }: Props) {
@@ -163,7 +168,7 @@ export default function ReservationsList({ bookings, locale, monthlyRevenue, ini
   const kpis = useMemo(() => {
     const inProgress = bookings.filter(isInProgressNow).length;
     const pending = bookings.filter(b => b.status === 'PENDING').length;
-    const walkInsOpen = bookings.filter(b => b.isOpenEnded && b.status !== 'COMPLETED' && b.status !== 'CANCELLED' && b.status !== 'REJECTED').length;
+    const walkInsOpen = bookings.filter(b => isOpenEndedRow(b) && b.status !== 'COMPLETED' && b.status !== 'CANCELLED' && b.status !== 'REJECTED').length;
     return { inProgress, pending, walkInsOpen };
   }, [bookings]);
 
@@ -180,7 +185,7 @@ export default function ReservationsList({ bookings, locale, monthlyRevenue, ini
           if (b.status !== 'PENDING') return false;
           break;
         case 'WALKIN':
-          if (!b.isOpenEnded) return false;
+          if (!isOpenEndedRow(b)) return false;
           if (b.status === 'COMPLETED' || b.status === 'CANCELLED' || b.status === 'REJECTED') return false;
           break;
         case 'BOARDING':
@@ -422,7 +427,7 @@ function Row({
   locale: string;
   t: ReturnType<typeof labelsFor>;
 }) {
-  const isWalkInRow = b.isOpenEnded;
+  const isWalkInRow = isOpenEndedRow(b);
   const initials = initialsFrom(b.client.firstName, b.client.lastName);
   const avatarColor = colorFromName(`${b.client.firstName} ${b.client.lastName}`);
   const totalAmount = b.invoiceAmount ?? b.totalPrice;
@@ -444,11 +449,11 @@ function Row({
     statusBg = '#F3F4F6'; statusFg = '#4B5563';
   }
 
-  // Dates
+  // Dates — open-ended (flag OR endDate=null) shows "?" + ongoing nights count.
   const startStr = formatShort(b.startDate, locale);
-  const endStr = b.endDate ? formatShort(b.endDate, locale) : '?';
+  const endStr = b.endDate && !b.isOpenEnded ? formatShort(b.endDate, locale) : '?';
   let nightsLine: string;
-  if (b.isOpenEnded) {
+  if (isWalkInRow) {
     nightsLine = `${nightsSince(b.startDate)} ${t.nightsOngoing}`;
   } else if (b.endDate) {
     nightsLine = `${nightsBetween(b.startDate, b.endDate)} ${t.nights}`;
@@ -553,7 +558,7 @@ function Row({
       </td>
       <td className="px-4 py-3 align-middle text-right">
         <div className="text-sm font-bold text-charcoal">{formatMAD(totalAmount)}</div>
-        {b.isOpenEnded && (
+        {isWalkInRow && (
           <div className="text-xs mt-0.5" style={{ color: '#854F0B' }}>{t.provisional}</div>
         )}
       </td>

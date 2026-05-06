@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
+import { ACTIVE_STAY_STATUSES, nightsBetween, nightsOverlap } from '@/lib/booking-status';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -66,24 +67,17 @@ export type MonthlyEntry = {
   croquettes: number;
 };
 
-// Cash collected per calendar month, split by category proportionally to item.total.
-// total = real Payment.amount (includes OTHER). Category split = weighted approximation.
-// Use for yearly revenue charts only — not for activity/billed widgets.
+// Revenue per calendar month, split by InvoiceItem.category, with **prorata
+// over real nights consumed**:
+//   - BOARDING items: spread the paid amount across months according to
+//     nightsInMonth / totalNights of the underlying booking.
+//   - Non-BOARDING items (taxi, grooming, product, other): bucketed entirely
+//     in the month of booking.startDate (date de service, jamais createdAt).
+// Source de vérité = SUM(Payment.amount). Open-ended bookings (no endDate)
+// fall back to single-bucket on startDate.
 export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
-  const start = new Date(year, 0, 1);
-  const end = new Date(year, 11, 31, 23, 59, 59, 999);
-
-  const payments = await prisma.payment.findMany({
-    where: {
-      paymentDate: { gte: start, lte: end },
-      invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
-    },
-    select: {
-      amount: true,
-      paymentDate: true,
-      invoice: { select: { items: { select: { category: true, description: true, total: true } } } },
-    },
-  });
+  const yearStart = new Date(year, 0, 1);
+  const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
 
   const monthly: MonthlyEntry[] = Array.from({ length: 12 }, (_, i) => ({
     month: i,
@@ -94,31 +88,30 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
     croquettes: 0,
   }));
 
-  for (const pmt of payments) {
-    const m = new Date(pmt.paymentDate).getMonth();
-    const pmtAmount = toNumber(pmt.amount);
-    const itemsTotal = pmt.invoice.items.reduce((s, i) => s + toNumber(i.total), 0);
-    monthly[m].total += pmtAmount;
-    if (itemsTotal === 0) continue;
-    const frac = pmtAmount / itemsTotal;
-    for (const item of pmt.invoice.items) {
-      const k = categoryKey(item.category, item.description);
-      if (k) monthly[m][k] += toNumber(item.total) * frac;
-    }
+  for (let m = 0; m < 12; m++) {
+    const mStart = new Date(year, m, 1);
+    const mEnd = new Date(year, m + 1, 0, 23, 59, 59, 999);
+    const breakdown = await revenueByCategoryProrata(mStart, mEnd);
+    monthly[m].boarding = breakdown.boarding;
+    monthly[m].taxi = breakdown.taxi;
+    monthly[m].grooming = breakdown.grooming;
+    monthly[m].croquettes = breakdown.croquettes;
+    monthly[m].total =
+      breakdown.boarding +
+      breakdown.taxi +
+      breakdown.grooming +
+      breakdown.croquettes +
+      breakdown.other;
   }
 
-  // Fusionner avec MonthlyRevenueSummary pour les mois sans payments réels
-  // (données historiques saisies manuellement : jan/fév/mars avant mise en prod)
-  // MonthlyRevenueSummary.month = 1–12, monthly[].month = 0–11
+  // Fallback MonthlyRevenueSummary pour les mois sans payments réels
+  // (données historiques saisies manuellement, e.g. avant mise en prod).
   const summaries = await prisma.monthlyRevenueSummary.findMany({
     where: { year },
   });
-
   for (const summary of summaries) {
     const m = summary.month - 1;
     if (m < 0 || m > 11) continue;
-
-    // Utiliser le summary UNIQUEMENT si aucun payment réel ce mois
     if (monthly[m].total === 0) {
       const b = toNumber(summary.boardingRevenue);
       const g = toNumber(summary.groomingRevenue);
@@ -128,10 +121,13 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
       monthly[m].boarding = b;
       monthly[m].grooming = g;
       monthly[m].taxi = t;
-      // otherRevenue → croquettes (pas de champ PRODUCT dans le modèle historique)
       monthly[m].croquettes = o;
     }
   }
+
+  // Silence unused var warning (kept for potential clamping if needed later).
+  void yearStart;
+  void yearEnd;
 
   return monthly;
 }
@@ -148,25 +144,54 @@ export type CategoryBreakdown = {
   other: number;
 };
 
-// Billed amount by category — payments in [start, end] distributed proportionally across items.
-// frac = pmt.amount / sum(item.total) per invoice. Matches partial-payment semantics.
-export async function billedByCategory(
+// Revenue by category for a window [start, end], with **prorata par nuits
+// réellement consommées** :
+//   - BOARDING items : montant payé spreadé sur les mois selon
+//     nightsOverlap(booking.startDate, booking.endDate, start, end) / totalNights.
+//   - Non-BOARDING items : bucketés sur le mois de booking.startDate (ou
+//     invoice.periodDate à défaut). Jamais createdAt.
+//   - Open-ended bookings (endDate IS NULL OR isOpenEnded) sans endDate :
+//     fallback single-bucket sur startDate.
+//
+// Source de vérité = SUM(Payment.amount) sur la facture. Un paiement de 1 200
+// MAD pour un séjour 25 avril → 10 mai (15 nuits, 5 avril / 10 mai) donne
+// 400 MAD à avril et 800 MAD à mai.
+//
+// La fenêtre de requête est élargie de ±90 j pour capturer les séjours qui
+// chevauchent partiellement la période cible. La cap take=2000 protège du
+// DoS / OOM en cas de volume élevé.
+export async function revenueByCategoryProrata(
   start: Date,
   end: Date,
 ): Promise<CategoryBreakdown> {
+  const expandStart = new Date(start);
+  expandStart.setDate(expandStart.getDate() - 90);
+  const expandEnd = new Date(end);
+  expandEnd.setDate(expandEnd.getDate() + 90);
+
   const invoices = await prisma.invoice.findMany({
     where: {
       status: { in: ['PAID', 'PARTIALLY_PAID'] },
-      payments: { some: { paymentDate: { gte: start, lte: end } } },
+      payments: { some: {} },
+      OR: [
+        { booking: { startDate: { gte: expandStart, lte: expandEnd } } },
+        {
+          booking: null,
+          OR: [
+            { periodDate: { gte: expandStart, lte: expandEnd } },
+            { periodDate: null, issuedAt: { gte: expandStart, lte: expandEnd } },
+          ],
+        },
+      ],
     },
     select: {
-      items:    { select: { category: true, description: true, unitPrice: true, quantity: true } },
-      payments: { select: { amount: true, paymentDate: true } },
+      periodDate: true,
+      issuedAt: true,
+      items: { select: { category: true, description: true, total: true } },
+      payments: { select: { amount: true } },
+      booking: { select: { startDate: true, endDate: true, isOpenEnded: true } },
     },
-    // DoS / OOM defense: cap at 1000 invoices per period. At ~current volume this never trips;
-    // at 10k+ invoices a single period query would exhaust Lambda memory. If the cap is ever
-    // reached, the analytics page should switch to summary-table aggregation.
-    take: 1000,
+    take: 2000,
   });
 
   const result: CategoryBreakdown = {
@@ -174,26 +199,35 @@ export async function billedByCategory(
   };
 
   for (const inv of invoices) {
-    const itemsTotal = inv.items.reduce((s, i) => s + toNumber(i.unitPrice) * i.quantity, 0);
-    if (itemsTotal === 0) continue;
-    const periodPayments = inv.payments.filter(
-      p => p.paymentDate >= start && p.paymentDate <= end,
-    );
-    for (const pmt of periodPayments) {
-      const frac = toNumber(pmt.amount) / itemsTotal;
-      for (const item of inv.items) {
-        const k = categoryKey(item.category, item.description);
-        const val = toNumber(item.unitPrice) * item.quantity;
-        if (k) result[k] += val * frac;
-        else    result.other += val * frac;
+    const paid = inv.payments.reduce((s, p) => s + toNumber(p.amount), 0);
+    if (paid <= 0) continue;
+    const itemsTotal = inv.items.reduce((s, i) => s + toNumber(i.total), 0);
+    if (itemsTotal <= 0) continue;
+
+    const refStart = inv.booking?.startDate ?? inv.periodDate ?? inv.issuedAt;
+    const bookingEnd = inv.booking?.endDate ?? null;
+    const isOpen = !!inv.booking?.isOpenEnded || (inv.booking != null && bookingEnd == null);
+
+    for (const item of inv.items) {
+      const itemRev = paid * (toNumber(item.total) / itemsTotal);
+      const k = categoryKey(item.category, item.description);
+      const bucket: keyof CategoryBreakdown = k ?? 'other';
+
+      if (k === 'boarding' && bookingEnd && !isOpen) {
+        const totalNights = nightsBetween(refStart, bookingEnd);
+        const inWindow = nightsOverlap(refStart, bookingEnd, start, end);
+        if (totalNights > 0 && inWindow > 0) {
+          result[bucket] += itemRev * (inWindow / totalNights);
+        }
+      } else {
+        if (refStart >= start && refStart <= end) {
+          result[bucket] += itemRev;
+        }
       }
     }
   }
 
-  // Fallback MonthlyRevenueSummary : si aucun payment réel sur la période,
-  // utiliser les données historiques saisies manuellement (jan/fév/mars pré-prod).
-  // Détection : la période start..end couvre un mois entier → lookup unique sur (year, month).
-  // MonthlyRevenueSummary.month = 1-12, Date.getMonth() = 0-11 → offset +1.
+  // Fallback historique pour les mois pré-prod sans payments réels.
   const total =
     result.boarding + result.taxi + result.grooming + result.croquettes + result.other;
   if (total === 0) {
@@ -213,12 +247,15 @@ export async function billedByCategory(
       result.grooming = toNumber(summary.groomingRevenue);
       result.taxi = toNumber(summary.taxiRevenue);
       result.other = toNumber(summary.otherRevenue);
-      // Pas de champ PRODUCT dans le modèle historique → croquettes reste 0
     }
   }
 
   return result;
 }
+
+// Backwards-compat alias — every caller now goes through the prorata version.
+// Kept exported so existing imports keep working without a breaking rename.
+export const billedByCategory = revenueByCategoryProrata;
 
 // Invoice count by dominant category (item with highest total) for PAID+PARTIALLY_PAID
 // invoices with a payment in [start, end].
@@ -283,19 +320,14 @@ export async function currentBoarders(): Promise<{
   dog: number;
   total: number;
 }> {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  // Active stay = within window OR open-ended (walk-in awaiting checkout).
-  // endDate compared to startOfDay so a stay ending today still counts until
-  // the day is over (pet hasn't physically left yet).
+  // Active stay = status CONFIRMED or IN_PROGRESS, period. endDate is NEVER
+  // used to determine activeness — the admin transitions to COMPLETED when the
+  // pet actually leaves (closed range, walk-in, or registered client without
+  // a known end date are all handled the same way).
   const boardingFilter = {
     serviceType: 'BOARDING' as const,
-    status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
-    startDate: { lte: now },
-    OR: [
-      { endDate: { gte: todayStart } },
-      { isOpenEnded: true },
-    ],
+    status: { in: [...ACTIVE_STAY_STATUSES] },
+    startDate: { lte: new Date() },
     deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
   };
   const [cat, dog] = await Promise.all([

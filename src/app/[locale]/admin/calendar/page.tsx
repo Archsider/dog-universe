@@ -34,8 +34,11 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
       status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },
       startDate: { lte: lastDay },
       OR: [
+        // Closed range overlapping the month.
         { endDate: { gte: firstDay } },
-        { endDate: null, startDate: { gte: firstDay } },
+        // Open-ended (walk-in or no endDate) — show on every month from startDate onward.
+        { endDate: null },
+        { isOpenEnded: true },
         // Boarding with taxi return date in this month (even if stay endDate is before month)
         { boardingDetail: { taxiReturnEnabled: true, taxiReturnDate: { gte: firstDayStr, lte: lastDayStr } } },
         // Boarding with taxi go date in this month
@@ -69,16 +72,16 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
     taxiReturnTime: b.boardingDetail?.taxiReturnTime ?? null,
   }));
 
-  // Stats
+  // Stats — "today's boarders" = active stays (status only) whose startDate
+  // has already begun. endDate is intentionally not used (admin checkout).
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   const todayBoardings = serialized.filter((b) => {
     if (b.serviceType !== 'BOARDING') return false;
+    if (!['CONFIRMED', 'IN_PROGRESS'].includes(b.status)) return false;
     const start = new Date(b.startDate);
     start.setHours(0, 0, 0, 0);
-    const end = b.endDate ? new Date(b.endDate) : null;
-    if (end) end.setHours(23, 59, 59, 0);
-    return start <= today && (!end || end >= today) && ['CONFIRMED', 'IN_PROGRESS'].includes(b.status);
+    return start <= today;
   });
 
   const petsTodayCount = todayBoardings.reduce((acc, b) => acc + b.bookingPets.length, 0);

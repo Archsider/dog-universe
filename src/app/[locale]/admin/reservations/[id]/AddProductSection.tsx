@@ -219,7 +219,7 @@ export default function AddProductSection({
         <div className="flex justify-between text-gray-500">
           <span>
             {t('Nuits', 'Nights')} ({provisionalNights}) × {formatMAD(pricePerNight)}
-            {isOpenEnded && <span className="ml-1 italic">— {t('en cours', 'in progress')}</span>}
+            {(isOpenEnded || !endDate) && <span className="ml-1 italic">— {t('en cours', 'in progress')}</span>}
           </span>
           <span>{formatMAD(provisionalNights * pricePerNight)}</span>
         </div>
