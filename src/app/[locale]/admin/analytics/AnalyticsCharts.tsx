@@ -155,12 +155,18 @@ export default function AnalyticsCharts({
   const [activeCategory, setActiveCategory] = useState<DrillCategory | null>(null);
 
   // Aggregated stats per drill category
-  // total = ENCAISSÉ (somme des Payment alloués), pas le facturé.
+  // count = nombre de factures encaissées ce mois ayant un item de la catégorie
+  //         (volumeByCategory côté serveur, source de vérité unique)
+  // total = ENCAISSÉ (somme des Payment alloués via computeMonthlyRevenue…)
+  const VOLUME_KEY: Record<DrillCategory, keyof typeof volumeData> = {
+    BOARDING: 'boarding',
+    PET_TAXI: 'taxi',
+    GROOMING: 'grooming',
+    PRODUCT: 'croquettes',
+  };
   const drillStats = DRILL_CATS.map(cat => {
     const items = categoryItems.filter(i => i.category === cat.key);
-    const count = cat.key === 'BOARDING'
-      ? new Set(items.map(i => i.invoice.invoiceNumber)).size
-      : items.reduce((s, i) => s + i.quantity, 0);
+    const count = volumeData[VOLUME_KEY[cat.key]];
     const total = items.reduce((s, i) => s + i.amount, 0);
     return { ...cat, count, total };
   });

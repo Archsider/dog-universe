@@ -209,42 +209,41 @@ export const billedByCategory = revenueByCategoryProrata;
 
 // Invoice count by dominant category (item with highest total) for PAID+PARTIALLY_PAID
 // invoices with a payment in [start, end].
+// Compteurs ENCAISSÉS par catégorie : nombre de factures distinctes ayant
+// (a) au moins un Payment dans la fenêtre [start, end] et (b) au moins un
+// InvoiceItem de la catégorie cible.
+//
+// Aligné avec le détail analytics (ENCAISSÉ ce mois). Si aucune facture n'a
+// été encaissée pour une catégorie, le compteur tombe à 0 — par ex.
+// "Toilettage — 0 soins" en mai 2026.
 export async function volumeByCategory(
   start: Date,
   end: Date,
 ): Promise<CategoryBreakdown> {
-  const invoices = await prisma.invoice.findMany({
-    where: {
-      status: { in: ['PAID', 'PARTIALLY_PAID', 'PENDING'] },
-      ...getMonthlyInvoicesWhere(start, end),
-    },
-    select: { items: { select: { category: true, description: true, unitPrice: true, quantity: true } } },
-  });
-
-  const result: CategoryBreakdown = {
-    boarding: 0,
-    taxi: 0,
-    grooming: 0,
-    croquettes: 0,
+  const paidThisMonth = {
+    payments: { some: { paymentDate: { gte: start, lte: end } } },
+  };
+  const [boarding, taxi, grooming, product] = await Promise.all([
+    prisma.invoice.count({
+      where: { AND: [paidThisMonth, { items: { some: { category: 'BOARDING' } } }] },
+    }),
+    prisma.invoice.count({
+      where: { AND: [paidThisMonth, { items: { some: { category: 'PET_TAXI' } } }] },
+    }),
+    prisma.invoice.count({
+      where: { AND: [paidThisMonth, { items: { some: { category: 'GROOMING' } } }] },
+    }),
+    prisma.invoice.count({
+      where: { AND: [paidThisMonth, { items: { some: { category: 'PRODUCT' } } }] },
+    }),
+  ]);
+  return {
+    boarding,
+    taxi,
+    grooming,
+    croquettes: product,
     other: 0,
   };
-  for (const inv of invoices) {
-    if (inv.items.length === 0) {
-      result.other++;
-      continue;
-    }
-    // Compter chaque item avec montant > 0 (pas seulement le dominant)
-    let counted = false;
-    for (const item of inv.items) {
-      if (toNumber(item.unitPrice) * item.quantity === 0) continue;
-      const k = categoryKey(item.category, item.description);
-      if (k) result[k]++;
-      else result.other++;
-      counted = true;
-    }
-    if (!counted) result.other++;
-  }
-  return result;
 }
 
 // Average basket = SUM(invoice.amount) / count(invoices) for PAID+PARTIALLY_PAID
