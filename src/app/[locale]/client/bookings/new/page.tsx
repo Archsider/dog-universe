@@ -612,11 +612,14 @@ export default function NewBookingPage() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         console.error('[BOOKING] response error body:', err);
+        const detailsStr = Array.isArray(err.details)
+          ? err.details.join(' | ')
+          : err.message ?? JSON.stringify(err);
         toast({
-          title: `[DEBUG] ${res.status}: ${err.error ?? 'unknown'}`,
-          description: err.details ? JSON.stringify(err.details).slice(0, 200) : err.message ?? '',
+          title: `[DEBUG] ${res.status} ${err.error ?? 'unknown'}`,
+          description: detailsStr.slice(0, 500),
           variant: 'destructive',
-          duration: 10000,
+          duration: 20000,
         });
         if (err.error === 'SUNDAY_NOT_ALLOWED') {
           toast({ title: l.sundayNotAllowed, variant: 'destructive' });
