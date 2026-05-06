@@ -153,12 +153,16 @@ export async function POST(request: Request) {
         ...(resolvedIssuedAt && { issuedAt: resolvedIssuedAt }),
         ...(resolvedPeriodDate && { periodDate: resolvedPeriodDate }),
         items: {
-          create: items.map((item: { description: string; quantity: number; unitPrice: number; total: number; category?: string }) => ({
+          create: items.map((item: { description: string; quantity: number; unitPrice: number; total: number; category?: string; productId?: string }) => ({
             description: item.description,
             quantity: item.quantity ?? 1,
             unitPrice: item.unitPrice,
             total: item.total,
-            category: (item.category ?? 'OTHER') as 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER',
+            // Règle métier : productId présent → category forcée à 'PRODUCT'.
+            // L'appelant ne peut pas surcharger cette catégorie.
+            ...(item.productId
+              ? { productId: item.productId, category: 'PRODUCT' as const }
+              : { category: (item.category ?? 'OTHER') as 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' }),
           })),
         },
       },

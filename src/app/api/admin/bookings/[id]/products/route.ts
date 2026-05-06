@@ -74,6 +74,8 @@ export async function POST(request: NextRequest, { params }: Params) {
           quantity,
           unitPrice: new Prisma.Decimal(unitPrice),
           total: new Prisma.Decimal(total),
+          // productId présent → category forcée à 'PRODUCT' (règle métier).
+          productId,
           category: 'PRODUCT',
         },
       });
