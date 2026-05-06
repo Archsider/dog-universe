@@ -613,7 +613,9 @@ export default function NewBookingPage() {
         const err = await res.json().catch(() => ({}));
         console.error('[BOOKING] response error body:', err);
         const detailsStr = Array.isArray(err.details)
-          ? err.details.join(' | ')
+          ? err.details.map((d: { path?: (string | number)[]; message?: string }) =>
+              typeof d === 'string' ? d : `${(d.path ?? []).join('.')}: ${d.message ?? ''}`
+            ).join(' | ')
           : err.message ?? JSON.stringify(err);
         toast({
           title: `[DEBUG] ${res.status} ${err.error ?? 'unknown'}`,

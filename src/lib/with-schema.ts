@@ -41,11 +41,10 @@ type Handler<BS extends AnyZod | undefined, PS extends AnyZod | undefined> = (
 type RouteCtx<PS extends AnyZod | undefined> = { params: Promise<OutP<PS>> };
 
 function validationError(issues: z.ZodIssue[]): NextResponse {
-  const isProd = process.env.NODE_ENV === 'production';
-  const payload: Record<string, unknown> = { error: 'VALIDATION_ERROR' };
-  if (!isProd) {
-    payload.details = issues;
-  }
+  // [DEBUG] Log full Zod issues server-side (visible in Vercel logs).
+  // Temporary: expose details in prod responses too until booking issue resolved.
+  console.error('[VALIDATION_ERROR]', JSON.stringify(issues, null, 2));
+  const payload: Record<string, unknown> = { error: 'VALIDATION_ERROR', details: issues };
   return NextResponse.json(payload, { status: 400 });
 }
 
