@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/db-migrate.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "node scripts/db-migrate.mjs",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
@@ -88,6 +89,8 @@
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@types/bcryptjs": "^2.4.6",
+    "@types/pg": "^8.11.10",
+    "pg": "^8.13.1",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^22.10.1",
     "@types/nodemailer": "^6.4.17",
