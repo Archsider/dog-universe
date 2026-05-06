@@ -614,7 +614,20 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
 
     return NextResponse.json({ ...booking, bookingRef }, { status: 201 });
   } catch (error) {
+    // [DEBUG] Full error dump — to remove once root cause identified
+    console.error('[BOOKING CREATE ERROR]', JSON.stringify({
+      message: error instanceof Error ? error.message : String(error),
+      name: error instanceof Error ? error.name : undefined,
+      stack: error instanceof Error ? error.stack : undefined,
+      code: (error as { code?: string })?.code,
+      meta: (error as { meta?: unknown })?.meta,
+      raw: error,
+    }, null, 2));
     await log('error', 'booking', 'Create booking error', { error: error instanceof Error ? error.message : String(error) });
-    return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
+    return NextResponse.json({
+      error: 'INTERNAL_ERROR',
+      message: error instanceof Error ? error.message : String(error),
+      code: (error as { code?: string })?.code,
+    }, { status: 500 });
   }
 });

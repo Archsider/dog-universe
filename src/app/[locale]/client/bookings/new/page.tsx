@@ -608,8 +608,16 @@ export default function NewBookingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      console.log('[BOOKING] response status:', res.status);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        console.error('[BOOKING] response error body:', err);
+        toast({
+          title: `[DEBUG] ${res.status}: ${err.error ?? 'unknown'}`,
+          description: err.details ? JSON.stringify(err.details).slice(0, 200) : err.message ?? '',
+          variant: 'destructive',
+          duration: 10000,
+        });
         if (err.error === 'SUNDAY_NOT_ALLOWED') {
           toast({ title: l.sundayNotAllowed, variant: 'destructive' });
           return;
@@ -625,9 +633,11 @@ export default function NewBookingPage() {
         throw new Error('Failed');
       }
       const data = await res.json();
+      console.log('[BOOKING] response data:', data);
       setBookingRef(data.bookingRef || data.id);
       setStep(5);
-    } catch {
+    } catch (err) {
+      console.error('[BOOKING] catch block:', err);
       toast({ title: locale === 'fr' ? 'Erreur lors de la réservation' : 'Booking error', variant: 'destructive' });
     } finally {
       setSubmitting(false);
