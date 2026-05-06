@@ -88,13 +88,47 @@ export default async function AdminBillingPage(props: PageProps) {
   const order = (VALID_ORDERS.includes(rawOrder) ? rawOrder : 'desc') as 'asc' | 'desc';
   const clientId = (searchParams.clientId || '').trim();
 
-  // periodDate = booking.startDate (set since 2026-05-04). Factures antérieures
-  // ont periodDate null → fallback sur issuedAt pour compatibilité ascendante.
+  // Règle métier : une facture appartient au mois si son séjour tombe ou
+  // chevauche le mois. Le filtre n'utilise PLUS issuedAt (≠ date de création
+  // de la facture) — exemple : facture émise 21 avr pour un séjour
+  // 24 avr → 6 mai apparaît désormais en mai.
+  //
+  //   - bookingId IS NOT NULL → fenêtre = [booking.startDate .. booking.endDate]
+  //     (ou indéfini si isOpenEnded / endDate=null).
+  //   - bookingId IS NULL (facture manuelle) → fallback sur invoice.issuedAt.
   const monthDateFilter = {
     OR: [
-      { periodDate: { gte: monthStart, lte: monthEnd } },
-      { periodDate: null, issuedAt: { gte: monthStart, lte: monthEnd } },
+      {
+        bookingId: { not: null },
+        booking: {
+          OR: [
+            // Séjour qui démarre dans le mois.
+            { startDate: { gte: monthStart, lte: monthEnd } },
+            // Séjour qui chevauche le mois (commence avant fin de mois ET
+            // continue après début de mois OU est open-ended).
+            {
+              startDate: { lte: monthEnd },
+              OR: [
+                { endDate: { gte: monthStart } },
+                { isOpenEnded: true },
+                { endDate: null },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        bookingId: null,
+        issuedAt: { gte: monthStart, lte: monthEnd },
+      },
     ],
+  };
+
+  // Pour les agrégats sur Payment : un paiement est rattaché au mois via la
+  // facture sous-jacente, jamais via paymentDate (un paiement encaissé en
+  // avril pour un séjour de mai compte en mai).
+  const paymentMonthFilter = {
+    invoice: monthDateFilter,
   };
 
   // Month-scoped where for the invoice list
@@ -159,13 +193,11 @@ export default async function AdminBillingPage(props: PageProps) {
       by: ['paymentMethod'],
       _sum: { amount: true },
       _count: { id: true },
-      where: {
-        paymentDate: { gte: monthStart, lte: monthEnd },
-      },
+      where: paymentMonthFilter,
     }),
     prisma.payment.aggregate({
       _sum: { amount: true },
-      where: { paymentDate: { gte: monthStart, lte: monthEnd } },
+      where: paymentMonthFilter,
     }),
     prisma.user.findMany({
       where: { role: 'CLIENT', deletedAt: null },
