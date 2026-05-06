@@ -560,6 +560,23 @@ export default function NewBookingPage() {
   };
 
   const handleSubmit = async () => {
+    // Guard against state loss from browser back/refresh on step 4 — send the user
+    // back to the step that's missing data instead of submitting an invalid payload.
+    if (selectedPets.length === 0) {
+      toast({ title: l.selectAtLeastOne, variant: 'destructive' });
+      setStep(2);
+      return;
+    }
+    if (bookingType === 'BOARDING' && (!checkIn || !checkOut)) {
+      toast({ title: l.fillAllFields, variant: 'destructive' });
+      setStep(3);
+      return;
+    }
+    if (bookingType === 'PET_TAXI' && (!taxiDate || !taxiTime || !pickupAddress || !dropoffAddress)) {
+      toast({ title: l.fillAllFields, variant: 'destructive' });
+      setStep(3);
+      return;
+    }
     setSubmitting(true);
     try {
       const { total } = getPriceBreakdown();
@@ -574,7 +591,12 @@ export default function NewBookingPage() {
         body.notes = boardingNotes;
         const groomingDogs = dogPets.filter(d => groomingPets[d.id]);
         body.includeGrooming = groomingDogs.length > 0;
-        body.groomingSize = groomingDogs.length === 1 ? (petSizes[groomingDogs[0].id] || 'SMALL') : (groomingDogs.length > 1 ? 'MIXED' : null);
+        // Schéma serveur n'accepte que SMALL | LARGE. Pour 2+ chiens, on prend la
+        // taille la plus grande dans la sélection (LARGE si au moins un, sinon SMALL).
+        // L'admin peut affiner après réception.
+        body.groomingSize = groomingDogs.length === 0
+          ? null
+          : groomingDogs.some(d => petSizes[d.id] === 'LARGE') ? 'LARGE' : 'SMALL';
         body.groomingPrice = groomingDogs.reduce((sum, dog) => sum + (petSizes[dog.id] === 'LARGE' ? GROOMING_PRICES.LARGE : GROOMING_PRICES.SMALL), 0);
         body.pricePerNight = 0;
         // Taxi addon
@@ -608,21 +630,8 @@ export default function NewBookingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      console.log('[BOOKING] response status:', res.status);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        console.error('[BOOKING] response error body:', err);
-        const detailsStr = Array.isArray(err.details)
-          ? err.details.map((d: { path?: (string | number)[]; message?: string }) =>
-              typeof d === 'string' ? d : `${(d.path ?? []).join('.')}: ${d.message ?? ''}`
-            ).join(' | ')
-          : err.message ?? JSON.stringify(err);
-        toast({
-          title: `[DEBUG] ${res.status} ${err.error ?? 'unknown'}`,
-          description: detailsStr.slice(0, 500),
-          variant: 'destructive',
-          duration: 20000,
-        });
         if (err.error === 'SUNDAY_NOT_ALLOWED') {
           toast({ title: l.sundayNotAllowed, variant: 'destructive' });
           return;
@@ -638,11 +647,9 @@ export default function NewBookingPage() {
         throw new Error('Failed');
       }
       const data = await res.json();
-      console.log('[BOOKING] response data:', data);
       setBookingRef(data.bookingRef || data.id);
       setStep(5);
-    } catch (err) {
-      console.error('[BOOKING] catch block:', err);
+    } catch {
       toast({ title: locale === 'fr' ? 'Erreur lors de la réservation' : 'Booking error', variant: 'destructive' });
     } finally {
       setSubmitting(false);
