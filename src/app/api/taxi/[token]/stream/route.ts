@@ -27,6 +27,9 @@ import type IORedis from 'ioredis';
 import { prisma } from '@/lib/prisma';
 import { getLocation, type TaxiLocationSnapshot } from '@/lib/taxi-location';
 import { getBullMQConnection, isBullMQConfigured } from '@/lib/redis-bullmq';
+import { getEta } from '@/lib/osrm';
+import { tryAcquireFlag } from '@/lib/cache';
+import { createTaxiArrivingSoonNotification } from '@/lib/notifications';
 
 // Vercel function timeout — Hobby caps at 60 s. We give ourselves a 6 s
 // buffer to flush the closing event before the platform kills the runtime.
@@ -36,12 +39,108 @@ export const dynamic = 'force-dynamic';
 const SOFT_TIMEOUT_MS    = 54_000;
 const FALLBACK_POLL_MS   = 5_000;
 const STATUS_CHECK_MS    = 10_000;
-const KEEPALIVE_MS       = 20_000;
+// 30 s keepalive (was 20 s) — most proxies tolerate 60 s idle, so 30 s gives
+// a comfortable margin while halving the keepalive event rate on long-lived
+// connections.
+const KEEPALIVE_MS       = 30_000;
+const ETA_REFRESH_MS     = 30_000;
+const ARRIVING_SOON_THRESHOLD_SEC = 300; // 5 min
 
 const TERMINAL_TRIP_STATUSES = new Set(['COMPLETED', 'CANCELLED', 'ARRIVED_AT_PENSION', 'ARRIVED_AT_DESTINATION']);
 
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+// ── IORedis subscriber pool ────────────────────────────────────────────────
+// Each SSE connection used to call `getBullMQConnection().duplicate()` and
+// subscribe to its own channel. With N concurrent viewers on the same trip
+// we'd burn N Upstash TCP connections for the exact same Pub/Sub stream.
+//
+// The pool maintains one shared subscriber per channel (process-local). A
+// listener Set fans out incoming messages to every active SSE connection.
+// When the last listener leaves, the subscriber is unsubscribed + quit and
+// the entry is dropped from the map.
+type ChannelEntry = {
+  subscriber: IORedis;
+  refCount: number;
+  listeners: Set<(msg: string) => void>;
+  pending?: Promise<void>;
+};
+const channelPool = new Map<string, ChannelEntry>();
+
+async function acquireSubscriber(
+  channel: string,
+  listener: (msg: string) => void,
+): Promise<{ release: () => Promise<void> } | null> {
+  if (!isBullMQConfigured()) return null;
+
+  const existing = channelPool.get(channel);
+  if (existing) {
+    // If a previous concurrent acquire is still wiring up subscribe(), wait
+    // for it so we don't add the listener before the channel is live.
+    if (existing.pending) {
+      try { await existing.pending; } catch { return null; }
+    }
+    existing.refCount += 1;
+    existing.listeners.add(listener);
+    return { release: () => releaseSubscriber(channel, listener) };
+  }
+
+  let subscriber: IORedis;
+  try {
+    subscriber = getBullMQConnection().duplicate();
+  } catch (err) {
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-stream', message: 'duplicate failed', channel, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    return null;
+  }
+
+  const listeners = new Set<(msg: string) => void>([listener]);
+  const entry: ChannelEntry = { subscriber, refCount: 1, listeners };
+  channelPool.set(channel, entry);
+
+  subscriber.on('error', (err: Error) => {
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-stream', message: 'subscriber error', channel, error: err.message, timestamp: new Date().toISOString() }));
+  });
+  subscriber.on('message', (_chan: string, msg: string) => {
+    // Snapshot listeners — a release() mid-iteration mutates the set.
+    const current = Array.from(entry.listeners);
+    for (const fn of current) {
+      try { fn(msg); } catch { /* listener swallows its own errors */ }
+    }
+  });
+
+  const pending = subscriber.subscribe(channel).then(() => undefined);
+  entry.pending = pending;
+  try {
+    await pending;
+    entry.pending = undefined;
+  } catch (err) {
+    entry.pending = undefined;
+    channelPool.delete(channel);
+    try { await subscriber.quit(); } catch { /* noop */ }
+    console.error(JSON.stringify({ level: 'error', service: 'taxi-stream', message: 'subscribe failed', channel, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    return null;
+  }
+
+  return { release: () => releaseSubscriber(channel, listener) };
+}
+
+async function releaseSubscriber(
+  channel: string,
+  listener: (msg: string) => void,
+): Promise<void> {
+  const entry = channelPool.get(channel);
+  if (!entry) return;
+  // Idempotent: a listener leaving twice (defensive double-cleanup) is a noop.
+  if (!entry.listeners.delete(listener)) return;
+  entry.refCount -= 1;
+  if (entry.refCount > 0) return;
+  // Last listener gone — drop entry and tear down subscriber.
+  channelPool.delete(channel);
+  const sub = entry.subscriber;
+  try { await sub.unsubscribe(channel); } catch { /* noop */ }
+  try { await sub.quit(); } catch { /* noop */ }
 }
 
 // Read latest position with Redis-first / Postgres-fallback strategy.
@@ -84,7 +183,20 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       bookingId: true,
       status: true,
       trackingActive: true,
-      booking: { select: { deletedAt: true } },
+      booking: {
+        select: {
+          deletedAt: true,
+          clientId: true,
+          taxiDetail: {
+            select: {
+              pickupLat: true,
+              pickupLng: true,
+              dropoffLat: true,
+              dropoffLng: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -100,10 +212,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const tripId = trip.id;
   const channel = `taxi:loc:${bookingId}`;
 
-  let subscriber: IORedis | null = null;
+  let subscriberHandle: { release: () => Promise<void> } | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let statusTimer: ReturnType<typeof setInterval> | null = null;
   let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  let etaTimer: ReturnType<typeof setInterval> | null = null;
   let softTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const stream = new ReadableStream<Uint8Array>({
@@ -111,6 +224,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       const enc = new TextEncoder();
       let closed = false;
       let lastTimestamp = 0;
+      let lastLat: number | null = null;
+      let lastLng: number | null = null;
 
       const send = (chunk: string) => {
         if (closed) return;
@@ -131,14 +246,14 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
         if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+        if (etaTimer) { clearInterval(etaTimer); etaTimer = null; }
         if (softTimeout) { clearTimeout(softTimeout); softTimeout = null; }
-        if (subscriber) {
-          const sub = subscriber;
-          subscriber = null;
-          // Best-effort teardown — never await/throw in cleanup
-          sub.unsubscribe(channel).catch(() => undefined).finally(() => {
-            sub.quit().catch(() => undefined);
-          });
+        if (subscriberHandle) {
+          const handle = subscriberHandle;
+          subscriberHandle = null;
+          // Pool-aware release — only tears down the IORedis subscriber when
+          // refCount hits 0. Never await/throw here.
+          void handle.release().catch(() => undefined);
         }
         close();
       }
@@ -150,44 +265,30 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       if (initial) {
         send(sseEvent('location', initial));
         lastTimestamp = initial.timestamp;
+        lastLat = initial.lat;
+        lastLng = initial.lng;
       }
 
-      // 2. Try Pub/Sub first — dedicated IORedis subscriber (must NOT be the
-      //    shared BullMQ connection: subscribe puts the client in subscriber
-      //    mode and disallows other commands).
-      let pubsubActive = false;
-      if (isBullMQConfigured()) {
+      // 2. Pub/Sub via shared subscriber pool — one IORedis subscriber per
+      //    channel across the whole process. Multiple SSE connections to the
+      //    same trip share a single Upstash TCP connection.
+      const onMessage = (msg: string) => {
+        if (closed) return;
         try {
-          const base = getBullMQConnection();
-          subscriber = base.duplicate();
-          // ioredis lazyConnect is true on the base; duplicate inherits it.
-          // subscribe() implicitly connects.
-          subscriber.on('error', (err: Error) => {
-            console.error(JSON.stringify({ level: 'error', service: 'taxi-stream', message: 'subscriber error', bookingId, error: err.message, timestamp: new Date().toISOString() }));
-          });
-          subscriber.on('message', (_chan: string, msg: string) => {
-            if (closed) return;
-            try {
-              const snap = JSON.parse(msg) as TaxiLocationSnapshot;
-              if (typeof snap?.lat === 'number' && typeof snap?.lng === 'number') {
-                if (typeof snap.timestamp === 'number' && snap.timestamp <= lastTimestamp) return;
-                if (typeof snap.timestamp === 'number') lastTimestamp = snap.timestamp;
-                send(sseEvent('location', snap));
-              }
-            } catch {
-              // Malformed payload — ignore
-            }
-          });
-          await subscriber.subscribe(channel);
-          pubsubActive = true;
-        } catch (err) {
-          console.error(JSON.stringify({ level: 'error', service: 'taxi-stream', message: 'subscribe failed, using polling fallback', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
-          if (subscriber) {
-            try { await subscriber.quit(); } catch { /* noop */ }
-            subscriber = null;
+          const snap = JSON.parse(msg) as TaxiLocationSnapshot;
+          if (typeof snap?.lat === 'number' && typeof snap?.lng === 'number') {
+            if (typeof snap.timestamp === 'number' && snap.timestamp <= lastTimestamp) return;
+            if (typeof snap.timestamp === 'number') lastTimestamp = snap.timestamp;
+            lastLat = snap.lat;
+            lastLng = snap.lng;
+            send(sseEvent('location', snap));
           }
+        } catch {
+          // Malformed payload — ignore
         }
-      }
+      };
+      subscriberHandle = await acquireSubscriber(channel, onMessage);
+      const pubsubActive = subscriberHandle !== null;
 
       // 3. Polling fallback (5 s) when Pub/Sub is unavailable.
       if (!pubsubActive) {
@@ -196,6 +297,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
           const snap = await readLatest(bookingId, tripId);
           if (snap && snap.timestamp > lastTimestamp) {
             lastTimestamp = snap.timestamp;
+            lastLat = snap.lat;
+            lastLng = snap.lng;
             send(sseEvent('location', snap));
           }
         };
@@ -218,6 +321,74 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
       statusTimer = setInterval(() => { void checkStatus(); }, STATUS_CHECK_MS);
       keepaliveTimer = setInterval(() => send(`: keepalive\n\n`), KEEPALIVE_MS);
+
+      // ── ETA computation ────────────────────────────────────────────────
+      // OSRM is rate-limited (and slow), so we only compute the ETA at
+      // connect (after the initial 'location' event) and then every 30 s.
+      // Target switches based on current trip status: pickup before the
+      // pet boards, dropoff afterwards.
+      const taxiDetail = trip.booking.taxiDetail;
+      const clientId = trip.booking.clientId;
+      let currentStatus: string = trip.status;
+
+      const computeAndEmitEta = async () => {
+        if (closed || lastLat == null || lastLng == null) return;
+        // Refresh status — auto-transitions can change it between ticks.
+        try {
+          const fresh = await prisma.taxiTrip.findUnique({
+            where: { id: tripId },
+            select: { status: true },
+          });
+          if (fresh?.status) currentStatus = fresh.status;
+        } catch { /* keep last known status */ }
+
+        const targetLat = currentStatus === 'ANIMAL_ON_BOARD'
+          ? taxiDetail?.dropoffLat
+          : taxiDetail?.pickupLat;
+        const targetLng = currentStatus === 'ANIMAL_ON_BOARD'
+          ? taxiDetail?.dropoffLng
+          : taxiDetail?.pickupLng;
+        if (targetLat == null || targetLng == null) return;
+
+        const eta = await getEta(lastLat, lastLng, targetLat, targetLng);
+        if (!eta) return;
+        send(sseEvent('eta', {
+          durationSec: eta.durationSec,
+          distanceM: eta.distanceM,
+          geometryPolyline: eta.geometry,
+        }));
+
+        // Arriving-soon notification: client when ETA to pickup < 5 min and
+        // driver is still EN_ROUTE_TO_CLIENT. Idempotent per booking via
+        // 30 min Redis flag.
+        if (
+          currentStatus === 'EN_ROUTE_TO_CLIENT' &&
+          eta.durationSec < ARRIVING_SOON_THRESHOLD_SEC
+        ) {
+          try {
+            const acquired = await tryAcquireFlag(`taxi:eta_alert:${bookingId}`, 1800);
+            if (acquired) {
+              await createTaxiArrivingSoonNotification(clientId, bookingId, eta.durationSec, 'fr');
+            }
+          } catch (err) {
+            console.error(JSON.stringify({
+              level: 'error',
+              service: 'taxi-stream',
+              message: 'arriving-soon notif failed',
+              bookingId,
+              error: err instanceof Error ? err.message : String(err),
+              timestamp: new Date().toISOString(),
+            }));
+          }
+        }
+      };
+
+      // Fire once at connect (if we have a position) then every 30 s.
+      if (lastLat != null && lastLng != null) {
+        void computeAndEmitEta();
+      }
+      etaTimer = setInterval(() => { void computeAndEmitEta(); }, ETA_REFRESH_MS);
+
       softTimeout = setTimeout(() => {
         send(sseEvent('reconnect', { reason: 'soft-timeout' }));
         cleanup();
@@ -231,13 +402,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
       if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+      if (etaTimer) { clearInterval(etaTimer); etaTimer = null; }
       if (softTimeout) { clearTimeout(softTimeout); softTimeout = null; }
-      if (subscriber) {
-        const sub = subscriber;
-        subscriber = null;
-        sub.unsubscribe(channel).catch(() => undefined).finally(() => {
-          sub.quit().catch(() => undefined);
-        });
+      if (subscriberHandle) {
+        const handle = subscriberHandle;
+        subscriberHandle = null;
+        // Pool-aware release — refCount decrement, no direct teardown.
+        void handle.release().catch(() => undefined);
       }
     },
   });

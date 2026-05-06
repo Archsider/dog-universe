@@ -21,9 +21,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { recordHeartbeat } from '@/lib/taxi-heartbeat';
-import { recordLocation } from '@/lib/taxi-location';
+import { recordLocation, getLocation, haversineKm } from '@/lib/taxi-location';
 import { haversineDistance } from '@/lib/geo';
 import { tryAcquireFlag } from '@/lib/cache';
+import { maybeAutoTransition } from '@/lib/taxi-auto-transition';
 import {
   createTaxiNearPickupNotification,
   createTaxiArrivedNotification,
@@ -31,11 +32,15 @@ import {
 
 export const maxDuration = 10;
 
+const MAX_ACCURACY_METERS = 50;
+const MAX_SPEED_KMH = 200;
+
 interface HeartbeatBody {
   latitude?: number;
   longitude?: number;
   heading?: number | null;
   speed?: number | null;
+  accuracy?: number | null;
   timestamp?: number;
 }
 
@@ -66,6 +71,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const trip = await prisma.taxiTrip.findUnique({
     where: { trackingToken: providedToken },
     select: {
+      id: true,
       bookingId: true,
       tripType: true,
       status: true,
@@ -75,7 +81,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           serviceType: true,
           deletedAt: true,
           clientId: true,
-          taxiDetail: { select: { pickupLat: true, pickupLng: true } },
+          taxiDetail: {
+            select: {
+              pickupLat: true,
+              pickupLng: true,
+              dropoffLat: true,
+              dropoffLng: true,
+            },
+          },
         },
       },
     },
@@ -104,6 +117,46 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   await recordHeartbeat(bookingId);
 
   if (isValidLat(body.latitude) && isValidLng(body.longitude)) {
+    // ── Quality gate: low-accuracy fixes (>50 m horizontal error) ──
+    if (
+      typeof body.accuracy === 'number' &&
+      Number.isFinite(body.accuracy) &&
+      body.accuracy > MAX_ACCURACY_METERS
+    ) {
+      console.error(JSON.stringify({
+        level: 'info',
+        service: 'taxi-heartbeat',
+        message: 'gps point ignored (low_accuracy)',
+        bookingId,
+        accuracy: body.accuracy,
+        timestamp: new Date().toISOString(),
+      }));
+      return NextResponse.json({ ok: true, ignored: 'low_accuracy' });
+    }
+
+    // ── Quality gate: implausible speed (>200 km/h) vs previous fix ──
+    try {
+      const prev = await getLocation(bookingId);
+      if (prev && typeof prev.timestamp === 'number') {
+        const dKm = haversineKm(prev.lat, prev.lng, body.latitude, body.longitude);
+        const dtSec = Math.max(0.001, (Date.now() - prev.timestamp) / 1000);
+        const speedKmh = (dKm / dtSec) * 3600;
+        if (speedKmh > MAX_SPEED_KMH) {
+          console.error(JSON.stringify({
+            level: 'info',
+            service: 'taxi-heartbeat',
+            message: 'gps point ignored (speed_outlier)',
+            bookingId,
+            speedKmh: Math.round(speedKmh),
+            deltaKm: dKm,
+            dtSec,
+            timestamp: new Date().toISOString(),
+          }));
+          return NextResponse.json({ ok: true, ignored: 'speed_outlier' });
+        }
+      }
+    } catch { /* fail-open: if Redis is down we cannot diff vs prev — accept point */ }
+
     await recordLocation(bookingId, {
       lat: body.latitude,
       lng: body.longitude,
@@ -111,6 +164,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       heading: typeof body.heading === 'number' && Number.isFinite(body.heading) ? body.heading : null,
       speed: typeof body.speed === 'number' && Number.isFinite(body.speed) ? body.speed : null,
     });
+
+    // ── Auto-transitions on geofence approach (pickup / dropoff) ──
+    try {
+      await maybeAutoTransition({
+        tripId: trip.id,
+        currentStatus: trip.status,
+        currentLat: body.latitude,
+        currentLng: body.longitude,
+        pickupLat: trip.booking.taxiDetail?.pickupLat ?? null,
+        pickupLng: trip.booking.taxiDetail?.pickupLng ?? null,
+        dropoffLat: trip.booking.taxiDetail?.dropoffLat ?? null,
+        dropoffLng: trip.booking.taxiDetail?.dropoffLng ?? null,
+      });
+    } catch (err) {
+      console.error(JSON.stringify({
+        level: 'error',
+        service: 'taxi-heartbeat',
+        message: 'auto-transition failed (non-blocking)',
+        bookingId,
+        error: err instanceof Error ? err.message : String(err),
+        timestamp: new Date().toISOString(),
+      }));
+    }
 
     // Geofencing: alert client when driver approaches pickup location.
     // Skips silently when pickup coords are not set (legacy bookings).

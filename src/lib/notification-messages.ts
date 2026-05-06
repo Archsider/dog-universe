@@ -258,6 +258,15 @@ export const NOTIFICATION_MESSAGES: Record<string, MessageFactory> = {
     messageAr: 'وصل السائق للتو إلى عنوانك.',
   }),
 
+  TAXI_ARRIVING_SOON: ({ minutes }) => ({
+    titleFr: '🚗 Votre chauffeur arrive bientôt',
+    titleEn: '🚗 Your driver is arriving soon',
+    titleAr: '🚗 السائق يصل قريبا',
+    messageFr: `Votre chauffeur arrive dans ${minutes} minute${Number(minutes) > 1 ? 's' : ''}.`,
+    messageEn: `Your driver arrives in ${minutes} minute${Number(minutes) > 1 ? 's' : ''}.`,
+    messageAr: `السائق يصل في ${minutes} دقائق.`,
+  }),
+
   // ── Admin notifications ────────────────────────────────────────────────────
 
   BOOKING_REQUEST: ({ clientName, serviceTypeFr, serviceTypeEn, petNames, bookingRef }) => ({
