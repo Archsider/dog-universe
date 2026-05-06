@@ -6,21 +6,10 @@ import { toNumber } from '@/lib/decimal';
 
 interface Params { params: Promise<{ id: string }> }
 
-/**
- * Adds a product line to the open invoice of a booking.
- *
- * Atomic transaction:
- *   1) lock the product row (FOR UPDATE) and verify stock
- *   2) create the InvoiceItem (category PRODUCT) with description = "name [brand · ref]"
- *   3) decrement Product.stock by qty
- *   4) bump Invoice.amount by line total
- *
- * Returns the new InvoiceItem.
- */
 export async function POST(request: NextRequest, { params }: Params) {
   const { id: bookingId } = await params;
   const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
+  if (!session?.user || session.user.role !== 'CLIENT') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -33,15 +22,24 @@ export async function POST(request: NextRequest, { params }: Params) {
   const parsed = body as { productId?: unknown; quantity?: unknown };
   const productId = typeof parsed.productId === 'string' ? parsed.productId : '';
   const quantity = Number(parsed.quantity);
-  if (!productId || !Number.isInteger(quantity) || quantity <= 0 || quantity > 1000) {
+  if (!productId || !Number.isInteger(quantity) || quantity <= 0 || quantity > 100) {
     return NextResponse.json({ error: 'INVALID_PARAMS' }, { status: 400 });
   }
 
+  // Verify booking belongs to this client and is in a state that allows product orders
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
-    select: { id: true, invoice: { select: { id: true, status: true, amount: true, version: true } } },
+    where: { id: bookingId, clientId: session.user.id, deletedAt: null },
+    select: {
+      id: true,
+      status: true,
+      bookingPets: { select: { pet: { select: { name: true } } } },
+      invoice: { select: { id: true, status: true, amount: true } },
+    },
   });
   if (!booking) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+  if (!['CONFIRMED', 'IN_PROGRESS'].includes(booking.status)) {
+    return NextResponse.json({ error: 'BOOKING_NOT_ACTIVE' }, { status: 400 });
+  }
   if (!booking.invoice) {
     return NextResponse.json({ error: 'NO_INVOICE' }, { status: 400 });
   }
@@ -53,28 +51,22 @@ export async function POST(request: NextRequest, { params }: Params) {
   try {
     const result = await prisma.$transaction(async (tx) => {
       const product = await tx.product.findUnique({ where: { id: productId } });
-      if (!product || !product.available) {
-        throw new Error('PRODUCT_UNAVAILABLE');
-      }
-      if (product.stock < quantity) {
-        throw new Error('OUT_OF_STOCK');
-      }
+      if (!product || !product.available) throw new Error('PRODUCT_UNAVAILABLE');
+      if (product.stock < quantity) throw new Error('OUT_OF_STOCK');
 
       const unitPrice = toNumber(product.price);
       const total = Number((unitPrice * quantity).toFixed(2));
       const descParts = [product.name];
       if (product.brand) descParts.push(product.brand);
       if (product.reference) descParts.push(`réf. ${product.reference}`);
-      const description = descParts.join(' · ');
 
       const item = await tx.invoiceItem.create({
         data: {
           invoiceId,
-          description,
+          description: descParts.join(' · '),
           quantity,
           unitPrice: new Prisma.Decimal(unitPrice),
           total: new Prisma.Decimal(total),
-          // productId présent → category forcée à 'PRODUCT' (règle métier).
           productId,
           category: 'PRODUCT',
         },
@@ -94,23 +86,30 @@ export async function POST(request: NextRequest, { params }: Params) {
         data: { amount: { increment: new Prisma.Decimal(total) } },
       });
 
-      return item;
+      return { item, productName: product.name, quantity, bookingId };
     });
 
+    // Notify admins (non-blocking)
+    const clientName = session.user.name ?? 'Client';
+    const petNames = booking.bookingPets.map((bp) => bp.pet?.name).filter(Boolean).join(', ') || 'animal';
+    import('@/lib/notifications').then(({ notifyAdminsProductOrder }) =>
+      notifyAdminsProductOrder({ clientName, productName: result.productName, quantity, bookingId, petNames }).catch(() => {})
+    ).catch(() => {});
+
     return NextResponse.json({
-      id: result.id,
-      description: result.description,
-      quantity: result.quantity,
-      unitPrice: toNumber(result.unitPrice),
-      total: toNumber(result.total),
-      category: result.category,
+      id: result.item.id,
+      description: result.item.description,
+      quantity: result.item.quantity,
+      unitPrice: toNumber(result.item.unitPrice),
+      total: toNumber(result.item.total),
+      category: result.item.category,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'UNKNOWN';
     if (msg === 'PRODUCT_UNAVAILABLE' || msg === 'OUT_OF_STOCK') {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
-    console.error(JSON.stringify({ level: 'error', service: 'booking-products', message: 'add product failed', err: msg }));
+    console.error(JSON.stringify({ level: 'error', service: 'client-products', message: 'add product failed', err: msg }));
     return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });
   }
 }

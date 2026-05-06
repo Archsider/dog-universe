@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatMAD } from '@/lib/utils';
+import { Trash2 } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -17,9 +18,9 @@ interface InvoiceItemView {
   id: string;
   description: string;
   quantity: number;
+  unitPrice: number;
   total: number;
   category: string;
-  // Optimistic-only flag — true while the server hasn't ACK'd
   pending?: boolean;
 }
 
@@ -27,8 +28,8 @@ interface AddProductSectionProps {
   bookingId: string;
   hasInvoice: boolean;
   initialItems: InvoiceItemView[];
-  startDate: string;          // ISO
-  endDate: string | null;     // ISO or null
+  startDate: string;
+  endDate: string | null;
   isOpenEnded: boolean;
   pricePerNight: number;
   petCount: number;
@@ -57,6 +58,11 @@ export default function AddProductSection({
   const [items, setItems] = useState<InvoiceItemView[]>(initialItems);
   const [error, setError] = useState<string | null>(null);
 
+  // Per-item states for inline edit / delete
+  const [editQty, setEditQty] = useState<Record<string, number>>({});
+  const [savingItem, setSavingItem] = useState<string | null>(null);
+  const [deletingItem, setDeletingItem] = useState<string | null>(null);
+
   useEffect(() => {
     let alive = true;
     fetch('/api/admin/products')
@@ -68,13 +74,9 @@ export default function AddProductSection({
       .finally(() => {
         if (alive) setLoadingProducts(false);
       });
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
-  // Provisional total = nights × pricePerNight × petCount + sum(non-boarding items)
-  // Règle métier : pension = pricePerNight × bookingPets.length × nbNuits.
   const start = new Date(startDate);
   const end = endDate ? new Date(endDate) : new Date();
   const diffMs = Math.max(0, end.getTime() - start.getTime());
@@ -99,17 +101,15 @@ export default function AddProductSection({
     setError(null);
 
     const product = products.find((p) => p.id === productId);
-    if (!product) {
-      setSubmitting(false);
-      return;
-    }
+    if (!product) { setSubmitting(false); return; }
+
     const tempId = `tmp_${Date.now()}`;
     const optimistic: InvoiceItemView = {
       id: tempId,
       description: [product.name, product.brand, product.reference ? `réf. ${product.reference}` : null]
-        .filter(Boolean)
-        .join(' · '),
+        .filter(Boolean).join(' · '),
       quantity,
+      unitPrice: product.price,
       total: Number((product.price * quantity).toFixed(2)),
       category: 'PRODUCT',
       pending: true,
@@ -127,7 +127,7 @@ export default function AddProductSection({
         throw new Error(data?.error ?? 'ERROR');
       }
       const created: InvoiceItemView = await res.json();
-      setItems((prev) => prev.map((it) => (it.id === tempId ? { ...created } : it)));
+      setItems((prev) => prev.map((it) => it.id === tempId ? { ...created, pending: false } : it));
       setProductId('');
       setQuantity(1);
       router.refresh();
@@ -135,18 +135,52 @@ export default function AddProductSection({
       setItems((prev) => prev.filter((it) => it.id !== tempId));
       const code = err instanceof Error ? err.message : 'ERROR';
       const msg =
-        code === 'OUT_OF_STOCK'
-          ? t('Stock insuffisant', 'Out of stock')
-          : code === 'PRODUCT_UNAVAILABLE'
-          ? t('Produit indisponible', 'Product unavailable')
-          : code === 'NO_INVOICE'
-          ? t('Pas de facture liée', 'No linked invoice')
-          : t("Erreur lors de l'ajout", 'Failed to add product');
+        code === 'OUT_OF_STOCK' ? t('Stock insuffisant', 'Out of stock')
+        : code === 'PRODUCT_UNAVAILABLE' ? t('Produit indisponible', 'Product unavailable')
+        : code === 'NO_INVOICE' ? t('Pas de facture liée', 'No linked invoice')
+        : t("Erreur lors de l'ajout", 'Failed to add product');
       setError(msg);
     } finally {
       setSubmitting(false);
     }
   }
+
+  async function updateQty(item: InvoiceItemView) {
+    const newQty = editQty[item.id];
+    if (!newQty || newQty === item.quantity || newQty <= 0) {
+      setEditQty((prev) => { const n = { ...prev }; delete n[item.id]; return n; });
+      return;
+    }
+    setSavingItem(item.id);
+    const res = await fetch(`/api/admin/bookings/${bookingId}/update-product/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ quantity: newQty }),
+    });
+    if (res.ok) {
+      const updated: InvoiceItemView = await res.json();
+      setItems((prev) => prev.map((it) => it.id === item.id ? { ...updated } : it));
+      setEditQty((prev) => { const n = { ...prev }; delete n[item.id]; return n; });
+      router.refresh();
+    }
+    setSavingItem(null);
+  }
+
+  async function deleteItem(item: InvoiceItemView) {
+    if (item.pending) return;
+    setDeletingItem(item.id);
+    const res = await fetch(`/api/admin/bookings/${bookingId}/remove-product/${item.id}`, {
+      method: 'DELETE',
+    });
+    if (res.status === 204) {
+      setItems((prev) => prev.filter((it) => it.id !== item.id));
+      router.refresh();
+    }
+    setDeletingItem(null);
+  }
+
+  const productItems = items.filter((i) => i.category === 'PRODUCT');
+  const otherItems = items.filter((i) => i.category !== 'PRODUCT' && i.category !== 'BOARDING');
 
   return (
     <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
@@ -157,7 +191,7 @@ export default function AddProductSection({
       {!hasInvoice && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mb-3">
           {t(
-            'Créez d’abord une facture pour ce séjour avant d’ajouter des produits.',
+            "Créez d'abord une facture pour ce séjour avant d'ajouter des produits.",
             'Create an invoice for this booking first before adding products.',
           )}
         </p>
@@ -200,26 +234,81 @@ export default function AddProductSection({
         {error && <p className="text-xs text-red-600">{error}</p>}
       </form>
 
-      {items.length > 0 && (
+      {/* Product items list with inline edit + delete */}
+      {productItems.length > 0 && (
         <div className="mt-4 space-y-1">
-          <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
-            {t('Lignes facturées', 'Invoiced lines')}
+          <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-1">
+            {t('Produits facturés', 'Billed products')}
           </p>
           <ul className="divide-y divide-ivory-100 text-sm">
-            {items.map((it) => (
-              <li key={it.id} className="flex justify-between py-1">
-                <span className={it.pending ? 'text-gray-400 italic' : 'text-charcoal'}>
-                  {it.description} × {it.quantity}
-                </span>
-                <span className={it.pending ? 'text-gray-400' : 'text-charcoal font-medium'}>
-                  {formatMAD(it.total)}
-                </span>
+            {productItems.map((it) => {
+              const isEditing = editQty[it.id] !== undefined;
+              const isSaving = savingItem === it.id;
+              const isDeleting = deletingItem === it.id;
+              return (
+                <li key={it.id} className="flex items-center gap-2 py-1.5">
+                  <span className={`flex-1 text-xs ${it.pending ? 'text-gray-400 italic' : 'text-charcoal'}`}>
+                    {it.description}
+                  </span>
+                  {/* Inline qty edit */}
+                  {it.pending ? (
+                    <span className="text-xs text-gray-400">× {it.quantity}</span>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={1}
+                        max={1000}
+                        value={isEditing ? editQty[it.id] : it.quantity}
+                        onChange={(e) => {
+                          const v = Math.max(1, parseInt(e.target.value, 10) || 1);
+                          setEditQty((prev) => ({ ...prev, [it.id]: v }));
+                        }}
+                        onBlur={() => updateQty(it)}
+                        onKeyDown={(e) => e.key === 'Enter' && updateQty(it)}
+                        disabled={isSaving || isDeleting}
+                        className="w-14 border border-ivory-200 rounded px-1.5 py-0.5 text-xs text-center"
+                      />
+                    </div>
+                  )}
+                  <span className={`text-xs font-medium w-20 text-right ${it.pending ? 'text-gray-400' : 'text-charcoal'}`}>
+                    {formatMAD(it.total)}
+                  </span>
+                  {!it.pending && (
+                    <button
+                      onClick={() => deleteItem(it)}
+                      disabled={isDeleting || isSaving}
+                      className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-50"
+                      title={t('Supprimer', 'Remove')}
+                    >
+                      {isDeleting ? <span className="text-xs">…</span> : <Trash2 className="h-3.5 w-3.5" />}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* Other non-boarding, non-product items */}
+      {otherItems.length > 0 && (
+        <div className="mt-3 space-y-1">
+          <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-1">
+            {t('Autres lignes facturées', 'Other invoiced lines')}
+          </p>
+          <ul className="divide-y divide-ivory-100 text-sm">
+            {otherItems.map((it) => (
+              <li key={it.id} className="flex justify-between py-1 text-xs">
+                <span className="text-charcoal">{it.description} × {it.quantity}</span>
+                <span className="text-charcoal font-medium">{formatMAD(it.total)}</span>
               </li>
             ))}
           </ul>
         </div>
       )}
 
+      {/* Provisional total */}
       <div className="mt-3 pt-3 border-t border-ivory-100 text-sm">
         <div className="flex justify-between text-gray-500">
           <span>

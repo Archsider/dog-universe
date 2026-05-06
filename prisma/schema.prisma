@@ -562,15 +562,16 @@ model Product {
   name      String
   brand     String?
   reference String?
+  category  String?  // libre : "Alimentation", "Accessoires", "Hygiène", etc.
   price     Decimal  @db.Decimal(10, 2)
   stock     Int      @default(0)
-  active    Boolean  @default(true)
+  available Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   invoiceItems InvoiceItem[]
 
-  @@index([active])
+  @@index([available])
 }
 
 // Historical revenue summaries — for pre-production data entry (Jan/Feb/Mar/etc.)

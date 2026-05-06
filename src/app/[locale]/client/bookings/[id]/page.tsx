@@ -21,6 +21,7 @@ import RescheduleBookingButton from './RescheduleBookingButton';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 import { RebookButton } from '@/components/client/RebookButton';
 import StayPhotoFeed from '@/components/client/StayPhotoFeed';
+import ClientProductOrder from './ClientProductOrder';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -805,6 +806,24 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Product ordering — only for active BOARDING stays */}
+        {isBoarding && ['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && (
+          <ClientProductOrder
+            bookingId={booking.id}
+            locale={locale}
+            initialItems={
+              (booking.invoice?.items ?? [])
+                .filter((it) => it.category === 'PRODUCT')
+                .map((it) => ({
+                  id: it.id,
+                  description: it.description,
+                  quantity: it.quantity,
+                  total: toNumber(it.total),
+                }))
+            }
+          />
         )}
 
         {/* Stay photos — Instagram-like feed */}

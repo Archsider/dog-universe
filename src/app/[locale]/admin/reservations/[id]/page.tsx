@@ -615,8 +615,9 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                 id: it.id,
                 description: it.description,
                 quantity: it.quantity,
+                unitPrice: toNumber(it.unitPrice),
                 total: toNumber(it.total),
-                category: it.category,
+                category: String(it.category),
               }))}
               startDate={booking.startDate.toISOString()}
               endDate={booking.endDate ? booking.endDate.toISOString() : null}

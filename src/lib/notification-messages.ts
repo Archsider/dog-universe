@@ -313,4 +313,13 @@ export const NOTIFICATION_MESSAGES: Record<string, MessageFactory> = {
     messageEn: `${clientName} requests a stay extension for ${petNames} (ref. ${bookingRef}) — requested new checkout: ${requestedEndDate}`,
     messageAr: `${clientName} يطلب تمديد الإقامة لـ ${petNames} (المرجع ${bookingRef}) — تاريخ المغادرة الجديد المطلوب: ${requestedEndDate}`,
   }),
+
+  PRODUCT_ORDER: ({ clientName, productName, quantity, petNames }) => ({
+    titleFr: 'Commande produit par un client',
+    titleEn: 'Product order from client',
+    titleAr: 'طلب منتج من العميل',
+    messageFr: `${clientName} a commandé ${productName} × ${quantity} pour ${petNames}`,
+    messageEn: `${clientName} ordered ${productName} × ${quantity} for ${petNames}`,
+    messageAr: `${clientName} طلب ${productName} × ${quantity} لـ ${petNames}`,
+  }),
 };

@@ -27,6 +27,7 @@ import {
   TrendingUp,
   Star,
   Car,
+  Package,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -53,6 +54,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
     { href: `/${locale}/admin/board`, labelKey: 'board', icon: LayoutGrid },
     { href: `/${locale}/admin/driver`, labelKey: 'driver', icon: Car },
     { href: `/${locale}/admin/billing`, labelKey: 'billing', icon: Receipt },
+    { href: `/${locale}/admin/products`, labelKey: 'products', icon: Package },
     { href: `/${locale}/admin/contracts`, labelKey: 'contracts', icon: FileText },
     { href: `/${locale}/admin/loyalty`, labelKey: 'loyalty', icon: Gift },
     { href: `/${locale}/admin/reviews`, labelKey: 'reviews', icon: Star },

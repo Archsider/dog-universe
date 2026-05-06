@@ -35,7 +35,8 @@ export type NotificationType =
   | 'STAY_PHOTO_ADDED'           // client receives when new stay photos are uploaded (Instagram-like feed)
   | 'WEEKLY_PET_REPORT'         // client receives weekly AI-generated stay report during IN_PROGRESS boarding
   | 'INVOICE_OVERDUE'           // client receives when an invoice is unpaid at J+30 then J+60
-  | 'REVIEW_REQUEST';           // client receives after a completed stay to submit a review
+  | 'REVIEW_REQUEST'            // client receives after a completed stay to submit a review
+  | 'PRODUCT_ORDER';            // admin receives when a client orders a product on an active booking
 
 interface CreateNotificationData {
   userId: string;
@@ -587,4 +588,20 @@ export async function promoteWaitlistedBooking(args: {
   await createWaitlistPromotedNotification(candidate.clientId, bookingRef, petNames);
 
   return candidate.id;
+}
+
+export async function notifyAdminsProductOrder(args: {
+  clientName: string;
+  productName: string;
+  quantity: number;
+  petNames: string;
+  bookingId: string;
+}) {
+  const msg = NOTIFICATION_MESSAGES.PRODUCT_ORDER({
+    clientName: args.clientName,
+    productName: args.productName,
+    quantity: String(args.quantity),
+    petNames: args.petNames,
+  });
+  return createAdminNotifications({ type: 'PRODUCT_ORDER', ...msg, metadata: { bookingId: args.bookingId } });
 }
