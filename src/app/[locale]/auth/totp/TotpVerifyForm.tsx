@@ -1,15 +1,12 @@
 'use client';
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 
 export function TotpVerifyForm() {
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const { update } = useSession();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,19 +30,20 @@ export function TotpVerifyForm() {
         return;
       }
 
-      // Déclenche le renouvellement du JWT pour effacer totpPending
-      await update();
+      // Force le jwt callback Node-side à s'exécuter et re-signer le cookie
+      // avec totpPending=false. Sans ce hit, le middleware Edge verrait encore
+      // l'ancien JWT et redirigerait en boucle vers /auth/totp.
+      await fetch('/api/auth/session', { cache: 'no-store', credentials: 'same-origin' });
+
       // P0: validate callbackUrl to prevent open redirect to external domains
       const rawCallbackUrl = searchParams.get('callbackUrl') ?? '';
-      // Locale-aware: support fr/en/ar prefixes. Default falls back to the
-      // user's locale if we can detect it from the current path.
       const isSafeCallback = /^\/(fr|en|ar)\//.test(rawCallbackUrl);
       const localeFromPath = (typeof window !== 'undefined'
         ? window.location.pathname.match(/^\/(fr|en|ar)\//)?.[1]
         : null) ?? 'fr';
       const callbackUrl = isSafeCallback ? rawCallbackUrl : `/${localeFromPath}/admin`;
-      router.push(callbackUrl);
-      router.refresh();
+      // Hard nav garantit que le middleware lit le nouveau cookie JWT.
+      window.location.href = callbackUrl;
     } catch {
       setError('Erreur réseau. Réessayez.');
     } finally {
