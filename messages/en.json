@@ -61,6 +61,7 @@
       "calendar": "Calendar",
       "reservations": "Reservations",
       "board": "Operations Board",
+      "driver": "Driver Mode",
       "billing": "Billing",
       "analytics": "Analytics",
       "logs": "Logs",

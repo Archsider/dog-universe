@@ -26,6 +26,7 @@ import {
   Gift,
   TrendingUp,
   Star,
+  Car,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -50,6 +51,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
     { href: `/${locale}/admin/calendar`, labelKey: 'calendar', icon: Calendar },
     { href: `/${locale}/admin/reservations`, labelKey: 'reservations', icon: ClipboardList },
     { href: `/${locale}/admin/board`, labelKey: 'board', icon: LayoutGrid },
+    { href: `/${locale}/admin/driver`, labelKey: 'driver', icon: Car },
     { href: `/${locale}/admin/billing`, labelKey: 'billing', icon: Receipt },
     { href: `/${locale}/admin/contracts`, labelKey: 'contracts', icon: FileText },
     { href: `/${locale}/admin/loyalty`, labelKey: 'loyalty', icon: Gift },

@@ -41,9 +41,63 @@ export default function TaxiTrackingButton({
   const router = useRouter();
   const isFr = locale !== 'en';
   const [busy, setBusy] = useState(false);
+  const [queueSize, setQueueSize] = useState(0);
+  const prevQueueSizeRef = useRef(0);
   // Refs : watchPosition pour GPS continu, Wake Lock pour garder l'écran allumé
   const watchIdRef = useRef<number | null>(null);
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
+
+  // Enregistre le SW chauffeur (offline GPS buffer) au mount.
+  // Distinct du sw.js PWA général : scope limité à /admin/reservations/.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    navigator.serviceWorker
+      .register('/sw-driver.js', { scope: '/admin/reservations/' })
+      .catch((err) => console.warn('[sw-driver register]', err));
+  }, []);
+
+  // Polling toutes les 5 s : récupère la taille de la queue offline + écoute les messages push du SW.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    const requestSize = () => {
+      const reg = navigator.serviceWorker.controller;
+      if (!reg) return;
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (e) => {
+        if (e.data?.type === 'QUEUE_SIZE') {
+          setQueueSize(e.data.size || 0);
+        }
+      };
+      reg.postMessage({ type: 'GET_QUEUE_SIZE' }, [channel.port2]);
+    };
+
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'QUEUE_UPDATED') {
+        setQueueSize(e.data.size || 0);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+
+    requestSize();
+    const interval = setInterval(requestSize, 5000);
+    return () => {
+      clearInterval(interval);
+      navigator.serviceWorker.removeEventListener('message', onMessage);
+    };
+  }, []);
+
+  // Toast quand la queue revient à 0 après avoir été > 0 (synchronisation terminée)
+  useEffect(() => {
+    if (prevQueueSizeRef.current > 0 && queueSize === 0) {
+      toast({
+        title: isFr ? 'Positions synchronisées' : 'Positions synced',
+        description: isFr ? 'Toutes les positions ont été synchronisées.' : 'All positions have been synced.',
+        variant: 'success',
+      });
+    }
+    prevQueueSizeRef.current = queueSize;
+  }, [queueSize, isFr]);
 
   // Démarre / arrête le watch GPS + le wake lock quand trackingActive change
   useEffect(() => {
@@ -191,6 +245,16 @@ export default function TaxiTrackingButton({
 
   return (
     <div className="mt-3 space-y-2">
+      {queueSize > 0 && (
+        <div className="px-3 py-2 rounded-md bg-yellow-50 border border-yellow-300 text-yellow-900 text-xs font-medium flex items-center gap-2">
+          <span className="animate-pulse">🔄</span>
+          <span>
+            {isFr
+              ? `${queueSize} position${queueSize > 1 ? 's' : ''} en attente de synchronisation`
+              : `${queueSize} position${queueSize > 1 ? 's' : ''} pending sync`}
+          </span>
+        </div>
+      )}
       {!trackingActive ? (
         <button
           type="button"

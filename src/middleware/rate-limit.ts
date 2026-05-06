@@ -52,6 +52,16 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(60, '60 m'),
       prefix: 'rl:taxi-stream',
     }),
+    // Public taxi tracking JSON endpoint (/api/taxi-tracking/{token}/...): the
+    // tracking page polls this as a fallback when SSE is unavailable. 600/h
+    // (= 10/min) is generous for normal use (a polling client at 10 s = 360/h)
+    // and bounds Postgres exposure to brute-force token enumeration. IP-based
+    // bucket — viewers are unauthenticated.
+    taxiTracking: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(600, '60 m'),
+      prefix: 'rl:taxi-tracking',
+    }),
     // RGPD ops (export + anonymize): 5 per hour per IP — these are expensive
     // (full DB read or transactional write) and abusable for DoS/scraping.
     rgpd: new Ratelimit({
@@ -107,7 +117,7 @@ export const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
   '/api/auth/totp/disable': 'auth',
 };
 
-type DynamicBucket = 'uploads' | 'auth' | 'passwordReset' | 'bookings' | 'taxiStream' | 'addonRequest';
+type DynamicBucket = 'uploads' | 'auth' | 'passwordReset' | 'bookings' | 'taxiStream' | 'taxiTracking' | 'addonRequest';
 
 // Routes rate-limited regardless of HTTP method (e.g. expensive GETs).
 export const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'health' | 'availability'> = {
@@ -126,6 +136,12 @@ export function getDynamicLimitBucket(path: string): DynamicBucket | null {
   // /api/taxi/{token}/stream — public SSE endpoint, 60 opens/h per IP
   if (path.startsWith('/api/taxi/') && path.endsWith('/stream')) {
     return 'taxiStream';
+  }
+  // /api/taxi-tracking/{token}/... — public JSON tracking endpoints (state +
+  // history). Unauthenticated, IP-bucketed. 600/h cap is plenty for a normal
+  // polling viewer (~360/h) and blocks token brute-force scans.
+  if (path.startsWith('/api/taxi-tracking/')) {
+    return 'taxiTracking';
   }
   // /api/bookings/{id}/addon-request — client adds extra service to a booking
   if (path.startsWith('/api/bookings/') && path.endsWith('/addon-request')) {
@@ -193,6 +209,7 @@ export async function checkRateLimit(
         : request.method === 'POST'
       : anyMethodKey ? true :
     dynamicKey === 'taxiStream' ? request.method === 'GET' :
+    dynamicKey === 'taxiTracking' ? request.method === 'GET' :
     dynamicKey ? request.method === 'POST' :
     true; // admin mutation
 

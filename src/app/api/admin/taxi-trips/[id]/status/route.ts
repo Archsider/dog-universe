@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { sendSMS, sendAdminSMS, petVerb, petArrived, petReturned } from '@/lib/sms';
+import { clearLocation } from '@/lib/taxi-location';
 
 const FLOWS: Record<string, string[]> = {
   OUTBOUND:   ['PLANNED', 'EN_ROUTE_TO_CLIENT', 'ON_SITE_CLIENT', 'ANIMAL_ON_BOARD', 'ARRIVED_AT_PENSION'],
@@ -9,6 +10,10 @@ const FLOWS: Record<string, string[]> = {
   RETURN:     ['PLANNED', 'ANIMAL_ON_BOARD', 'EN_ROUTE_TO_CLIENT', 'ARRIVED_AT_CLIENT'],
 };
 
+// Terminal trip statuses — when reached we (a) stop the SSE stream by setting
+// trackingActive=false, (b) ROTATE trackingToken to null so any cached SMS
+// link returns 404, and (c) clear the Redis location cache. Admins can still
+// view the historical replay via /admin/reservations/[id] (cookie-auth).
 const TERMINAL = new Set(['ARRIVED_AT_PENSION', 'ARRIVED_AT_CLIENT']);
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -47,16 +52,32 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     );
   }
 
+  const reachedTerminal = TERMINAL.has(nextStatus);
+
+  // On terminal transition: rotate trackingToken to null + disable trackingActive.
+  // Anyone still holding the old SMS link will hit 404 on /track/[token] and
+  // 404 on the SSE endpoint. Admin replay path is unaffected (auth, no token).
   await prisma.$transaction([
-    prisma.taxiTrip.update({ where: { id: id }, data: { status: nextStatus } }),
+    prisma.taxiTrip.update({
+      where: { id: id },
+      data: reachedTerminal
+        ? { status: nextStatus, trackingActive: false, trackingToken: null }
+        : { status: nextStatus },
+    }),
     prisma.taxiStatusHistory.create({
       data: { taxiTripId: id, status: nextStatus, updatedBy: session.user.id },
     }),
   ]);
 
+  // Best-effort: drop the Redis last-known location so a stale entry doesn't
+  // linger for an hour after the trip ends. clearLocation never throws.
+  if (reachedTerminal) {
+    await clearLocation(trip.bookingId);
+  }
+
   // Sync Booking.status for STANDALONE trips
   if (trip.tripType === 'STANDALONE') {
-    if (TERMINAL.has(nextStatus)) {
+    if (reachedTerminal) {
       await prisma.booking.update({ where: { id: trip.bookingId }, data: { status: 'COMPLETED' } });
     } else if (trip.status === 'PLANNED') {
       await prisma.booking.update({
