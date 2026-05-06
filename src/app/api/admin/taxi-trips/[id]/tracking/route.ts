@@ -3,6 +3,10 @@ import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { sendSMS } from '@/lib/sms';
 import { recordLocation, clearLocation, haversineKm } from '@/lib/taxi-location';
+import { maybeAutoTransition } from '@/lib/taxi-auto-transition';
+
+const MAX_ACCURACY_METERS = 50;
+const MAX_SPEED_KMH = 200;
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
 const MAX_LOCATIONS_PER_TRIP = 50;
@@ -38,7 +42,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const trip = await prisma.taxiTrip.findUnique({
     where: { id: id },
-    select: { id: true, bookingId: true, trackingActive: true, trackingToken: true, distanceKm: true },
+    select: {
+      id: true,
+      bookingId: true,
+      trackingActive: true,
+      trackingToken: true,
+      distanceKm: true,
+      status: true,
+      booking: {
+        select: {
+          clientId: true,
+          taxiDetail: {
+            select: {
+              pickupLat: true,
+              pickupLng: true,
+              dropoffLat: true,
+              dropoffLng: true,
+            },
+          },
+        },
+      },
+    },
   });
   if (!trip) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -111,16 +135,45 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'INVALID_COORDINATES' }, { status: 400 });
     }
 
+    // ── Quality gate: reject low-accuracy fixes (>50 m horizontal error) ──
+    if (isValidNumber(accuracy) && accuracy > MAX_ACCURACY_METERS) {
+      console.error(JSON.stringify({
+        level: 'info',
+        service: 'taxi-tracking',
+        message: 'gps point ignored (low_accuracy)',
+        tripId: id,
+        accuracy,
+        timestamp: new Date().toISOString(),
+      }));
+      return NextResponse.json({ ok: true, ignored: 'low_accuracy' });
+    }
+
     // Compute distance delta from the previous GPS point (noise-filtered at 10 m).
     const prev = await prisma.taxiLocation.findFirst({
       where: { taxiTripId: id },
       orderBy: { createdAt: 'desc' },
-      select: { latitude: true, longitude: true },
+      select: { latitude: true, longitude: true, createdAt: true },
     });
 
     let deltaKm = 0;
     if (prev) {
       const d = haversineKm(prev.latitude, prev.longitude, latitude, longitude);
+      // ── Quality gate: reject implausible speeds (>200 km/h teleport / GPS bug) ──
+      const dtSec = Math.max(0.001, (Date.now() - prev.createdAt.getTime()) / 1000);
+      const speedKmh = (d / dtSec) * 3600;
+      if (speedKmh > MAX_SPEED_KMH) {
+        console.error(JSON.stringify({
+          level: 'info',
+          service: 'taxi-tracking',
+          message: 'gps point ignored (speed_outlier)',
+          tripId: id,
+          speedKmh: Math.round(speedKmh),
+          deltaKm: d,
+          dtSec,
+          timestamp: new Date().toISOString(),
+        }));
+        return NextResponse.json({ ok: true, ignored: 'speed_outlier' });
+      }
       if (d >= 0.01) deltaKm = d; // ignore < 10 m (GPS drift)
     }
 
@@ -171,6 +224,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await prisma.taxiLocation.deleteMany({
         where: { id: { in: stale.map(r => r.id) } },
       });
+    }
+
+    // ── Auto-transitions on geofence approach ──
+    // Wrapped: failure here must never break the position write above.
+    try {
+      await maybeAutoTransition({
+        tripId: id,
+        currentStatus: trip.status,
+        currentLat: latitude,
+        currentLng: longitude,
+        pickupLat: trip.booking?.taxiDetail?.pickupLat ?? null,
+        pickupLng: trip.booking?.taxiDetail?.pickupLng ?? null,
+        dropoffLat: trip.booking?.taxiDetail?.dropoffLat ?? null,
+        dropoffLng: trip.booking?.taxiDetail?.dropoffLng ?? null,
+      });
+    } catch (err) {
+      console.error(JSON.stringify({
+        level: 'error',
+        service: 'taxi-tracking',
+        message: 'auto-transition failed (non-blocking)',
+        tripId: id,
+        error: err instanceof Error ? err.message : String(err),
+        timestamp: new Date().toISOString(),
+      }));
     }
 
     return NextResponse.json({ ok: true });

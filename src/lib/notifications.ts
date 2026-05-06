@@ -25,6 +25,7 @@ export type NotificationType =
   | 'TAXI_HEARTBEAT_LOST'       // admin receives when no GPS heartbeat for >5 min on an active taxi trip
   | 'TAXI_NEAR_PICKUP'          // client receives when driver is within ~1 km of pickup location
   | 'TAXI_ARRIVED'              // client receives when driver is within ~100 m of pickup location
+  | 'TAXI_ARRIVING_SOON'        // client receives when ETA to pickup drops below 5 min
   | 'BOOKING_EXTENDED'          // client receives when stay is extended (admin direct or approved)
   | 'BOOKING_NO_SHOW'           // client receives when booking is marked NO_SHOW by admin
   | 'BOOKING_WAITLISTED'        // client receives when booking is queued on the waitlist
@@ -427,6 +428,22 @@ export async function createTaxiArrivedNotification(
 ) {
   const msg = NOTIFICATION_MESSAGES.TAXI_ARRIVED({});
   return createNotification({ userId, type: 'TAXI_ARRIVED', ...msg, metadata: { bookingId } });
+}
+
+export async function createTaxiArrivingSoonNotification(
+  userId: string,
+  bookingId: string,
+  etaSec: number,
+  _locale: string,
+) {
+  const minutes = Math.max(1, Math.round(etaSec / 60));
+  const msg = NOTIFICATION_MESSAGES.TAXI_ARRIVING_SOON({ minutes: String(minutes) });
+  return createNotification({
+    userId,
+    type: 'TAXI_ARRIVING_SOON',
+    ...msg,
+    metadata: { bookingId, etaSec: String(etaSec) },
+  });
 }
 
 // ─── Addon request notifications ─────────────────────────────────────────────
