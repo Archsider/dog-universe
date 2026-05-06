@@ -1,4 +1,4 @@
-import { auth } from '../../auth';
+import { auth } from '../../auth.edge';
 
 /**
  * Resolve the current authenticated user's ID for the purpose of bucketing

@@ -1,12 +1,19 @@
 // next-auth v5 : encore en beta (5.0.0-beta.31 au 2026-05-04). Pas de release GA.
 // Surveille https://github.com/nextauthjs/next-auth/releases — upgrade vers 5.0.0 stable
 // dès disponible. Notre code utilise déjà les API stabilisées (handlers, auth, signIn, signOut).
+//
+// Cette config Node étend la base Edge (auth.config.ts) avec :
+//   - le provider Credentials (utilise Prisma + bcrypt)
+//   - le callback jwt (hit la DB pour tokenVersion / role / TOTP)
+// Le middleware Edge utilise auth.edge.ts qui ne contient AUCUNE de ces deps.
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
+import { authConfig } from './auth.config';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       name: 'credentials',
@@ -52,11 +59,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  session: {
-    strategy: 'jwt',
-    maxAge: 24 * 60 * 60, // 1 day (réduit pour limiter la fenêtre d'exposition en cas de vol de session)
-  },
   callbacks: {
+    ...authConfig.callbacks,
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id!;
@@ -97,20 +101,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return token;
     },
-    async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id;
-        session.user.role = token.role;
-        session.user.language = token.language ?? 'fr';
-        session.user.totpPending = token.totpPending ?? false;
-        session.user.totpEnabled = (token as { totpEnabled?: boolean }).totpEnabled ?? false;
-      }
-      return session;
-    },
+    // session() callback inherited from authConfig (Edge-safe).
   },
-  pages: {
-    signIn: '/auth/login',
-    error: '/auth/login',
-  },
-  trustHost: true,
 });

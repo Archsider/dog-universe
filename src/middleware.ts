@@ -47,7 +47,7 @@ export async function middleware(request: NextRequest) {
 
   if (needsTotpCheck) {
     try {
-      const { auth } = await import('../auth');
+      const { auth } = await import('../auth.edge');
       const session = await auth();
 
       const localeMatch = pathname.match(/^\/(fr|en|ar)\//);
