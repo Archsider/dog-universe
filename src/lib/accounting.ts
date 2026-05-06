@@ -77,40 +77,25 @@ function isWithin(d: Date, start: Date, end: Date): boolean {
   return d.getTime() >= start.getTime() && d.getTime() <= end.getTime();
 }
 
+// Total encaissé pour une facture sur le mois cible. Règle « caisse prime » :
+// uniquement la somme des Payment.amount dont paymentDate ∈ [monthStart, monthEnd].
+// Aucun prorata fictif — une facture sans payment compte 0 dans les KPIs encaissés.
+// Les paramètres invoice/booking restent dans la signature pour stabilité, ils
+// ne sont plus utilisés (gardés pour limiter la blast radius des call sites).
 export function computeMonthlyRevenue(
   payments: AccountingPayment[],
-  invoice: AccountingInvoice,
-  booking: AccountingBooking | null,
+  _invoice: AccountingInvoice,
+  _booking: AccountingBooking | null,
   monthStart: Date,
   monthEnd: Date,
 ): Prisma.Decimal {
-  // CAS 2 & 3 — il y a au moins un paiement → on suit la caisse.
-  if (payments.length > 0) {
-    let acc = new Prisma.Decimal(0);
-    for (const p of payments) {
-      if (isWithin(p.paymentDate, monthStart, monthEnd)) {
-        acc = acc.plus(new Prisma.Decimal(toNumber(p.amount)));
-      }
+  let acc = new Prisma.Decimal(0);
+  for (const p of payments) {
+    if (isWithin(p.paymentDate, monthStart, monthEnd)) {
+      acc = acc.plus(new Prisma.Decimal(toNumber(p.amount)));
     }
-    return acc;
   }
-
-  // CAS 1 — Aucun paiement.
-  const invoiceAmt = new Prisma.Decimal(toNumber(invoice.amount));
-  if (booking) {
-    const start = booking.startDate;
-    // open-ended (isOpenEnded ou endDate null) → l'amount « court » jusqu'à
-    // aujourd'hui. Évite la division par zéro lorsque le séjour démarre dans
-    // le futur sans encore avoir consommé une nuit.
-    const end = booking.endDate ?? new Date();
-    const totalNights = Math.max(1, nightsBetween(start, end));
-    const inMonth = nightsOverlap(start, end, monthStart, monthEnd);
-    if (inMonth === 0) return new Prisma.Decimal(0);
-    return invoiceAmt.times(inMonth).dividedBy(totalNights);
-  }
-
-  // Pas de booking ni paiement → bucket sur issuedAt.
-  return isWithin(invoice.issuedAt, monthStart, monthEnd) ? invoiceAmt : new Prisma.Decimal(0);
+  return acc;
 }
 
 export type CategoryBreakdown = {
@@ -135,57 +120,58 @@ function bucketOf(category: string, description?: string | null): keyof Category
   return 'other';
 }
 
-// Décomposition par catégorie pour un (invoice, items, mois cible).
-// Règle métier unique — la caisse prime :
-//   1. encaisséMois = SUM(Payment.amount) où paymentDate ∈ [monthStart, monthEnd]
-//   2. Si encaisséMois = 0 ET payments.length = 0 (CAS 1, aucun paiement enregistré) :
-//      encaisséMois = invoice.amount × (nightsInMonth / totalNights)
-//      Ouvert (endDate null/isOpenEnded) → totalNights = (now - startDate),
-//      borné au mois pour nightsInMonth. Pas de booking → bucket sur issuedAt.
-//   3. Si encaisséMois = 0 ET payments.length > 0 → 0 (paiements existent
-//      mais hors mois cible).
-//   4. Ventilation par catégorie au prorata des items.total.
+// Décomposition par catégorie pour un (payments, items, mois cible).
+//
+// RÈGLE MÉTIER DÉFINITIVE — La caisse prime, allocation séquentielle :
+//   - Source de vérité = Payment.paymentDate. Pas de prorata fictif.
+//   - Aucun paiement enregistré → 0 partout (la facture reste « en attente »).
+//   - Sinon : payments triés par date asc, items dans l'ordre reçu (le caller
+//     doit fournir orderBy id asc côté Prisma — cuid est chronologique). Chaque
+//     payment est consommé séquentiellement contre les items en cours, et
+//     **uniquement** comptabilisé si Payment.paymentDate tombe dans le mois cible.
+//   - Un item ne se coupe jamais en deux mois côté logique : la portion allouée
+//     à un paiement reste indivisible. C'est la *date du payment* qui décide.
 export function computeMonthlyRevenueByCategory(
   payments: AccountingPayment[],
-  invoice: AccountingInvoice,
   items: AccountingItem[],
-  booking: AccountingBooking | null,
   monthStart: Date,
   monthEnd: Date,
 ): CategoryBreakdown {
   const result: CategoryBreakdown = { ...EMPTY_BREAKDOWN };
-  const itemsTotal = items.reduce((s, it) => s + toNumber(it.total), 0);
-  if (itemsTotal <= 0) return result;
+  if (payments.length === 0 || items.length === 0) return result;
 
-  let cashThisMonth = 0;
-  for (const p of payments) {
-    if (isWithin(p.paymentDate, monthStart, monthEnd)) {
-      cashThisMonth += toNumber(p.amount);
+  const sortedPayments = [...payments].sort(
+    (a, b) => a.paymentDate.getTime() - b.paymentDate.getTime(),
+  );
+
+  // Restant à allouer par item (Decimal — précision centime).
+  const itemRemaining: Prisma.Decimal[] = items.map(
+    (it) => new Prisma.Decimal(toNumber(it.total)),
+  );
+  let itemIdx = 0;
+
+  for (const payment of sortedPayments) {
+    const isThisMonth = isWithin(payment.paymentDate, monthStart, monthEnd);
+    let remaining = new Prisma.Decimal(toNumber(payment.amount));
+
+    while (remaining.gt(0) && itemIdx < items.length) {
+      const slot = itemRemaining[itemIdx];
+      const allocated = Prisma.Decimal.min(remaining, slot);
+
+      if (isThisMonth && allocated.gt(0)) {
+        const bucket = bucketOf(items[itemIdx].category, items[itemIdx].description);
+        result[bucket] += allocated.toNumber();
+      }
+
+      remaining = remaining.minus(allocated);
+      itemRemaining[itemIdx] = slot.minus(allocated);
+
+      if (itemRemaining[itemIdx].lte(0)) {
+        itemIdx += 1;
+      }
     }
   }
 
-  // CAS 1 — aucun paiement n'a jamais été enregistré → prorata nuits sur
-  // l'intégralité de invoice.amount (taxi/grooming/produits inclus, on suit
-  // l'estimation comptable jusqu'au moment où un Payment réel arrive).
-  if (cashThisMonth === 0 && payments.length === 0) {
-    const invAmt = toNumber(invoice.amount);
-    if (booking) {
-      const start = booking.startDate;
-      const endRef = booking.endDate ?? new Date();
-      const totalNights = Math.max(1, nightsBetween(start, endRef));
-      const inMonth = countNightsInMonth(start, booking.endDate, monthStart, monthEnd);
-      if (inMonth > 0) cashThisMonth = invAmt * (inMonth / totalNights);
-    } else if (isWithin(invoice.issuedAt, monthStart, monthEnd)) {
-      cashThisMonth = invAmt;
-    }
-  }
-
-  if (cashThisMonth === 0) return result;
-
-  for (const it of items) {
-    const share = cashThisMonth * (toNumber(it.total) / itemsTotal);
-    result[bucketOf(it.category, it.description)] += share;
-  }
   return result;
 }
 

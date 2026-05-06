@@ -3,7 +3,6 @@ import { toNumber } from '@/lib/decimal';
 import { ACTIVE_STAY_STATUSES } from '@/lib/booking-status';
 import {
   computeMonthlyRevenueByCategory,
-  getMonthlyInvoicesFilter,
   type CategoryBreakdown as AccountingCategoryBreakdown,
 } from '@/lib/accounting';
 
@@ -143,20 +142,22 @@ export async function revenueByCategoryProrata(
   // manuelle issuedAt dans le mois). On rapatrie aussi les factures payées
   // dont le paymentDate tombe dans la fenêtre — un client qui paie en avril
   // un séjour de mars produit du CA en avril (CAS 2 / 3).
+  // On ne charge que les factures dont au moins un Payment tombe dans la
+  // fenêtre — la règle métier définitive est « la caisse prime », un mois
+  // sans paiement = 0 (jamais de prorata fictif).
   const invoices = await prisma.invoice.findMany({
     where: {
-      status: { in: ['PAID', 'PARTIALLY_PAID', 'PENDING'] },
-      OR: [
-        getMonthlyInvoicesFilter(start, end),
-        { payments: { some: { paymentDate: { gte: start, lte: end } } } },
-      ],
+      status: { in: ['PAID', 'PARTIALLY_PAID'] },
+      payments: { some: { paymentDate: { gte: start, lte: end } } },
     },
     select: {
-      amount: true,
-      issuedAt: true,
-      items: { select: { category: true, description: true, total: true } },
+      // Items ordonnés chronologiquement (cuid asc ≈ created order) — l'ordre
+      // est la base de l'allocation séquentielle Payment → InvoiceItem.
+      items: {
+        select: { category: true, description: true, total: true },
+        orderBy: { id: 'asc' },
+      },
       payments: { select: { amount: true, paymentDate: true } },
-      booking: { select: { startDate: true, endDate: true, isOpenEnded: true } },
     },
     take: 2000,
   });
@@ -168,9 +169,7 @@ export async function revenueByCategoryProrata(
   for (const inv of invoices) {
     const sub: AccountingCategoryBreakdown = computeMonthlyRevenueByCategory(
       inv.payments,
-      { amount: inv.amount, issuedAt: inv.issuedAt },
       inv.items,
-      inv.booking,
       start,
       end,
     );
