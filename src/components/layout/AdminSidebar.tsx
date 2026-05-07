@@ -91,10 +91,21 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
           const isReservations = item.href.includes('/reservations');
           const isLoyalty = item.href.includes('/loyalty');
 
+          // Prefetch tweak: heavy / rarely-visited admin pages skip prefetch.
+          // /admin/logs and /admin/queues fetch large server-side lists and
+          // are visited only on incident triage — no point hydrating them
+          // for every sidebar hover. Other items keep the default prefetch
+          // (revalidate=60 ISR keeps them snappy).
+          const isRare =
+            item.href.endsWith('/admin/logs') ||
+            item.href.endsWith('/admin/queues') ||
+            item.href.endsWith('/admin/revenue-summary');
+
           return (
             <Link
               key={item.href}
               href={item.href}
+              prefetch={!isRare}
               onClick={() => setMobileOpen(false)}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',

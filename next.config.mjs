@@ -1,7 +1,12 @@
 import createNextIntlPlugin from 'next-intl/plugin';
 import { withSentryConfig } from '@sentry/nextjs';
+import bundleAnalyzer from '@next/bundle-analyzer';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+});
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -124,7 +129,7 @@ const nextConfig = {
   },
 };
 
-export default withSentryConfig(withNextIntl(nextConfig), {
+export default withSentryConfig(withBundleAnalyzer(withNextIntl(nextConfig)), {
   // Suppresses source map upload logs during build
   silent: true,
 

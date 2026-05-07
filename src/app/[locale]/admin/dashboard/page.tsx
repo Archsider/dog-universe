@@ -1,20 +1,22 @@
+import { Suspense } from 'react';
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, LogIn, LogOut, Package, CalendarOff, MessageSquare } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
-import RevenueChartWrapper from './RevenueChartWrapper';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import {
   totalCashCollected,
-  cashByMonth,
   billedByCategory,
   deltaPercent,
   currentBoarders,
   pendingBookingsCount,
   newClientsCount,
 } from '@/lib/metrics';
+import DashboardActivity from './sections/DashboardActivity';
+import DashboardLowerSections from './sections/DashboardLowerSections';
+import { SectionSkeleton } from './sections/SectionSkeleton';
 
 // Cache ISR — revalidation toutes les 60 s. Les actions admin (PATCH bookings,
 // invoices) appellent revalidateTag('admin-counts') pour invalider en cas de
@@ -29,7 +31,6 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const now = new Date();
-  const currentYear = now.getFullYear();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
   const thisMonthStart = startOfMonth(now);
@@ -46,12 +47,8 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     boarders,
     thisCash,
     lastCash,
-    recentBookings,
-    lastYearMonthly,
-    currentYearMonthly,
     loyalClientsGroups,
     newClients,
-    top5Revenue,
     pendingInvoicesAgg,
     bookingsWithoutInvoice,
     todayCheckIns,
@@ -68,19 +65,6 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     currentBoarders(),
     totalCashCollected(thisMonthStart, thisMonthEnd),
     totalCashCollected(lastMonthStart, lastMonthEnd),
-    prisma.booking.findMany({
-      where: { deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
-      select: {
-        id: true,
-        status: true,
-        client: { select: { name: true, email: true } },
-        bookingPets: { select: { pet: { select: { name: true } } } },
-      },
-      orderBy: { startDate: 'desc' },
-      take: 8,
-    }),
-    cashByMonth(currentYear - 1),
-    cashByMonth(currentYear),
     prisma.booking.groupBy({
       by: ['clientId'],
       where: { deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
@@ -88,13 +72,6 @@ export default async function AdminDashboardPage({ params }: PageProps) {
       having: { clientId: { _count: { gt: 1 } } },
     }),
     newClientsCount(thisMonthStart, thisMonthEnd, true),
-    prisma.invoice.groupBy({
-      by: ['clientId'],
-      where: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
-      _sum: { paidAmount: true },
-      orderBy: { _sum: { paidAmount: 'desc' } },
-      take: 5,
-    }),
     prisma.invoice.aggregate({
       where: { status: 'PENDING' },
       _sum: { amount: true },
@@ -170,17 +147,6 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   const capacityDog = capMap.capacity_dog ?? 50;
   const capacityCat = capMap.capacity_cat ?? 10;
 
-  const top5Users = await prisma.user.findMany({
-    where: { id: { in: top5Revenue.map(r => r.clientId) } },
-    select: { id: true, name: true, email: true },
-  });
-  const topClients = top5Revenue.map(r => ({
-    id: r.clientId,
-    name: top5Users.find(u => u.id === r.clientId)?.name ?? r.clientId,
-    email: top5Users.find(u => u.id === r.clientId)?.email ?? '',
-    totalRevenue: Number(r._sum.paidAmount ?? 0),
-  }));
-
   // CA global — paiements réels + données historiques manuelles
   const thisHistAmt = thisMonthHistorical
     ? Number(thisMonthHistorical.boardingRevenue) + Number(thisMonthHistorical.groomingRevenue) + Number(thisMonthHistorical.taxiRevenue) + Number(thisMonthHistorical.otherRevenue)
@@ -202,18 +168,7 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   const groomingDelta   = deltaPercent(thisBilled.grooming,   lastBilled.grooming);
   const croquettesDelta = deltaPercent(thisBilled.croquettes, lastBilled.croquettes);
 
-  // Graphe 12 mois — cash family (cashByMonth, 2 calendar years combined)
-  const chartLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
-  const chartData: { month: string; boarding: number; taxi: number; grooming: number; croquettes: number }[] = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
-    const yr = d.getFullYear();
-    const mo = d.getMonth();
-    const entry = yr === currentYear ? currentYearMonthly[mo] : lastYearMonthly[mo];
-    chartData.push({ month: key, boarding: entry.boarding, taxi: entry.taxi, grooming: entry.grooming, croquettes: entry.croquettes });
-  }
-
+  // Graphe 12 mois et top clients : streamés via <Suspense> (DashboardActivity / DashboardLowerSections)
   const loyalClients = loyalClientsGroups.length;
   const pendingInvoicesAmount = Number(pendingInvoicesAgg._sum.amount ?? 0);
   const pendingInvoicesCount = pendingInvoicesAgg._count.id ?? 0;
@@ -277,15 +232,6 @@ export default async function AdminDashboardPage({ params }: PageProps) {
       checkOutsToday: 'Check-outs today',
       noMovement: 'No movement',
     },
-  };
-
-  const statusColors: Record<string, string> = {
-    PENDING: 'bg-amber-100 text-amber-700',
-    CONFIRMED: 'bg-green-100 text-green-700',
-    IN_PROGRESS: 'bg-blue-100 text-blue-700',
-    COMPLETED: 'bg-gray-100 text-gray-600',
-    CANCELLED: 'bg-red-100 text-red-600',
-    REJECTED: 'bg-red-100 text-red-600',
   };
 
   const statusLabels: Record<string, Record<string, string>> = {
@@ -574,64 +520,19 @@ export default async function AdminDashboardPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Chart + Recent bookings */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
-          <h2 className="font-semibold text-charcoal mb-4">{l.revenueTitle}</h2>
-          <RevenueChartWrapper data={chartData} locale={locale} />
-        </div>
+      {/* Chart + Recent bookings — streamed via Suspense, KPIs render first */}
+      <Suspense fallback={<SectionSkeleton height="h-72" />}>
+        <DashboardActivity
+          locale={locale}
+          labels={{ recentBookings: l.recentBookings, viewAll: l.viewAll, revenueTitle: l.revenueTitle }}
+          statusLabels={sl}
+        />
+      </Suspense>
 
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-charcoal">{l.recentBookings}</h2>
-            <Link href={`/${locale}/admin/reservations`} className="text-xs text-gold-600 hover:underline">{l.viewAll}</Link>
-          </div>
-          <div className="space-y-3">
-            {recentBookings.map(booking => (
-              <Link key={booking.id} href={`/${locale}/admin/reservations/${booking.id}`}>
-                <div className="flex items-center justify-between py-2 border-b border-ivory-100 last:border-0 hover:bg-ivory-50 -mx-2 px-2 rounded transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-charcoal truncate">
-                      {booking.client.name || booking.client.email}
-                    </p>
-                    <p className="text-xs text-gray-400">{booking.bookingPets.map(bp => bp.pet.name).join(', ')}</p>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ml-2 flex-shrink-0 ${statusColors[booking.status] || 'bg-gray-100 text-gray-600'}`}>
-                    {sl[booking.status] || booking.status}
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Top 5 clients */}
-      {topClients.length > 0 && (
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card mt-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-charcoal">{l.top5}</h2>
-            <Link href={`/${locale}/admin/clients`} className="text-xs text-gold-600 hover:underline">{l.viewAll}</Link>
-          </div>
-          <div className="space-y-3">
-            {topClients.map((client, i) => (
-              <Link key={client.id} href={`/${locale}/admin/clients/${client.id}`}>
-                <div className="flex items-center gap-3 py-2 hover:bg-ivory-50 -mx-2 px-2 rounded transition-colors">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                    style={{ background: ['#C9A84C','#9CA3AF','#CD7F32','#E5E7EB','#E5E7EB'][i], color: i < 3 ? '#fff' : '#374151' }}>
-                    {i + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-charcoal truncate">{client.name}</p>
-                    <p className="text-xs text-gray-400 truncate">{client.email}</p>
-                  </div>
-                  <span className="text-sm font-semibold text-gold-700 flex-shrink-0">{formatMAD(client.totalRevenue)}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Top 5 clients — streamed via Suspense */}
+      <Suspense fallback={<SectionSkeleton height="h-48" />}>
+        <DashboardLowerSections locale={locale} labels={{ top5: l.top5, viewAll: l.viewAll }} />
+      </Suspense>
 
       {/* Row 3 — Client insights */}
       <div className="grid grid-cols-2 gap-4 mt-6">

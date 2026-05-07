@@ -13,8 +13,8 @@ import DeleteClientButton from './DeleteClientButton';
 import CreateAnimalModal from '../../animals/CreateAnimalModal';
 import HistoricalDataForm from './HistoricalDataForm';
 import RgpdAdminSection from './RgpdAdminSection';
-import AdminCreateBookingModal from '@/components/admin/AdminCreateBookingModal';
-import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
+import AdminCreateBookingModal from '@/components/admin/AdminCreateBookingModalLazy';
+import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModalLazy';
 import WhatsAppButton from '@/components/admin/WhatsAppButton';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
