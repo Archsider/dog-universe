@@ -20,20 +20,24 @@ const envSchema = z.object({
   NEXTAUTH_URL: z.string().url(),
 
   // ── Optional (libs already fail-open / feature-flag on absence) ───────
-  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  // NOTE: `.url()` removed on optional URLs — a typo on Vercel would otherwise
+  // throw at module-load and brick every route that imports env.ts (TOTP,
+  // workers, cache). Consuming libs (Upstash, Supabase, Sentry) already
+  // handle malformed URLs at connection time with descriptive errors.
+  UPSTASH_REDIS_REST_URL: z.string().min(1).optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
   UPSTASH_REDIS_HOST: z.string().min(1).optional(),
   UPSTASH_REDIS_PORT: z.coerce.number().int().positive().optional(),
   UPSTASH_REDIS_PASSWORD: z.string().min(1).optional(),
 
-  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_URL: z.string().min(1).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   SUPABASE_STORAGE_BUCKET: z.string().default('uploads'),
   SUPABASE_PRIVATE_STORAGE_BUCKET: z.string().default('uploads-private'),
 
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
 
-  SENTRY_DSN: z.string().url().optional(),
+  SENTRY_DSN: z.string().min(1).optional(),
   // CRON_SECRET: required in production (cron endpoints would be unprotected without it).
   // Optional in dev/test/build to keep local DX painless.
   CRON_SECRET:
