@@ -115,6 +115,36 @@ export const CacheTTL = {
   notifCount: 30,         // 30 s — bell badge can lag briefly
 } as const;
 
+// ─── Worker heartbeat (diagnostics) ────────────────────────────────────────
+
+/**
+ * Stamps the current ISO timestamp under `worker:lastRun` (TTL 24 h) so the
+ * /admin/diagnostics page can surface "last cron run" health. Fail-open: any
+ * Redis error is swallowed — the worker never fails because of this signal.
+ */
+export async function markWorkerRun(): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  try {
+    await redis.set('worker:lastRun', new Date().toISOString(), { ex: 86400 });
+  } catch (err) {
+    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'markWorkerRun failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+  }
+}
+
+/** Reads the last worker heartbeat (ISO string) or null if Redis is unconfigured/down. */
+export async function getWorkerLastRun(): Promise<string | null> {
+  const redis = getRedis();
+  if (!redis) return null;
+  try {
+    const val = await redis.get<string>('worker:lastRun');
+    return val ?? null;
+  } catch (err) {
+    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'getWorkerLastRun failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    return null;
+  }
+}
+
 // ─── Health check ──────────────────────────────────────────────────────────
 
 /** Ping Redis with a write+read round-trip. Returns false if unconfigured or on error. */
