@@ -213,8 +213,8 @@ Vercel l'injecte automatiquement via `Authorization: Bearer` pour ses propres cr
 | `/api/workers/process` | Chaque minute | Dépile et traite les jobs email + SMS des queues BullMQ |
 
 Architecture asynchrone :
-- `POST /api/bookings` et `PATCH /api/admin/bookings/[id]` → `enqueueEmail()` / `enqueueSms()` (non-bloquant)
-- Si Redis down au moment de l'enqueue → fallback direct (sendEmail / sendSMS)
+- **Notifications transactionnelles depuis 2026-05-07** : `sendEmailNow` / `sendSmsNow` (fire-and-forget direct, 3 retries 0s/1s/3s) pour les actions utilisateur (booking, validation, photo, claim, message, invoice). `enqueueEmail` / `enqueueSms` réservés aux crons batch (reminders, birthday, reviews, overdue, weekly). Voir `src/lib/notify-now.ts` + `docs/REALTIME_NOTIFICATIONS.md`. Raison : cron Vercel Hobby = dépilage 1×/min → latence inacceptable pour le transactionnel.
+- Si Redis down au moment de l'enqueue (cron) → fallback direct (sendEmail / sendSMS)
 - Le cron `/api/workers/process` crée des Workers BullMQ éphémères, traite max 10 jobs/queue en 55 s, puis close
 - Jobs épuisant leurs 3 tentatives → archivés dans la queue `dlq` (Dead Letter Queue)
 - Monitoring : `/admin/queues` (SUPERADMIN uniquement) — compteurs + rejouer les jobs échoués

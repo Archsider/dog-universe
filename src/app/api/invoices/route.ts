@@ -193,7 +193,7 @@ export async function POST(request: Request) {
         invoiceNumber,
         amount: formatMAD(amount),
       }, locale);
-      sendEmail({ to: client.email, subject, html }).catch(() => {});
+      sendEmailNow({ to: client.email, subject, html });
     }
 
     await logAction({
