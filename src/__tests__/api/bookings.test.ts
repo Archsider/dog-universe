@@ -493,3 +493,294 @@ describe('PATCH /api/admin/bookings/[id]', () => {
     expect(mocks.prisma.booking.findFirst).not.toHaveBeenCalled();
   });
 });
+
+// ===========================================================================
+// NO_SHOW handling — invoice cancellation policy + stock restoration
+// ===========================================================================
+describe('NO_SHOW handling', () => {
+  function paramsFor(id: string) {
+    return { params: Promise.resolve({ id }) };
+  }
+
+  const baseBooking = (status: string) => ({
+    id: 'b-no-show',
+    status,
+    serviceType: 'BOARDING' as const,
+    clientId: 'client-1',
+    startDate: new Date('2099-06-01'),
+    endDate: new Date('2099-06-05'),
+    bookingPets: [{ pet: { id: 'pet-1', species: 'DOG', name: 'Max' } }],
+    client: { id: 'client-1', name: 'Alice', email: 'a@x.com', phone: '+212', language: 'fr' },
+    boardingDetail: null,
+    taxiDetail: null,
+    invoice: { id: 'inv-1', status: 'PENDING' },
+    version: 1,
+  });
+
+  beforeEach(() => {
+    mocks.auth.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
+  });
+
+  it('cancels PENDING invoice and restores stock on NO_SHOW from CONFIRMED', async () => {
+    const existing = baseBooking('CONFIRMED');
+    mocks.prisma.booking.findFirst.mockResolvedValue(existing);
+    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
+    mocks.prisma.invoice.findUnique.mockResolvedValue({
+      id: 'inv-1',
+      status: 'PENDING',
+      paidAmount: 0,
+      items: [{ productId: 'prod-1', quantity: 2 }],
+    });
+    mocks.prismaTx.product.findUnique.mockResolvedValue({ available: false, stock: 0 });
+
+    const res = await AdminBookingsPATCH(
+      makeAdminPatchRequest('b-no-show', { status: 'NO_SHOW' }) as any,
+      paramsFor('b-no-show'),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mocks.prismaTx.invoice.update).toHaveBeenCalledWith({
+      where: { id: 'inv-1' },
+      data: { status: 'CANCELLED' },
+    });
+    expect(mocks.prismaTx.product.update).toHaveBeenCalledWith({
+      where: { id: 'prod-1' },
+      data: { stock: { increment: 2 }, available: true },
+    });
+  });
+
+  it('keeps PAID invoice unchanged + logs warning + audit + restores stock', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const existing = baseBooking('CONFIRMED');
+    existing.invoice = { id: 'inv-paid', status: 'PAID' };
+    mocks.prisma.booking.findFirst.mockResolvedValue(existing);
+    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
+    mocks.prisma.invoice.findUnique.mockResolvedValue({
+      id: 'inv-paid',
+      status: 'PAID',
+      paidAmount: 800,
+      items: [{ productId: 'prod-2', quantity: 1 }],
+    });
+    mocks.prismaTx.product.findUnique.mockResolvedValue({ available: true, stock: 5 });
+
+    const res = await AdminBookingsPATCH(
+      makeAdminPatchRequest('b-no-show', { status: 'NO_SHOW' }) as any,
+      paramsFor('b-no-show'),
+    );
+
+    expect(res.status).toBe(200);
+    // Invoice MUST NOT be cancelled
+    expect(mocks.prismaTx.invoice.update).not.toHaveBeenCalled();
+    // Warning was logged
+    expect(warnSpy).toHaveBeenCalled();
+    const warnArg = warnSpy.mock.calls[0][0];
+    expect(warnArg).toContain('invoice already paid');
+    // Audit log dedicated action
+    expect(mocks.logAction).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'NO_SHOW_INVOICE_PAID_KEPT',
+      entityType: 'Invoice',
+      entityId: 'inv-paid',
+    }));
+    // Stock still restored
+    expect(mocks.prismaTx.product.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'prod-2' },
+      data: expect.objectContaining({ stock: { increment: 1 } }),
+    }));
+    warnSpy.mockRestore();
+  });
+
+  it('keeps PARTIALLY_PAID invoice unchanged + logs warning', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const existing = baseBooking('IN_PROGRESS');
+    existing.invoice = { id: 'inv-partial', status: 'PARTIALLY_PAID' };
+    mocks.prisma.booking.findFirst.mockResolvedValue(existing);
+    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
+    mocks.prisma.invoice.findUnique.mockResolvedValue({
+      id: 'inv-partial',
+      status: 'PARTIALLY_PAID',
+      paidAmount: 300,
+      items: [],
+    });
+
+    const res = await AdminBookingsPATCH(
+      makeAdminPatchRequest('b-no-show', { status: 'NO_SHOW' }) as any,
+      paramsFor('b-no-show'),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mocks.prismaTx.invoice.update).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
+    expect(mocks.logAction).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'NO_SHOW_INVOICE_PAID_KEPT',
+    }));
+    warnSpy.mockRestore();
+  });
+
+  it('idempotent on already CANCELLED invoice — no update, no stock change', async () => {
+    const existing = baseBooking('CONFIRMED');
+    existing.invoice = { id: 'inv-cancelled', status: 'CANCELLED' };
+    mocks.prisma.booking.findFirst.mockResolvedValue(existing);
+    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
+    mocks.prisma.invoice.findUnique.mockResolvedValue({
+      id: 'inv-cancelled',
+      status: 'CANCELLED',
+      paidAmount: 0,
+      items: [{ productId: 'prod-3', quantity: 1 }],
+    });
+
+    const res = await AdminBookingsPATCH(
+      makeAdminPatchRequest('b-no-show', { status: 'NO_SHOW' }) as any,
+      paramsFor('b-no-show'),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mocks.prismaTx.invoice.update).not.toHaveBeenCalled();
+    expect(mocks.prismaTx.product.update).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// Optimistic lock — VERSION_CONFLICT on PATCH /api/admin/bookings/[id]
+// ===========================================================================
+describe('Optimistic lock — bookings PATCH', () => {
+  function paramsFor(id: string) {
+    return { params: Promise.resolve({ id }) };
+  }
+
+  beforeEach(() => {
+    mocks.auth.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
+  });
+
+  it('returns 409 VERSION_CONFLICT when client sends stale version', async () => {
+    mocks.prisma.booking.findFirst.mockResolvedValue({
+      id: 'bv1',
+      status: 'PENDING',
+      serviceType: 'BOARDING',
+      clientId: 'client-1',
+      startDate: new Date('2099-06-01'),
+      endDate: new Date('2099-06-05'),
+      bookingPets: [{ pet: { id: 'pet-1', species: 'DOG', name: 'Max' } }],
+      client: { id: 'client-1', name: 'Alice', email: 'a@x.com', phone: '+212', language: 'fr' },
+      boardingDetail: null,
+      taxiDetail: null,
+      invoice: null,
+      version: 5, // server is at v5
+    });
+
+    const res = await AdminBookingsPATCH(
+      makeAdminPatchRequest('bv1', { status: 'CONFIRMED', version: 3 }) as any,
+      paramsFor('bv1'),
+    );
+
+    expect(res.status).toBe(409);
+    const json = await res.json();
+    expect(json.error).toBe('VERSION_CONFLICT');
+    expect(json.currentVersion).toBe(5);
+    // No update should have run
+    expect(mocks.prisma.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('increments version on successful PATCH', async () => {
+    const existing = {
+      id: 'bv2',
+      status: 'PENDING',
+      serviceType: 'BOARDING',
+      clientId: 'client-1',
+      startDate: new Date('2099-06-01'),
+      endDate: new Date('2099-06-05'),
+      arrivalTime: null,
+      bookingPets: [{ pet: { id: 'pet-1', name: 'Max', species: 'DOG' } }],
+      client: { id: 'client-1', name: 'Alice', email: 'a@x.com', phone: '+212', language: 'fr' },
+      boardingDetail: { includeGrooming: false, groomingPrice: 0, taxiAddonPrice: 0 },
+      taxiDetail: null,
+      invoice: null,
+      version: 2,
+    };
+    mocks.prisma.booking.findFirst.mockResolvedValue(existing);
+    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'CONFIRMED', version: 3 });
+    mocks.prisma.taxiTrip.findFirst.mockResolvedValue(null);
+
+    const res = await AdminBookingsPATCH(
+      makeAdminPatchRequest('bv2', { status: 'CONFIRMED', version: 2 }) as any,
+      paramsFor('bv2'),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mocks.prisma.booking.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'bv2' },
+      data: expect.objectContaining({ version: { increment: 1 } }),
+    }));
+  });
+});
+
+// ===========================================================================
+// Extension — invoice PAID guard + forcePaidInvoice override
+// ===========================================================================
+describe('Extension — PAID invoice handling', () => {
+  function paramsFor(id: string) {
+    return { params: Promise.resolve({ id }) };
+  }
+
+  const extBooking = () => ({
+    id: 'b-ext',
+    status: 'CONFIRMED',
+    serviceType: 'BOARDING' as const,
+    clientId: 'client-1',
+    startDate: new Date('2099-06-01'),
+    endDate: new Date('2099-06-05'),
+    totalPrice: 800,
+    bookingPets: [{ pet: { id: 'pet-1', species: 'DOG', name: 'Max' } }],
+    client: { id: 'client-1', name: 'Alice', email: 'a@x.com', phone: '+212', language: 'fr' },
+    boardingDetail: { includeGrooming: false, groomingPrice: 0, taxiAddonPrice: 0 },
+    taxiDetail: null,
+    invoice: { id: 'inv-ext', status: 'PAID', paidAmount: 800 },
+    version: 1,
+  });
+
+  beforeEach(() => {
+    mocks.auth.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
+  });
+
+  it('rejects extension with INVOICE_ALREADY_PAID without forcePaidInvoice flag', async () => {
+    mocks.prisma.booking.findFirst.mockResolvedValue(extBooking());
+
+    const res = await AdminBookingsPATCH(
+      makeAdminPatchRequest('b-ext', { extendEndDate: '2099-06-10' }) as any,
+      paramsFor('b-ext'),
+    );
+
+    expect(res.status).toBe(409);
+    const json = await res.json();
+    expect(json.error).toBe('INVOICE_ALREADY_PAID');
+    expect(json.hint).toMatch(/forcePaidInvoice/);
+    // No mutation must have run
+    expect(mocks.prisma.booking.update).not.toHaveBeenCalled();
+    expect(mocks.prismaTx.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it('accepts extension with forcePaidInvoice=true and updates invoice items', async () => {
+    mocks.prisma.booking.findFirst.mockResolvedValue(extBooking());
+    mocks.prismaTx.invoiceItem.findMany.mockResolvedValue([
+      { id: 'item-1', description: 'Pension chien', unitPrice: 200 },
+    ]);
+
+    const res = await AdminBookingsPATCH(
+      makeAdminPatchRequest('b-ext', {
+        extendEndDate: '2099-06-10',
+        forcePaidInvoice: true,
+      }) as any,
+      paramsFor('b-ext'),
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.message).toBe('extended');
+    // Invoice was touched (override accepted)
+    expect(mocks.prismaTx.invoice.update).toHaveBeenCalled();
+    // Booking was extended with version increment
+    expect(mocks.prismaTx.booking.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'b-ext' },
+      data: expect.objectContaining({ version: { increment: 1 } }),
+    }));
+  });
+});
