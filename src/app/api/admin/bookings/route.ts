@@ -18,6 +18,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { revalidateTag } from 'next/cache';
 import { log } from '@/lib/logger';
 import { taxiDescription } from '@/lib/invoice-descriptions';
+import { getPensionPriceNumber, getPricingSettings } from '@/lib/pricing';
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -336,22 +337,21 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
             const nights = Math.round(
               (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24),
             );
-            // Single combined BOARDING line:
-            //   unitPrice = pricePerNight × petCount (cost for all pets, per night)
-            //   quantity  = nights
-            //   total     = unitPrice × quantity
-            const petCount = booking.bookingPets.length;
+            // Une ligne InvoiceItem BOARDING par animal, tarif via getPensionPrice().
             const qty = nights > 0 ? nights : 1;
-            const unitPrice = Math.round((totalPrice / qty) * 100) / 100;
-            const total = Math.round(unitPrice * qty * 100) / 100;
-            const petNames = booking.bookingPets.map((bp) => bp.pet.name).join(', ');
-            invoiceItems.push({
-              description: `Pension — ${qty} nuit${qty > 1 ? 's' : ''} × ${petCount} animal${petCount > 1 ? 'aux' : ''} (${petNames})`,
-              quantity: qty,
-              unitPrice,
-              total,
-              category: ItemCategory.BOARDING,
-            });
+            const dogsCount = booking.bookingPets.filter((bp) => bp.pet.species === 'DOG').length;
+            const pricingSettings = await getPricingSettings();
+            for (const bp of booking.bookingPets) {
+              const speciesLabel = bp.pet.species === 'CAT' ? 'chat' : 'chien';
+              const unitPrice = getPensionPriceNumber(bp.pet, dogsCount, qty, pricingSettings);
+              invoiceItems.push({
+                description: `Pension ${bp.pet.name} (${speciesLabel})`,
+                quantity: qty,
+                unitPrice,
+                total: Math.round(unitPrice * qty * 100) / 100,
+                category: ItemCategory.BOARDING,
+              });
+            }
           } else if (serviceType === 'PET_TAXI') {
             invoiceItems.push({
               description: taxiDescription('one-way', null, 1, totalPrice, 'fr'),

@@ -60,9 +60,32 @@ export interface PetForPricing {
 }
 
 /**
+ * Pure pension price helper (per pet, per night).
+ *   - 1 chien seul, séjour < 32 nuits : 120 MAD
+ *   - Tout chien, séjour ≥ 32 nuits   : 100 MAD
+ *   - 2+ chiens                       : 100 MAD/chien
+ *   - Chat                            : 70 MAD
+ *
+ * Returns a `number` for use in pure rule helpers. Server callers that need
+ * a Decimal use `getPensionPrice()` from `@/lib/pricing` (server facade).
+ */
+export function getPensionPriceNumber(
+  pet: { species: string },
+  totalDogsInBooking: number,
+  totalNights: number,
+  pricing?: PricingSettings,
+): number {
+  const p = pricing ?? PRICING_DEFAULTS;
+  if (pet.species === 'CAT') return p.boarding_cat_per_night;
+  if (totalNights >= p.long_stay_threshold) return p.boarding_dog_long_stay;
+  if (totalDogsInBooking >= 2) return p.boarding_dog_multi;
+  return p.boarding_dog_per_night;
+}
+
+/**
  * Boarding price breakdown.
- * - 1 chien ≤32 nuits : 120 MAD/nuit
- * - 1 chien >32 nuits : 100 MAD/nuit
+ * - 1 chien <32 nuits : 120 MAD/nuit
+ * - 1 chien ≥32 nuits : 100 MAD/nuit
  * - 2+ chiens : 100 MAD/chien/nuit
  * - Chat : 70 MAD/nuit
  * - Jour de départ non facturé.
@@ -81,36 +104,27 @@ export function calculateBoardingBreakdown(
   const dogs = pets.filter(pet => pet.species === 'DOG');
   const cats = pets.filter(pet => pet.species === 'CAT');
 
-  if (dogs.length === 1) {
-    const pricePerNight = nights > p.long_stay_threshold ? p.boarding_dog_long_stay : p.boarding_dog_per_night;
+  // Single source of truth via `getPensionPriceNumber()`.
+  dogs.forEach(dog => {
+    const unitPrice = getPensionPriceNumber(dog, dogs.length, nights, p);
     items.push({
-      descriptionFr: `Pension ${dogs[0].name} (chien)`,
-      descriptionEn: `Boarding ${dogs[0].name} (dog)`,
+      descriptionFr: `Pension ${dog.name} (chien)`,
+      descriptionEn: `Boarding ${dog.name} (dog)`,
       quantity: nights,
-      unitPrice: pricePerNight,
-      total: nights * pricePerNight,
+      unitPrice,
+      total: nights * unitPrice,
       category: 'BOARDING',
     });
-  } else if (dogs.length > 1) {
-    dogs.forEach(dog => {
-      items.push({
-        descriptionFr: `Pension ${dog.name} (chien)`,
-        descriptionEn: `Boarding ${dog.name} (dog)`,
-        quantity: nights,
-        unitPrice: p.boarding_dog_multi,
-        total: nights * p.boarding_dog_multi,
-        category: 'BOARDING',
-      });
-    });
-  }
+  });
 
   cats.forEach(cat => {
+    const unitPrice = getPensionPriceNumber(cat, dogs.length, nights, p);
     items.push({
       descriptionFr: `Pension ${cat.name} (chat)`,
       descriptionEn: `Boarding ${cat.name} (cat)`,
       quantity: nights,
-      unitPrice: p.boarding_cat_per_night,
-      total: nights * p.boarding_cat_per_night,
+      unitPrice,
+      total: nights * unitPrice,
       category: 'BOARDING',
     });
   });

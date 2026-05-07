@@ -3,6 +3,7 @@ import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
+import { getPensionPrice, getPricingSettings } from '@/lib/pricing';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -13,7 +14,8 @@ const MS_PER_DAY = 1000 * 60 * 60 * 24;
  *   - sets endDate = chosenDateTime
  *   - flips isOpenEnded → false
  *   - status → COMPLETED
- *   - recomputes the invoice total = real_nights × pricePerNight + sum(other items)
+ *   - recomputes one InvoiceItem BOARDING per pet (unitPrice via getPensionPrice),
+ *     then sums into invoice.amount.
  *
  * The invoice PDF is regenerated on demand via `/api/invoices/[id]/pdf`,
  * so no eager render is needed here — the recomputed amount is enough to
@@ -45,7 +47,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     where: { id: bookingId, deletedAt: null },
     include: {
       boardingDetail: true,
-      bookingPets: { select: { id: true } },
+      bookingPets: { include: { pet: { select: { id: true, name: true, species: true } } } },
       invoice: { include: { items: true } },
     },
   });
@@ -62,26 +64,33 @@ export async function POST(request: NextRequest, { params }: Params) {
   const diffMs = endDate.getTime() - booking.startDate.getTime();
   const realNights = Math.max(1, Math.ceil(diffMs / MS_PER_DAY));
 
-  const pricePerNight = booking.boardingDetail
-    ? toNumber(booking.boardingDetail.pricePerNight)
-    : 0;
-  // unitPrice on the BOARDING line = pricePerNight × petCount (combined cost per night)
-  const petCount = Math.max(1, booking.bookingPets.length);
-  const unitPricePerNight = Number((pricePerNight * petCount).toFixed(2));
-  const boardingTotal = Number((realNights * unitPricePerNight).toFixed(2));
+  // Tarif pension via getPensionPrice() — source unique de vérité.
+  const pricingSettings = await getPricingSettings();
+  const dogsCount = booking.bookingPets.filter((bp) => bp.pet.species === 'DOG').length;
 
-  let nonBoardingItemsTotal = 0;
-  let boardingItemId: string | null = null;
+  // Compute per-pet boarding lines.
+  const boardingLines = booking.bookingPets.map((bp) => {
+    const unitPrice = getPensionPrice(bp.pet, dogsCount, realNights, pricingSettings);
+    const total = unitPrice.times(realNights);
+    const speciesLabel = bp.pet.species === 'CAT' ? 'chat' : 'chien';
+    return {
+      petId: bp.pet.id,
+      description: `Pension ${bp.pet.name} (${speciesLabel})`,
+      quantity: realNights,
+      unitPrice,
+      total,
+    };
+  });
+  const boardingTotal = boardingLines.reduce((acc, l) => acc.plus(l.total), new Prisma.Decimal(0));
+
+  let nonBoardingItemsTotal = new Prisma.Decimal(0);
   if (booking.invoice) {
     for (const item of booking.invoice.items) {
-      if (item.category === 'BOARDING' && boardingItemId === null) {
-        boardingItemId = item.id;
-        continue;
-      }
-      nonBoardingItemsTotal += toNumber(item.total);
+      if (item.category === 'BOARDING') continue;
+      nonBoardingItemsTotal = nonBoardingItemsTotal.plus(toNumber(item.total));
     }
   }
-  const newInvoiceAmount = Number((boardingTotal + nonBoardingItemsTotal).toFixed(2));
+  const newInvoiceAmount = boardingTotal.plus(nonBoardingItemsTotal);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -96,33 +105,27 @@ export async function POST(request: NextRequest, { params }: Params) {
       });
 
       if (booking.invoice) {
-        // Update or create the boarding line so its total reflects the real nights.
-        if (boardingItemId) {
-          await tx.invoiceItem.update({
-            where: { id: boardingItemId },
-            data: {
-              quantity: realNights,
-              unitPrice: new Prisma.Decimal(unitPricePerNight),
-              total: new Prisma.Decimal(boardingTotal),
-            },
-          });
-        } else if (boardingTotal > 0) {
-          await tx.invoiceItem.create({
-            data: {
-              invoiceId: booking.invoice.id,
-              description: `Pension — ${realNights} nuit${realNights > 1 ? 's' : ''} × ${petCount} animal${petCount > 1 ? 'aux' : ''}`,
-              quantity: realNights,
-              unitPrice: new Prisma.Decimal(unitPricePerNight),
-              total: new Prisma.Decimal(boardingTotal),
+        // Replace all BOARDING items with the freshly computed per-pet lines.
+        await tx.invoiceItem.deleteMany({
+          where: { invoiceId: booking.invoice.id, category: 'BOARDING' },
+        });
+        if (boardingLines.length > 0) {
+          await tx.invoiceItem.createMany({
+            data: boardingLines.map((l) => ({
+              invoiceId: booking.invoice!.id,
+              description: l.description,
+              quantity: l.quantity,
+              unitPrice: l.unitPrice,
+              total: l.total,
               category: 'BOARDING',
-            },
+            })),
           });
         }
 
         await tx.invoice.update({
           where: { id: booking.invoice.id },
           data: {
-            amount: new Prisma.Decimal(newInvoiceAmount),
+            amount: newInvoiceAmount,
             version: { increment: 1 },
           },
         });
@@ -134,7 +137,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       bookingId,
       endDate: endDate.toISOString(),
       realNights,
-      invoiceAmount: newInvoiceAmount,
+      invoiceAmount: toNumber(newInvoiceAmount),
     });
   } catch (err) {
     console.error(JSON.stringify({

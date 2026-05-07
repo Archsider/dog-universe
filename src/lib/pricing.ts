@@ -2,15 +2,45 @@
 // Pure rule helpers live in `pricing-rules.ts` (no prisma dep, safe to bundle
 // in client components). This module adds `getPricingSettings()` which reads
 // the Setting table and merges with PRICING_DEFAULTS.
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { PRICING_DEFAULTS, type PricingSettings } from '@/lib/pricing-rules';
+import {
+  PRICING_DEFAULTS,
+  getPensionPriceNumber,
+  type PricingSettings,
+} from '@/lib/pricing-rules';
 
 export {
   PRICING_DEFAULTS,
   calculateBoardingBreakdown,
   calculateTaxiPrice,
   calculateBoardingTotalForExtension,
+  getPensionPriceNumber,
 } from '@/lib/pricing-rules';
+
+/**
+ * Tarif pension par animal et par nuit, retourné en `Prisma.Decimal` pour
+ * écrire directement dans `InvoiceItem.unitPrice` (colonne `Decimal(10,2)`).
+ *
+ * Règles métier — source unique de vérité :
+ *   - Chat                        : 70 MAD
+ *   - Chien, séjour ≥ 32 nuits    : 100 MAD
+ *   - 2+ chiens                   : 100 MAD/chien
+ *   - 1 chien seul, < 32 nuits    : 120 MAD
+ *
+ * Utiliser ce helper PARTOUT où un InvoiceItem BOARDING est créé ou
+ * mis à jour. Ne jamais coder un tarif pension en dur.
+ */
+export function getPensionPrice(
+  pet: { species: string },
+  totalDogsInBooking: number,
+  totalNights: number,
+  settings?: PricingSettings,
+): Prisma.Decimal {
+  return new Prisma.Decimal(
+    getPensionPriceNumber(pet, totalDogsInBooking, totalNights, settings ?? PRICING_DEFAULTS),
+  );
+}
 
 export type {
   PricingSettings,

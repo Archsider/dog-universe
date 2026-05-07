@@ -362,6 +362,25 @@ migration `20260507_cleanup_categories` normalise les rows legacy.
 Payment → InvoiceItem via `computeMonthlyRevenueByCategory`), jamais le
 facturé. Les items à 0 encaissé sont exclus.
 
+**Pricing pension (verrouillé 2026-05-08) :** utiliser obligatoirement
+`getPensionPrice()` de `src/lib/pricing.ts` (Decimal) ou
+`getPensionPriceNumber()` de `src/lib/pricing-rules.ts` (number).
+Ne JAMAIS coder un tarif pension en dur. Une ligne `InvoiceItem` BOARDING
+**par animal** — pas de ligne combinée multi-animaux.
+
+Règle métier (centralisée dans le helper) :
+| Cas | Tarif/nuit |
+|---|---|
+| Chat | 70 MAD |
+| Chien — séjour ≥ 32 nuits | 100 MAD |
+| 2+ chiens | 100 MAD/chien |
+| 1 chien seul, < 32 nuits | 120 MAD |
+
+L'ordre d'évaluation est : `CAT → long_stay → multi → single`. Long stay
+prévaut sur multi-chiens. Migration `20260508_fix_pension_pricing`
+recale les lignes legacy en DB. Tests dans
+`src/lib/__tests__/pricing.test.ts` (cas-limites + données réelles).
+
 ---
 
 ## CONVENTIONS DE CODE

@@ -8,6 +8,8 @@ import {
   calculateBoardingBreakdown,
   calculateTaxiPrice,
   calculateBoardingTotalForExtension,
+  getPensionPrice,
+  getPensionPriceNumber,
   PRICING_DEFAULTS,
   type PetForPricing,
   type PricingSettings,
@@ -30,13 +32,19 @@ describe('calculateBoardingBreakdown — pension chien seul', () => {
     expect(result.total).toBe(1200);
   });
 
-  it('1 chien, exactement 32 nuits — tarif standard (seuil non depasse)', () => {
-    const result = calculateBoardingBreakdown(32, [dog()], undefined, false, false, P);
+  it('1 chien, 31 nuits (sous seuil 32) — tarif standard 120 MAD/nuit', () => {
+    const result = calculateBoardingBreakdown(31, [dog()], undefined, false, false, P);
     expect(result.items[0].unitPrice).toBe(120);
-    expect(result.total).toBe(3840);
+    expect(result.total).toBe(3720);
   });
 
-  it('1 chien, 33 nuits (depasse seuil 32) — tarif long sejour 100 MAD/nuit', () => {
+  it('1 chien, exactement 32 nuits — tarif long sejour 100 MAD/nuit (regle 32+)', () => {
+    const result = calculateBoardingBreakdown(32, [dog()], undefined, false, false, P);
+    expect(result.items[0].unitPrice).toBe(100);
+    expect(result.total).toBe(3200);
+  });
+
+  it('1 chien, 33 nuits — tarif long sejour 100 MAD/nuit', () => {
     const result = calculateBoardingBreakdown(33, [dog()], undefined, false, false, P);
     expect(result.items[0].unitPrice).toBe(100);
     expect(result.total).toBe(3300);
@@ -277,5 +285,54 @@ describe('calculateBoardingTotalForExtension', () => {
   it('1 chat en extension — tarif chat correct', () => {
     const total = calculateBoardingTotalForExtension([{ species: 'CAT' }], 7, 0, 0, P);
     expect(total).toBe(7 * 70);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getPensionPrice — source unique de verite (Decimal)
+// ---------------------------------------------------------------------------
+describe('getPensionPrice — regle metier definitive', () => {
+  it('1 chien → 120 MAD/nuit', () => {
+    const elvis = { species: 'DOG' };
+    expect(getPensionPrice(elvis, 1, 5).toNumber()).toBe(120);
+  });
+
+  it('2 chiens → 100 MAD/nuit chacun', () => {
+    const elvis = { species: 'DOG' };
+    expect(getPensionPrice(elvis, 2, 5).toNumber()).toBe(100);
+  });
+
+  it('Chat → 70 MAD/nuit', () => {
+    const milo = { species: 'CAT' };
+    expect(getPensionPrice(milo, 0, 5).toNumber()).toBe(70);
+  });
+
+  it('Chien sejour 32+ nuits → 100 MAD/nuit', () => {
+    const dog = { species: 'DOG' };
+    expect(getPensionPrice(dog, 1, 32).toNumber()).toBe(100);
+  });
+
+  it('Benjamin — 2 chiens × 9 nuits × 100 MAD = 1800 MAD', () => {
+    const elvis = { species: 'DOG' };
+    const balto = { species: 'DOG' };
+    const elvisPrice = getPensionPrice(elvis, 2, 9);
+    const baltoPrice = getPensionPrice(balto, 2, 9);
+    const total = elvisPrice.times(9).plus(baltoPrice.times(9));
+    expect(total.toNumber()).toBe(1800);
+  });
+
+  it('Chat ignore le seuil long sejour (32+ ne sapplique quaux chiens)', () => {
+    const cat = { species: 'CAT' };
+    expect(getPensionPrice(cat, 0, 60).toNumber()).toBe(70);
+  });
+
+  it('Long sejour prevaut sur multi-chiens (32+ chez 3 chiens → 100)', () => {
+    const dog = { species: 'DOG' };
+    expect(getPensionPrice(dog, 3, 35).toNumber()).toBe(100);
+  });
+
+  it('getPensionPriceNumber renvoie le meme nombre que .toNumber() de Decimal', () => {
+    const dog = { species: 'DOG' };
+    expect(getPensionPriceNumber(dog, 1, 10)).toBe(getPensionPrice(dog, 1, 10).toNumber());
   });
 });

@@ -34,7 +34,7 @@ describe('getMonthlyInvoicesWhere', () => {
     });
   });
 
-  it('CAS 2 — séjour CONFIRMED/IN_PROGRESS sans paiement', () => {
+  it('CAS 2 — séjour CONFIRMED/IN_PROGRESS/COMPLETED sans paiement', () => {
     const where = getMonthlyInvoicesWhere(MAY_START, MAY_END);
     const c2 = where.OR![1] as Record<string, unknown>;
     expect(c2.payments).toEqual({ none: {} });
@@ -42,6 +42,7 @@ describe('getMonthlyInvoicesWhere', () => {
     expect((booking.status as Record<string, unknown>).in).toEqual([
       'CONFIRMED',
       'IN_PROGRESS',
+      'COMPLETED',
     ]);
     expect(booking.startDate).toEqual({ lte: MAY_END });
     expect(Array.isArray(booking.OR)).toBe(true);
