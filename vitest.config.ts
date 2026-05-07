@@ -11,7 +11,6 @@ export default defineConfig({
     // plusieurs fichiers de test fuyait son état en mode threads. Forks =
     // process séparé par fichier → isolation stricte des modules mockés.
     pool: 'forks',
-    poolOptions: { forks: { singleFork: true } },
     coverage: {
       provider: 'v8',
       thresholds: {

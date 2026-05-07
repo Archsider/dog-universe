@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { FileText, Download, Eye, Pencil } from 'lucide-react';
 import { formatDate, formatMAD } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
-import { computeMonthlyRevenue } from '@/lib/accounting';
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
 import PaymentModal from './PaymentModal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModal';
@@ -132,14 +131,19 @@ export default async function AdminBillingPage(props: PageProps) {
   };
   const orderBy = sort ? orderByMap[sort] : { issuedAt: 'desc' as const };
 
+  // Perf 3.8 : KPIs calculés via aggregate/groupBy Postgres au lieu de
+  // charger 5000 invoices en mémoire et boucler en JS.
+  // - kpiTotalBilled : SUM(invoice.amount) WHERE monthWhere
+  // - kpiCollected   : SUM(payment.amount) WHERE paymentDate ∈ mois ET invoice ∈ monthWhere
+  // - methodGrouped  : GROUP BY payment.paymentMethod sur les mêmes paiements
+  // Perf 3.9 : `allClients` (take 1000) supprimé — picker basculé vers
+  // ClientSearchSelect qui appelle /api/admin/clients/search à la demande.
   const [
     invoices,
     invoiceCount,
-    // KPI : tous les invoices du mois (même filtre que la liste, jamais
-    // divergent — cf. FIX 4). On charge payments + booking pour calculer
-    // computeMonthlyRevenue (FIX 3 : caisse prime, prorata si zero payment).
-    monthInvoicesFull,
-    allClients,
+    billedAgg,
+    collectedAgg,
+    methodGrouped,
   ] = await Promise.all([
     prisma.invoice.findMany({
       where: listWhere,
@@ -152,63 +156,37 @@ export default async function AdminBillingPage(props: PageProps) {
       take: limit,
     }),
     prisma.invoice.count({ where: listWhere }),
-    prisma.invoice.findMany({
+    prisma.invoice.aggregate({
       where: monthWhere,
-      select: {
-        id: true,
-        amount: true,
-        issuedAt: true,
-        payments: { select: { amount: true, paymentDate: true, paymentMethod: true } },
-        booking: { select: { startDate: true, endDate: true, isOpenEnded: true } },
-      },
-      take: 5000,
+      _sum: { amount: true },
     }),
-    prisma.user.findMany({
-      where: { role: 'CLIENT', deletedAt: null },
-      select: { id: true, name: true, email: true },
-      orderBy: { name: 'asc' },
-      take: 1000,
+    prisma.payment.aggregate({
+      where: {
+        paymentDate: { gte: monthStart, lte: monthEnd },
+        invoice: monthWhere,
+      },
+      _sum: { amount: true },
+    }),
+    prisma.payment.groupBy({
+      by: ['paymentMethod'],
+      where: {
+        paymentDate: { gte: monthStart, lte: monthEnd },
+        invoice: monthWhere,
+      },
+      _sum: { amount: true },
+      _count: { id: true },
     }),
   ]);
 
-  // Total facturé = somme exacte des invoice.amount sur la liste affichée.
-  // Total encaissé = somme du computeMonthlyRevenue de chaque facture (caisse
-  // prime, prorata fallback). Reste à encaisser = différence.
-  let kpiTotalBilled = 0;
-  let kpiCollected = 0;
-  // Répartition par méthode : ne compte que les paiements dont paymentDate
-  // tombe dans le mois (CAS 2/3 — la caisse), restreints aux factures du mois.
-  const methodAgg: Record<string, { amount: number; count: number }> = {
-    CASH: { amount: 0, count: 0 },
-    CARD: { amount: 0, count: 0 },
-    CHECK: { amount: 0, count: 0 },
-    TRANSFER: { amount: 0, count: 0 },
-  };
-  for (const inv of monthInvoicesFull) {
-    kpiTotalBilled += toNumber(inv.amount);
-    const monthRev = computeMonthlyRevenue(
-      inv.payments,
-      { amount: inv.amount, issuedAt: inv.issuedAt },
-      inv.booking,
-      monthStart,
-      monthEnd,
-    );
-    kpiCollected += toNumber(monthRev);
-    for (const p of inv.payments) {
-      if (p.paymentDate < monthStart || p.paymentDate > monthEnd) continue;
-      const m = methodAgg[p.paymentMethod];
-      if (!m) continue;
-      m.amount += toNumber(p.amount);
-      m.count += 1;
-    }
-  }
+  const kpiTotalBilled = toNumber(billedAgg._sum.amount ?? 0);
+  const kpiCollected = toNumber(collectedAgg._sum.amount ?? 0);
   const kpiRemaining = Math.max(0, kpiTotalBilled - kpiCollected);
-  const paymentMethodStats = (Object.entries(methodAgg) as [string, { amount: number; count: number }][])
-    .filter(([, v]) => v.count > 0)
-    .map(([paymentMethod, v]) => ({
-      paymentMethod,
-      _sum: { amount: v.amount },
-      _count: { id: v.count },
+  const paymentMethodStats = methodGrouped
+    .filter(g => (g._count.id ?? 0) > 0)
+    .map(g => ({
+      paymentMethod: g.paymentMethod,
+      _sum: { amount: toNumber(g._sum.amount ?? 0) },
+      _count: { id: g._count.id ?? 0 },
     }));
 
   // ── CSV export URL ─────────────────────────────────────────────────────────
@@ -345,7 +323,7 @@ export default async function AdminBillingPage(props: PageProps) {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <RecomputeAllocationsButton locale={locale} />
-          <CreateStandaloneInvoiceModal clients={allClients} locale={locale} />
+          <CreateStandaloneInvoiceModal locale={locale} />
           <CsvDownloadButton href={csvHref} filename={csvFilename} locale={locale} />
         </div>
       </div>
