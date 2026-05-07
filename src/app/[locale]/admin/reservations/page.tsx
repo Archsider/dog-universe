@@ -14,13 +14,16 @@ interface PageProps {
   searchParams: Promise<{ status?: string; type?: string; view?: string; noInvoice?: string; f?: string }>;
 }
 
-const VALID_FILTERS = ['ALL', 'IN_PROGRESS', 'PENDING', 'WALKIN', 'BOARDING', 'PET_TAXI'] as const;
+const VALID_FILTERS = ['ALL', 'IN_PROGRESS', 'CONFIRMED', 'PENDING', 'WALKIN', 'CANCELLED', 'NO_SHOW', 'BOARDING', 'PET_TAXI'] as const;
 type Filter = typeof VALID_FILTERS[number];
 
 function deriveInitialFilter(sp: { status?: string; type?: string; f?: string; noInvoice?: string }): Filter {
   if (sp.f && (VALID_FILTERS as readonly string[]).includes(sp.f)) return sp.f as Filter;
   if (sp.status === 'PENDING') return 'PENDING';
   if (sp.status === 'IN_PROGRESS') return 'IN_PROGRESS';
+  if (sp.status === 'CONFIRMED') return 'CONFIRMED';
+  if (sp.status === 'CANCELLED') return 'CANCELLED';
+  if (sp.status === 'NO_SHOW') return 'NO_SHOW';
   if (sp.type === 'BOARDING') return 'BOARDING';
   if (sp.type === 'PET_TAXI') return 'PET_TAXI';
   return 'ALL';

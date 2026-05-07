@@ -269,14 +269,12 @@ export async function currentBoarders(): Promise<{
   dog: number;
   total: number;
 }> {
-  // Active stay = status CONFIRMED or IN_PROGRESS, period. endDate is NEVER
-  // used to determine activeness — the admin transitions to COMPLETED when the
-  // pet actually leaves (closed range, walk-in, or registered client without
-  // a known end date are all handled the same way).
+  // Règle UI "En cours" = IN_PROGRESS UNIQUEMENT (chien physiquement présent).
+  // CONFIRMED = réservé mais pas encore arrivé → exclu de ce compteur.
+  // Capacity check et facturation continuent à inclure CONFIRMED ailleurs.
   const boardingFilter = {
     serviceType: 'BOARDING' as const,
-    status: { in: [...ACTIVE_STAY_STATUSES] },
-    startDate: { lte: new Date() },
+    status: 'IN_PROGRESS',
     deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
   };
   const [cat, dog] = await Promise.all([

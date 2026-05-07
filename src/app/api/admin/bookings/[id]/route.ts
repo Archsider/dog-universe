@@ -662,6 +662,44 @@ export const PATCH = withSchema(
     }),
   );
 
+  // NO_SHOW : annule la facture + réincrémente le stock des produits ajoutés.
+  // Statut définitif — la place est libérée et la facture ne doit pas
+  // apparaître en attente de paiement. Idempotent : si déjà CANCELLED, no-op.
+  if (status === 'NO_SHOW' && status !== booking.status) {
+    const inv = await prisma.invoice.findUnique({
+      where: { bookingId: id },
+      select: {
+        id: true,
+        status: true,
+        items: { where: { productId: { not: null } }, select: { productId: true, quantity: true } },
+      },
+    });
+    if (inv && inv.status !== 'CANCELLED') {
+      await prisma.$transaction(async (tx) => {
+        await tx.invoice.update({
+          where: { id: inv.id },
+          data: { status: 'CANCELLED' },
+        });
+        for (const it of inv.items) {
+          if (!it.productId) continue;
+          const product = await tx.product.findUnique({
+            where: { id: it.productId },
+            select: { available: true, stock: true },
+          });
+          if (!product) continue;
+          const newStock = product.stock + it.quantity;
+          await tx.product.update({
+            where: { id: it.productId },
+            data: {
+              stock: { increment: it.quantity },
+              ...(!product.available && newStock > 0 ? { available: true } : {}),
+            },
+          });
+        }
+      });
+    }
+  }
+
   // Send notifications on status change
   if (status && status !== booking.status) {
     const userLang = booking.client.language || 'fr';

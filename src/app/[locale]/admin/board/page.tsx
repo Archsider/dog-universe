@@ -74,14 +74,11 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
     updatedAt: (b as { updatedAt?: Date }).updatedAt?.toISOString() ?? b.startDate.toISOString(),
   }));
 
-  // "En ce moment" stats — status-driven (admin transitions to COMPLETED on
-  // checkout). endDate is intentionally not used: a stay whose endDate has
-  // passed but is still IN_PROGRESS counts, and an open-ended walk-in counts.
+  // "En ce moment" = IN_PROGRESS UNIQUEMENT (chien physiquement présent).
+  // CONFIRMED = réservé mais pas encore arrivé → exclu. Cohérent avec
+  // currentBoarders / KPI "En cours" sur /admin/reservations.
   const activeBoarders = bookings.filter(
-    (b) =>
-      b.serviceType === 'BOARDING' &&
-      ['CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'].includes(b.status) &&
-      new Date(b.startDate) <= now
+    (b) => b.serviceType === 'BOARDING' && b.status === 'IN_PROGRESS'
   );
 
   const todayArrivals = bookings.filter(

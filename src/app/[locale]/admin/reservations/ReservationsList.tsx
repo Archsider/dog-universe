@@ -31,8 +31,11 @@ export type ReservationRow = {
 type Filter =
   | 'ALL'
   | 'IN_PROGRESS'
+  | 'CONFIRMED'
   | 'PENDING'
   | 'WALKIN'
+  | 'CANCELLED'
+  | 'NO_SHOW'
   | 'BOARDING'
   | 'PET_TAXI';
 
@@ -85,12 +88,10 @@ function nightsSince(startIso: string): number {
   return Math.max(0, Math.floor(ms / 86_400_000));
 }
 
-// Active stay = status only, gated on startDate (don't surface a future
-// CONFIRMED booking as "in progress"). endDate is intentionally NOT used:
-// the admin transitions to COMPLETED when the pet leaves.
+// "En cours" UI = IN_PROGRESS UNIQUEMENT (chien physiquement présent).
+// CONFIRMED = réservé mais pas encore arrivé → exclu.
 function isInProgressNow(b: ReservationRow): boolean {
-  if (b.status !== 'CONFIRMED' && b.status !== 'IN_PROGRESS') return false;
-  return new Date(b.startDate).getTime() <= Date.now();
+  return b.status === 'IN_PROGRESS';
 }
 
 // Open-ended = walk-in flag OR no endDate set. Both treated identically.
@@ -119,8 +120,11 @@ export default function ReservationsList({ bookings, locale, monthlyRevenue, ini
     subActiveStays: 'active stays',
     subWalkIns: 'open walk-ins',
     inProgress: 'In progress',
+    confirmed: 'Confirmed',
     pending: 'Pending',
     walkInsOpen: 'Open walk-ins',
+    cancelled: 'Cancelled',
+    noShow: 'No-show',
     revenueMonth: 'Revenue this month',
     all: 'All',
     walkin: 'Walk-in',
@@ -143,8 +147,11 @@ export default function ReservationsList({ bookings, locale, monthlyRevenue, ini
     subActiveStays: 'séjours actifs',
     subWalkIns: 'walk-ins ouverts',
     inProgress: 'En cours',
+    confirmed: 'Confirmées',
     pending: 'En attente',
     walkInsOpen: 'Walk-ins ouverts',
+    cancelled: 'Annulées',
+    noShow: 'No-show',
     revenueMonth: 'CA ce mois',
     all: 'Toutes',
     walkin: 'Walk-in',
@@ -181,12 +188,21 @@ export default function ReservationsList({ bookings, locale, monthlyRevenue, ini
         case 'IN_PROGRESS':
           if (!isInProgressNow(b)) return false;
           break;
+        case 'CONFIRMED':
+          if (b.status !== 'CONFIRMED') return false;
+          break;
         case 'PENDING':
           if (b.status !== 'PENDING') return false;
           break;
         case 'WALKIN':
           if (!isOpenEndedRow(b)) return false;
-          if (b.status === 'COMPLETED' || b.status === 'CANCELLED' || b.status === 'REJECTED') return false;
+          if (b.status === 'COMPLETED' || b.status === 'CANCELLED' || b.status === 'REJECTED' || b.status === 'NO_SHOW') return false;
+          break;
+        case 'CANCELLED':
+          if (b.status !== 'CANCELLED' && b.status !== 'REJECTED') return false;
+          break;
+        case 'NO_SHOW':
+          if (b.status !== 'NO_SHOW') return false;
           break;
         case 'BOARDING':
           if (b.serviceType !== 'BOARDING') return false;
@@ -313,8 +329,11 @@ export default function ReservationsList({ bookings, locale, monthlyRevenue, ini
       <div className="flex items-center gap-2 flex-wrap mb-4">
         <Pill active={filter === 'ALL'} onClick={() => setFilter('ALL')}>{t.all}</Pill>
         <Pill active={filter === 'IN_PROGRESS'} onClick={() => setFilter('IN_PROGRESS')}>{t.inProgress}</Pill>
+        <Pill active={filter === 'CONFIRMED'} onClick={() => setFilter('CONFIRMED')}>{t.confirmed}</Pill>
         <Pill active={filter === 'PENDING'} onClick={() => setFilter('PENDING')}>{t.pending}</Pill>
         <Pill active={filter === 'WALKIN'} onClick={() => setFilter('WALKIN')}>{t.walkin}</Pill>
+        <Pill active={filter === 'CANCELLED'} onClick={() => setFilter('CANCELLED')}>{t.cancelled}</Pill>
+        <Pill active={filter === 'NO_SHOW'} onClick={() => setFilter('NO_SHOW')}>{t.noShow}</Pill>
         <span className="h-5 w-px bg-ivory-200 self-center mx-1" aria-hidden />
         <Pill active={filter === 'BOARDING'} onClick={() => setFilter('BOARDING')}>{t.boarding}</Pill>
         <Pill active={filter === 'PET_TAXI'} onClick={() => setFilter('PET_TAXI')}>{t.taxi}</Pill>
