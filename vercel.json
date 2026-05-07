@@ -39,6 +39,14 @@
     {
       "path": "/api/cron/taxi-retention",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/db-backup",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-monthly-revenue",
+      "schedule": "5 * * * *"
     }
   ]
 }
