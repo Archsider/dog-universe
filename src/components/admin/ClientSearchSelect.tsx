@@ -5,7 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 interface Client {
   id: string;
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
   email: string;
+  phone?: string | null;
 }
 
 interface Props {
@@ -78,7 +81,10 @@ export default function ClientSearchSelect({
       .then(r => r.ok ? r.json() : { clients: [] })
       .then((data: { clients: Client[] }) => {
         const found = data.clients.find(c => c.id === value);
-        if (found) setSelectedLabel(found.name);
+        if (found) {
+          const display = found.firstName && found.lastName ? `${found.firstName} ${found.lastName}` : found.name;
+          setSelectedLabel(display);
+        }
       })
       .catch(() => { /* noop */ });
   }, [value, selectedLabel]);
@@ -157,17 +163,20 @@ export default function ClientSearchSelect({
             </div>
           )}
 
-          {!loading && results.map(c => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => selectClient(c)}
-              className="w-full text-left text-sm px-3 py-2 hover:bg-ivory-50"
-            >
-              <div className="font-medium text-charcoal">{c.name}</div>
-              {c.email && <div className="text-xs text-gray-400">{c.email}</div>}
-            </button>
-          ))}
+          {!loading && results.map(c => {
+            const display = c.firstName && c.lastName ? `${c.firstName} ${c.lastName}` : c.name;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => selectClient({ id: c.id, name: display })}
+                className="w-full text-left text-sm px-3 py-2 hover:bg-ivory-50"
+              >
+                <div className="font-medium text-charcoal">{display}</div>
+                {c.email && <div className="text-xs text-gray-400">{c.email}</div>}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

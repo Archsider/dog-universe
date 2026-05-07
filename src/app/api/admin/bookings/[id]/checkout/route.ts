@@ -45,6 +45,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     where: { id: bookingId, deletedAt: null },
     include: {
       boardingDetail: true,
+      bookingPets: { select: { id: true } },
       invoice: { include: { items: true } },
     },
   });
@@ -64,7 +65,10 @@ export async function POST(request: NextRequest, { params }: Params) {
   const pricePerNight = booking.boardingDetail
     ? toNumber(booking.boardingDetail.pricePerNight)
     : 0;
-  const boardingTotal = Number((realNights * pricePerNight).toFixed(2));
+  // unitPrice on the BOARDING line = pricePerNight × petCount (combined cost per night)
+  const petCount = Math.max(1, booking.bookingPets.length);
+  const unitPricePerNight = Number((pricePerNight * petCount).toFixed(2));
+  const boardingTotal = Number((realNights * unitPricePerNight).toFixed(2));
 
   let nonBoardingItemsTotal = 0;
   let boardingItemId: string | null = null;
@@ -98,7 +102,7 @@ export async function POST(request: NextRequest, { params }: Params) {
             where: { id: boardingItemId },
             data: {
               quantity: realNights,
-              unitPrice: new Prisma.Decimal(pricePerNight),
+              unitPrice: new Prisma.Decimal(unitPricePerNight),
               total: new Prisma.Decimal(boardingTotal),
             },
           });
@@ -106,9 +110,9 @@ export async function POST(request: NextRequest, { params }: Params) {
           await tx.invoiceItem.create({
             data: {
               invoiceId: booking.invoice.id,
-              description: `Pension (${realNights} nuit${realNights > 1 ? 's' : ''})`,
+              description: `Pension — ${realNights} nuit${realNights > 1 ? 's' : ''} × ${petCount} animal${petCount > 1 ? 'aux' : ''}`,
               quantity: realNights,
-              unitPrice: new Prisma.Decimal(pricePerNight),
+              unitPrice: new Prisma.Decimal(unitPricePerNight),
               total: new Prisma.Decimal(boardingTotal),
               category: 'BOARDING',
             },

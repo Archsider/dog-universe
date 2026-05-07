@@ -17,7 +17,7 @@ import { createBookingConfirmationNotification } from '@/lib/notifications';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { revalidateTag } from 'next/cache';
 import { log } from '@/lib/logger';
-import { boardingDescription, taxiDescription } from '@/lib/invoice-descriptions';
+import { taxiDescription } from '@/lib/invoice-descriptions';
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -336,19 +336,22 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
             const nights = Math.round(
               (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24),
             );
-            // One line per pet if we can resolve per-pet price, otherwise split equally
-            const pricePerPet = Math.round((totalPrice / booking.bookingPets.length) * 100) / 100;
-            const pricePerNight = nights > 0 ? Math.round((pricePerPet / nights) * 100) / 100 : pricePerPet;
-            for (const bp of booking.bookingPets) {
-              const species = (bp.pet.species ?? 'DOG') as 'DOG' | 'CAT';
-              invoiceItems.push({
-                description: boardingDescription(bp.pet.name, species, nights > 0 ? nights : 1, pricePerNight, 'fr'),
-                quantity: nights > 0 ? nights : 1,
-                unitPrice: pricePerNight,
-                total: pricePerPet,
-                category: ItemCategory.BOARDING,
-              });
-            }
+            // Single combined BOARDING line:
+            //   unitPrice = pricePerNight × petCount (cost for all pets, per night)
+            //   quantity  = nights
+            //   total     = unitPrice × quantity
+            const petCount = booking.bookingPets.length;
+            const qty = nights > 0 ? nights : 1;
+            const unitPrice = Math.round((totalPrice / qty) * 100) / 100;
+            const total = Math.round(unitPrice * qty * 100) / 100;
+            const petNames = booking.bookingPets.map((bp) => bp.pet.name).join(', ');
+            invoiceItems.push({
+              description: `Pension — ${qty} nuit${qty > 1 ? 's' : ''} × ${petCount} animal${petCount > 1 ? 'aux' : ''} (${petNames})`,
+              quantity: qty,
+              unitPrice,
+              total,
+              category: ItemCategory.BOARDING,
+            });
           } else if (serviceType === 'PET_TAXI') {
             invoiceItems.push({
               description: taxiDescription('one-way', null, 1, totalPrice, 'fr'),

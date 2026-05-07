@@ -131,8 +131,24 @@ export default function AdminEditPetPage() {
         : (form.antiparasiticProductKey === '__none__' ? null : form.antiparasiticProductKey || null);
 
       const { antiparasiticProductKey: _k, antiparasiticCustomProduct: _c, ...rest } = form;
+      // Coerce empty enum/optional strings to null so Zod (which expects undefined/null
+      // or a valid enum value) doesn't reject the payload with a 400.
+      const nullIfEmpty = (v: string) => (v.trim() === '' ? null : v);
       const payload = {
         ...rest,
+        breed: nullIfEmpty(rest.breed),
+        gender: nullIfEmpty(rest.gender),
+        microchipNumber: nullIfEmpty(rest.microchipNumber),
+        tattooNumber: nullIfEmpty(rest.tattooNumber),
+        vetName: nullIfEmpty(rest.vetName),
+        vetPhone: nullIfEmpty(rest.vetPhone),
+        allergies: nullIfEmpty(rest.allergies),
+        currentMedication: nullIfEmpty(rest.currentMedication),
+        behaviorWithDogs: nullIfEmpty(rest.behaviorWithDogs),
+        behaviorWithCats: nullIfEmpty(rest.behaviorWithCats),
+        behaviorWithHumans: nullIfEmpty(rest.behaviorWithHumans),
+        notes: nullIfEmpty(rest.notes),
+        antiparasiticNotes: nullIfEmpty(rest.antiparasiticNotes),
         photoUrl,
         isNeutered: form.isNeutered === '' ? null : form.isNeutered === 'true',
         weight: form.weight ? parseFloat(form.weight) : null,
@@ -151,10 +167,16 @@ export default function AdminEditPetPage() {
         toast({ title: fr ? 'Animal modifié !' : 'Pet updated!', variant: 'success' });
         router.push(`/${locale}/admin/animals/${petId}`);
       } else {
-        throw new Error('Failed');
+        const data = await res.json().catch(() => ({}));
+        const detail =
+          (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+            ? data.error
+            : null) ?? (fr ? 'Échec de la modification' : 'Update failed');
+        throw new Error(detail);
       }
-    } catch {
-      toast({ title: fr ? 'Erreur' : 'Error', variant: 'destructive' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (fr ? 'Erreur' : 'Error');
+      toast({ title: msg, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
