@@ -23,24 +23,14 @@ export async function GET(request: NextRequest) {
   // soft-delete: required — no global extension (Edge Runtime incompatible)
   const baseWhere = { role: 'CLIENT' as const, deletedAt: null };
 
-  // Build display name from firstName/lastName when present, fall back to legacy `name`.
-  const toClient = (u: { id: string; name: string; firstName: string; lastName: string; email: string; phone: string | null }) => ({
-    id: u.id,
-    name: u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.name,
-    firstName: u.firstName,
-    lastName: u.lastName,
-    email: u.email,
-    phone: u.phone,
-  });
-
   if (q.length < 2) {
     const rows = await prisma.user.findMany({
       where: baseWhere,
-      select: { id: true, name: true, firstName: true, lastName: true, email: true, phone: true },
+      select: { id: true, name: true, email: true, phone: true },
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
-    return NextResponse.json({ clients: rows.map(toClient) });
+    return NextResponse.json({ clients: rows });
   }
 
   const rows = await prisma.user.findMany({
@@ -49,14 +39,12 @@ export async function GET(request: NextRequest) {
       OR: [
         { name: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
-        { firstName: { contains: q, mode: 'insensitive' } },
-        { lastName: { contains: q, mode: 'insensitive' } },
       ],
     },
-    select: { id: true, name: true, firstName: true, lastName: true, email: true, phone: true },
+    select: { id: true, name: true, email: true, phone: true },
     orderBy: { name: 'asc' },
     take: 50,
   });
 
-  return NextResponse.json({ clients: rows.map(toClient) });
+  return NextResponse.json({ clients: rows });
 }
