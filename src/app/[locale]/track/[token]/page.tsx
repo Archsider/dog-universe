@@ -4,12 +4,17 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { Map as LeafletMap, Marker as LeafletMarker } from 'leaflet';
+import { sseHealthFor, shouldRestartSse, SSE_LOST_MS } from '@/lib/taxi-gps';
 
 // Fallback poll interval (used only if the SSE stream cannot be established
 // — old browsers, blocked proxies, repeated server errors).
 const FALLBACK_POLL_MS = 10_000;
 // Threshold before we give up on SSE and switch to fallback polling.
 const SSE_MAX_RECONNECT_ATTEMPTS = 3;
+// Watchdog cadence : surveille la fraîcheur du dernier event SSE / la queue.
+const WATCHDOG_INTERVAL_MS = 15_000;
+// Tentative de re-bascule polling → SSE.
+const POLLING_TO_SSE_PROBE_MS = 60_000;
 
 // MapView encapsulates all Leaflet imports (CSS + JS) — lazy loaded only when
 // a GPS position is available, keeping Leaflet out of the initial page bundle.
@@ -39,6 +44,8 @@ interface TrackResponse {
 
 type LeafletDivIcon = unknown; // L.DivIcon importé dynamiquement à la volée
 
+type ConnectionStatus = 'live' | 'reconnecting' | 'polling' | 'offline';
+
 export default function TrackPage() {
   const params = useParams<{ locale: string; token: string }>();
   const locale = params?.locale === 'en' ? 'en' : 'fr';
@@ -50,6 +57,7 @@ export default function TrackPage() {
   const [carIcon, setCarIcon] = useState<LeafletDivIcon | null>(null);
   // Trail of past positions (for the gold polyline). Capped at 200 points.
   const [trail, setTrail] = useState<[number, number][]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('live');
   // Polling : setTimeout récursif (plus fiable que setInterval pour les requêtes lentes)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -57,17 +65,25 @@ export default function TrackPage() {
   // (setLatLng / flyTo) sans re-render du composant parent.
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<LeafletMarker | null>(null);
+  // Refs watchdog
+  const lastSseEventAtRef = useRef<number>(0);
+  const lastErrorAtRef = useRef<number>(0);
+  const consecutiveErrorsRef = useRef(0);
+  const sseModeRef = useRef<'sse' | 'polling' | 'idle'>('idle');
+  const lastPollProbeAtRef = useRef<number>(0);
+  const watchdogIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Référence aux fonctions de start (déclarées dans l'effet) pour les
+  // handlers DOM qui doivent les appeler depuis l'extérieur (visibilitychange
+  // / online / pageshow).
+  const startSseRef = useRef<(() => void) | null>(null);
+  const startPollingRef = useRef<(() => void) | null>(null);
+  const forceReconnectRef = useRef<(() => void) | null>(null);
 
   // Charge l'icône custom (divIcon = pas d'image externe — CSP-safe).
-  // L'import dynamique de leaflet est hors du bundle initial — Leaflet n'est
-  // chargé qu'ici, après montage, uniquement quand la carte est affichée.
   useEffect(() => {
     let cancelled = false;
     import('leaflet').then((L) => {
       if (cancelled) return;
-      // Heading-aware icon: the inner element with [data-rotor] is rotated
-      // by MapView via CSS transform whenever a new heading arrives. The
-      // arrow tip points "up" at heading=0 (North).
       const icon = L.divIcon({
         html: `<div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;">
   <div data-rotor style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;transition:transform 0.3s ease-out;">
@@ -86,14 +102,6 @@ export default function TrackPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Stratégie en deux étages :
-  //  1. SSE (`/api/taxi/{token}/stream`) — push temps réel, EventSource gère
-  //     la reconnexion auto. Au-delà de SSE_MAX_RECONNECT_ATTEMPTS échecs
-  //     consécutifs (server errors, CSP, navigateur sans support), bascule.
-  //  2. Fallback polling 10 s sur l'endpoint REST historique
-  //     `/api/taxi-tracking/{token}` (toujours dispo).
-  // Premier fetch REST une fois pour récupérer clientName/petNames + état
-  // initial avant que le stream ne livre des positions.
   useEffect(() => {
     if (!token) return;
     let aborted = false;
@@ -111,8 +119,6 @@ export default function TrackPage() {
     };
     void fetchHistory();
 
-    // Initial REST fetch: récupère le nom client/animaux (le stream ne les
-    // envoie pas) + statut "active". Si 404 → notfound, on s'arrête.
     const fetchOnce = async () => {
       try {
         const res = await fetch(`/api/taxi-tracking/${token}`, { cache: 'no-store' });
@@ -130,9 +136,15 @@ export default function TrackPage() {
       }
     };
 
+    // Polling fallback : exécution récursive setTimeout. Une fois lancé,
+    // tourne tant que `aborted` est false ET sseModeRef.current === 'polling'.
     const startFallbackPolling = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      sseModeRef.current = 'polling';
+      setConnectionStatus(typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'polling');
+
       const tick = async () => {
-        if (aborted) return;
+        if (aborted || sseModeRef.current !== 'polling') return;
         try {
           const res = await fetch(`/api/taxi-tracking/${token}`, { cache: 'no-store' });
           if (aborted) return;
@@ -142,34 +154,53 @@ export default function TrackPage() {
             if (!aborted) {
               setData((prev) => ({ ...prev, ...json }));
               setStatus(json.active ? 'ok' : 'inactive');
+              lastSseEventAtRef.current = Date.now(); // freshness côté UI
             }
           }
         } catch { /* swallow — try again next tick */ }
-        if (!aborted) {
+        if (!aborted && sseModeRef.current === 'polling') {
           timeoutRef.current = setTimeout(tick, FALLBACK_POLL_MS);
         }
       };
       void tick();
     };
+    startPollingRef.current = startFallbackPolling;
 
     const startSse = () => {
       if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
         startFallbackPolling();
         return;
       }
-      let consecutiveErrors = 0;
+      // Close any previous connection avant d'en ouvrir une nouvelle.
+      if (eventSourceRef.current) {
+        try { eventSourceRef.current.close(); } catch { /* silent */ }
+        eventSourceRef.current = null;
+      }
+      sseModeRef.current = 'sse';
+      lastSseEventAtRef.current = Date.now();
+      consecutiveErrorsRef.current = 0;
+      setConnectionStatus('live');
+
       const es = new EventSource(`/api/taxi/${token}/stream`);
       eventSourceRef.current = es;
 
-      es.addEventListener('connected', () => { consecutiveErrors = 0; });
+      const markEvent = () => {
+        lastSseEventAtRef.current = Date.now();
+        // Reset errors counter dès qu'on reçoit un event valide.
+        consecutiveErrorsRef.current = 0;
+      };
+
+      es.addEventListener('connected', () => {
+        markEvent();
+        setConnectionStatus('live');
+      });
       // Server soft-timeouts (~54s) emit 'reconnect' before closing the
-      // stream. EventSource then auto-reconnects transparently. Without
-      // this listener, the implicit error from the close would accumulate
-      // and switch us to slow polling fallback.
-      es.addEventListener('reconnect', () => { consecutiveErrors = 0; });
+      // stream. EventSource then auto-reconnects transparently.
+      es.addEventListener('reconnect', () => { markEvent(); });
 
       es.addEventListener('location', (ev) => {
         if (aborted) return;
+        markEvent();
         try {
           const payload = JSON.parse((ev as MessageEvent).data) as {
             lat: number; lng: number; timestamp: number;
@@ -179,7 +210,6 @@ export default function TrackPage() {
           setData((prev) => ({
             ...prev,
             active: true,
-            // Preserve previous distanceKm if the new event doesn't include it.
             distanceKm: typeof payload.distanceKm === 'number' ? payload.distanceKm : prev?.distanceKm,
             lastLocation: {
               lat: payload.lat,
@@ -194,6 +224,7 @@ export default function TrackPage() {
             return next.length > 200 ? next.slice(next.length - 200) : next;
           });
           setStatus('ok');
+          setConnectionStatus('live');
         } catch { /* malformed event — ignore */ }
       });
 
@@ -201,21 +232,43 @@ export default function TrackPage() {
         if (aborted) return;
         setData((prev) => ({ ...prev, active: false }));
         setStatus('inactive');
+        sseModeRef.current = 'idle';
         es.close();
       });
 
       es.onerror = () => {
-        consecutiveErrors += 1;
+        consecutiveErrorsRef.current += 1;
+        lastErrorAtRef.current = Date.now();
+        setConnectionStatus('reconnecting');
         // EventSource will auto-reconnect; only escalate to polling fallback
-        // when the connection has failed repeatedly. Server-side soft-timeouts
-        // (~54 s) are normal reconnects and won't accumulate errors here.
-        if (consecutiveErrors >= SSE_MAX_RECONNECT_ATTEMPTS) {
+        // when the connection has failed repeatedly.
+        if (consecutiveErrorsRef.current >= SSE_MAX_RECONNECT_ATTEMPTS) {
           es.close();
           eventSourceRef.current = null;
           if (!aborted) startFallbackPolling();
         }
       };
     };
+    startSseRef.current = startSse;
+
+    // Force la reconnexion : close de l'EventSource courant + reset compteur
+    // + relance startSse(). Si en mode polling, tente immédiatement un fetch
+    // puis remonte vers SSE.
+    const forceReconnect = () => {
+      if (aborted) return;
+      consecutiveErrorsRef.current = 0;
+      if (eventSourceRef.current) {
+        try { eventSourceRef.current.close(); } catch { /* silent */ }
+        eventSourceRef.current = null;
+      }
+      // Stoppe le polling pour éviter doublon.
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      startSse();
+    };
+    forceReconnectRef.current = forceReconnect;
 
     void (async () => {
       const isActive = await fetchOnce();
@@ -223,13 +276,79 @@ export default function TrackPage() {
       if (isActive) startSse();
     })();
 
+    // ── Watchdog (15 s) ──────────────────────────────────────────────────
+    // Surveille la fraîcheur du flux SSE / déclenche probe SSE depuis polling.
+    watchdogIntervalRef.current = setInterval(() => {
+      if (aborted) return;
+      const now = Date.now();
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        setConnectionStatus('offline');
+        return;
+      }
+      if (sseModeRef.current === 'sse') {
+        // Stream silencieusement mort ? L'EventSource onerror ne fire pas
+        // toujours sur certains proxies / mobile networks.
+        if (shouldRestartSse(lastSseEventAtRef.current, now)) {
+          console.warn('[SSE watchdog] silence prolongé, force reconnect');
+          forceReconnect();
+          return;
+        }
+        const health = sseHealthFor(lastSseEventAtRef.current, now);
+        setConnectionStatus(health === 'live' ? 'live' : 'reconnecting');
+      } else if (sseModeRef.current === 'polling') {
+        // Probe SSE ponctuelle pour tenter de revenir au push temps réel.
+        if (now - lastPollProbeAtRef.current > POLLING_TO_SSE_PROBE_MS) {
+          lastPollProbeAtRef.current = now;
+          // Reset du compteur d'erreurs et nouvelle tentative de SSE.
+          // Si le SSE échoue de nouveau, onerror redéclenchera startFallbackPolling.
+          forceReconnect();
+        }
+      }
+    }, WATCHDOG_INTERVAL_MS);
+
+    // ── Handlers DOM ─────────────────────────────────────────────────────
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (aborted) return;
+      // Si le dernier event est ancien → reconnect agressif.
+      const now = Date.now();
+      if (now - lastSseEventAtRef.current > SSE_LOST_MS / 2) {
+        forceReconnectRef.current?.();
+      }
+    };
+    const handleOnline = () => {
+      if (aborted) return;
+      forceReconnectRef.current?.();
+    };
+    const handleOffline = () => {
+      setConnectionStatus('offline');
+    };
+    const handlePageShow = (ev: PageTransitionEvent) => {
+      // bfcache restore : tout l'état JS est gelé puis restauré → l'EventSource
+      // est mort sans fire d'erreur. Forcer reconnect.
+      if (ev.persisted && !aborted) {
+        forceReconnectRef.current?.();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('pageshow', handlePageShow);
+
     return () => {
       aborted = true;
+      sseModeRef.current = 'idle';
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (watchdogIntervalRef.current) clearInterval(watchdogIntervalRef.current);
+      watchdogIntervalRef.current = null;
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('pageshow', handlePageShow);
     };
   }, [token]);
 
@@ -289,6 +408,20 @@ export default function TrackPage() {
   const center: [number, number] = last ? [last.lat, last.lng] : [31.6295, -7.9811]; // Marrakech fallback
   const updatedAt = last ? new Date(last.createdAt).toLocaleTimeString(isFr ? 'fr-FR' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
 
+  // Badge de statut connexion (discret, en haut)
+  const connectionBadge = (() => {
+    switch (connectionStatus) {
+      case 'live':
+        return { dot: 'bg-green-500 animate-pulse', label: isFr ? 'En direct' : 'Live', emoji: '🟢' };
+      case 'reconnecting':
+        return { dot: 'bg-yellow-500 animate-pulse', label: isFr ? 'Reconnexion…' : 'Reconnecting…', emoji: '🟡' };
+      case 'polling':
+        return { dot: 'bg-blue-500', label: isFr ? 'Mise à jour 10s' : 'Updating every 10s', emoji: '🔵' };
+      case 'offline':
+        return { dot: 'bg-red-500', label: isFr ? 'Hors-ligne' : 'Offline', emoji: '🔴' };
+    }
+  })();
+
   return (
     <div className="min-h-screen flex flex-col bg-[#FEFCF9]">
       {/* Header */}
@@ -302,14 +435,23 @@ export default function TrackPage() {
               {isFr ? 'Suivi en direct' : 'Live tracking'}
             </p>
           </div>
-          {data?.clientName && (
-            <div className="text-right min-w-0">
-              <p className="text-xs sm:text-sm font-medium text-[#2A2520] truncate">{data.clientName}</p>
-              {data.petNames && (
-                <p className="text-[10px] sm:text-xs text-[#8A7E75] truncate">🐾 {data.petNames}</p>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-3 min-w-0">
+            <span
+              className="hidden sm:inline-flex items-center gap-1.5 text-[11px] text-[#8A7E75]"
+              title={connectionBadge.label}
+            >
+              <span className={`inline-block w-2 h-2 rounded-full ${connectionBadge.dot}`} />
+              {connectionBadge.label}
+            </span>
+            {data?.clientName && (
+              <div className="text-right min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-[#2A2520] truncate">{data.clientName}</p>
+                {data.petNames && (
+                  <p className="text-[10px] sm:text-xs text-[#8A7E75] truncate">🐾 {data.petNames}</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -347,7 +489,7 @@ export default function TrackPage() {
         <footer className="px-4 py-3 sm:px-6 sm:py-3 bg-white border-t border-[rgba(196,151,74,0.2)]">
           <div className="max-w-3xl mx-auto flex items-center justify-between text-xs text-[#8A7E75]">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className={`inline-block w-2 h-2 rounded-full ${connectionBadge.dot}`} />
               {isFr ? 'Mise à jour' : 'Updated'} : {updatedAt}
             </span>
             <span className="flex items-center gap-3">
