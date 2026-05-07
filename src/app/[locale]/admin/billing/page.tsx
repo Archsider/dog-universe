@@ -93,6 +93,22 @@ export default async function AdminBillingPage(props: PageProps) {
   // Highlight target invoice when navigating from a booking page.
   const highlightInvoiceId = (searchParams.invoiceId || '').trim();
 
+  // Auto-navigate to the invoice's month when arriving from a booking link
+  // (no explicit ?month= means the user hit the link fresh — look up the invoice).
+  if (highlightInvoiceId && !searchParams.month) {
+    const targetInv = await prisma.invoice.findUnique({
+      where: { id: highlightInvoiceId },
+      select: { periodDate: true, issuedAt: true },
+    });
+    if (targetInv) {
+      const refDate = targetInv.periodDate ?? targetInv.issuedAt;
+      const invoiceMonth = `${refDate.getFullYear()}-${String(refDate.getMonth() + 1).padStart(2, '0')}`;
+      if (invoiceMonth !== selectedMonth) {
+        redirect(`/${locale}/admin/billing?month=${invoiceMonth}&invoiceId=${highlightInvoiceId}`);
+      }
+    }
+  }
+
   // Règle métier unique : SOURCE DE VÉRITÉ comptable = lib/billing.getMonthlyInvoicesWhere.
   // Une facture appartient au mois si (1) elle a un paiement ce mois, (2) le séjour est
   // actif ce mois sans paiement, ou (3) c'est une facture manuelle émise ce mois.

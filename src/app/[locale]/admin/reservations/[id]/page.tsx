@@ -320,7 +320,13 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
   const standaloneTrip = serializedTrips.find(t => t.tripType === 'STANDALONE') ?? null;
   const nights = booking.endDate
     ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))
-    : 0;
+    : (() => {
+        // BUG5: endDate not saved yet — use quantity from BOARDING invoice item as ground truth
+        const boardingItem = booking.invoice?.items.find((i) => i.category === 'BOARDING');
+        if (boardingItem) return boardingItem.quantity;
+        // Fallback: days elapsed since start (for in-progress open-ended stays)
+        return Math.max(0, Math.floor((Date.now() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)));
+      })();
 
   return (
     <div className="max-w-3xl mx-auto">

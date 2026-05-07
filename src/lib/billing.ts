@@ -54,7 +54,7 @@ export function getMonthlyInvoicesWhere(
       {
         payments: { none: {} },
         booking: {
-          status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+          status: { in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },
           startDate: { lte: monthEnd },
           OR: [
             { endDate: { gte: monthStart } },

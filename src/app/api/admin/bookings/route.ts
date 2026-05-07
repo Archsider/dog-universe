@@ -293,6 +293,15 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
 
     const bookingRef = booking.id.slice(0, 8).toUpperCase();
 
+    // Auto-COMPLETED for historical entries: if endDate is in the past,
+    // the admin is entering a stay that already happened.
+    if (endDate && new Date(endDate) < new Date()) {
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: { status: 'COMPLETED' },
+      });
+    }
+
     // ── Optionally create the matching Invoice (PENDING) ──
     let invoiceNumber: string | null = null;
     if (createInvoice && totalPrice > 0) {
