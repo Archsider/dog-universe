@@ -60,6 +60,8 @@ const mocks = vi.hoisted(() => {
     checkBoardingCapacity: vi.fn(),
     enqueueEmail: vi.fn().mockResolvedValue(undefined),
     enqueueSms: vi.fn().mockResolvedValue(undefined),
+    sendEmailNow: vi.fn(),
+    sendSmsNow: vi.fn(),
     sendEmail: vi.fn().mockResolvedValue(undefined),
     sendSMS: vi.fn().mockResolvedValue(undefined),
     sendAdminSMS: vi.fn().mockResolvedValue(undefined),
@@ -115,6 +117,11 @@ vi.mock('@/lib/queues/index', () => ({
 vi.mock('@/lib/queues', () => ({
   enqueueEmail: mocks.enqueueEmail,
   enqueueSms: mocks.enqueueSms,
+}));
+
+vi.mock('@/lib/notify-now', () => ({
+  sendEmailNow: mocks.sendEmailNow,
+  sendSmsNow: mocks.sendSmsNow,
 }));
 
 vi.mock('@/lib/email', () => ({
