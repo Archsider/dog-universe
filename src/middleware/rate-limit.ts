@@ -159,6 +159,11 @@ export const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
   '/api/auth/totp/validate': 'totp',
   '/api/auth/totp/verify-setup': 'totp',
   '/api/auth/totp/disable': 'totp',
+  // Diagnostics — manual SUPERADMIN-triggered live tests. Reuse the
+  // passwordReset bucket (5 / 60 min) — same low-rate semantics, no need
+  // to create a fresh bucket for two rarely-used endpoints.
+  '/api/admin/diagnostics/test-email': 'passwordReset',
+  '/api/admin/diagnostics/test-sms': 'passwordReset',
 };
 
 type DynamicBucket =

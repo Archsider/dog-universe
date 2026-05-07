@@ -19,6 +19,7 @@ import { processEmailJob, processSmsJob } from '@/workers/processors';
 import { prisma } from '@/lib/prisma';
 import { getLastHeartbeat, tryClaimAlertSlot } from '@/lib/taxi-heartbeat';
 import { notifyAdminsTaxiHeartbeatLost, createNotification } from '@/lib/notifications';
+import { markWorkerRun } from '@/lib/cache';
 
 export const maxDuration = 60;
 
@@ -219,6 +220,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
   }
+
+  // Stamp last-run heartbeat for /admin/diagnostics. Fail-open inside markWorkerRun.
+  await markWorkerRun();
 
   // Heartbeat scan runs even when BullMQ is not configured — it uses the
   // separate Upstash REST client and is independent of the queue infra.
