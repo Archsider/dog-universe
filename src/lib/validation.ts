@@ -95,13 +95,23 @@ export const bookingSourceSchema = z.enum(['ONLINE', 'MANUAL', 'PHONE', 'EMAIL']
 
 // Date string ISO (YYYY-MM-DD ou plein ISO) — convertie en Date côté route après parsing.
 // On stocke en string dans Zod pour laisser la conversion + validation business
-// (date passée / future) à la route qui a le contexte.
-const dateStringSchema = z.string().min(1, 'date required').max(40);
+// (date passée / future) à la route qui a le contexte. Le `.refine` garantit
+// qu'une string de "garbage" (ex: "not-a-date") est rejetée dès la validation.
+const dateStringSchema = z
+  .string()
+  .min(1, 'date required')
+  .max(40)
+  .refine(v => !isNaN(new Date(v).getTime()), 'INVALID_DATE');
 
 // Création d'une réservation (client OU admin) — schéma de FORME uniquement.
-// Les règles métier (taxi dimanche interdit, plage horaire, ownership des pets,
-// comparaison startDate/endDate) restent dans la route car elles dépendent du
-// rôle et du contexte DB.
+// Les règles métier (taxi dimanche interdit, plage horaire, ownership des pets)
+// restent dans la route car elles dépendent du rôle et du contexte DB.
+//
+// totalPrice : conservé optionnel mais NEVER trusté côté CLIENT — la route
+// `/api/bookings` recalcule systématiquement le prix server-side pour les CLIENT
+// (cf. `resolvedTotalPrice` dans route.ts). Le champ n'est lu que pour les ADMIN.
+// On le garde dans le schéma pour ne pas casser les payloads admin existants
+// passant par /api/bookings au lieu de /api/admin/bookings.
 export const bookingCreateSchema = z.object({
   serviceType: serviceTypeSchema,
   petIds: z.array(z.string().min(1)).min(1, 'at least one pet'),
@@ -146,7 +156,16 @@ export const bookingCreateSchema = z.object({
     unitPrice: z.number().nonnegative(),
     category: z.string().max(50).optional(),
   })).optional(),
-});
+}).refine(
+  d => {
+    if (!d.endDate) return true;
+    const start = new Date(d.startDate).getTime();
+    const end = new Date(d.endDate).getTime();
+    if (isNaN(start) || isNaN(end)) return true; // dateStringSchema déjà rejeté
+    return end >= start;
+  },
+  { message: 'INVALID_DATE_RANGE', path: ['endDate'] },
+);
 
 // Création d'une réservation par un ADMIN (depuis /admin/reservations/new) —
 // inclut un cas walk-in (création inline du User + Pets).
@@ -179,6 +198,15 @@ export const adminBookingCreateSchema = z.object({
 }).refine(
   d => !!d.clientId || !!d.walkIn,
   { message: 'clientId or walkIn required' },
+).refine(
+  d => {
+    if (!d.endDate) return true;
+    const start = new Date(d.startDate).getTime();
+    const end = new Date(d.endDate).getTime();
+    if (isNaN(start) || isNaN(end)) return true;
+    return end >= start;
+  },
+  { message: 'INVALID_DATE_RANGE', path: ['endDate'] },
 );
 
 // Demande d'extension client — body simple

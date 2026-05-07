@@ -53,7 +53,19 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const product = await tx.product.findUnique({ where: { id: productId } });
+      // SELECT ... FOR UPDATE — lock the row to prevent concurrent stock decrement
+      // races between two parallel "add product" requests. Without this lock, two
+      // requests reading stock=1 simultaneously could both pass the check and over-sell.
+      const locked = await tx.$queryRaw<Array<{
+        id: string; stock: number; available: boolean; price: unknown;
+        name: string; brand: string | null; reference: string | null;
+      }>>`
+        SELECT id, stock, available, price, name, brand, reference
+        FROM "Product"
+        WHERE id = ${productId}
+        FOR UPDATE
+      `;
+      const product = locked[0];
       if (!product || !product.available) {
         throw new Error('PRODUCT_UNAVAILABLE');
       }
@@ -61,7 +73,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         throw new Error('OUT_OF_STOCK');
       }
 
-      const unitPrice = toNumber(product.price);
+      const unitPrice = toNumber(product.price as never);
       const total = Number((unitPrice * quantity).toFixed(2));
       const descParts = [product.name];
       if (product.brand) descParts.push(product.brand);
@@ -82,6 +94,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       });
 
       const newStock = product.stock - quantity;
+      // The row is held under FOR UPDATE; the decrement is therefore safe.
       await tx.product.update({
         where: { id: productId },
         data: {

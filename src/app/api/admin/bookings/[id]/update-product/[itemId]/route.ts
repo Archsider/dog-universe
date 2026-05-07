@@ -44,7 +44,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const product = await tx.product.findUnique({ where: { id: item.productId! } });
+      // SELECT ... FOR UPDATE — lock the product row so the stock check + decrement
+      // are atomic versus concurrent requests touching the same product.
+      const locked = await tx.$queryRaw<Array<{
+        id: string; stock: number; available: boolean;
+      }>>`
+        SELECT id, stock, available
+        FROM "Product"
+        WHERE id = ${item.productId!}
+        FOR UPDATE
+      `;
+      const product = locked[0];
       if (!product) throw new Error('PRODUCT_NOT_FOUND');
 
       // If we need more stock, check availability

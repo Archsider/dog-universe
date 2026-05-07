@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
@@ -41,6 +42,17 @@ export async function GET(req: NextRequest) {
 
   // Prisma doesn't have MONTH()/DAY() helpers — use raw query.
   // JOIN avec User pour ramener nom + téléphone owner en 1 seule requête (évite N+1 ensuite).
+  //
+  // BUG FIX (Sprint 2) : un fragment SQL conditionnel ne peut PAS être interpolé
+  // dans un tagged template `prisma.$queryRaw`` — il deviendrait un paramètre lié
+  // (string entre quotes), pas un fragment SQL. On utilise `Prisma.sql`` pour
+  // composer un fragment, puis on le passe via `prisma.$queryRaw(Prisma.sql`...`)`
+  // qui accepte les sous-fragments.
+  // Filtre soft-delete : Pet et User doivent être actifs (deletedAt IS NULL).
+  const feb29Clause = includeFeb29
+    ? Prisma.sql`OR (EXTRACT(MONTH FROM p."dateOfBirth") = 2 AND EXTRACT(DAY FROM p."dateOfBirth") = 29)`
+    : Prisma.empty;
+
   const pets = await prisma.$queryRaw<
     Array<{
       id: string;
@@ -51,7 +63,7 @@ export async function GET(req: NextRequest) {
       ownerName: string | null;
       ownerPhone: string | null;
     }>
-  >`
+  >(Prisma.sql`
     SELECT
       p.id, p.name, p.species, p."ownerId", p."dateOfBirth",
       u.name AS "ownerName",
@@ -59,11 +71,13 @@ export async function GET(req: NextRequest) {
     FROM "Pet" p
     JOIN "User" u ON u.id = p."ownerId"
     WHERE p."dateOfBirth" IS NOT NULL
+      AND p."deletedAt" IS NULL
+      AND u."deletedAt" IS NULL
       AND (
         (EXTRACT(MONTH FROM p."dateOfBirth") = ${month} AND EXTRACT(DAY FROM p."dateOfBirth") = ${day})
-        ${includeFeb29 ? `OR (EXTRACT(MONTH FROM p."dateOfBirth") = 2 AND EXTRACT(DAY FROM p."dateOfBirth") = 29)` : `AND TRUE`}
+        ${feb29Clause}
       )
-  `;
+  `);
 
   if (pets.length === 0) {
     return NextResponse.json({ sent: 0, message: 'No birthdays today' });

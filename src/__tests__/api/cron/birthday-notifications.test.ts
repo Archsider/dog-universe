@@ -226,3 +226,65 @@ describe('GET /api/cron/birthday-notifications — processing', () => {
     });
   });
 });
+
+// ===========================================================================
+// SQL fragment integrity (Prisma.sql composition + soft-delete filter)
+// ===========================================================================
+describe('GET /api/cron/birthday-notifications — SQL composition', () => {
+  it('passes a Prisma.sql fragment containing soft-delete filter on Pet AND User', async () => {
+    mocks.prisma.$queryRaw.mockResolvedValue([]);
+    await GET(makeRequest('Bearer test-secret') as any);
+
+    expect(mocks.prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    const arg = mocks.prisma.$queryRaw.mock.calls[0][0];
+    // Prisma.Sql exposes either `.sql` (parameterized) or `.strings` ; both contain
+    // the SQL text with placeholders. We check that the rendered template includes
+    // the soft-delete clauses we added.
+    const text =
+      (arg && typeof arg === 'object' && 'sql' in arg && typeof (arg as { sql: unknown }).sql === 'string'
+        ? (arg as { sql: string }).sql
+        : (arg && typeof arg === 'object' && 'strings' in arg && Array.isArray((arg as { strings: unknown }).strings)
+            ? ((arg as { strings: string[] }).strings).join('?')
+            : '')) || '';
+    expect(text).toMatch(/p\."deletedAt" IS NULL/);
+    expect(text).toMatch(/u\."deletedAt" IS NULL/);
+  });
+
+  it('on a non-leap-year date OTHER than Feb 28: SQL fragment does NOT include Feb 29 clause', async () => {
+    // Force "today" = March 15 2026 (non-leap year, but not the special Feb 28)
+    const fakeNow = new Date(2026, 2, 15); // March 15 2026
+    vi.setSystemTime(fakeNow);
+    mocks.prisma.$queryRaw.mockResolvedValue([]);
+
+    await GET(makeRequest('Bearer test-secret') as any);
+
+    const arg = mocks.prisma.$queryRaw.mock.calls[0][0];
+    const text =
+      (arg && typeof arg === 'object' && 'sql' in arg && typeof (arg as { sql: unknown }).sql === 'string'
+        ? (arg as { sql: string }).sql
+        : (arg && typeof arg === 'object' && 'strings' in arg && Array.isArray((arg as { strings: unknown }).strings)
+            ? ((arg as { strings: string[] }).strings).join('?')
+            : '')) || '';
+    expect(text).not.toMatch(/= 2 AND EXTRACT\(DAY FROM p\."dateOfBirth"\) = 29/);
+    vi.useRealTimers();
+  });
+
+  it('on Feb 28 of a non-leap year: SQL fragment INCLUDES the Feb 29 catch-up clause', async () => {
+    // 2026 is non-leap (not divisible by 4). Feb 28 2026 → includeFeb29 = true.
+    const fakeNow = new Date(2026, 1, 28); // Feb 28 2026
+    vi.setSystemTime(fakeNow);
+    mocks.prisma.$queryRaw.mockResolvedValue([]);
+
+    await GET(makeRequest('Bearer test-secret') as any);
+
+    const arg = mocks.prisma.$queryRaw.mock.calls[0][0];
+    const text =
+      (arg && typeof arg === 'object' && 'sql' in arg && typeof (arg as { sql: unknown }).sql === 'string'
+        ? (arg as { sql: string }).sql
+        : (arg && typeof arg === 'object' && 'strings' in arg && Array.isArray((arg as { strings: unknown }).strings)
+            ? ((arg as { strings: string[] }).strings).join('?')
+            : '')) || '';
+    expect(text).toMatch(/= 2 AND EXTRACT\(DAY FROM p\."dateOfBirth"\) = 29/);
+    vi.useRealTimers();
+  });
+});
