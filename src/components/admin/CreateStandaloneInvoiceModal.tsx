@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import ClientSearchSelect from './ClientSearchSelect';
 
 interface Client {
   id: string;
@@ -41,11 +42,19 @@ const autoCategory = (desc: string): ItemCategory => {
 };
 
 interface CreateStandaloneInvoiceModalProps {
-  clients: Client[];
+  /**
+   * Optional. When omitted, the modal uses the autocomplete API
+   * (`/api/admin/clients/search`) instead of a fully-loaded dropdown.
+   * Kept for backward compatibility with call sites that already passed it
+   * (e.g. preselected client name resolution).
+   */
+  clients?: Client[];
   locale: string;
   onCreated?: () => void;
   /** Pre-fill and lock the client selector */
   preselectedClientId?: string;
+  /** Pre-fill the displayed name when `preselectedClientId` is set without `clients`. */
+  preselectedClientName?: string;
 }
 
 const SERVICE_TYPES = [
@@ -139,10 +148,10 @@ const PAYMENT_METHODS = [
 
 const today = () => new Date().toISOString().split('T')[0];
 
-export default function CreateStandaloneInvoiceModal({ clients, locale, onCreated, preselectedClientId }: CreateStandaloneInvoiceModalProps) {
+export default function CreateStandaloneInvoiceModal({ clients, locale, onCreated, preselectedClientId, preselectedClientName }: CreateStandaloneInvoiceModalProps) {
   const fr = locale === 'fr';
 
-  const sortedClients = [...clients].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedClients = clients ? [...clients].sort((a, b) => a.name.localeCompare(b.name)) : null;
 
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -308,7 +317,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
                 <Label className="text-xs">{fr ? 'Client *' : 'Client *'}</Label>
                 {preselectedClientId ? (
                   <div className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 bg-ivory-50 text-charcoal font-medium">
-                    {clients.find(c => c.id === preselectedClientId)?.name ?? preselectedClientId}
+                    {clients?.find(c => c.id === preselectedClientId)?.name ?? preselectedClientId}
                   </div>
                 ) : (
                   <>
@@ -319,7 +328,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
                     >
                       <option value="">{fr ? '— Sélectionner —' : '— Select —'}</option>
                       <option value="WALK_IN">➕ {fr ? 'Nouveau client de passage' : 'New walk-in client'}</option>
-                      {sortedClients.map(c => (
+                      {(sortedClients ?? []).map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
