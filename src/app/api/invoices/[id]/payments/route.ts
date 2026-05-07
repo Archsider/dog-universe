@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendSMS, sendAdminSMS, formatMAD } from '@/lib/sms';
+import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
+import { toNumber } from '@/lib/decimal';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -46,6 +48,20 @@ export async function POST(request: Request, { params }: Params) {
 
   const { id } = await params;
 
+  // Idempotency-Key support — replays within 24h are rejected with 409.
+  // Scope per-invoice so two distinct invoices can reuse the same client key.
+  try {
+    const idem = await tryAcquireIdempotency(request, `payment:${id}`);
+    if (!idem.acquired) {
+      return NextResponse.json({ error: 'DUPLICATE_REQUEST' }, { status: 409 });
+    }
+  } catch (err) {
+    if (err instanceof IdempotencyKeyInvalidError) {
+      return NextResponse.json({ error: 'IDEMPOTENCY_KEY_INVALID' }, { status: 400 });
+    }
+    throw err;
+  }
+
   const invoice = await prisma.invoice.findUnique({
     where: { id },
     include: {
@@ -76,14 +92,23 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: 'INVALID_PAYMENT_DATE' }, { status: 400 });
   }
 
-  // Prevent overpayment ONLY when the invoice is already fully PAID — on
-  // PENDING / PARTIALLY_PAID invoices the admin may still be editing items
-  // (e.g. just added an addon line and is recording the matching payment),
-  // so a payment that briefly exceeds the current amount is allowed.
-  // allocatePayments() afterwards derives the final status from the items.
-  const alreadyPaid = invoice.payments.reduce((s, p) => s + Number(p.amount), 0);
-  if (invoice.status === 'PAID' && alreadyPaid + parsedAmount > Number(invoice.amount) + 0.001) {
-    return NextResponse.json({ error: 'OVERPAYMENT_NOT_ALLOWED' }, { status: 400 });
+  // Reject overpayment outright (Sprint 1 sécurité critique). Tolerance 0.01
+  // MAD (1 centime) to absorb Decimal rounding without allowing actual excess.
+  // If the admin needs to add a new line item before recording the payment,
+  // they must update the invoice first — the previous "briefly accepted"
+  // behaviour masked legitimate accounting errors.
+  const alreadyPaid = invoice.payments.reduce((s, p) => s + toNumber(p.amount), 0);
+  const invoiceTotal = toNumber(invoice.amount);
+  if (alreadyPaid + parsedAmount > invoiceTotal + 0.01) {
+    return NextResponse.json(
+      {
+        error: 'OVERPAYMENT',
+        invoiceTotal,
+        alreadyPaid,
+        attempted: parsedAmount,
+      },
+      { status: 400 },
+    );
   }
 
   // --- Insert Payment ---

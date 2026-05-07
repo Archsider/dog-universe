@@ -3,10 +3,18 @@
  *
  * SUPERADMIN ONLY — Production clean-slate reset.
  *
- * Body: { dryRun?: boolean, confirm?: boolean }
+ * Body: { dryRun?: boolean, password?: string, confirm?: string }
  *
- * - dryRun=true  → returns counts of what WOULD be deleted (safe preview)
- * - confirm=true → performs the actual deletion (IRREVERSIBLE)
+ * - dryRun=true → returns counts of what WOULD be deleted (safe preview, no
+ *   re-auth required)
+ * - confirm='PRODUCTION_RESET_IRREVERSIBLE' AND password=<current> → performs
+ *   the actual deletion (IRREVERSIBLE)
+ *
+ * Hardening (Sprint 1 sécurité critique) :
+ *   - Re-auth password obligatoire (bcrypt compare contre passwordHash)
+ *   - Confirmation token explicite : `confirm === 'PRODUCTION_RESET_IRREVERSIBLE'`
+ *   - Rate-limit 3 tentatives / heure par userId via Redis
+ *   - Audit log avant ET après l'opération
  *
  * Preserved:
  *   - All ADMIN and SUPERADMIN user accounts
@@ -24,6 +32,32 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
+import bcrypt from 'bcryptjs';
+import { Redis } from '@upstash/redis';
+
+const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW = 3600; // seconds
+const CONFIRM_TOKEN = 'PRODUCTION_RESET_IRREVERSIBLE';
+
+function getRedis(): Redis | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  return new Redis({ url, token });
+}
+
+async function checkResetRateLimit(userId: string): Promise<boolean> {
+  const redis = getRedis();
+  if (!redis) return true; // fail-open: no Redis → allow
+  try {
+    const key = `production-reset:attempts:${userId}`;
+    const count = await redis.incr(key);
+    if (count === 1) await redis.expire(key, RATE_LIMIT_WINDOW);
+    return count <= RATE_LIMIT_MAX;
+  } catch {
+    return true; // fail-open
+  }
+}
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -31,18 +65,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden — SUPERADMIN only' }, { status: 403 });
   }
 
-  const body = await request.json().catch(() => ({}));
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const dryRun = body.dryRun === true;
-  const confirm = body.confirm === true;
+  const confirm = typeof body.confirm === 'string' ? body.confirm : undefined;
+  const password = typeof body.password === 'string' ? body.password : undefined;
 
-  if (!dryRun && !confirm) {
-    return NextResponse.json(
-      { error: 'Send { dryRun: true } to preview, or { confirm: true } to execute.' },
-      { status: 400 }
-    );
-  }
-
-  // ── Count what will be affected ──────────────────────────────────────────
+  // ── Count what will be affected (used by both dryRun and confirm paths) ──
   const [
     clientCount,
     petCount,
@@ -84,6 +112,55 @@ export async function POST(request: Request) {
   if (dryRun) {
     return NextResponse.json({ dryRun: true, wouldDelete: preview });
   }
+
+  // ── Confirmation token must match exactly ────────────────────────────────
+  if (confirm !== CONFIRM_TOKEN) {
+    return NextResponse.json(
+      { error: 'CONFIRMATION_REQUIRED', expected: CONFIRM_TOKEN },
+      { status: 400 },
+    );
+  }
+
+  // ── Password required for re-auth ────────────────────────────────────────
+  if (!password) {
+    return NextResponse.json({ error: 'PASSWORD_REQUIRED' }, { status: 400 });
+  }
+
+  // ── Rate-limit (3 / hour per userId) ─────────────────────────────────────
+  const allowed = await checkResetRateLimit(session.user.id);
+  if (!allowed) {
+    await logAction({
+      userId: session.user.id,
+      action: 'PRODUCTION_RESET_BLOCKED',
+      entityType: 'System',
+      details: { reason: 'RATE_LIMITED', performedBy: session.user.email },
+    });
+    return NextResponse.json({ error: 'TOO_MANY_ATTEMPTS' }, { status: 429 });
+  }
+
+  // ── Re-auth: bcrypt compare against current passwordHash ─────────────────
+  const admin = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { passwordHash: true },
+  });
+  const valid = admin ? await bcrypt.compare(password, admin.passwordHash) : false;
+  if (!valid) {
+    await logAction({
+      userId: session.user.id,
+      action: 'PRODUCTION_RESET_BLOCKED',
+      entityType: 'System',
+      details: { reason: 'WRONG_PASSWORD', performedBy: session.user.email },
+    });
+    return NextResponse.json({ error: 'INVALID_PASSWORD' }, { status: 403 });
+  }
+
+  // ── Audit BEFORE the destructive operation ──────────────────────────────
+  await logAction({
+    userId: session.user.id,
+    action: 'PRODUCTION_RESET_INITIATED',
+    entityType: 'System',
+    details: { willDelete: preview, performedBy: session.user.email },
+  });
 
   // ── CONFIRM: perform irreversible deletion ───────────────────────────────
   await prisma.$transaction(
@@ -132,7 +209,7 @@ export async function POST(request: Request) {
       // 12. CLIENT users only — ADMIN/SUPERADMIN preserved
       await tx.user.deleteMany({ where: { role: 'CLIENT' } });
     },
-    { timeout: 30000 }
+    { timeout: 30000 },
   );
 
   await logAction({

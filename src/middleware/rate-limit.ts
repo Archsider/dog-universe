@@ -18,6 +18,15 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(10, '15 m'),
       prefix: 'rl:auth',
     }),
+    // TOTP endpoints (setup / verify-setup / disable / validate) :
+    // bucket dédié, 10 / 15 min, séparé d'`auth` pour éviter qu'un brute-force
+    // de code TOTP ne gèle aussi les tentatives signin/reset-password
+    // légitimes du même utilisateur (ou inversement).
+    totp: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, '15 m'),
+      prefix: 'rl:totp',
+    }),
     // Password reset: 5 attempts per hour per IP
     passwordReset: new Ratelimit({
       redis,
@@ -98,7 +107,7 @@ function getRatelimiter() {
 export const limiter = getRatelimiter();
 
 // Bucket name for routes that should be rate-limited only on POST (default).
-type ExactBucket = 'auth' | 'passwordReset' | 'bookings' | 'uploads';
+type ExactBucket = 'auth' | 'totp' | 'passwordReset' | 'bookings' | 'uploads';
 
 export const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
   '/api/auth/signin': 'auth',
@@ -109,12 +118,13 @@ export const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
   '/api/contracts/sign': 'uploads', // signature contrat — spam protection
   '/api/bookings': 'bookings',
   '/api/uploads': 'uploads',
-  // TOTP endpoints — bucket alongside auth (10 / 15 min) to slow brute force
-  // of 6-digit codes (1e6 space; without rate-limit a few thousand req/s on
-  // serverless infra cracks it in minutes).
-  '/api/auth/totp/validate': 'auth',
-  '/api/auth/totp/verify-setup': 'auth',
-  '/api/auth/totp/disable': 'auth',
+  // TOTP endpoints — bucket dédié `totp` (10 / 15 min) pour slow brute-force
+  // des codes 6 digits (1e6 space) sans interférer avec le bucket `auth`
+  // partagé par signin / register / reset-password.
+  '/api/auth/totp/setup': 'totp',
+  '/api/auth/totp/validate': 'totp',
+  '/api/auth/totp/verify-setup': 'totp',
+  '/api/auth/totp/disable': 'totp',
 };
 
 type DynamicBucket = 'uploads' | 'auth' | 'passwordReset' | 'bookings' | 'taxiStream' | 'taxiTracking' | 'addonRequest';

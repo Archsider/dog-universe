@@ -22,6 +22,17 @@ export async function PUT(request: Request, { params }: Params) {
   }
   const { grade } = parsed.data;
 
+  // Sprint 1 sécurité — ne jamais upsert un grade fidélité sur un user
+  // qui n'est pas un CLIENT actif (évite création silencieuse de grade
+  // sur un ADMIN/SUPERADMIN ou un user soft-deleted).
+  const target = await prisma.user.findUnique({
+    where: { id },
+    select: { role: true, deletedAt: true },
+  });
+  if (!target || target.role !== 'CLIENT' || target.deletedAt !== null) {
+    return NextResponse.json({ error: 'CLIENT_NOT_FOUND' }, { status: 404 });
+  }
+
   const currentGrade = await prisma.loyaltyGrade.findUnique({ where: { clientId: id } });
 
   const updated = await prisma.loyaltyGrade.upsert({
