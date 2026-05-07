@@ -25,5 +25,9 @@ export async function GET() {
       price: toNumber(p.price),
       stock: p.stock,
     })),
+    {
+      // Per-user authenticated route — only browser-cache (private), no CDN.
+      headers: { 'Cache-Control': 'private, max-age=30' },
+    },
   );
 }

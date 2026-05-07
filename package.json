@@ -17,7 +17,8 @@
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "mutation": "stryker run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.85.0",
@@ -87,14 +88,14 @@
     }
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.2.5",
     "@playwright/test": "^1.59.1",
     "@types/bcryptjs": "^2.4.6",
-    "@types/pg": "^8.11.10",
-    "pg": "^8.13.1",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^22.10.1",
     "@types/nodemailer": "^6.4.17",
     "@types/opossum": "^8.1.9",
+    "@types/pg": "^8.11.10",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -103,6 +104,7 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.5.15",
+    "pg": "^8.13.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
     "typescript": "^5.7.2",

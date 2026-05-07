@@ -101,6 +101,40 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(60, '15 m'),
       prefix: 'rl:availability',
     }),
+    // Tier 2 hardening (2026-05-09) — granular buckets for sensitive routes:
+    //
+    // payment: 5 / 60 min — POST /api/invoices/[id]/payments. Recording a
+    // payment is a high-value comptable operation; brute-force or accidental
+    // double-submits should be hard-capped per user.
+    payment: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, '60 m'),
+      prefix: 'rl:payment',
+    }),
+    // invoiceCreate: 20 / 60 min — POST /api/admin/invoices and the future
+    // /api/admin/invoices/standalone. Caps invoice spam from a compromised
+    // admin token without throttling routine billing work.
+    invoiceCreate: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(20, '60 m'),
+      prefix: 'rl:invoiceCreate',
+    }),
+    // vaccinationExtract: 10 / 60 min — POST /api/pets/[id]/vaccinations/extract.
+    // Each call hits the Anthropic API ($$) and uploads a document; tight bucket
+    // bounds cost exposure if a token leaks.
+    vaccinationExtract: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, '60 m'),
+      prefix: 'rl:vaccinationExtract',
+    }),
+    // productOrder: 30 / 60 min — POST /api/client/bookings/[id]/add-product.
+    // Clients adding shop products to an active stay; cap accidental
+    // double-clicks and inventory griefing without blocking legitimate use.
+    productOrder: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(30, '60 m'),
+      prefix: 'rl:productOrder',
+    }),
   };
 }
 
@@ -127,7 +161,18 @@ export const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
   '/api/auth/totp/disable': 'totp',
 };
 
-type DynamicBucket = 'uploads' | 'auth' | 'passwordReset' | 'bookings' | 'taxiStream' | 'taxiTracking' | 'addonRequest';
+type DynamicBucket =
+  | 'uploads'
+  | 'auth'
+  | 'passwordReset'
+  | 'bookings'
+  | 'taxiStream'
+  | 'taxiTracking'
+  | 'addonRequest'
+  | 'payment'
+  | 'invoiceCreate'
+  | 'vaccinationExtract'
+  | 'productOrder';
 
 // Routes rate-limited regardless of HTTP method (e.g. expensive GETs).
 export const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'health' | 'availability'> = {
@@ -139,9 +184,11 @@ export const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'health' | 
 
 // Routes dynamiques (avec [params]) — match par suffixe de path
 export function getDynamicLimitBucket(path: string): DynamicBucket | null {
-  // /api/pets/{petId}/vaccinations/extract — upload + parsing PDF coûteux
+  // /api/pets/{petId}/vaccinations/extract — Anthropic API call ($$ + upload).
+  // Tier 2 hardening: switched from 'uploads' (30/h) to dedicated 'vaccinationExtract'
+  // (10/h) bucket — bounds cost exposure if an admin token leaks.
   if (path.startsWith('/api/pets/') && path.endsWith('/vaccinations/extract')) {
-    return 'uploads';
+    return 'vaccinationExtract';
   }
   // /api/taxi/{token}/stream — public SSE endpoint, 60 opens/h per IP
   if (path.startsWith('/api/taxi/') && path.endsWith('/stream')) {
@@ -168,6 +215,30 @@ export function getDynamicLimitBucket(path: string): DynamicBucket | null {
   // Reuse the uploads bucket (30/h per user) to cap photo-spam and storage abuse.
   if (path.startsWith('/api/admin/bookings/') && path.endsWith('/photos')) {
     return 'uploads';
+  }
+  // Tier 2 hardening — sensitive POST routes :
+  //
+  // /api/invoices/{id}/payments — record a payment (POST). Tight 5/h bucket.
+  if (
+    path.startsWith('/api/invoices/') &&
+    path.endsWith('/payments')
+  ) {
+    return 'payment';
+  }
+  // /api/admin/invoices (POST) and /api/admin/invoices/standalone (POST).
+  // Note: this is hit before the generic adminMutation bucket — granular wins.
+  if (
+    path === '/api/admin/invoices' ||
+    path === '/api/admin/invoices/standalone'
+  ) {
+    return 'invoiceCreate';
+  }
+  // /api/client/bookings/{id}/add-product — client adds shop products mid-stay.
+  if (
+    path.startsWith('/api/client/bookings/') &&
+    path.endsWith('/add-product')
+  ) {
+    return 'productOrder';
   }
   return null;
 }

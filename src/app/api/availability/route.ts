@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { cacheReadThrough } from '@/lib/cache';
 import { getCapacityLimits } from '@/lib/capacity';
 
+// Edge / CDN caching — public route, varies on query string by default
+export const revalidate = 60;
+
 const MONTH_RE = /^\d{4}-\d{2}$/;
 const VALID_SPECIES = ['DOG', 'CAT'] as const;
 type Species = 'DOG' | 'CAT';
@@ -156,5 +159,10 @@ export async function GET(request: NextRequest) {
     computeAvailability(species, month, limit),
   );
 
-  return NextResponse.json(data);
+  return NextResponse.json(data, {
+    headers: {
+      // CDN: serve cached for 60s, allow stale-while-revalidate up to 5 min
+      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+    },
+  });
 }

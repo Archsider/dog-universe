@@ -596,3 +596,15 @@ model MonthlyRevenueSummary {
   @@index([year])
 }
 
+
+// Multi-tenant scaffolding (NON destructif).
+// Modèle posé pour préparer la future migration multi-pension SaaS.
+// Aujourd'hui une seule row 'default' ; aucune relation forcée vers les
+// autres modèles pour ne pas casser le runtime single-tenant.
+// Voir docs/MULTI_TENANT_PLAN.md.
+model Tenant {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+}
