@@ -16,6 +16,11 @@ import {
   newClientsCount,
 } from '@/lib/metrics';
 
+// Cache ISR — revalidation toutes les 60 s. Les actions admin (PATCH bookings,
+// invoices) appellent revalidateTag('admin-counts') pour invalider en cas de
+// mutation, donc 60 s ne fait que limiter les hits DB sur lectures bulk.
+export const revalidate = 60;
+
 interface PageProps { params: Promise<{ locale: string }> }
 
 export default async function AdminDashboardPage({ params }: PageProps) {
@@ -65,9 +70,11 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     totalCashCollected(lastMonthStart, lastMonthEnd),
     prisma.booking.findMany({
       where: { deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
-      include: {
+      select: {
+        id: true,
+        status: true,
         client: { select: { name: true, email: true } },
-        bookingPets: { include: { pet: { select: { name: true } } } },
+        bookingPets: { select: { pet: { select: { name: true } } } },
       },
       orderBy: { startDate: 'desc' },
       take: 8,
@@ -109,9 +116,11 @@ export default async function AdminDashboardPage({ params }: PageProps) {
         startDate: { gte: todayStart, lte: todayEnd },
         deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       },
-      include: {
+      select: {
+        id: true,
+        arrivalTime: true,
         client: { select: { name: true } },
-        bookingPets: { include: { pet: { select: { name: true, species: true } } } },
+        bookingPets: { select: { pet: { select: { name: true, species: true } } } },
       },
       orderBy: { arrivalTime: 'asc' },
     }),
@@ -122,9 +131,10 @@ export default async function AdminDashboardPage({ params }: PageProps) {
         endDate: { gte: todayStart, lte: todayEnd },
         deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       },
-      include: {
+      select: {
+        id: true,
         client: { select: { name: true } },
-        bookingPets: { include: { pet: { select: { name: true, species: true } } } },
+        bookingPets: { select: { pet: { select: { name: true, species: true } } } },
       },
     }),
     prisma.monthlyRevenueSummary.findFirst({

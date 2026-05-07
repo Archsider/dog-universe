@@ -104,6 +104,12 @@ export default function ReservationsList({ bookings, locale, monthlyRevenue, ini
   const searchParams = useSearchParams();
   const [filter, setFilter] = useState<Filter>(initialFilter);
   const [query, setQuery] = useState('');
+  // Pagination client : KPIs restent calculés sur le dataset complet (chargé
+  // côté serveur avec take: 500), mais on n'affiche que PAGE_SIZE lignes à la
+  // fois pour réduire la charge DOM/render. Reset à 1 sur changement de filtre.
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [filter, query]);
 
   // Sync filter back to URL (no scroll, replace) so deep links keep working.
   useEffect(() => {
@@ -375,11 +381,24 @@ export default function ReservationsList({ bookings, locale, monthlyRevenue, ini
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((b) => (
+                {filtered.slice(0, page * PAGE_SIZE).map((b) => (
                   <Row key={b.id} b={b} locale={locale} t={t} />
                 ))}
               </tbody>
             </table>
+            {filtered.length > page * PAGE_SIZE && (
+              <div className="px-4 py-4 border-t border-ivory-100 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => p + 1)}
+                  className="px-4 py-2 text-sm font-medium text-charcoal bg-[#FAF6F0] hover:bg-[#F0E6CF] rounded-lg border border-[#F0D98A]/40 transition-colors"
+                >
+                  {locale === 'en'
+                    ? `Load more (${filtered.length - page * PAGE_SIZE} remaining)`
+                    : `Charger plus (${filtered.length - page * PAGE_SIZE} restantes)`}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

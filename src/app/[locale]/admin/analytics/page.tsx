@@ -19,6 +19,11 @@ import { toNumber } from '@/lib/decimal';
 // Recharts sub-components internally via next/dynamic — no outer wrapper needed.
 import AnalyticsCharts from './AnalyticsCharts';
 
+// Cache ISR — analytics agrègent sur tout le mois ; recalculer toutes les 60 s
+// suffit. Mutations comptables (paiement, statut booking) invalident via
+// revalidateTag('admin-counts').
+export const revalidate = 60;
+
 interface PageProps { params: Promise<{ locale: string }> }
 
 export default async function AdminAnalyticsPage({ params }: PageProps) {

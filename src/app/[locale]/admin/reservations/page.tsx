@@ -55,9 +55,17 @@ export default async function AdminReservationsPage(props: PageProps) {
           { status: 'COMPLETED', updatedAt: { gte: sevenDaysAgo } },
         ],
       },
-      include: {
+      select: {
+        id: true,
+        version: true,
+        serviceType: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        arrivalTime: true,
+        notes: true,
         client: { select: { id: true, name: true, email: true } },
-        bookingPets: { include: { pet: { select: { name: true } } } },
+        bookingPets: { select: { pet: { select: { name: true } } } },
       },
       orderBy: { startDate: 'asc' },
     });

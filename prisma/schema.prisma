@@ -392,6 +392,7 @@ model InvoiceItem {
   @@index([invoiceId])
   @@index([category]) // billing par catégorie (CA Taxi, Boarding…)
   @@index([productId])
+  @@index([invoiceId, category]) // hot path : drill-down analytics + allocation séquentielle
 }
 
 model Payment {

@@ -90,14 +90,32 @@ async function main() {
       continue;
     }
     console.log(`[db-migrate] applying ${name}`);
-    await client.query('BEGIN');
+
+    // Postgres : CREATE INDEX CONCURRENTLY ne tolère pas une transaction.
+    // On split le SQL en deux groupes : statements CONCURRENTLY hors tx,
+    // le reste dans la tx unique habituelle. Détection naïve "CONCURRENTLY"
+    // (case-insensitive) suffisante pour notre usage.
+    const stmts = sql.split(';').map((s) => s.trim()).filter(Boolean);
+    const concurrent = stmts.filter((s) => /\bconcurrently\b/i.test(s));
+    const transactional = stmts.filter((s) => !/\bconcurrently\b/i.test(s));
+
     try {
-      await client.query(sql);
+      if (transactional.length > 0) {
+        await client.query('BEGIN');
+        try {
+          await client.query(transactional.join(';\n') + ';');
+          await client.query('COMMIT');
+        } catch (err) {
+          await client.query('ROLLBACK');
+          throw err;
+        }
+      }
+      for (const stmt of concurrent) {
+        await client.query(stmt);
+      }
       await client.query('INSERT INTO "_app_migrations"(name) VALUES ($1)', [name]);
-      await client.query('COMMIT');
       count += 1;
     } catch (err) {
-      await client.query('ROLLBACK');
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[db-migrate] FAILED ${name}: ${msg}`);
       throw err;
