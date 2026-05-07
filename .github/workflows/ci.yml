@@ -135,7 +135,7 @@ jobs:
           PLAYWRIGHT_BASE_URL: https://app.doguniverse.ma
       - name: Upload Playwright artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
