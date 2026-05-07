@@ -1,0 +1,25 @@
+name: Soft-delete guard
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/app/api/**'
+      - 'src/lib/services/**'
+      - 'scripts/check-soft-delete.mjs'
+
+jobs:
+  check:
+    name: prisma find* must filter deletedAt
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Report-only during the migration window. Once the existing backlog of
+      # find* calls is annotated with `// soft-delete-bypass: <reason>` or
+      # actually fixed, drop the `--warn` flag to make this gate strict.
+      - name: Run soft-delete guard
+        run: node scripts/check-soft-delete.mjs --warn
