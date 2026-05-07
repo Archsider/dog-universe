@@ -1,0 +1,46 @@
+name: Lighthouse CI
+
+on:
+  pull_request:
+    branches: [main]
+
+# Lighthouse spins up a real Next.js server and audits public routes.
+# Budgets live in lighthouserc.json (LCP/CLS/TBT/JS bundle).
+jobs:
+  lighthouse:
+    name: Lighthouse audit (public routes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Build needs at least these to compile/start.
+      NEXTAUTH_SECRET: lighthouse-ci-fake-secret-not-for-production
+      NEXTAUTH_URL: http://localhost:3000
+      DATABASE_URL: postgresql://lhci:lhci@localhost:5432/lhci
+      DIRECT_URL: postgresql://lhci:lhci@localhost:5432/lhci
+      SKIP_ENV_VALIDATION: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Build Next.js (skip DB migration)
+        run: npx next build
+        env:
+          # Bypass `npm run build` which calls scripts/db-migrate.mjs first.
+          NEXT_TELEMETRY_DISABLED: '1'
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          configPath: ./lighthouserc.json
+          uploadArtifacts: true
+          temporaryPublicStorage: true

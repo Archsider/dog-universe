@@ -134,6 +134,11 @@ export type CategoryBreakdown = {
 // La fenêtre de requête est élargie de ±90 j pour capturer les séjours qui
 // chevauchent partiellement la période cible. La cap take=2000 protège du
 // DoS / OOM en cas de volume élevé.
+// TODO: switch to monthly_revenue_mv when stable.
+// The materialized view (migration 20260509_monthly_revenue_mv) pre-aggregates
+// the same allocation per (year, month, category) and is refreshed hourly by
+// /api/cron/refresh-monthly-revenue. Once we've validated parity in prod, swap
+// the body of this function for a `prisma.$queryRaw` against the view.
 export async function revenueByCategoryProrata(
   start: Date,
   end: Date,
