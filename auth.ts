@@ -31,6 +31,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const user = await prisma.user.findUnique({
           where: { email: email.toLowerCase().trim() },
+          // Explicit select: avoids fetching columns that may not exist yet in
+          // prod DB (e.g. firstName/lastName added by a pending migration). A
+          // missing column in a select-all query causes Prisma to throw, which
+          // NextAuth silently converts to "invalid credentials".
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            passwordHash: true,
+            role: true,
+            language: true,
+            isWalkIn: true,
+            deletedAt: true,
+            anonymizedAt: true,
+          },
         });
 
         if (!user) return null;
