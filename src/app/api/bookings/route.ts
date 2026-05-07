@@ -11,7 +11,7 @@ import {
 } from '@/lib/notifications';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
-import { enqueueEmail, enqueueSms } from '@/lib/queues/index';
+import { sendEmailNow, sendSmsNow } from '@/lib/notify-now';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice, calculateBoardingTotalForExtension } from '@/lib/pricing';
 import { bookingCreateSchema } from '@/lib/validation';
 import { withSchema } from '@/lib/with-schema';
@@ -517,13 +517,7 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
       const dateRangeSMS = booking.serviceType === 'BOARDING' && booking.endDate
         ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
         : `le ${formatDateFR(booking.startDate)}`;
-      Sentry.startSpan(
-        { name: 'booking.enqueueAdminSms', op: 'queue' },
-        () => enqueueSms(
-          { to: 'ADMIN', message: `🔔 Nouvelle réservation : ${clientLabel} pour ${petNames} ${dateRangeSMS}.` },
-          `${booking.id}:admin-new-booking-sms`,
-        ),
-      ).catch(() => {});
+      sendSmsNow({ to: 'ADMIN', message: `🔔 Nouvelle réservation : ${clientLabel} pour ${petNames} ${dateRangeSMS}.` });
 
       // Email admin — loop tous les admins en DB (queued, with direct-send fallback)
       Sentry.startSpan(
@@ -546,7 +540,7 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
           const dateRangeHtmlEn = booking.serviceType === 'BOARDING' && booking.endDate
             ? `from <strong>${formatDateFR(booking.startDate)}</strong> to <strong>${formatDateFR(booking.endDate)}</strong>`
             : `on <strong>${formatDateFR(booking.startDate)}</strong>`;
-          await Promise.all(admins.map((admin, idx) => {
+          await Promise.all(admins.map((admin) => {
             const isFr = (admin.language ?? 'fr') === 'fr';
             const subject = isFr
               ? `🔔 Nouvelle réservation — ${clientLabel}`
@@ -572,10 +566,8 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
                  </ul>
                  <p><a href="${appUrl}/en/admin/reservations/${booking.id}">Review and confirm</a></p>
                  <p>— Dog Universe CRM</p>`;
-            return enqueueEmail(
-              { to: admin.email, subject, html },
-              `${booking.id}:admin-new-booking-email-${idx}`,
-            ).catch(err => console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin new booking enqueue failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() })));
+            sendEmailNow({ to: admin.email, subject, html });
+            return Promise.resolve();
           }));
         } catch (err) {
           console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin new booking notification loop failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
@@ -595,10 +587,7 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
       petName: petNames,
     }, locale);
 
-    Sentry.startSpan(
-      { name: 'booking.enqueueNotifications', op: 'queue' },
-      () => enqueueEmail({ to: booking.client.email, subject, html }, `${booking.id}:booking-confirmation-email`),
-    ).catch(() => {});
+    sendEmailNow({ to: booking.client.email, subject, html });
 
     await logAction({
       userId: session.user.id,

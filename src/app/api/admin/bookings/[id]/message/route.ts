@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { createAdminMessageNotification } from '@/lib/notifications';
-import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { getEmailTemplate } from '@/lib/email';
+import { sendEmailNow } from '@/lib/notify-now';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     { clientName: booking.client.name, message, bookingRef },
     locale
   );
-  sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
+  sendEmailNow({ to: booking.client.email, subject, html });
 
   return NextResponse.json({ success: true });
 }

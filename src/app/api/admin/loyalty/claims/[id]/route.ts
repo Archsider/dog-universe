@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
-import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { getEmailTemplate } from '@/lib/email';
+import { sendEmailNow } from '@/lib/notify-now';
 import { revalidateTag } from 'next/cache';
 import { invalidateNotifCount } from '@/lib/notifications';
 
@@ -77,7 +78,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     },
     locale,
   );
-  sendEmail({ to: claim.client.email, subject, html }).catch(() => {});
+  sendEmailNow({ to: claim.client.email, subject, html });
 
   // Notification was inserted via tx.notification.create (bypassing the
   // createNotification helper that auto-invalidates), so do it manually here.

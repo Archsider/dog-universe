@@ -3,7 +3,8 @@ import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createInvoiceNotification } from '@/lib/notifications';
-import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { getEmailTemplate } from '@/lib/email';
+import { sendEmailNow } from '@/lib/notify-now';
 import { formatMAD } from '@/lib/utils';
 import { allocatePayments } from '@/lib/payments';
 

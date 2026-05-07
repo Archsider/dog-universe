@@ -3,7 +3,8 @@ import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { uploadFile } from '@/lib/upload';
 import { createStayPhotoAddedNotification } from '@/lib/notifications';
-import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { getEmailTemplate } from '@/lib/email';
+import { sendEmailNow } from '@/lib/notify-now';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 interface Params { params: Promise<{ id: string }> }
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     { clientName: booking.client.name ?? booking.client.email, petName, bookingRef },
     locale
   );
-  sendEmail({ to: booking.client.email, subject, html }).catch(() => {});
+  sendEmailNow({ to: booking.client.email, subject, html });
 
   return NextResponse.json(photo, { status: 201 });
 }

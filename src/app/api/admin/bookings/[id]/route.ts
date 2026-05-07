@@ -19,7 +19,7 @@ import {
   sendSMS, sendAdminSMS, formatDateFR,
   petVerb, petArrived, petChouchoute,
 } from '@/lib/sms';
-import { enqueueEmail, enqueueSms } from '@/lib/queues/index';
+import { sendEmailNow, sendSmsNow } from '@/lib/notify-now';
 import { checkBoardingCapacity, CapacityCheckExceeded } from '@/lib/capacity';
 import { revalidateTag } from 'next/cache';
 import {
@@ -770,10 +770,7 @@ export const PATCH = withSchema(
         startDate: startDateFmt,
         endDate: endDateFmt,
       }, userLang, pets);
-      enqueueEmail(
-        { to: booking.client.email, subject, html },
-        `${id}:confirmed-email`,
-      ).catch(() => {});
+      sendEmailNow({ to: booking.client.email, subject, html })
 
       // SMS client confirmation — accord genre/pluriel (queued)
       const dateRange = booking.serviceType === 'BOARDING' && booking.endDate
@@ -782,19 +779,13 @@ export const PATCH = withSchema(
       const venueLine = booking.serviceType === 'BOARDING'
         ? `${petNames} ${petVerb(pets)} chez Dog Universe ${dateRange}. Nous ${pets.length > 1 ? 'les' : "l'"} attendons avec impatience !`
         : `Transport prévu pour ${petNames} ${dateRange}.`;
-      enqueueSms(
-        { to: booking.client.phone, message: `Bonjour ${firstName} ! ${venueLine} — Dog Universe 🐾` },
-        `${id}:confirmed-sms-client`,
-      ).catch(() => {});
+      sendSmsNow({ to: booking.client.phone, message: `Bonjour ${firstName} ! ${venueLine} — Dog Universe 🐾` });
 
       // SMS admin — réservation confirmée (queued)
       const confirmRangeAdmin = booking.serviceType === 'BOARDING' && booking.endDate
         ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
         : ` le ${formatDateFR(booking.startDate)}`;
-      enqueueSms(
-        { to: 'ADMIN', message: `✅ Résa confirmée : ${petNames} de ${booking.client.name}${confirmRangeAdmin}.` },
-        `${id}:confirmed-sms-admin`,
-      ).catch(() => {});
+      sendSmsNow({ to: 'ADMIN', message: `✅ Résa confirmée : ${petNames} de ${booking.client.name}${confirmRangeAdmin}.` });
 
       // For PET_TAXI: ensure a STANDALONE TaxiTrip exists
       if (booking.serviceType === 'PET_TAXI') {
@@ -836,26 +827,17 @@ export const PATCH = withSchema(
           bookingRef,
           petName: petNames,
         }, userLang, pets);
-        enqueueEmail(
-          { to: booking.client.email, subject, html },
-          `${id}:refused-email`,
-        ).catch(() => {});
+        sendEmailNow({ to: booking.client.email, subject, html })
 
         // SMS client annulation + SMS admin alerte (queued) — localisé selon la langue du client
         const refusedSmsMsg = userLang === 'en'
           ? `Hello ${firstName}, your booking for ${petNames} has been cancelled. We remain available. — Dog Universe`
           : `Bonjour ${firstName}, votre réservation pour ${petNames} a été annulée. Nous restons disponibles. — Dog Universe`;
-        enqueueSms(
-          { to: booking.client.phone, message: refusedSmsMsg },
-          `${id}:refused-sms-client`,
-        ).catch(() => {});
+        sendSmsNow({ to: booking.client.phone, message: refusedSmsMsg })
         const adminDateRange = booking.serviceType === 'BOARDING' && booking.endDate
           ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
           : ` le ${formatDateFR(booking.startDate)}`;
-        enqueueSms(
-          { to: 'ADMIN', message: `⚠️ Annulation : ${petNames} de ${booking.client.name}${adminDateRange}.` },
-          `${id}:refused-sms-admin`,
-        ).catch(() => {});
+        sendSmsNow({ to: 'ADMIN', message: `⚠️ Annulation : ${petNames} de ${booking.client.name}${adminDateRange}.` });
       }
 
       await logAction({
@@ -880,10 +862,7 @@ export const PATCH = withSchema(
       // sous BOOKING_CANCELLED car NO_SHOW est sémantiquement une non-venue.
       await createBookingNoShowNotification(booking.clientId, bookingRef, petNames);
 
-      enqueueSms(
-        { to: 'ADMIN', message: `🚫 No Show : ${petNames} de ${booking.client.name} (réf. ${bookingRef}).` },
-        `${id}:no-show-sms-admin`,
-      ).catch(() => {});
+      sendSmsNow({ to: 'ADMIN', message: `🚫 No Show : ${petNames} de ${booking.client.name} (réf. ${bookingRef}).` });
 
       await logAction({
         userId: session.user.id,
@@ -911,16 +890,10 @@ export const PATCH = withSchema(
       );
 
       // SMS client séjour terminé (queued)
-      enqueueSms(
-        { to: booking.client.phone, message: `Bonjour ${firstName} ! Le séjour de ${petNames} est terminé. Ce fut un plaisir de ${pets.length > 1 ? 'les' : "l'"} accueillir. À très bientôt ! — Dog Universe 🐾` },
-        `${id}:completed-sms-client`,
-      ).catch(() => {});
+      sendSmsNow({ to: booking.client.phone, message: `Bonjour ${firstName} ! Le séjour de ${petNames} est terminé. Ce fut un plaisir de ${pets.length > 1 ? 'les' : "l'"} accueillir. À très bientôt ! — Dog Universe 🐾` });
 
       // SMS admin — séjour terminé (queued)
-      enqueueSms(
-        { to: 'ADMIN', message: `✅ Départ : ${petNames} de ${booking.client.name} a quitté la pension.` },
-        `${id}:completed-sms-admin`,
-      ).catch(() => {});
+      sendSmsNow({ to: 'ADMIN', message: `✅ Départ : ${petNames} de ${booking.client.name} a quitté la pension.` });
 
       await logAction({
         userId: session.user.id,
@@ -970,17 +943,11 @@ export const PATCH = withSchema(
         select: { id: true },
       });
       if (!hasTaxiDelivered) {
-        enqueueSms(
-          { to: booking.client.phone, message: `Bonjour ${firstName} ! ${petNames} ${petVerb(pets, 'present')} bien ${petArrived(pets)} et déjà ${petChouchoute(pets)}. Nous en prenons soin. — Dog Universe 🐾` },
-          `${id}:in-progress-sms-client`,
-        ).catch(() => {});
+        sendSmsNow({ to: booking.client.phone, message: `Bonjour ${firstName} ! ${petNames} ${petVerb(pets, 'present')} bien ${petArrived(pets)} et déjà ${petChouchoute(pets)}. Nous en prenons soin. — Dog Universe 🐾` });
       }
 
       // SMS admin — arrivée confirmée (queued)
-      enqueueSms(
-        { to: 'ADMIN', message: `🏠 Arrivée : ${petNames} de ${booking.client.name} est en pension.` },
-        `${id}:in-progress-sms-admin`,
-      ).catch(() => {});
+      sendSmsNow({ to: 'ADMIN', message: `🏠 Arrivée : ${petNames} de ${booking.client.name} est en pension.` });
 
       await logAction({
         userId: session.user.id,

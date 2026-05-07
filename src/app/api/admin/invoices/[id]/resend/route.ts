@@ -4,7 +4,8 @@ import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
 import { createInvoiceNotification, createInvoicePaidNotification } from '@/lib/notifications';
-import { sendEmail, getEmailTemplate } from '@/lib/email';
+import { getEmailTemplate } from '@/lib/email';
+import { sendEmailNow } from '@/lib/notify-now';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -45,7 +46,7 @@ export async function POST(_req: Request, { params }: Params) {
           invoiceNumber: invoice.invoiceNumber,
           amount: amountStr,
         }, locale);
-        await sendEmail({ to: client.email, subject, html });
+        sendEmailNow({ to: client.email, subject, html });
       }
     },
   );
