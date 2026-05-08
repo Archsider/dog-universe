@@ -141,34 +141,87 @@ export async function POST(request: Request) {
     const isPaid = markPaid === true;
     const resolvedPaidAt = isPaid && paidAt ? new Date(paidAt) : isPaid ? new Date() : null;
 
-    const invoice = await prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        clientId,
-        bookingId: bookingId || null,
-        amount,
-        serviceType: serviceType || null,
-        status: 'PENDING',
-        paidAmount: 0,
-        notes: notes?.trim() || null,
-        ...(resolvedIssuedAt && { issuedAt: resolvedIssuedAt }),
-        ...(resolvedPeriodDate && { periodDate: resolvedPeriodDate }),
-        items: {
-          create: items.map((item: { description: string; quantity: number; unitPrice: number; total: number; category?: string; productId?: string }) => ({
-            description: item.description,
-            quantity: item.quantity ?? 1,
-            unitPrice: item.unitPrice,
-            total: item.total,
-            // Règle métier : productId présent → category forcée à 'PRODUCT'.
-            // L'appelant ne peut pas surcharger cette catégorie.
-            ...(item.productId
-              ? { productId: item.productId, category: 'PRODUCT' as const }
-              : { category: (item.category ?? 'OTHER') as 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' }),
-          })),
-        },
-      },
-      include: { items: true, client: true },
-    });
+    // Aggrège les quantités par productId — si le même produit apparaît sur
+    // plusieurs lignes, on décrément le stock une seule fois avec la somme
+    // (évite les doubles décréments + le SELECT FOR UPDATE concurrent).
+    const productLines = (items as { productId?: string; quantity: number }[])
+      .filter((it) => typeof it.productId === 'string' && it.productId.length > 0);
+    const stockNeeds = new Map<string, number>();
+    for (const it of productLines) {
+      stockNeeds.set(it.productId!, (stockNeeds.get(it.productId!) ?? 0) + (it.quantity ?? 1));
+    }
+
+    let invoice;
+    try {
+      invoice = await prisma.$transaction(async (tx) => {
+        // 1) Verrouille chaque produit (FOR UPDATE) + check stock + décrément.
+        //    Lock en parallèle SAFE car id distinct par ligne.
+        if (stockNeeds.size > 0) {
+          for (const [productId, needed] of stockNeeds.entries()) {
+            const locked = await tx.$queryRaw<{ id: string; stock: number; available: boolean }[]>`
+              SELECT id, stock, available FROM "Product" WHERE id = ${productId} FOR UPDATE
+            `;
+            const product = locked[0];
+            if (!product) {
+              throw new Error(`PRODUCT_NOT_FOUND:${productId}`);
+            }
+            if (product.available === false) {
+              throw new Error(`PRODUCT_UNAVAILABLE:${productId}`);
+            }
+            if (product.stock < needed) {
+              throw new Error(`OUT_OF_STOCK:${productId}`);
+            }
+            await tx.product.update({
+              where: { id: productId },
+              data: { stock: { decrement: needed } },
+            });
+          }
+        }
+
+        // 2) Crée l'invoice + items dans la même tx.
+        return tx.invoice.create({
+          data: {
+            invoiceNumber,
+            clientId,
+            bookingId: bookingId || null,
+            amount,
+            serviceType: serviceType || null,
+            status: 'PENDING',
+            paidAmount: 0,
+            notes: notes?.trim() || null,
+            ...(resolvedIssuedAt && { issuedAt: resolvedIssuedAt }),
+            ...(resolvedPeriodDate && { periodDate: resolvedPeriodDate }),
+            items: {
+              create: items.map((item: { description: string; quantity: number; unitPrice: number; total: number; category?: string; productId?: string }) => ({
+                description: item.description,
+                quantity: item.quantity ?? 1,
+                unitPrice: item.unitPrice,
+                total: item.total,
+                // Règle métier : productId présent → category forcée à 'PRODUCT'.
+                // L'appelant ne peut pas surcharger cette catégorie.
+                ...(item.productId
+                  ? { productId: item.productId, category: 'PRODUCT' as const }
+                  : { category: (item.category ?? 'OTHER') as 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' }),
+              })),
+            },
+          },
+          include: { items: true, client: true },
+        });
+      });
+    } catch (err) {
+      if (err instanceof Error) {
+        if (err.message.startsWith('OUT_OF_STOCK')) {
+          return NextResponse.json({ error: 'OUT_OF_STOCK' }, { status: 400 });
+        }
+        if (err.message.startsWith('PRODUCT_UNAVAILABLE')) {
+          return NextResponse.json({ error: 'PRODUCT_UNAVAILABLE' }, { status: 400 });
+        }
+        if (err.message.startsWith('PRODUCT_NOT_FOUND')) {
+          return NextResponse.json({ error: 'PRODUCT_NOT_FOUND' }, { status: 400 });
+        }
+      }
+      throw err;
+    }
 
     // If markPaid: create a Payment row and run allocation
     if (isPaid && paymentMethod) {

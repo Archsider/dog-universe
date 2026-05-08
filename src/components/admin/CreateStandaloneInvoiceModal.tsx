@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,16 @@ interface LineItem {
   quantity: number;
   unitPrice: number;
   category: ItemCategory;
+  productId?: string;
+}
+
+interface CatalogProduct {
+  id: string;
+  name: string;
+  brand: string | null;
+  price: number;
+  stock: number;
+  available: boolean;
 }
 
 const CATEGORY_OPTIONS: { value: ItemCategory; label: string }[] = [
@@ -163,6 +173,27 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
   const [issuedAt, setIssuedAt] = useState(today());
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<LineItem[]>([{ description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+
+  // Charge le catalogue produits au montage (utilisé pour l'autocomplete des
+  // lignes d'articles → auto-fill prix/catégorie/productId quand l'admin
+  // sélectionne un produit existant).
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/admin/products')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: CatalogProduct[]) => {
+        if (alive && Array.isArray(data)) {
+          setCatalog(data.filter(p => p.available !== false));
+        }
+      })
+      .catch(() => { /* silencieux : la facture peut toujours être créée à la main */ });
+    return () => { alive = false; };
+  }, []);
+
+  // Libellé canonique d'un produit pour l'option du datalist + matching.
+  const productLabel = (p: CatalogProduct) =>
+    p.brand ? `${p.name} — ${p.brand}` : p.name;
   const [markPaid, setMarkPaid] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [paidAt, setPaidAt] = useState(today());
@@ -171,13 +202,28 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
 
   const addItem = () => setItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
   const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
-  const updateItem = (i: number, field: keyof LineItem, value: string | number) => {
+  const updateItem = (i: number, field: keyof LineItem, value: string | number | undefined) => {
     setItems(prev => prev.map((it, idx) => {
       if (idx !== i) return it;
       const next = { ...it, [field]: value } as LineItem;
-      // Auto-detect category on description change — only if current category is OTHER
-      if (field === 'description' && it.category === 'OTHER') {
-        next.category = autoCategory(String(value));
+      // Description change : tenter un match exact dans le catalogue produits.
+      // Match → auto-fill prix/catégorie/productId. Sinon → reset productId
+      // et auto-detect catégorie depuis le texte si elle est sur 'OTHER'.
+      if (field === 'description') {
+        const raw = String(value).trim().toLowerCase();
+        const matched = raw
+          ? catalog.find(p => productLabel(p).toLowerCase() === raw)
+          : undefined;
+        if (matched) {
+          next.productId = matched.id;
+          next.unitPrice = matched.price;
+          next.category = 'PRODUCT';
+        } else {
+          next.productId = undefined;
+          if (it.category === 'OTHER') {
+            next.category = autoCategory(String(value));
+          }
+        }
       }
       return next;
     }));
@@ -260,6 +306,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
           unitPrice: it.unitPrice,
           total: it.quantity * it.unitPrice,
           category: it.category,
+          ...(it.productId ? { productId: it.productId } : {}),
         })),
       };
       if (markPaid) {
@@ -418,9 +465,10 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
                   <div key={i} className="grid grid-cols-12 gap-2 items-center">
                     <Input
                       className="col-span-4 text-sm h-8"
+                      list="invoice-products-datalist"
                       value={it.description}
                       onChange={e => updateItem(i, 'description', e.target.value)}
-                      placeholder={fr ? 'ex: Croquettes Royal Canin 10kg' : 'e.g. Royal Canin 10kg kibbles'}
+                      placeholder={fr ? 'Tape ou choisis un produit du catalogue…' : 'Type or pick from catalogue…'}
                     />
                     <select
                       value={it.category}
@@ -456,6 +504,15 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
                   </div>
                 ))}
               </div>
+
+              {/* Catalogue produits — alimente l'autocomplete des descriptions */}
+              <datalist id="invoice-products-datalist">
+                {catalog.map(p => (
+                  <option key={p.id} value={productLabel(p)}>
+                    {p.price.toLocaleString()} MAD · stock {p.stock}
+                  </option>
+                ))}
+              </datalist>
 
               <div className="flex justify-end mt-3 pt-2 border-t border-gray-100">
                 <span className="text-sm font-bold text-charcoal">
