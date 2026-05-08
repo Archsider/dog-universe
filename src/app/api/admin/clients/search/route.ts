@@ -61,6 +61,13 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
+    console.error(JSON.stringify({
+      level: 'info',
+      service: 'admin-clients-search',
+      message: 'GET (no query)',
+      count: clients.length,
+      timestamp: new Date().toISOString(),
+    }));
     return NextResponse.json({ clients });
   }
 
@@ -75,6 +82,15 @@ export async function GET(request: NextRequest) {
     orderBy: { name: 'asc' },
     take: 50,
   });
+
+  console.error(JSON.stringify({
+    level: 'info',
+    service: 'admin-clients-search',
+    message: 'GET (query)',
+    q: q.slice(0, 50),
+    count: clients.length,
+    timestamp: new Date().toISOString(),
+  }));
 
   return NextResponse.json({ clients });
 }

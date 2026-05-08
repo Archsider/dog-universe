@@ -24,11 +24,21 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Pas de filtre `available` côté admin — le dropdown serait vide pour
+  // les bases qui ont les rangs legacy `available = false` ou null.
+  // Le composant AddProductSection peut filtrer côté client si besoin.
   const products = await prisma.product.findMany({
-    where: { available: true },
     orderBy: { name: 'asc' },
     take: 1000,
   });
+
+  console.error(JSON.stringify({
+    level: 'info',
+    service: 'admin-products',
+    message: 'GET',
+    count: products.length,
+    timestamp: new Date().toISOString(),
+  }));
 
   return NextResponse.json(
     products.map((p) => ({
