@@ -151,8 +151,6 @@ const today = () => new Date().toISOString().split('T')[0];
 export default function CreateStandaloneInvoiceModal({ clients, locale, onCreated, preselectedClientId, preselectedClientName }: CreateStandaloneInvoiceModalProps) {
   const fr = locale === 'fr';
 
-  const sortedClients = clients ? [...clients].sort((a, b) => a.name.localeCompare(b.name)) : null;
-
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -317,21 +315,17 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
                 <Label className="text-xs">{fr ? 'Client *' : 'Client *'}</Label>
                 {preselectedClientId ? (
                   <div className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 bg-ivory-50 text-charcoal font-medium">
-                    {clients?.find(c => c.id === preselectedClientId)?.name ?? preselectedClientId}
+                    {preselectedClientName ?? clients?.find(c => c.id === preselectedClientId)?.name ?? preselectedClientId}
                   </div>
                 ) : (
                   <>
-                    <select
+                    <ClientSearchSelect
                       value={clientId}
-                      onChange={e => setClientId(e.target.value)}
-                      className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 focus:outline-none focus:border-gold-400 bg-white"
-                    >
-                      <option value="">{fr ? '— Sélectionner —' : '— Select —'}</option>
-                      <option value="WALK_IN">➕ {fr ? 'Nouveau client de passage' : 'New walk-in client'}</option>
-                      {(sortedClients ?? []).map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
+                      onChange={setClientId}
+                      locale={locale}
+                      includeWalkIn
+                      placeholder={fr ? 'Rechercher un client…' : 'Search a client…'}
+                    />
                     {clientId === 'WALK_IN' && (
                       <div className="mt-2 grid grid-cols-2 gap-2">
                         <div>
