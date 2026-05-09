@@ -18,6 +18,11 @@ const patchSchema = z.object({
   price: z.number().min(0).max(9_999_999).optional(),
   stock: z.number().int().min(0).max(999_999).optional(),
   available: z.boolean().optional(),
+  targetSpecies: z.enum(['DOG', 'CAT', 'BOTH']).optional(),
+  targetAge: z.enum(['PUPPY', 'JUNIOR', 'ADULT', 'SENIOR', 'ALL']).optional(),
+  supplier: z.string().max(100).nullable().optional(),
+  weight: z.string().max(50).nullable().optional(),
+  imageUrl: z.string().max(2048).nullable().optional(),
 });
 
 export async function PATCH(request: NextRequest, { params }: Params) {
@@ -42,7 +47,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const product = await prisma.product.findUnique({ where: { id } });
   if (!product) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
 
-  const { name, brand, reference, category, price, stock, available } = parsed.data;
+  const {
+    name, brand, reference, category, price, stock, available,
+    targetSpecies, targetAge, supplier, weight, imageUrl,
+  } = parsed.data;
 
   const updated = await prisma.product.update({
     where: { id },
@@ -54,6 +62,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       ...(price !== undefined && { price }),
       ...(stock !== undefined && { stock }),
       ...(available !== undefined && { available }),
+      ...(targetSpecies !== undefined && { targetSpecies }),
+      ...(targetAge !== undefined && { targetAge }),
+      ...(supplier !== undefined && { supplier: supplier?.trim() || null }),
+      ...(weight !== undefined && { weight: weight?.trim() || null }),
+      ...(imageUrl !== undefined && { imageUrl: imageUrl?.trim() || null }),
     },
   });
 
@@ -66,6 +79,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     price: toNumber(updated.price),
     stock: updated.stock,
     available: updated.available,
+    targetSpecies: updated.targetSpecies,
+    targetAge: updated.targetAge,
+    supplier: updated.supplier,
+    weight: updated.weight,
+    imageUrl: updated.imageUrl,
     createdAt: updated.createdAt,
   });
 }

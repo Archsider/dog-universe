@@ -32,6 +32,11 @@ export default async function AdminProductsPage({ params }: Props) {
         price: toNumber(p.price),
         stock: p.stock,
         available: p.available,
+        targetSpecies: p.targetSpecies,
+        targetAge: p.targetAge,
+        supplier: p.supplier,
+        weight: p.weight,
+        imageUrl: p.imageUrl,
         createdAt: p.createdAt.toISOString(),
       }))}
       stockValue={stockValue}
