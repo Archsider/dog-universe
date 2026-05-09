@@ -27,6 +27,7 @@ import BookingPetsSection from './BookingPetsSection';
 import BookingInvoiceSection from './BookingInvoiceSection';
 import BookingServiceSection from './BookingServiceSection';
 import AddProductSection from './AddProductSection';
+import UpsellSuggestions from '@/components/shared/UpsellSuggestions';
 import CheckoutBookingButton from './CheckoutBookingButton';
 import { toNumber } from '@/lib/decimal';
 
@@ -610,6 +611,16 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
               a known endDate (walk-in flag OR endDate=null are treated identically). */}
           {isBoarding && (booking.isOpenEnded || booking.endDate == null) && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
             <CheckoutBookingButton bookingId={booking.id} locale={locale} />
+          )}
+
+          {/* Suggestions upsell smart — détection auto espèce + âge */}
+          {isBoarding && !isPendingExtension && (
+            <UpsellSuggestions
+              bookingId={booking.id}
+              context="admin"
+              locale={locale}
+              hasInvoice={!!booking.invoice}
+            />
           )}
 
           {/* Add product to invoice — walk-in friendly. Available on any boarding booking with an invoice. */}

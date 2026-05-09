@@ -22,6 +22,7 @@ import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimelin
 import { RebookButton } from '@/components/client/RebookButton';
 import StayPhotoFeed from '@/components/client/StayPhotoFeed';
 import ClientProductOrder from './ClientProductOrder';
+import UpsellSuggestions from '@/components/shared/UpsellSuggestions';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -806,6 +807,16 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Suggestions upsell smart — détection auto espèce + âge */}
+        {isBoarding && ['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && (
+          <UpsellSuggestions
+            bookingId={booking.id}
+            context="client"
+            locale={locale}
+            hasInvoice={!!booking.invoice}
+          />
         )}
 
         {/* Product ordering — only for active BOARDING stays */}

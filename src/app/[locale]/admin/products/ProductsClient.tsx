@@ -13,8 +13,18 @@ interface Product {
   price: number;
   stock: number;
   available: boolean;
+  targetSpecies?: string;
+  targetAge?: string;
+  supplier?: string | null;
+  weight?: string | null;
+  imageUrl?: string | null;
   createdAt: string;
 }
+
+const SPECIES_LABEL: Record<string, string> = { DOG: 'Chien', CAT: 'Chat', BOTH: 'Tous' };
+const AGE_LABEL: Record<string, string> = {
+  PUPPY: 'Chiot/Chaton', JUNIOR: 'Jeune', ADULT: 'Adulte', SENIOR: 'Senior', ALL: 'Tout âge',
+};
 
 interface ProductsClientProps {
   locale: string;
@@ -42,7 +52,10 @@ function StockBadge({ stock }: { stock: number }) {
   );
 }
 
-const EMPTY_FORM = { name: '', brand: '', reference: '', category: '', price: '', stock: '0', available: true };
+const EMPTY_FORM = {
+  name: '', brand: '', reference: '', category: '', price: '', stock: '0', available: true,
+  targetSpecies: 'BOTH', targetAge: 'ALL', supplier: '', weight: '', imageUrl: '',
+};
 
 export default function ProductsClient({ locale, initialProducts, stockValue }: ProductsClientProps) {
   const [products, setProducts] = useState<Product[]>(initialProducts);
@@ -59,7 +72,22 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
   const [adjustDelta, setAdjustDelta] = useState('');
   const [adjusting, setAdjusting] = useState(false);
 
-  const totalValue = products.reduce((s, p) => s + p.price * p.stock, 0);
+  // Filtres
+  const [filterSupplier, setFilterSupplier] = useState<string>('');
+  const [filterSpecies, setFilterSpecies] = useState<string>('');
+  const [filterCategory, setFilterCategory] = useState<string>('');
+
+  const suppliersList = Array.from(new Set(products.map((p) => p.supplier).filter(Boolean))) as string[];
+  const categoriesList = Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[];
+
+  const filteredProducts = products.filter((p) => {
+    if (filterSupplier && p.supplier !== filterSupplier) return false;
+    if (filterSpecies && p.targetSpecies !== filterSpecies) return false;
+    if (filterCategory && p.category !== filterCategory) return false;
+    return true;
+  });
+
+  const totalValue = filteredProducts.reduce((s, p) => s + p.price * p.stock, 0);
 
   function openCreate() {
     setEditProduct(null);
@@ -78,6 +106,11 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
       price: String(p.price),
       stock: String(p.stock),
       available: p.available,
+      targetSpecies: p.targetSpecies ?? 'BOTH',
+      targetAge: p.targetAge ?? 'ALL',
+      supplier: p.supplier ?? '',
+      weight: p.weight ?? '',
+      imageUrl: p.imageUrl ?? '',
     });
     setError(null);
     setShowModal(true);
@@ -101,6 +134,11 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
       price,
       stock,
       available: form.available,
+      targetSpecies: form.targetSpecies,
+      targetAge: form.targetAge,
+      supplier: form.supplier.trim() || undefined,
+      weight: form.weight.trim() || undefined,
+      imageUrl: form.imageUrl.trim() || undefined,
     };
     try {
       if (editProduct) {
@@ -194,7 +232,7 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
             </h1>
           </div>
           <p className="text-sm text-gray-500">
-            {products.length} {t('produit(s)', 'product(s)', locale)}
+            {filteredProducts.length}/{products.length} {t('produit(s)', 'product(s)', locale)}
             {' · '}
             {t('Valeur stock', 'Stock value', locale)} : <span className="font-semibold text-charcoal">{formatMAD(totalValue)}</span>
           </p>
@@ -208,6 +246,33 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
         </button>
       </div>
 
+      {/* Filtres */}
+      <div className="flex flex-wrap items-center gap-2 mb-4 text-sm">
+        <select value={filterSupplier} onChange={(e) => setFilterSupplier(e.target.value)}
+          className="border border-ivory-200 rounded-lg px-2 py-1.5 bg-white">
+          <option value="">{t('Tous fournisseurs', 'All suppliers', locale)}</option>
+          {suppliersList.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={filterSpecies} onChange={(e) => setFilterSpecies(e.target.value)}
+          className="border border-ivory-200 rounded-lg px-2 py-1.5 bg-white">
+          <option value="">{t('Toutes espèces', 'All species', locale)}</option>
+          <option value="DOG">🐕 {t('Chien', 'Dog', locale)}</option>
+          <option value="CAT">🐈 {t('Chat', 'Cat', locale)}</option>
+          <option value="BOTH">{t('Les deux', 'Both', locale)}</option>
+        </select>
+        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}
+          className="border border-ivory-200 rounded-lg px-2 py-1.5 bg-white">
+          <option value="">{t('Toutes catégories', 'All categories', locale)}</option>
+          {categoriesList.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        {(filterSupplier || filterSpecies || filterCategory) && (
+          <button onClick={() => { setFilterSupplier(''); setFilterSpecies(''); setFilterCategory(''); }}
+            className="text-xs text-gray-400 hover:text-charcoal underline">
+            {t('Réinitialiser', 'Reset', locale)}
+          </button>
+        )}
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card overflow-hidden">
         <div className="overflow-x-auto">
@@ -215,9 +280,10 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
             <thead className="bg-[#FAF6F0] border-b border-[#F0D98A]/40">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-charcoal">{t('Nom', 'Name', locale)}</th>
-                <th className="px-4 py-3 text-left font-semibold text-charcoal">{t('Marque', 'Brand', locale)}</th>
-                <th className="px-4 py-3 text-left font-semibold text-charcoal">{t('Référence', 'Reference', locale)}</th>
+                <th className="px-4 py-3 text-left font-semibold text-charcoal">{t('Fournisseur', 'Supplier', locale)}</th>
                 <th className="px-4 py-3 text-left font-semibold text-charcoal">{t('Catégorie', 'Category', locale)}</th>
+                <th className="px-4 py-3 text-center font-semibold text-charcoal">{t('Espèce', 'Species', locale)}</th>
+                <th className="px-4 py-3 text-center font-semibold text-charcoal">{t('Âge', 'Age', locale)}</th>
                 <th className="px-4 py-3 text-right font-semibold text-charcoal">{t('Prix', 'Price', locale)}</th>
                 <th className="px-4 py-3 text-center font-semibold text-charcoal">{t('Stock', 'Stock', locale)}</th>
                 <th className="px-4 py-3 text-center font-semibold text-charcoal">{t('Dispo', 'Available', locale)}</th>
@@ -225,19 +291,22 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
               </tr>
             </thead>
             <tbody className="divide-y divide-ivory-100">
-              {products.length === 0 && (
+              {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">
                     {t('Aucun produit. Cliquez sur "+ Ajouter" pour commencer.', 'No products. Click "+ Add product" to get started.', locale)}
                   </td>
                 </tr>
               )}
-              {products.map((p) => (
+              {filteredProducts.map((p) => (
                 <tr key={p.id} className="hover:bg-[#FAF6F0]/50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-charcoal">{p.name}</td>
-                  <td className="px-4 py-3 text-gray-500">{p.brand ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.reference ?? '—'}</td>
+                  <td className="px-4 py-3 font-medium text-charcoal">
+                    {p.name}{p.weight && <span className="text-xs text-gray-400 ml-1">· {p.weight}</span>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">{p.supplier ?? p.brand ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{p.category ?? '—'}</td>
+                  <td className="px-4 py-3 text-center text-gray-500 text-xs">{SPECIES_LABEL[p.targetSpecies ?? 'BOTH']}</td>
+                  <td className="px-4 py-3 text-center text-gray-500 text-xs">{AGE_LABEL[p.targetAge ?? 'ALL']}</td>
                   <td className="px-4 py-3 text-right font-medium text-charcoal">{formatMAD(p.price)}</td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
@@ -356,6 +425,48 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
                     required
                   />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('Espèce cible', 'Target species', locale)}</label>
+                  <select value={form.targetSpecies} onChange={(e) => setForm((f) => ({ ...f, targetSpecies: e.target.value }))}
+                    className="w-full border border-ivory-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gold-400">
+                    <option value="BOTH">{t('Chien & Chat', 'Dog & Cat', locale)}</option>
+                    <option value="DOG">🐕 {t('Chien', 'Dog', locale)}</option>
+                    <option value="CAT">🐈 {t('Chat', 'Cat', locale)}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('Âge cible', 'Target age', locale)}</label>
+                  <select value={form.targetAge} onChange={(e) => setForm((f) => ({ ...f, targetAge: e.target.value }))}
+                    className="w-full border border-ivory-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gold-400">
+                    <option value="ALL">{t('Tout âge', 'All ages', locale)}</option>
+                    <option value="PUPPY">{t('Chiot/Chaton (<12 mois)', 'Puppy/Kitten (<12 mo)', locale)}</option>
+                    <option value="JUNIOR">{t('Jeune (12-24 mois)', 'Junior (12-24 mo)', locale)}</option>
+                    <option value="ADULT">{t('Adulte (2-7 ans)', 'Adult (2-7 yr)', locale)}</option>
+                    <option value="SENIOR">{t('Senior (7+ ans)', 'Senior (7+ yr)', locale)}</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('Fournisseur', 'Supplier', locale)}</label>
+                  <input value={form.supplier} onChange={(e) => setForm((f) => ({ ...f, supplier: e.target.value }))}
+                    placeholder="Ultra Premium, Canvit…"
+                    className="w-full border border-ivory-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gold-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('Conditionnement', 'Packaging', locale)}</label>
+                  <input value={form.weight} onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
+                    placeholder="12kg, 500ml…"
+                    className="w-full border border-ivory-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gold-400" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('URL image (optionnel)', 'Image URL (optional)', locale)}</label>
+                <input type="url" value={form.imageUrl} onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
+                  placeholder="https://…"
+                  className="w-full border border-ivory-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gold-400" />
               </div>
               <div className="flex items-center gap-2">
                 <input

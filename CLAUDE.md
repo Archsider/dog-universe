@@ -381,6 +381,25 @@ prévaut sur multi-chiens. Migration `20260508_fix_pension_pricing`
 recale les lignes legacy en DB. Tests dans
 `src/lib/__tests__/pricing.test.ts` (cas-limites + données réelles).
 
+**Upsell & produits (verrouillé 2026-05-10) :** utiliser obligatoirement
+`getMatchingProducts()` ou `getMatchingProductsForPet()` de
+`src/lib/pet-profile.ts` pour toute recommandation produit. Ne JAMAIS
+filtrer manuellement par espèce/âge dans les routes API.
+
+Catégories cibles :
+- `targetSpecies` : `DOG` | `CAT` | `BOTH`
+- `targetAge` : `PUPPY` (<12 mois) | `JUNIOR` (12-23 mois) | `ADULT`
+  (24-83 mois) | `SENIOR` (≥84 mois) | `ALL`
+
+Le matching génère 4 OR par animal (espèce×âge | espèce×ALL | BOTH×âge
+| BOTH×ALL) et trie par pertinence (SENIOR/PUPPY > JUNIOR > ADULT > ALL)
+puis prix décroissant (upsell premium en premier). Catalogue Ultra Premium
++ Canvit (~70 produits) seedé via `20260510_seed_products_upsell` (stock=0
+initial — Mehdi ajuste après réception). API endpoints :
+`GET /api/(client|admin)/products/suggestions?bookingId=…`. UI :
+`src/components/shared/UpsellSuggestions.tsx` (mode `client` / `admin`).
+Tests dans `src/lib/__tests__/pet-profile.test.ts`.
+
 ---
 
 ## CONVENTIONS DE CODE
