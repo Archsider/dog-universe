@@ -201,7 +201,8 @@ export async function GET(request: Request) {
     include: {
       client: { select: { name: true, firstName: true, email: true, language: true, phone: true } },
       bookingPets: { include: { pet: { select: { name: true, gender: true } } } },
-      taxiDetail: { select: { id: true } }, // taxi addon presence drives end-reminder copy (see SMS/email below)
+      taxiDetail: { select: { id: true } }, // taxi standalone (PET_TAXI service)
+      boardingDetail: { select: { taxiReturnEnabled: true } }, // taxi retour en addon d'un BOARDING
     },
   });
 
@@ -237,7 +238,12 @@ export async function GET(request: Request) {
       const endDate = locale === 'fr' ? endDateFr : endDateEn;
       const bookingRef = booking.id.slice(0, 8).toUpperCase();
 
-      const hasTaxi = booking.taxiDetail != null;
+      // hasTaxi détecte le taxi standalone (taxiDetail) OU l'addon taxi retour
+      // sur un séjour pension (boardingDetail.taxiReturnEnabled). Pour le rappel
+      // "fin de séjour", seul le retour compte — l'aller a déjà eu lieu.
+      const hasTaxi =
+        booking.taxiDetail != null ||
+        booking.boardingDetail?.taxiReturnEnabled === true;
       const isPlural = pets.length > 1;
 
       // Gender resolution (le/la, reposé/reposée). Falls back to neutral form if unknown.
