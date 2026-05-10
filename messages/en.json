@@ -70,6 +70,7 @@
       "profile": "My Profile",
       "contracts": "Contracts",
       "users": "Users",
+      "feature_flags": "Feature flags",
       "diagnostics": "Diagnostics",
       "health": "System health",
       "guardian": "AI Guardian",

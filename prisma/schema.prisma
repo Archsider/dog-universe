@@ -700,3 +700,16 @@ model Heartbeat {
 
   @@index([timestamp(sort: Desc)])
 }
+
+// Feature flags interne — toggle/rollout par % / role / userId whitelist.
+// Lecture cachée Redis 60s ; fail-open : Redis down → DB ; DB down → false.
+model FeatureFlag {
+  key            String   @id
+  description    String   @default("")
+  enabled        Boolean  @default(false) // kill-switch global
+  rolloutPercent Int      @default(0)     // 0-100, sticky bucketing par hash(userId+key)
+  targetRoles    String[] @default([])    // ['CLIENT','ADMIN','SUPERADMIN'] ; [] = pas de filtre
+  userWhitelist  String[] @default([])    // userIds explicites (bypass rollout)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
