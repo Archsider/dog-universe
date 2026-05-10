@@ -22,9 +22,14 @@ const DEFAULT_LIMITS: CapacityLimits = {
 // Statuses that consume capacity. PENDING included on purpose: even unconfirmed
 // requests must reserve a slot to avoid the race where two clients book the
 // same window before the admin validates either one.
+// PENDING_EXTENSION included as well: from the client's perspective an
+// extension is a firm hold (the original booking is already on premises and
+// the extension stay overlaps the very next window). Treating it as soft
+// would let a parallel booking sneak into the slot the client is asking to
+// extend into.
 // WAITLIST is intentionally NOT included — waitlisted bookings are reservations
 // of *intent*, not of a slot.
-const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] as const;
+const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'PENDING_EXTENSION'] as const;
 
 async function readLimitsFromDb(client: PrismaClientLike): Promise<CapacityLimits> {
   return Sentry.startSpan(

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { log } from '@/lib/logger';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import {
@@ -297,7 +298,11 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
       const dayBeforeEnd = new Date(dayBefore);
       dayBeforeEnd.setUTCHours(23, 59, 59, 999);
 
-      const existingContiguous = await prisma.booking.findFirst({
+      // Probe outside the tx purely as a fast-path: avoids opening a
+      // Serializable transaction when no contiguous booking exists at all.
+      // Inside the tx we re-read with the same predicate so the merge is safe
+      // against concurrent updates to the row we touch.
+      const probe = await prisma.booking.findFirst({
         where: {
           clientId,
           serviceType: 'BOARDING',
@@ -306,84 +311,158 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
           bookingPets: { some: { petId: { in: petIds } } },
           deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
         },
-        include: {
-          invoice: true,
-          boardingDetail: true,
-          bookingPets: { include: { pet: true } },
-          client: true,
-        },
+        select: { id: true },
       });
 
-      if (existingContiguous) {
-        // AUTO-MERGE: extend the existing booking instead of creating a new one
-        const mergedEndDate = new Date(endDate);
-        const mergedNights = Math.floor(
-          (mergedEndDate.getTime() - existingContiguous.startDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-        const mergePets = existingContiguous.bookingPets.map(bp => bp.pet);
-        const mergeGroomingPrice = Number(existingContiguous.boardingDetail?.groomingPrice ?? 0);
-        const mergeTaxiAddonPrice = Number(existingContiguous.boardingDetail?.taxiAddonPrice ?? 0);
-        const mergedTotal = calculateBoardingTotalForExtension(
-          mergePets,
-          mergedNights,
-          mergeGroomingPrice,
-          mergeTaxiAddonPrice,
-          await getPricingSettings(),
-        );
+      if (probe) {
+        // AUTO-MERGE under Serializable. We:
+        //   1. Re-read the candidate inside the tx (snapshot consistency)
+        //   2. Re-check capacity for the new window [oldEnd, newEnd], passing
+        //      excludeBookingId so the candidate's own pets don't count
+        //      against the limit during the merge
+        //   3. Update invoice + booking atomically
+        // Any concurrent capacity-consuming insert in the same window forces
+        // PostgreSQL to abort one of the two transactions (P2034) — we retry
+        // up to 3 times via runWithSerializableRetry.
+        const pricingForMerge = await getPricingSettings();
+        let mergeCapacityError: CapacityCheckExceeded | null = null;
+        type MergeResult = {
+          merged: NonNullable<Awaited<ReturnType<typeof prisma.booking.findFirst>>> & {
+            invoice: Awaited<ReturnType<typeof prisma.invoice.findFirst>> | null;
+            boardingDetail: Awaited<ReturnType<typeof prisma.boardingDetail.findFirst>> | null;
+            bookingPets: Array<{ pet: { id: string; name: string; species: string } }>;
+            client: { name: string | null; email: string };
+          };
+          mergedTotal: number;
+          mergedEndDate: Date;
+        } | null;
 
-        // Atomic: invoice + booking updates must commit together. allocatePayments
-        // (if any) runs OUTSIDE — it has its own $transaction + FOR UPDATE lock.
-        await prisma.$transaction(async (tx) => {
-          // Handle invoice update (same logic as extension)
-          if (existingContiguous.invoice) {
-            if (existingContiguous.invoice.status === 'PENDING') {
-              await tx.invoice.update({
-                where: { id: existingContiguous.invoice.id },
-                data: { amount: mergedTotal },
-              });
-            } else if (existingContiguous.invoice.status === 'PARTIALLY_PAID') {
-              const invoiceUpdate: Record<string, unknown> = { amount: mergedTotal };
-              if (Number(existingContiguous.invoice.paidAmount) >= mergedTotal) {
-                invoiceUpdate.status = 'PAID';
-                invoiceUpdate.paidAt = existingContiguous.invoice.paidAt ?? new Date();
-              }
-              await tx.invoice.update({
-                where: { id: existingContiguous.invoice.id },
-                data: invoiceUpdate,
-              });
-            }
-            // If PAID: don't touch — admin will handle supplementary invoice manually
+        let result: MergeResult = null;
+        try {
+          result = await runWithSerializableRetry(() =>
+            prisma.$transaction(
+              async (tx) => {
+                const existingContiguous = await tx.booking.findFirst({
+                  where: {
+                    clientId,
+                    serviceType: 'BOARDING',
+                    status: { notIn: ['CANCELLED', 'REJECTED', 'COMPLETED'] },
+                    endDate: { gte: dayBeforeStart, lte: dayBeforeEnd },
+                    bookingPets: { some: { petId: { in: petIds } } },
+                    deletedAt: null,
+                  },
+                  include: {
+                    invoice: true,
+                    boardingDetail: true,
+                    bookingPets: { include: { pet: true } },
+                    client: true,
+                  },
+                });
+                if (!existingContiguous) return null;
+
+                // Capacity recheck: only the *new* window (oldEnd → newEnd)
+                // can push us over the limit. excludeBookingId omits this
+                // booking's own pets from the overlap count for that window.
+                const cap = await checkBoardingCapacity(
+                  {
+                    petIds,
+                    startDate: existingContiguous.endDate ?? existingContiguous.startDate,
+                    endDate: new Date(endDate),
+                    excludeBookingId: existingContiguous.id,
+                  },
+                  tx,
+                );
+                if (!cap.ok) {
+                  mergeCapacityError = cap;
+                  return null;
+                }
+
+                const mergedEndDate = new Date(endDate);
+                const mergedNights = Math.floor(
+                  (mergedEndDate.getTime() - existingContiguous.startDate.getTime()) / (1000 * 60 * 60 * 24),
+                );
+                const mergePets = existingContiguous.bookingPets.map((bp) => bp.pet);
+                const mergeGroomingPrice = Number(existingContiguous.boardingDetail?.groomingPrice ?? 0);
+                const mergeTaxiAddonPrice = Number(existingContiguous.boardingDetail?.taxiAddonPrice ?? 0);
+                const mergedTotal = calculateBoardingTotalForExtension(
+                  mergePets,
+                  mergedNights,
+                  mergeGroomingPrice,
+                  mergeTaxiAddonPrice,
+                  pricingForMerge,
+                );
+
+                if (existingContiguous.invoice) {
+                  if (existingContiguous.invoice.status === 'PENDING') {
+                    await tx.invoice.update({
+                      where: { id: existingContiguous.invoice.id },
+                      data: { amount: mergedTotal },
+                    });
+                  } else if (existingContiguous.invoice.status === 'PARTIALLY_PAID') {
+                    const invoiceUpdate: Record<string, unknown> = { amount: mergedTotal };
+                    if (Number(existingContiguous.invoice.paidAmount) >= mergedTotal) {
+                      invoiceUpdate.status = 'PAID';
+                      invoiceUpdate.paidAt = existingContiguous.invoice.paidAt ?? new Date();
+                    }
+                    await tx.invoice.update({
+                      where: { id: existingContiguous.invoice.id },
+                      data: invoiceUpdate,
+                    });
+                  }
+                  // If PAID: leave alone — admin handles supplementary invoice manually
+                }
+
+                await tx.booking.update({
+                  where: { id: existingContiguous.id },
+                  data: {
+                    endDate: mergedEndDate,
+                    totalPrice: mergedTotal,
+                    hasExtensionRequest: false,
+                    extensionRequestedEndDate: null,
+                    extensionRequestNote: null,
+                  },
+                });
+
+                return { merged: existingContiguous as never, mergedTotal, mergedEndDate };
+              },
+              { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 },
+            ),
+          );
+        } catch (err) {
+          if (err instanceof Error && err.message === 'CONFLICT_RETRY_EXCEEDED') {
+            return NextResponse.json({ error: 'CONFLICT_RETRY_EXCEEDED' }, { status: 503 });
           }
+          throw err;
+        }
 
-          await tx.booking.update({
-            where: { id: existingContiguous.id },
-            data: {
-              endDate: mergedEndDate,
-              totalPrice: mergedTotal,
-              hasExtensionRequest: false,
-              extensionRequestedEndDate: null,
-              extensionRequestNote: null,
+        if (mergeCapacityError) {
+          const ce = mergeCapacityError as CapacityCheckExceeded;
+          return NextResponse.json({ error: 'CAPACITY_EXCEEDED', ...ce }, { status: 400 });
+        }
+
+        if (result) {
+          const { merged, mergedTotal, mergedEndDate } = result;
+          const mergedRef = merged.id.slice(0, 8).toUpperCase();
+          await logAction({
+            userId: session.user.id,
+            action: 'BOOKING_AUTO_MERGED',
+            entityType: 'Booking',
+            entityId: merged.id,
+            details: {
+              mergedEndDate: mergedEndDate.toISOString().slice(0, 10),
+              mergedTotal,
+              petIds,
             },
           });
-        });
 
-        const mergedRef = existingContiguous.id.slice(0, 8).toUpperCase();
-        await logAction({
-          userId: session.user.id,
-          action: 'BOOKING_AUTO_MERGED',
-          entityType: 'Booking',
-          entityId: existingContiguous.id,
-          details: {
-            mergedEndDate: mergedEndDate.toISOString().slice(0, 10),
-            mergedTotal,
-            petIds,
-          },
-        });
-
-        return NextResponse.json(
-          { ...existingContiguous, bookingRef: mergedRef, autoMerged: true, newEndDate: endDate, newTotal: mergedTotal },
-          { status: 200 },
-        );
+          return NextResponse.json(
+            { ...merged, bookingRef: mergedRef, autoMerged: true, newEndDate: endDate, newTotal: mergedTotal },
+            { status: 200 },
+          );
+        }
+        // result === null && no capacity error: candidate disappeared between
+        // probe and tx (cancelled/deleted concurrently). Fall through to the
+        // normal create path.
       }
     }
     // ── End auto-merge ────────────────────────────────────────────────────────────

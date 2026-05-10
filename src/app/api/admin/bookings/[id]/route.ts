@@ -28,6 +28,7 @@ import {
   rejectExtensionRequest as rejectExtensionRequestService,
 } from '@/lib/services/booking-admin.service';
 import { BookingError } from '@/lib/services/booking-errors';
+import { canTransition, isBookingStatus, type BookingStatus } from '@/lib/booking-state-machine';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -119,10 +120,14 @@ export const PATCH = withSchema(
   }
 
   // ── Status transition guards ──────────────────────────────────────────────
-  // P0-5: REJECTED / CANCELLED require a cancellationReason (min 10 chars) so
-  // the client always receives a meaningful explanation and admins cannot skip
-  // the justification step by calling the API directly.
-  if ((status === 'REJECTED' || status === 'CANCELLED') && body.patchBoardingDetail === undefined) {
+  // REJECTED / CANCELLED require a cancellationReason (min 10 chars) so the
+  // client always receives a meaningful explanation and admins cannot skip
+  // the justification step by calling the API directly. The previous escape
+  // hatch (`patchBoardingDetail === undefined`) was an arbitrary back-door
+  // that allowed an admin to flip status while patching boarding details —
+  // removed: cancellation always requires a reason, regardless of the
+  // sibling fields in the same body.
+  if (status === 'REJECTED' || status === 'CANCELLED') {
     const reason = typeof body.cancellationReason === 'string' ? body.cancellationReason.trim() : '';
     if (reason.length < 10) {
       return NextResponse.json(
@@ -378,6 +383,24 @@ export const PATCH = withSchema(
     }
     if (newEnd <= newStart) {
       return NextResponse.json({ error: 'endDate must be after startDate' }, { status: 400 });
+    }
+
+    // PET_TAXI: enforce Sunday-closed + 10h–17h slot rules even when an admin
+    // moves the booking. The validation throws a BookingError that mirrors
+    // the same shape POST /api/bookings would return for the client path.
+    if (booking.serviceType === 'PET_TAXI') {
+      try {
+        const { validateTaxiSlot } = await import('@/lib/services/booking-client.service');
+        validateTaxiSlot({ startDate: newStart, arrivalTime: booking.arrivalTime });
+      } catch (err) {
+        if (err instanceof BookingError) {
+          return NextResponse.json(
+            { error: err.code, ...(err.payload ?? {}) },
+            { status: err.status },
+          );
+        }
+        throw err;
+      }
     }
 
     const newNights = Math.floor((newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60 * 24));
@@ -653,6 +676,31 @@ export const PATCH = withSchema(
   // ── End extension handling ────────────────────────────────────────────────────
 
   const newStatus = status as string | undefined;
+  // State-machine guard: refuse arbitrary jumps (e.g. COMPLETED → PENDING).
+  // Some transitions (NO_SHOW, WAITLIST → ...) already had bespoke checks
+  // above; this is the safety net for everything else. Self-transition is
+  // allowed (no-op). AT_PICKUP is accepted by the status enum but is not
+  // part of the canonical machine — let it through to preserve existing
+  // taxi flows that key off it.
+  if (newStatus && newStatus !== booking.status && newStatus !== 'AT_PICKUP') {
+    if (!isBookingStatus(booking.status) || !isBookingStatus(newStatus)) {
+      // Unknown legacy state — let it through to avoid lockout, but log.
+      console.warn(JSON.stringify({
+        level: 'warn',
+        service: 'booking',
+        message: 'state machine bypass: unknown status',
+        from: booking.status,
+        to: newStatus,
+        bookingId: id,
+      }));
+    } else if (!canTransition(booking.status as BookingStatus, newStatus as BookingStatus)) {
+      return NextResponse.json(
+        { error: 'INVALID_TRANSITION', from: booking.status, to: newStatus },
+        { status: 400 },
+      );
+    }
+  }
+
   // Persist cancellationReason when admin rejects or cancels a booking
   const cancellationReason = (status === 'REJECTED' || status === 'CANCELLED')
     ? (typeof body.cancellationReason === 'string' ? body.cancellationReason.trim() : undefined)
