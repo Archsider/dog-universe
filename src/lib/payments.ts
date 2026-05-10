@@ -45,6 +45,7 @@ export interface AllocationItem {
   id: string;
   description: string;
   total: DecimalLike;
+  category?: string | null;
 }
 
 export interface AllocationResult {
@@ -63,6 +64,13 @@ export function computeItemAllocation(
 
   let remaining = totalPaid;
   return sorted.map(item => {
+    // Les lignes DISCOUNT sont déductives (total négatif) : elles ne consomment
+    // pas de paiement et ne reçoivent pas d'allocation. On les marque PAID
+    // pour cohérence statut sans toucher au reste à allouer.
+    if (item.category === 'DISCOUNT') {
+      return { id: item.id, allocatedAmount: 0, status: 'PAID' as const };
+    }
+
     const itemTotal = toNumber(item.total);
     let allocatedAmount: number;
     let status: 'PAID' | 'PARTIAL' | 'PENDING';

@@ -86,10 +86,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         },
       });
 
+      // Note: le trigger PG `trg_recompute_invoice_amount` recompute déjà
+      // Invoice.amount = SUM(items.total) après UPDATE sur InvoiceItem.
+      // NE PAS écrire `amount` manuellement (drift garanti).
       if (totalDelta !== 0) {
         await tx.invoice.update({
           where: { id: booking.invoice!.id },
-          data: { amount: { increment: new Prisma.Decimal(totalDelta) } },
+          data: { version: { increment: 1 } },
         });
       }
 

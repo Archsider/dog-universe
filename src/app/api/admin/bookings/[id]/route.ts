@@ -449,9 +449,17 @@ export const PATCH = withSchema(
 
         const newPaidAmount = Number(booking.invoice.paidAmount);
         const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+        // Si la facture sortait PAID et redevient PENDING/PARTIAL après l'édition,
+        // on reset paidAt pour ne pas garder une date périmée — allocatePayments
+        // re-positionnera paidAt si un nouveau crédit complet apparaît.
+        const droppedFromPaid = newStatus !== 'PAID' && booking.invoice.status === 'PAID';
         await tx.invoice.update({
           where: { id: booking.invoice.id },
-          data: { amount: newTotal, status: newStatus },
+          data: {
+            amount: newTotal,
+            status: newStatus,
+            ...(droppedFromPaid && { paidAt: null }),
+          },
         });
       }
     }, { isolationLevel: 'Serializable' });
@@ -800,7 +808,6 @@ export const PATCH = withSchema(
               date: dateStr,
               time: booking.arrivalTime ?? undefined,
               taxiType: booking.taxiDetail?.taxiType ?? undefined,
-              price: booking.taxiDetail?.price ?? 0,
             },
           });
           await prisma.taxiStatusHistory.create({ data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: session.user.id } });

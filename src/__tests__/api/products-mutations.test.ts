@@ -256,8 +256,10 @@ describe('PATCH /api/admin/bookings/[id]/update-product/[itemId]', () => {
     expect(mocks.tx.product.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ stock: { decrement: 3 } }) }),
     );
+    // Note : Invoice.amount n'est plus écrit côté code (trigger PG recompute).
+    // On vérifie seulement la mise à jour de version (optimistic lock).
     expect(mocks.tx.invoice.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ amount: { increment: expect.anything() } }) }),
+      expect.objectContaining({ data: expect.objectContaining({ version: { increment: 1 } }) }),
     );
   });
 

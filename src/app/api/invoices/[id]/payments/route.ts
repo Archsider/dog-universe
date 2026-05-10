@@ -67,10 +67,15 @@ export async function POST(request: Request, { params }: Params) {
     where: { id },
     include: {
       payments: true,
-      client: { select: { name: true, email: true, phone: true, isWalkIn: true } },
+      client: { select: { name: true, email: true, phone: true, isWalkIn: true, role: true } },
     },
   });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  // Authz cross-role : ADMIN ne peut enregistrer un paiement que sur une
+  // facture de CLIENT. SUPERADMIN passe partout.
+  if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+  }
   if (invoice.status === 'CANCELLED') {
     return NextResponse.json({ error: 'INVOICE_CANCELLED' }, { status: 400 });
   }

@@ -122,10 +122,12 @@ export async function POST(request: NextRequest, { params }: Params) {
           });
         }
 
+        // Note: le trigger PG `trg_recompute_invoice_amount` recompute déjà
+        // Invoice.amount = SUM(items.total) après les mutations sur InvoiceItem.
+        // NE PAS écrire `amount` manuellement (drift garanti).
         await tx.invoice.update({
           where: { id: booking.invoice.id },
           data: {
-            amount: newInvoiceAmount,
             version: { increment: 1 },
           },
         });

@@ -37,7 +37,7 @@ describe('getMonthlyInvoicesWhere', () => {
   it('CAS 2 — séjour CONFIRMED/IN_PROGRESS/COMPLETED sans paiement', () => {
     const where = getMonthlyInvoicesWhere(MAY_START, MAY_END);
     const c2 = where.OR![1] as Record<string, unknown>;
-    expect(c2.payments).toEqual({ none: {} });
+    expect(c2.payments).toEqual({ none: { paymentDate: { gte: MAY_START, lte: MAY_END } } });
     const booking = c2.booking as Record<string, unknown>;
     expect((booking.status as Record<string, unknown>).in).toEqual([
       'CONFIRMED',

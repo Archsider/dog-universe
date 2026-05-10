@@ -88,13 +88,17 @@ interface QuickAddPreset {
 
 const QUICK_ADD_PRESETS: QuickAddPreset[] = [
   {
-    labelFr: 'Pension',
-    labelEn: 'Boarding',
+    // Tarif pension non hardcodé : la règle métier (chat 70 / chien long-stay
+    // 100 / multi-chiens 100 / chien seul 120) est centralisée dans
+    // src/lib/pricing.ts. Pour la facturation manuelle standalone, l'admin
+    // saisit le prix appliqué au client.
+    labelFr: 'Pension (à saisir)',
+    labelEn: 'Boarding (enter price)',
     descriptionFr: 'Pension (nuit)',
     descriptionEn: 'Boarding (night)',
     serviceType: 'BOARDING',
     category: 'BOARDING',
-    defaultPrice: 120,
+    defaultPrice: 0,
     color: 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
   },
   {
