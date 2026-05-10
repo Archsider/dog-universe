@@ -65,27 +65,47 @@ jobs:
         run: npx vitest run scripts/__tests__/db-rollback.test.mjs
 
       - name: Up → down → schema-equivalence loop
-        # For every migration authored within the last 90 days that ships a
-        # down.sql WITHOUT the @rollback: not-applicable marker:
-        #   1. snapshot the schema (pg_dump -s) BEFORE applying the up.
-        #   2. apply migration.sql.
-        #   3. snapshot the schema AFTER.
-        #   4. apply down.sql.
-        #   5. snapshot the schema POST-DOWN — must equal the BEFORE snapshot.
+        # Two passes :
+        #   PASS 1 — bootstrap : applique TOUTES les migrations < CUTOFF dans
+        #     l'ordre, sans tester le rollback. Indispensable car les migrations
+        #     récentes référencent des tables/colonnes créées par les anciennes
+        #     (ex: 20260511_invoice_sequence dépend d'Invoice).
+        #   PASS 2 — pour chaque migration >= CUTOFF avec down.sql actionnable :
+        #     1. snapshot schéma AVANT (pg_dump -s).
+        #     2. apply migration.sql.
+        #     3. apply down.sql via db-rollback.mjs.
+        #     4. snapshot schéma APRÈS — doit égaler AVANT.
         # Any drift fails the job.
         run: |
           set -euo pipefail
           MIG_DIR=prisma/migrations
           CUTOFF_EPOCH=$(date -d '90 days ago' +%s)
           FAIL=0
-          # Bootstrap the home-grown tracker — db-rollback.mjs deletes a row from it.
           psql -c 'CREATE TABLE IF NOT EXISTS "_app_migrations" (name TEXT PRIMARY KEY, checksum TEXT, applied_at TIMESTAMP DEFAULT NOW());'
-          for d in $(ls -1 "$MIG_DIR" | sort); do
+
+          ALL=$(ls -1 "$MIG_DIR" | sort)
+
+          # PASS 1 : bootstrap with everything older than the cutoff.
+          echo "[rollback-check] === bootstrap (migrations < 90 days) ==="
+          for d in $ALL; do
+            ymd="${d%%_*}"
+            [[ "$ymd" =~ ^[0-9]{8}$ ]] || continue
+            iso="${ymd:0:4}-${ymd:4:2}-${ymd:6:2}"
+            mig_epoch=$(date -d "$iso" +%s 2>/dev/null || echo 0)
+            [ "$mig_epoch" -lt "$CUTOFF_EPOCH" ] || continue
+            up="$MIG_DIR/$d/migration.sql"
+            [ -f "$up" ] || continue
+            echo "[bootstrap] $d"
+            psql -v ON_ERROR_STOP=1 -f "$up" > /dev/null
+            psql -c "INSERT INTO \"_app_migrations\"(name) VALUES ('$d') ON CONFLICT DO NOTHING;" > /dev/null
+          done
+
+          # PASS 2 : up → down equivalence on recent migrations only.
+          echo "[rollback-check] === recent migrations (>= 90 days) ==="
+          for d in $ALL; do
             name="$d"
             ymd="${name%%_*}"
-            # Skip non-dated entries.
             [[ "$ymd" =~ ^[0-9]{8}$ ]] || continue
-            # Convert YYYYMMDD → epoch and skip anything older than 90d.
             iso="${ymd:0:4}-${ymd:4:2}-${ymd:6:2}"
             mig_epoch=$(date -d "$iso" +%s 2>/dev/null || echo 0)
             [ "$mig_epoch" -ge "$CUTOFF_EPOCH" ] || continue
@@ -105,6 +125,7 @@ jobs:
             echo "[rollback-check] === $name ==="
             pg_dump -s --no-owner --no-privileges > /tmp/before.sql
             psql -v ON_ERROR_STOP=1 -f "$up"
+            psql -c "INSERT INTO \"_app_migrations\"(name) VALUES ('$name') ON CONFLICT DO NOTHING;" > /dev/null
             pg_dump -s --no-owner --no-privileges > /tmp/after_up.sql
             node scripts/db-rollback.mjs "$name"
             pg_dump -s --no-owner --no-privileges > /tmp/after_down.sql
