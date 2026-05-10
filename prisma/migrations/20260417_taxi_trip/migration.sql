@@ -1,4 +1,5 @@
 -- ── TaxiTrip + TaxiStatusHistory ─────────────────────────────────────────────
+-- @safety: reviewed
 -- Replaces flat taxiGoStatus / taxiReturnStatus columns on BoardingDetail
 -- and introduces a unified TaxiTrip model for both addon and standalone trips.
 

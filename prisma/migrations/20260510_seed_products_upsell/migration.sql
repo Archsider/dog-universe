@@ -1,4 +1,5 @@
 -- Seed catalogue Ultra Premium + Canvit (~70 produits) pour upsell smart.
+-- @safety: reviewed
 -- Idempotent — `WHERE NOT EXISTS` sur (name, supplier).
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

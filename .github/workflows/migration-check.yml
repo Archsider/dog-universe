@@ -1,0 +1,76 @@
+name: Migration Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'prisma/**'
+      - 'scripts/db-migrate.mjs'
+      - '.github/workflows/migration-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'prisma/**'
+      - 'scripts/db-migrate.mjs'
+      - '.github/workflows/migration-check.yml'
+
+concurrency:
+  group: migration-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate-migrations:
+    name: Validate migrations (static + shadow DB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Ephemeral postgres used as shadow DB for the migration runner dry-run.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shadow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Shadow DB — non-prod, ephemeral, deleted at the end of the job.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shadow
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/shadow
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Static safety validation (no DB)
+        # Runs validateMigrationSql() against every prisma/migrations/*/migration.sql.
+        # Fails on: DROP TABLE without IF EXISTS, DELETE/UPDATE without WHERE,
+        # migrations >100 lines missing `-- @safety: reviewed`.
+        run: node scripts/db-migrate.mjs --validate-only
+
+      - name: Unit tests for the validator
+        run: npx vitest run scripts/__tests__/db-migrate.test.mjs
+
+      - name: Dry-run against shadow DB
+        # Confirms the runner can connect, baseline detection works, and lists
+        # the migrations that would be applied — without mutating anything.
+        # CI=true would normally skip the runner; we override via --dry-run flag
+        # which forces evaluation even in CI.
+        run: |
+          CI= node scripts/db-migrate.mjs --dry-run
