@@ -187,6 +187,7 @@ model Booking {
   invoice        Invoice?
   stayPhotos     StayPhoto[]
   review         Review?
+  rescheduleRequest RescheduleRequest?
 
   @@index([clientId])
   @@index([status])
@@ -528,6 +529,26 @@ model Review {
   createdAt DateTime @default(now())
 
   @@index([clientId])
+  @@index([createdAt])
+}
+
+// Client-initiated reschedule request on a booking. Replaces the older pattern
+// of stuffing a `[RESCHEDULE_REQUEST]{json}` tag in `Booking.notes` (parsed by
+// fragile regex). Legacy notes are intentionally NOT migrated — admins handle
+// the leftover tags manually until they age out.
+model RescheduleRequest {
+  id         String    @id @default(cuid())
+  bookingId  String    @unique
+  startDate  DateTime
+  endDate    DateTime?
+  reason     String?
+  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([status])
   @@index([createdAt])
 }
 

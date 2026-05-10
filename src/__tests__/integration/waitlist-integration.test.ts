@@ -3,22 +3,28 @@
  *
  * No real DB — all Prisma calls are mocked via vi.mock().
  * The "integration" angle: tests cover the full promotion path:
- *   findFirst (WAITLIST candidate) → booking.update (→ PENDING)
- *   → createWaitlistPromotedNotification → notification.create
+ *   findMany (WAITLIST candidates) → $transaction (re-read + capacity recheck
+ *   → booking.update PENDING) → notification.create
+ *
+ * Capacity recheck is mocked to "ok" so promotion proceeds. The route's own
+ * tests cover the capacity-blocked path.
  */
 
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
-//
-// vi.mock() factories are hoisted to the top of the file, so any variable they
-// reference must also be hoisted via vi.hoisted() — otherwise the factory runs
-// before the variable is initialised (temporal dead zone / ReferenceError).
 
-const { mockPrisma } = vi.hoisted(() => {
-  const mockPrisma = {
+const { mockPrisma, mockCheckCapacity } = vi.hoisted(() => {
+  const txProxy = {
     booking: {
       findFirst: vi.fn(),
+      update: vi.fn(),
+    },
+  };
+  const mockPrisma = {
+    booking: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(), // legacy access from other modules
       update: vi.fn(),
     },
     notification: {
@@ -27,12 +33,19 @@ const { mockPrisma } = vi.hoisted(() => {
     user: {
       findUnique: vi.fn(),
     },
+    $transaction: vi.fn(async (fn: (tx: typeof txProxy) => Promise<unknown>) => fn(txProxy)),
+    __tx: txProxy,
   };
-  return { mockPrisma };
+  const mockCheckCapacity = vi.fn();
+  return { mockPrisma, mockCheckCapacity };
 });
 
 vi.mock('@/lib/prisma', () => ({
   prisma: mockPrisma,
+}));
+
+vi.mock('@/lib/capacity', () => ({
+  checkBoardingCapacity: mockCheckCapacity,
 }));
 
 vi.mock('@/lib/cache', () => ({
@@ -45,13 +58,10 @@ vi.mock('@/lib/cache', () => ({
   CacheTTL: { notifCount: 30, capacityLimits: 300 },
 }));
 
-// email / sms helpers called inside createBookingCompletedNotification (non-blocking)
 vi.mock('@/lib/email', () => ({
   sendEmail: vi.fn().mockResolvedValue(undefined),
   getEmailTemplate: vi.fn().mockReturnValue({ subject: 'test', html: '<p>test</p>' }),
 }));
-
-// ── Imports (after mocks) ─────────────────────────────────────────────────────
 
 import { promoteWaitlistedBooking } from '@/lib/notifications';
 
@@ -72,15 +82,23 @@ function makeWaitlistBooking(overrides: Partial<{
     startDate: overrides.startDate ?? new Date('2026-09-01'),
     endDate: overrides.endDate ?? new Date('2026-09-07'),
     createdAt: overrides.createdAt ?? new Date('2026-07-01'),
-    bookingPets: petNames.map((name) => ({ pet: { name } })),
+    bookingPets: petNames.map((name) => ({ pet: { name }, petId: 'pet-' + name })),
   };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Default: notification.create succeeds
   mockPrisma.notification.create.mockResolvedValue({ id: 'notif-1' });
   mockPrisma.booking.update.mockResolvedValue({});
+  // Tx proxy: re-read returns same candidate; capacity ok by default.
+  mockPrisma.__tx.booking.findFirst.mockImplementation(async ({ where }: { where: { id: string } }) => ({
+    id: where.id,
+    startDate: new Date('2026-09-01'),
+    endDate: new Date('2026-09-07'),
+    bookingPets: [{ petId: 'pet-Rex' }],
+  }));
+  mockPrisma.__tx.booking.update.mockResolvedValue({});
+  mockCheckCapacity.mockResolvedValue({ ok: true });
 });
 
 // ── Test 1: promotes oldest WAITLIST booking (FIFO) ──────────────────────────
@@ -88,7 +106,13 @@ beforeEach(() => {
 describe('promoteWaitlistedBooking — promotes oldest WAITLIST booking (FIFO)', () => {
   it('updates the candidate booking to PENDING and returns its id', async () => {
     const candidate = makeWaitlistBooking({ id: 'booking-oldest', clientId: 'client-A' });
-    mockPrisma.booking.findFirst.mockResolvedValue(candidate);
+    mockPrisma.booking.findMany.mockResolvedValue([candidate]);
+    mockPrisma.__tx.booking.findFirst.mockResolvedValueOnce({
+      id: candidate.id,
+      startDate: candidate.startDate,
+      endDate: candidate.endDate,
+      bookingPets: candidate.bookingPets,
+    });
 
     const result = await promoteWaitlistedBooking({
       startDate: new Date('2026-09-01'),
@@ -96,7 +120,7 @@ describe('promoteWaitlistedBooking — promotes oldest WAITLIST booking (FIFO)',
     });
 
     expect(result).toBe('booking-oldest');
-    expect(mockPrisma.booking.update).toHaveBeenCalledWith({
+    expect(mockPrisma.__tx.booking.update).toHaveBeenCalledWith({
       where: { id: 'booking-oldest' },
       data: { status: 'PENDING' },
     });
@@ -104,14 +128,14 @@ describe('promoteWaitlistedBooking — promotes oldest WAITLIST booking (FIFO)',
 
   it('queries for WAITLIST status ordered by createdAt ASC (FIFO)', async () => {
     const candidate = makeWaitlistBooking();
-    mockPrisma.booking.findFirst.mockResolvedValue(candidate);
+    mockPrisma.booking.findMany.mockResolvedValue([candidate]);
 
     await promoteWaitlistedBooking({
       startDate: new Date('2026-09-01'),
       endDate: new Date('2026-09-07'),
     });
 
-    expect(mockPrisma.booking.findFirst).toHaveBeenCalledWith(
+    expect(mockPrisma.booking.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ status: 'WAITLIST' }),
         orderBy: { createdAt: 'asc' },
@@ -124,7 +148,7 @@ describe('promoteWaitlistedBooking — promotes oldest WAITLIST booking (FIFO)',
 
 describe('promoteWaitlistedBooking — no WAITLIST bookings', () => {
   it('returns null and does not call update or create', async () => {
-    mockPrisma.booking.findFirst.mockResolvedValue(null);
+    mockPrisma.booking.findMany.mockResolvedValue([]);
 
     const result = await promoteWaitlistedBooking({
       startDate: new Date('2026-09-01'),
@@ -133,6 +157,7 @@ describe('promoteWaitlistedBooking — no WAITLIST bookings', () => {
 
     expect(result).toBeNull();
     expect(mockPrisma.booking.update).not.toHaveBeenCalled();
+    expect(mockPrisma.__tx.booking.update).not.toHaveBeenCalled();
     expect(mockPrisma.notification.create).not.toHaveBeenCalled();
   });
 });
@@ -146,7 +171,7 @@ describe('promoteWaitlistedBooking — creates BOOKING_WAITLIST_PROMOTED notific
       clientId: 'client-xyz',
       petNames: ['Luna'],
     });
-    mockPrisma.booking.findFirst.mockResolvedValue(candidate);
+    mockPrisma.booking.findMany.mockResolvedValue([candidate]);
 
     await promoteWaitlistedBooking({
       startDate: new Date('2026-09-01'),
@@ -165,7 +190,7 @@ describe('promoteWaitlistedBooking — creates BOOKING_WAITLIST_PROMOTED notific
 
   it('includes the pet name in the notification message', async () => {
     const candidate = makeWaitlistBooking({ clientId: 'client-xyz', petNames: ['Milo'] });
-    mockPrisma.booking.findFirst.mockResolvedValue(candidate);
+    mockPrisma.booking.findMany.mockResolvedValue([candidate]);
 
     await promoteWaitlistedBooking({
       startDate: new Date('2026-09-01'),
@@ -190,7 +215,26 @@ describe('promoteWaitlistedBooking — endDate=null means no promotable slot', (
     });
 
     expect(result).toBeNull();
-    expect(mockPrisma.booking.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.booking.findMany).not.toHaveBeenCalled();
     expect(mockPrisma.booking.update).not.toHaveBeenCalled();
+  });
+});
+
+// ── Test 5: capacity recheck blocks → leaves on WAITLIST ─────────────────────
+
+describe('promoteWaitlistedBooking — capacity recheck guard', () => {
+  it('skips a candidate whose pets exceed remaining capacity', async () => {
+    const candidate = makeWaitlistBooking({ id: 'booking-too-big', clientId: 'client-Z' });
+    mockPrisma.booking.findMany.mockResolvedValue([candidate]);
+    mockCheckCapacity.mockResolvedValue({ ok: false, species: 'DOG', available: 0, requested: 1, limit: 20 });
+
+    const result = await promoteWaitlistedBooking({
+      startDate: new Date('2026-09-01'),
+      endDate: new Date('2026-09-07'),
+    });
+
+    expect(result).toBeNull();
+    expect(mockPrisma.__tx.booking.update).not.toHaveBeenCalled();
+    expect(mockPrisma.notification.create).not.toHaveBeenCalled();
   });
 });

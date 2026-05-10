@@ -555,6 +555,15 @@ export async function createWaitlistPromotedNotification(
 // PENDING and notifies its owner. Called whenever capacity is freed
 // (CANCELLED, REJECTED, NO_SHOW). Returns the promoted booking id, or null
 // if no waitlisted booking matched.
+//
+// SAFETY: each candidate is re-checked against the LIVE capacity inside a
+// Serializable transaction before being moved out of WAITLIST. Without this
+// guard, freeing one slot could promote a candidate whose pets exceed the
+// remaining capacity (e.g. cancellation of a 1-dog booking does not entitle
+// us to promote a 3-dog WAITLIST). On capacity-fail we move on to the next
+// candidate (FIFO) and try again, up to MAX_CANDIDATES.
+const MAX_WAITLIST_CANDIDATES = 10;
+
 export async function promoteWaitlistedBooking(args: {
   startDate: Date;
   endDate: Date | null;
@@ -562,32 +571,78 @@ export async function promoteWaitlistedBooking(args: {
   if (!args.endDate) return null;
 
   const { prisma } = await import('@/lib/prisma');
-  const candidate = await prisma.booking.findFirst({
+  const { Prisma } = await import('@prisma/client');
+  const { checkBoardingCapacity } = await import('@/lib/capacity');
+
+  const candidates = await prisma.booking.findMany({
     where: {
       status: 'WAITLIST',
       serviceType: 'BOARDING',
-      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      deletedAt: null,
       startDate: { lte: args.endDate },
       endDate: { gte: args.startDate, not: null },
     },
     orderBy: { createdAt: 'asc' },
+    take: MAX_WAITLIST_CANDIDATES,
     include: {
       bookingPets: { include: { pet: { select: { name: true } } } },
     },
   });
 
-  if (!candidate) return null;
+  for (const candidate of candidates) {
+    if (!candidate.endDate) continue;
+    let promoted = false;
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          // Re-read the candidate inside the tx and re-check capacity in the
+          // same Serializable snapshot. Skip excludeBookingId so the
+          // candidate's own pets are part of the requested count, mirroring
+          // the original create-time semantics.
+          const fresh = await tx.booking.findFirst({
+            where: { id: candidate.id, status: 'WAITLIST', deletedAt: null },
+            select: {
+              id: true,
+              startDate: true,
+              endDate: true,
+              bookingPets: { select: { petId: true } },
+            },
+          });
+          if (!fresh || !fresh.endDate) return;
 
-  await prisma.booking.update({
-    where: { id: candidate.id },
-    data: { status: 'PENDING' },
-  });
+          const cap = await checkBoardingCapacity(
+            {
+              petIds: fresh.bookingPets.map((bp) => bp.petId),
+              startDate: fresh.startDate,
+              endDate: fresh.endDate,
+              excludeBookingId: candidate.id,
+            },
+            tx,
+          );
+          if (!cap.ok) return; // leave on WAITLIST — we'll try next candidate
 
-  const petNames = candidate.bookingPets.map((bp) => bp.pet.name).join(', ') || 'votre animal';
-  const bookingRef = candidate.id.slice(0, 8).toUpperCase();
-  await createWaitlistPromotedNotification(candidate.clientId, bookingRef, petNames);
+          await tx.booking.update({
+            where: { id: candidate.id },
+            data: { status: 'PENDING' },
+          });
+          promoted = true;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 },
+      );
+    } catch {
+      // P2034 / timeouts are non-fatal here — leave on WAITLIST and continue.
+      promoted = false;
+    }
 
-  return candidate.id;
+    if (promoted) {
+      const petNames = candidate.bookingPets.map((bp) => bp.pet.name).join(', ') || 'votre animal';
+      const bookingRef = candidate.id.slice(0, 8).toUpperCase();
+      await createWaitlistPromotedNotification(candidate.clientId, bookingRef, petNames);
+      return candidate.id;
+    }
+  }
+
+  return null;
 }
 
 export async function notifyAdminsProductOrder(args: {

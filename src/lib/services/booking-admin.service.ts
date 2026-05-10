@@ -302,11 +302,17 @@ export async function addBookingItems(args: AddBookingItemsArgs) {
     if (typeof it.description !== 'string' || !it.description.trim()) {
       throw new BookingError('INVALID_ITEM_DESCRIPTION');
     }
-    if (typeof it.quantity !== 'number' || !Number.isInteger(it.quantity) || it.quantity <= 0) {
+    if (typeof it.quantity !== 'number' || !Number.isInteger(it.quantity) || it.quantity <= 0 || it.quantity > 1_000) {
       throw new BookingError('INVALID_ITEM_QUANTITY');
     }
-    if (typeof it.unitPrice !== 'number' || !isFinite(it.unitPrice) || it.unitPrice < 0) {
+    if (typeof it.unitPrice !== 'number' || !isFinite(it.unitPrice) || it.unitPrice < 0 || it.unitPrice > 100_000) {
       throw new BookingError('INVALID_ITEM_PRICE');
+    }
+    // Defence-in-depth against quantity * unitPrice overflowing the
+    // Decimal(10,2) line total: 1_000 * 100_000 = 100M but a single line is
+    // capped at 1M MAD here so admins can spot fat-finger errors early.
+    if (it.quantity * it.unitPrice > 1_000_000) {
+      throw new BookingError('INVALID_ITEM_TOTAL');
     }
     if (
       it.category !== undefined &&

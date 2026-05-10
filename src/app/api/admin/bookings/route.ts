@@ -189,6 +189,8 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
                 name: p.name.trim(),
                 species: p.species,
                 breed: p.breed?.trim() || null,
+                // dateOfBirth is REQUIRED at the schema level (cf. validation.ts).
+                // Branch retained defensively for legacy callers; new walk-ins must always send DOB.
                 dateOfBirth: p.dateOfBirth ? new Date(p.dateOfBirth) : null,
               },
               select: { id: true },

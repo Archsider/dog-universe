@@ -62,6 +62,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }, { status: 400 });
   }
 
+  // Conflict check: refuse to extend over a window where the same client
+  // already has another active booking (PENDING / CONFIRMED / IN_PROGRESS /
+  // PENDING_EXTENSION). Without this, a client could double-book themselves
+  // by extending into a slot they already booked separately, which the admin
+  // would then have to disentangle manually.
+  const overlapping = await prisma.booking.findFirst({
+    where: {
+      clientId: session.user.id,
+      id: { not: id },
+      deletedAt: null,
+      status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'PENDING_EXTENSION'] },
+      startDate: { lte: newEndDate },
+      endDate: { gte: extensionStartDate, not: null },
+    },
+    select: { id: true },
+  });
+  if (overlapping) {
+    return NextResponse.json({ error: 'BOOKING_CONFLICT' }, { status: 400 });
+  }
+
   // Create the PENDING_EXTENSION booking
   const extensionBooking = await prisma.$transaction(async (tx) => {
     // Mark original booking as having a pending extension

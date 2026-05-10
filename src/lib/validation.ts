@@ -169,10 +169,17 @@ export const bookingCreateSchema = z.object({
 
 // Création d'une réservation par un ADMIN (depuis /admin/reservations/new) —
 // inclut un cas walk-in (création inline du User + Pets).
+// `dateOfBirth` est OBLIGATOIRE depuis 2026-05-11 (cf. règle métier projet :
+// anniversaires automatiques + grade fidélité dépendant de l'âge). Les anciens
+// walk-in DOB-vides étaient une faille de validation et ont créé un bruit
+// statistique sur la pyramide des âges des chiens en pension.
 const adminWalkInPetSchema = z.object({
   name: z.string().min(1).max(100),
   species: z.enum(['DOG', 'CAT']),
-  dateOfBirth: z.string().max(40).optional().nullable(),
+  dateOfBirth: z.string().min(1).max(40).refine(v => {
+    const d = new Date(v);
+    return !isNaN(d.getTime()) && d <= new Date();
+  }, 'invalid or future date of birth'),
   breed: z.string().max(100).optional().nullable(),
 });
 
