@@ -8,6 +8,7 @@ import { sendEmailNow } from '@/lib/notify-now';
 import { formatMAD } from '@/lib/utils';
 import { allocatePayments } from '@/lib/payments';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
+import { withSpan, logServerError } from '@/lib/observability';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -198,7 +199,10 @@ export async function POST(request: Request) {
 
     let invoice;
     try {
-      invoice = await prisma.$transaction(async (tx) => {
+      invoice = await withSpan(
+        'api.invoice.create',
+        { entityId: clientId, userId: session.user.id, amount, items: items.length, markPaid: !!markPaid },
+        () => prisma.$transaction(async (tx) => {
         // 1) Verrouille chaque produit (FOR UPDATE) + check stock + décrément.
         //    Lock en parallèle SAFE car id distinct par ligne.
         if (stockNeeds.size > 0) {
@@ -252,7 +256,8 @@ export async function POST(request: Request) {
           },
           include: { items: true, client: true },
         });
-      });
+      }),
+      );
     } catch (err) {
       if (err instanceof Error) {
         if (err.message.startsWith('OUT_OF_STOCK')) {
@@ -304,7 +309,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'invoice', message: 'Create invoice error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logServerError('invoice', 'Create invoice error', error);
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

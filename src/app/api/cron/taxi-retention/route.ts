@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { markCronRun } from '@/lib/observability';
 
 export const maxDuration = 60;
 
@@ -47,6 +48,8 @@ export async function GET(request: Request) {
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
+
+  await markCronRun('taxi-retention');
 
   const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 3600 * 1000);
   const errors: string[] = [];

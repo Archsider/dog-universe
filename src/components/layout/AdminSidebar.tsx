@@ -66,6 +66,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
     ...(userRole === 'SUPERADMIN'
       ? [
           { href: `/${locale}/admin/diagnostics`, labelKey: 'diagnostics', icon: Activity },
+          { href: `/${locale}/admin/health`, labelKey: 'health', icon: Activity },
           { href: `/${locale}/admin/users`, labelKey: 'users', icon: UserCog },
           { href: `/${locale}/admin/revenue-summary`, labelKey: 'revenue_summary', icon: TrendingUp },
         ]

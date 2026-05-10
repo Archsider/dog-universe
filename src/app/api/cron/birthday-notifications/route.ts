@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { markCronRun } from '@/lib/observability';
 
 export const maxDuration = 60;
 
@@ -29,6 +30,8 @@ export async function GET(req: NextRequest) {
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
+
+  await markCronRun('birthday-notifications');
 
   // Find all pets born today (day + month match regardless of year)
   const today = new Date();

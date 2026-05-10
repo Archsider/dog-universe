@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { markCronRun } from '@/lib/observability';
 import { createNotification } from '@/lib/notifications';
 import { enqueueEmail } from '@/lib/queues';
 import { getEmailTemplate } from '@/lib/email';
@@ -30,6 +31,8 @@ export async function GET(request: Request) {
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
+
+  await markCronRun('review-requests');
 
   const now = new Date();
   const since = new Date(now);

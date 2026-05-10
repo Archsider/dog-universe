@@ -5,6 +5,7 @@ import { getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
 import { enqueueEmail } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { markCronRun } from '@/lib/observability';
 import { generateWeeklyPetReport } from '@/lib/ai';
 
 export const maxDuration = 60;
@@ -47,6 +48,8 @@ export async function GET(request: Request) {
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
+
+  await markCronRun('weekly-pet-report');
 
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);

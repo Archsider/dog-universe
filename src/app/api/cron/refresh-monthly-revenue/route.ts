@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { markCronRun } from '@/lib/observability';
 import { log } from '@/lib/logger';
 
 export const maxDuration = 60;
@@ -42,6 +43,8 @@ export async function GET(req: NextRequest) {
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
+
+  await markCronRun('refresh-monthly-revenue');
 
   try {
     await prisma.$executeRawUnsafe(

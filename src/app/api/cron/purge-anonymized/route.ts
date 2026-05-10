@@ -18,6 +18,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { markCronRun } from '@/lib/observability';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { deleteFromPrivateStorage } from '@/lib/supabase';
 
@@ -40,6 +41,8 @@ export async function GET(request: Request) {
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
+
+  await markCronRun('purge-anonymized');
 
   const cutoff = new Date(Date.now() - THREE_YEARS_MS);
 

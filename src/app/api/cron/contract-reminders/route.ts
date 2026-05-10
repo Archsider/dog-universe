@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getEmailTemplate } from '@/lib/email';
 import { enqueueEmail, enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { markCronRun } from '@/lib/observability';
 import { APP_URL } from '@/lib/config';
 
 export const maxDuration = 60;
@@ -29,6 +30,8 @@ export async function GET(req: NextRequest) {
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
+
+  await markCronRun('contract-reminders');
 
   const unsigned = await prisma.user.findMany({
     where: { role: 'CLIENT', deletedAt: null, isWalkIn: false, contract: null }, // soft-delete: required — no global extension (Edge Runtime incompatible). Walk-in clients have no portal access — skip.

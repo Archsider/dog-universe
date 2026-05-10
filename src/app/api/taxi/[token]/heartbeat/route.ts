@@ -30,6 +30,7 @@ import {
   createTaxiNearPickupNotification,
   createTaxiArrivedNotification,
 } from '@/lib/notifications';
+import { withSpan } from '@/lib/observability';
 
 export const maxDuration = 10;
 
@@ -54,6 +55,10 @@ function isValidLng(v: unknown): v is number {
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token: urlToken } = await params;
+  return withSpan('api.taxi.heartbeat', { tokenPrefix: urlToken.slice(0, 8) }, () => heartbeatImpl(request, urlToken));
+}
+
+async function heartbeatImpl(request: NextRequest, urlToken: string) {
 
   const auth = request.headers.get('authorization') ?? '';
   const match = /^Bearer\s+(.+)$/i.exec(auth);
