@@ -260,10 +260,60 @@ async function computeRevenueByCategoryProrata(
 }
 
 /**
+ * Read the (year, month) row of `monthly_revenue_mv` and project it onto the
+ * `CategoryBreakdown` shape. Returns `null` when the view is empty for that
+ * month (zero payments yet, or MV not refreshed since the first paid
+ * invoice) — the caller then falls back to live computation so the dashboard
+ * never displays "0 MAD" when the MV is stale.
+ */
+async function readRevenueFromMV(
+  year: number,
+  month: number,
+): Promise<CategoryBreakdown | null> {
+  try {
+    const rows = await prisma.$queryRaw<{ category: string; total: unknown }[]>`
+      SELECT category, total
+      FROM monthly_revenue_mv
+      WHERE year = ${year} AND month = ${month}
+    `;
+    if (rows.length === 0) return null;
+    const breakdown: CategoryBreakdown = {
+      boarding: 0, taxi: 0, grooming: 0, croquettes: 0, other: 0,
+    };
+    for (const row of rows) {
+      const amount = toNumber(row.total as number | string | null);
+      switch (row.category) {
+        case 'BOARDING':  breakdown.boarding   += amount; break;
+        case 'PET_TAXI':  breakdown.taxi       += amount; break;
+        case 'GROOMING':  breakdown.grooming   += amount; break;
+        case 'PRODUCT':   breakdown.croquettes += amount; break;
+        default:          breakdown.other      += amount; break;
+      }
+    }
+    return breakdown;
+  } catch (err) {
+    // MV missing / DB down → fall back to live computation upstream.
+    console.error(JSON.stringify({
+      level: 'warn',
+      service: 'metrics',
+      message: 'monthly_revenue_mv unavailable for revenueByCategoryProrata',
+      error: err instanceof Error ? err.message : String(err),
+      timestamp: new Date().toISOString(),
+    }));
+    return null;
+  }
+}
+
+/**
  * Public cached wrapper around computeRevenueByCategoryProrata. TTL 600 s
  * (10 min) — invalidé manuellement depuis les routes Payment (POST/DELETE)
  * via cacheDel(`revenue:${year}:${month}`). Fail-open : Redis down → calcul
  * direct.
+ *
+ * Lecture MV-first : on tente `monthly_revenue_mv` (refresh hourly + daily).
+ * Si la MV est vide pour ce mois (ex : juste après le 1er paiement, avant
+ * le prochain tick cron) → fallback live calculation pour ne jamais afficher
+ * un faux zéro.
  *
  * Important : la clé est dérivée du **mois civil** de `start` (pas du tuple
  * start/end exact) — toutes les call sites du code passent monthStart/monthEnd
@@ -278,7 +328,11 @@ export async function revenueByCategoryProrata(
   return cacheReadThrough(
     `revenue:${year}:${month}`,
     600,
-    () => computeRevenueByCategoryProrata(start, end),
+    async () => {
+      const mv = await readRevenueFromMV(year, month);
+      if (mv) return mv;
+      return computeRevenueByCategoryProrata(start, end);
+    },
   );
 }
 

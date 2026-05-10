@@ -130,7 +130,9 @@ jobs:
         run: npx playwright test
       - name: Run Playwright tests (secrets absent — graceful skip)
         if: env.TEST_CLIENT_EMAIL == ''
-        run: npx playwright test
+        run: |
+          echo "::notice title=E2E skipped::No E2E secrets configured. See docs/E2E_SETUP.md to enable them."
+          npx playwright test
         env:
           PLAYWRIGHT_BASE_URL: https://app.doguniverse.ma
       - name: Upload Playwright artifacts on failure

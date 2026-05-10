@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/refresh-monthly-revenue",
       "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/cron/refresh-revenue-mv",
+      "schedule": "0 2 * * *"
     }
   ]
 }
