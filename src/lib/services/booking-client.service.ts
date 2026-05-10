@@ -17,6 +17,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
+import { getDayOfWeekMaroc, getHourMaroc, getMinuteMaroc } from '@/lib/timezone';
 import { BookingError } from './booking-errors';
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -32,7 +33,7 @@ export function validateTaxiSlot(args: {
   arrivalTime?: string | null;
 }): void {
   const taxiDate = new Date(args.startDate);
-  if (taxiDate.getDay() === 0) {
+  if (getDayOfWeekMaroc(taxiDate) === 0) {
     throw new BookingError('SUNDAY_NOT_ALLOWED');
   }
   let taxiHour: number | null = null;
@@ -42,8 +43,8 @@ export function validateTaxiSlot(args: {
     taxiHour = parts[0] ?? null;
     taxiMinute = parts[1] ?? 0;
   } else {
-    taxiHour = taxiDate.getHours();
-    taxiMinute = taxiDate.getMinutes();
+    taxiHour = getHourMaroc(taxiDate);
+    taxiMinute = getMinuteMaroc(taxiDate);
   }
   if (taxiHour !== null) {
     if (isNaN(taxiHour) || isNaN(taxiMinute)) {
@@ -80,7 +81,7 @@ export function validateBoardingTaxiAddons(args: {
     if (!addon.enabled) continue;
     if (addon.date) {
       const d = new Date(addon.date + 'T12:00:00');
-      if (d.getDay() === 0) {
+      if (getDayOfWeekMaroc(d) === 0) {
         throw new BookingError('SUNDAY_NOT_ALLOWED');
       }
     }

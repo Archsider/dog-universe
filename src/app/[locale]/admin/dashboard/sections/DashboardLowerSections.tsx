@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
+import { safeClientWhere } from '@/lib/queries/safe-where';
 
 interface Props {
   locale: string;
@@ -15,7 +16,11 @@ interface Props {
 export default async function DashboardLowerSections({ locale, labels }: Props) {
   const top5Revenue = await prisma.invoice.groupBy({
     by: ['clientId'],
-    where: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
+    where: {
+      status: { in: ['PAID', 'PARTIALLY_PAID'] },
+      // RGPD : exclure ADMIN/SUPERADMIN + soft-deleted du Top 5.
+      client: safeClientWhere,
+    },
     _sum: { paidAmount: true },
     orderBy: { _sum: { paidAmount: 'desc' } },
     take: 5,
@@ -24,7 +29,7 @@ export default async function DashboardLowerSections({ locale, labels }: Props) 
   if (top5Revenue.length === 0) return null;
 
   const top5Users = await prisma.user.findMany({
-    where: { id: { in: top5Revenue.map((r) => r.clientId) } },
+    where: { id: { in: top5Revenue.map((r) => r.clientId) }, ...safeClientWhere },
     select: { id: true, name: true, email: true },
   });
 

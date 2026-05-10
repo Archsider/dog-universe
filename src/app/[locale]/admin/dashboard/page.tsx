@@ -17,6 +17,7 @@ import {
 import DashboardActivity from './sections/DashboardActivity';
 import DashboardLowerSections from './sections/DashboardLowerSections';
 import { SectionSkeleton } from './sections/SectionSkeleton';
+import { safeClientWhere } from '@/lib/queries/safe-where';
 
 // Cache ISR — revalidation toutes les 60 s. Les actions admin (PATCH bookings,
 // invoices) appellent revalidateTag('admin-counts') pour invalider en cas de
@@ -40,6 +41,8 @@ export default async function AdminDashboardPage({ params }: PageProps) {
 
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const oneYearAgo = new Date(now);
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
   const [
     totalClients,
@@ -50,7 +53,8 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     loyalClientsGroups,
     newClients,
     pendingInvoicesAgg,
-    bookingsWithoutInvoice,
+    bookingsWithoutInvoiceCount,
+    bookingsWithoutInvoiceFirst,
     todayCheckIns,
     todayCheckOuts,
     thisMonthHistorical,
@@ -67,24 +71,36 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     totalCashCollected(lastMonthStart, lastMonthEnd),
     prisma.booking.groupBy({
       by: ['clientId'],
-      where: { deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: {
+        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        client: { isWalkIn: false },
+      },
       _count: { clientId: true },
       having: { clientId: { _count: { gt: 1 } } },
     }),
     newClientsCount(thisMonthStart, thisMonthEnd, true),
     prisma.invoice.aggregate({
-      where: { status: 'PENDING' },
+      // Cap à 12 mois pour borner la lecture (un PENDING vieux d'un an n'a plus
+      // de valeur indicateur — il devrait être en relance overdue).
+      where: { status: 'PENDING', issuedAt: { gte: oneYearAgo } },
       _sum: { amount: true },
       _count: { id: true },
     }),
-    prisma.booking.findMany({
+    prisma.booking.count({
       where: {
         status: { in: ['CONFIRMED', 'COMPLETED', 'IN_PROGRESS'] },
         invoice: null,
-        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        deletedAt: null,
+      },
+    }),
+    prisma.booking.findFirst({
+      where: {
+        status: { in: ['CONFIRMED', 'COMPLETED', 'IN_PROGRESS'] },
+        invoice: null,
+        deletedAt: null,
       },
       select: { id: true },
-      take: 2,
+      orderBy: { startDate: 'desc' },
     }),
     prisma.booking.findMany({
       where: {
@@ -132,7 +148,10 @@ export default async function AdminDashboardPage({ params }: PageProps) {
       },
     }),
     prisma.review.aggregate({
-      where: { createdAt: { gte: thirtyDaysAgo } },
+      where: {
+        createdAt: { gte: thirtyDaysAgo },
+        booking: { deletedAt: null, client: safeClientWhere },
+      },
       _avg: { rating: true },
       _count: { id: true },
     }),
@@ -154,8 +173,12 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   const lastHistAmt = lastMonthHistorical
     ? Number(lastMonthHistorical.boardingRevenue) + Number(lastMonthHistorical.groomingRevenue) + Number(lastMonthHistorical.taxiRevenue) + Number(lastMonthHistorical.otherRevenue)
     : 0;
-  const thisAmt = thisCash + thisHistAmt;
-  const lastAmt = lastCash + lastHistAmt;
+  // Fallback only-if-zero — cohérent avec cashByMonth (lib/metrics.ts) :
+  // les paiements réels priment sur les saisies historiques manuelles.
+  // L'addition aveugle double-comptait les mois où l'on a saisi à la fois la
+  // synthèse historique ET les paiements réels.
+  const thisAmt = thisCash > 0 ? thisCash : thisHistAmt;
+  const lastAmt = lastCash > 0 ? lastCash : lastHistAmt;
   const delta = deltaPercent(thisAmt, lastAmt);
 
   // Cartes service — billed family (item.total, PAID+PARTIALLY_PAID, issuedAt)
@@ -172,9 +195,8 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   const loyalClients = loyalClientsGroups.length;
   const pendingInvoicesAmount = Number(pendingInvoicesAgg._sum.amount ?? 0);
   const pendingInvoicesCount = pendingInvoicesAgg._count.id ?? 0;
-  const bookingsWithoutInvoiceCount = bookingsWithoutInvoice.length;
-  const bookingsWithoutInvoiceHref = bookingsWithoutInvoice.length === 1
-    ? `/${locale}/admin/reservations/${bookingsWithoutInvoice[0].id}`
+  const bookingsWithoutInvoiceHref = bookingsWithoutInvoiceCount === 1 && bookingsWithoutInvoiceFirst
+    ? `/${locale}/admin/reservations/${bookingsWithoutInvoiceFirst.id}`
     : `/${locale}/admin/reservations?noInvoice=1`;
 
   const labels = {

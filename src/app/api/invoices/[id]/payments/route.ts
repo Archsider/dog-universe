@@ -6,6 +6,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendSMS, sendAdminSMS, formatMAD } from '@/lib/sms';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
 import { toNumber } from '@/lib/decimal';
+import { cacheDel } from '@/lib/cache';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -124,6 +125,12 @@ export async function POST(request: Request, { params }: Params) {
 
   // --- Reallocate & derive status ---
   await allocatePayments(id);
+
+  // O5 — invalide le cache revenue du mois du paiement (KPIs dashboard /
+  // analytics). Fail-open via cacheDel.
+  const yyyy = parsedDate.getFullYear();
+  const mm = parsedDate.getMonth() + 1;
+  await cacheDel(`revenue:${yyyy}:${mm}`);
 
   // --- SMS confirmation paiement ---
   const clientFullName = invoice.clientDisplayName ?? invoice.client.name ?? '';

@@ -6,6 +6,7 @@ import {
   type CategoryBreakdown as AccountingCategoryBreakdown,
 } from '@/lib/accounting';
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
+import { cacheReadThrough } from '@/lib/cache';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -62,20 +63,70 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
     croquettes: 0,
   }));
 
-  for (let m = 0; m < 12; m++) {
-    const mStart = new Date(year, m, 1);
-    const mEnd = new Date(year, m + 1, 0, 23, 59, 59, 999);
-    const breakdown = await revenueByCategoryProrata(mStart, mEnd);
-    monthly[m].boarding = breakdown.boarding;
-    monthly[m].taxi = breakdown.taxi;
-    monthly[m].grooming = breakdown.grooming;
-    monthly[m].croquettes = breakdown.croquettes;
-    monthly[m].total =
-      breakdown.boarding +
-      breakdown.taxi +
-      breakdown.grooming +
-      breakdown.croquettes +
-      breakdown.other;
+  // O1 — 1 query sur la materialized view monthly_revenue_mv (refreshée
+  // chaque heure par /api/cron/refresh-monthly-revenue) au lieu de 12
+  // round-trips séquentiels via revenueByCategoryProrata. La MV stocke
+  // 1 row par (year, month, category) ; on agrège en JS sur les 12 mois.
+  let mvRows: { month: number; category: string; total: unknown }[] = [];
+  try {
+    mvRows = await prisma.$queryRaw<{ month: number; category: string; total: unknown }[]>`
+      SELECT month, category, total
+      FROM monthly_revenue_mv
+      WHERE year = ${year}
+    `;
+  } catch (err) {
+    // MV indisponible (ex: première migration pas encore appliquée) → fallback
+    // immédiat sur la lecture par mois.
+    console.error(JSON.stringify({
+      level: 'warn',
+      service: 'metrics',
+      message: 'monthly_revenue_mv unavailable, falling back to per-month query',
+      error: err instanceof Error ? err.message : String(err),
+      timestamp: new Date().toISOString(),
+    }));
+  }
+
+  if (mvRows.length > 0) {
+    for (const row of mvRows) {
+      const m = row.month - 1; // MV: month 1-12 → array 0-11
+      if (m < 0 || m > 11) continue;
+      const amount = toNumber(row.total as number | string | null);
+      switch (row.category) {
+        case 'BOARDING':
+          monthly[m].boarding += amount;
+          break;
+        case 'PET_TAXI':
+          monthly[m].taxi += amount;
+          break;
+        case 'GROOMING':
+          monthly[m].grooming += amount;
+          break;
+        case 'PRODUCT':
+          monthly[m].croquettes += amount;
+          break;
+        default:
+          // OTHER → comptabilisé dans total mais pas attribué à une catégorie UI.
+          break;
+      }
+      monthly[m].total += amount;
+    }
+  } else {
+    // Fallback per-month si MV vide — préserve l'ancien comportement.
+    for (let m = 0; m < 12; m++) {
+      const mStart = new Date(year, m, 1);
+      const mEnd = new Date(year, m + 1, 0, 23, 59, 59, 999);
+      const breakdown = await revenueByCategoryProrata(mStart, mEnd);
+      monthly[m].boarding = breakdown.boarding;
+      monthly[m].taxi = breakdown.taxi;
+      monthly[m].grooming = breakdown.grooming;
+      monthly[m].croquettes = breakdown.croquettes;
+      monthly[m].total =
+        breakdown.boarding +
+        breakdown.taxi +
+        breakdown.grooming +
+        breakdown.croquettes +
+        breakdown.other;
+    }
   }
 
   // Fallback MonthlyRevenueSummary pour les mois sans payments réels
@@ -139,7 +190,7 @@ export type CategoryBreakdown = {
 // the same allocation per (year, month, category) and is refreshed hourly by
 // /api/cron/refresh-monthly-revenue. Once we've validated parity in prod, swap
 // the body of this function for a `prisma.$queryRaw` against the view.
-export async function revenueByCategoryProrata(
+async function computeRevenueByCategoryProrata(
   start: Date,
   end: Date,
 ): Promise<CategoryBreakdown> {
@@ -206,6 +257,29 @@ export async function revenueByCategoryProrata(
   }
 
   return result;
+}
+
+/**
+ * Public cached wrapper around computeRevenueByCategoryProrata. TTL 600 s
+ * (10 min) — invalidé manuellement depuis les routes Payment (POST/DELETE)
+ * via cacheDel(`revenue:${year}:${month}`). Fail-open : Redis down → calcul
+ * direct.
+ *
+ * Important : la clé est dérivée du **mois civil** de `start` (pas du tuple
+ * start/end exact) — toutes les call sites du code passent monthStart/monthEnd
+ * via getMonthlyInvoicesWhere ; les windows libres ne sont pas attendues ici.
+ */
+export async function revenueByCategoryProrata(
+  start: Date,
+  end: Date,
+): Promise<CategoryBreakdown> {
+  const year = start.getFullYear();
+  const month = start.getMonth() + 1;
+  return cacheReadThrough(
+    `revenue:${year}:${month}`,
+    600,
+    () => computeRevenueByCategoryProrata(start, end),
+  );
 }
 
 // Backwards-compat alias — every caller now goes through the prorata version.

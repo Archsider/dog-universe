@@ -72,13 +72,14 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
     taxiReturnTime: b.boardingDetail?.taxiReturnTime ?? null,
   }));
 
-  // Stats — "today's boarders" = active stays (status only) whose startDate
-  // has already begun. endDate is intentionally not used (admin checkout).
+  // Stats — "today's boarders" = IN_PROGRESS uniquement (animal physiquement
+  // dans nos murs). Aligné sur metrics.currentBoarders pour cohérence
+  // dashboard ↔ calendar. CONFIRMED = réservé mais pas encore arrivé → exclu.
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   const todayBoardings = serialized.filter((b) => {
     if (b.serviceType !== 'BOARDING') return false;
-    if (!['CONFIRMED', 'IN_PROGRESS'].includes(b.status)) return false;
+    if (b.status !== 'IN_PROGRESS') return false;
     const start = new Date(b.startDate);
     start.setHours(0, 0, 0, 0);
     return start <= today;
