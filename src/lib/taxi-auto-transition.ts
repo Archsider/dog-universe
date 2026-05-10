@@ -19,6 +19,7 @@
 import { prisma } from '@/lib/prisma';
 import { haversineDistance } from '@/lib/geo';
 import { tryAcquireFlag } from '@/lib/cache';
+import { notifyTaxiTransition } from '@/lib/taxi-notifications';
 
 const AUTO_TRANSITION_RADIUS_M = 50;
 const AUTO_TRANSITION_TTL_SEC = 600; // 10 min
@@ -77,12 +78,14 @@ export async function maybeAutoTransition(args: MaybeAutoTransitionArgs): Promis
 
   // Re-check current status inside the transaction to avoid a race with a
   // manual admin transition that may have happened between read and write.
-  await prisma.$transaction(async (tx) => {
+  // Returns whether the transition actually committed so we don't fire SMS
+  // on a no-op (status already advanced manually).
+  const committed = await prisma.$transaction(async (tx) => {
     const fresh = await tx.taxiTrip.findUnique({
       where: { id: tripId },
       select: { status: true },
     });
-    if (!fresh || fresh.status !== currentStatus) return;
+    if (!fresh || fresh.status !== currentStatus) return false;
 
     await tx.taxiTrip.update({
       where: { id: tripId },
@@ -95,7 +98,42 @@ export async function maybeAutoTransition(args: MaybeAutoTransitionArgs): Promis
         updatedBy: 'AUTO_GEOFENCE',
       },
     });
+    return true;
   });
+
+  if (!committed) return null;
+
+  // Symmetry with manual PATCH /api/admin/taxi-trips/[id]/status: send the
+  // same SMS suite to the client + admin so an auto-transition behaves
+  // identically from the user's perspective.
+  try {
+    const ctx = await prisma.taxiTrip.findUnique({
+      where: { id: tripId },
+      select: {
+        booking: {
+          select: {
+            client: { select: { name: true, phone: true } },
+            bookingPets: { select: { pet: { select: { name: true, species: true, gender: true } } } },
+          },
+        },
+      },
+    });
+    await notifyTaxiTransition(target.newStatus, {
+      clientName: ctx?.booking?.client?.name ?? '',
+      clientPhone: ctx?.booking?.client?.phone ?? null,
+      pets: ctx?.booking?.bookingPets.map(bp => bp.pet) ?? [],
+    });
+  } catch (err) {
+    console.error(JSON.stringify({
+      level: 'error',
+      service: 'taxi-auto-transition',
+      message: 'notify failed (non-blocking)',
+      tripId,
+      newStatus: target.newStatus,
+      error: err instanceof Error ? err.message : String(err),
+      timestamp: new Date().toISOString(),
+    }));
+  }
 
   return target.newStatus;
 }

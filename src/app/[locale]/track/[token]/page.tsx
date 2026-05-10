@@ -37,6 +37,10 @@ interface TrackResponse {
     speed: number | null;
     createdAt: string;
   } | null;
+  // PII-reduced (2026-05-11): first name + species emoji counts only.
+  // Legacy fields kept temporarily for backward compatibility during deploy.
+  firstName?: string;
+  petSummary?: string;
   clientName?: string;
   petNames?: string;
   error?: string;
@@ -443,11 +447,15 @@ export default function TrackPage() {
               <span className={`inline-block w-2 h-2 rounded-full ${connectionBadge.dot}`} />
               {connectionBadge.label}
             </span>
-            {data?.clientName && (
+            {(data?.firstName ?? data?.clientName) && (
               <div className="text-right min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-[#2A2520] truncate">{data.clientName}</p>
-                {data.petNames && (
-                  <p className="text-[10px] sm:text-xs text-[#8A7E75] truncate">🐾 {data.petNames}</p>
+                <p className="text-xs sm:text-sm font-medium text-[#2A2520] truncate">
+                  {data.firstName ?? data.clientName}
+                </p>
+                {(data.petSummary ?? data.petNames) && (
+                  <p className="text-[10px] sm:text-xs text-[#8A7E75] truncate">
+                    {data.petSummary ?? `🐾 ${data.petNames}`}
+                  </p>
                 )}
               </div>
             )}

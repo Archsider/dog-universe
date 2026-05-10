@@ -135,6 +135,14 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(30, '60 m'),
       prefix: 'rl:productOrder',
     }),
+    // geocode: 30 / 60 min — GET /api/geocode/reverse. Proxies Nominatim
+    // (OSM) which has a 1 req/s fair-use policy. Authenticated only —
+    // anonymous traffic is rejected at the route level.
+    geocode: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(30, '60 m'),
+      prefix: 'rl:geocode',
+    }),
   };
 }
 
@@ -177,14 +185,16 @@ type DynamicBucket =
   | 'payment'
   | 'invoiceCreate'
   | 'vaccinationExtract'
-  | 'productOrder';
+  | 'productOrder'
+  | 'geocode';
 
 // Routes rate-limited regardless of HTTP method (e.g. expensive GETs).
-export const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'health' | 'availability'> = {
+export const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'health' | 'availability' | 'geocode'> = {
   '/api/user/export': 'rgpd',          // GET — full DB read
   '/api/user/anonymize': 'rgpd',       // POST — transactional write
   '/api/health': 'health',             // GET — uptime probe, 60/min per IP
   '/api/availability': 'availability', // GET — public calendar, scrape-resistant
+  '/api/geocode/reverse': 'geocode',   // GET — proxies Nominatim (1 req/s fair use)
 };
 
 // Routes dynamiques (avec [params]) — match par suffixe de path

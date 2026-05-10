@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { sendSMS } from '@/lib/sms';
 import { recordLocation, clearLocation, haversineKm } from '@/lib/taxi-location';
 import { maybeAutoTransition } from '@/lib/taxi-auto-transition';
+import { signTaxiToken } from '@/lib/taxi-token';
 
 const MAX_ACCURACY_METERS = 50;
 const MAX_SPEED_KMH = 200;
@@ -77,11 +78,47 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // ── start ──────────────────────────────────────────────────────────────
   if (body.action === 'start') {
-    const trackingToken = trip.trackingToken ?? crypto.randomUUID();
-    await prisma.taxiTrip.update({
-      where: { id: id },
-      data: { trackingActive: true, trackingToken },
-    });
+    // P0 race: only mint a fresh token when the trip currently has none.
+    // The conditional `where: { trackingToken: null }` makes the assignment
+    // atomic — two concurrent admin clicks can't both win and overwrite the
+    // already-distributed SMS link with a different token.
+    let trackingToken: string;
+    if (trip.trackingToken) {
+      // Already started — return existing token, just refresh expiry below.
+      trackingToken = trip.trackingToken;
+    } else {
+      trackingToken = signTaxiToken(trip.id);
+    }
+    // Hard expiry: 24h after start; manual rotation will reset.
+    const trackingTokenExpiresAt = new Date(Date.now() + 24 * 3600 * 1000);
+    if (!trip.trackingToken) {
+      // Conditional updateMany — atomic CAS on (id, trackingToken IS NULL).
+      // count=0 means another concurrent caller already minted a token; we
+      // re-read and reuse theirs instead of overwriting and breaking the
+      // already-distributed SMS link.
+      const result = await prisma.taxiTrip.updateMany({
+        where: { id, trackingToken: null },
+        data: { trackingActive: true, trackingToken, trackingTokenExpiresAt },
+      });
+      if (result.count === 0) {
+        const fresh = await prisma.taxiTrip.findUnique({
+          where: { id },
+          select: { trackingToken: true },
+        });
+        if (fresh?.trackingToken) {
+          trackingToken = fresh.trackingToken;
+          await prisma.taxiTrip.update({
+            where: { id },
+            data: { trackingActive: true, trackingTokenExpiresAt },
+          });
+        }
+      }
+    } else {
+      await prisma.taxiTrip.update({
+        where: { id },
+        data: { trackingActive: true, trackingTokenExpiresAt },
+      });
+    }
 
     // Récupère les infos client pour envoyer le SMS de suivi (1 query, action rare)
     const tripWithClient = await prisma.taxiTrip.findUnique({
