@@ -32,6 +32,17 @@ if (!url) {
   process.exit(0);
 }
 
+// CI / local : ne JAMAIS appliquer les migrations.
+//   - GitHub Actions définit CI=true → skip
+//   - DATABASE_URL pointe localhost → dev local, skip (la DB locale n'est
+//     pas la source de vérité ; les migrations passent par Supabase prod)
+//   - Seul l'environnement Vercel production (Supabase pooler/direct URL)
+//     déclenche réellement les migrations.
+if (process.env.CI === 'true' || url.includes('localhost') || url.includes('127.0.0.1')) {
+  console.log('[db-migrate] Skipping migrations (CI or local DB — production only)');
+  process.exit(0);
+}
+
 if (!existsSync(MIGRATIONS_DIR)) {
   console.warn('[db-migrate] no prisma/migrations dir — skipping');
   process.exit(0);
