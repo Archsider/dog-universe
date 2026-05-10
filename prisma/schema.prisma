@@ -663,7 +663,6 @@ model InvoiceSequence {
   lastSeq Int @default(0)
 }
 
-
 /// AI Guardian — auto-triage de chaque évènement Sentry reçu via webhook.
 /// Stocke la classification Claude + l'action prise (issue GH créée, admin
 /// notifié, silenced…). Voir `src/lib/guardian/*` et `docs/GUARDIAN.md`.
@@ -685,4 +684,19 @@ model GuardianEvent {
 
   @@index([createdAt])
   @@index([classification])
+}
+
+// Self-monitoring : ping toutes les 5 min de /api/health/ping écrit ici par
+// /api/cron/heartbeat. Les rows sont purgées après 30 jours par le même cron.
+// La page publique /status lit cette table pour calculer l'uptime et tracer
+// la latence DB.
+model Heartbeat {
+  id           String   @id @default(cuid())
+  timestamp    DateTime @default(now())
+  status       String   // "ok" | "degraded" | "down"
+  latencyMs    Int
+  dbStatus     String   // "ok" | "down"
+  redisStatus  String   // "ok" | "down"
+
+  @@index([timestamp(sort: Desc)])
 }
