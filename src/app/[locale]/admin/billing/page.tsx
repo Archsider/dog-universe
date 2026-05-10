@@ -6,6 +6,7 @@ import { FileText, Download, Eye, Pencil } from 'lucide-react';
 import { formatDate, formatMAD } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
+import { safeClientWhere } from '@/lib/queries/safe-where';
 import PaymentModal from './PaymentModalLazy';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModalLazy';
 import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
@@ -48,8 +49,10 @@ function parseMonth(raw: string | undefined): string {
 
 function monthBounds(yyyyMm: string): { start: Date; end: Date } {
   const [y, m] = yyyyMm.split('-').map(Number);
-  const start = new Date(y, m - 1, 1, 0, 0, 0, 0);
-  const end = new Date(y, m, 0, 23, 59, 59, 999);
+  // Bornes en UTC pour stabilité serverless (Vercel runs en UTC, Maroc UTC+1).
+  // Inclut tout YYYY-MM-01 00:00 → YYYY-MM-end 23:59:59.999 UTC.
+  const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
   return { start, end };
 }
 
@@ -115,9 +118,15 @@ export default async function AdminBillingPage(props: PageProps) {
   // Filtre partagé entre liste + KPIs — jamais de divergence.
   const monthDateFilter = getMonthlyInvoicesWhere(monthStart, monthEnd);
 
+  // RGPD : ADMIN ne voit que les factures de clients (role=CLIENT, non soft-deleted).
+  // SUPERADMIN voit toutes les factures, tous rôles confondus.
+  const isSuperadmin = session.user.role === 'SUPERADMIN';
+  const clientRoleFilter = isSuperadmin ? {} : { client: safeClientWhere };
+
   // Month-scoped where for the invoice list
   const listWhere: Record<string, unknown> = {
     ...monthDateFilter,
+    ...clientRoleFilter,
     ...(status ? { status } : {}),
     ...(clientId ? { clientId } : {}),
     ...(search
