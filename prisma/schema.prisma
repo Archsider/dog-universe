@@ -188,6 +188,7 @@ model Booking {
   stayPhotos     StayPhoto[]
   review         Review?
   rescheduleRequest RescheduleRequest?
+  addonRequests     AddonRequest[]
 
   @@index([clientId])
   @@index([status])
@@ -551,6 +552,32 @@ model RescheduleRequest {
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@index([status])
+  @@index([createdAt])
+}
+
+// Client-initiated addon request on an active booking. Replaces the legacy
+// pattern of stuffing the request payload in `Notification.metadata` JSON and
+// using a fragile `contains "bookingId":"…"` substring scan to recover it.
+// Legacy notifications are NOT migrated — admins read them manually until
+// they age out.
+model AddonRequest {
+  id          String    @id @default(cuid())
+  bookingId   String
+  petId       String?
+  serviceType String    // 'PET_TAXI' | 'TOILETTAGE' | 'AUTRE' | 'GROOMING' | 'TAXI_GO' | 'TAXI_RETURN' | 'PRODUCT' | 'OTHER'
+  description String
+  requestedBy String    // userId of the client who made the request
+  status      String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reason      String?   // rejection reason
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([status])
+  @@index([requestedBy])
   @@index([createdAt])
 }
 
