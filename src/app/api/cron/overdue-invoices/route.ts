@@ -5,6 +5,7 @@ import { getEmailTemplate } from '@/lib/email';
 import { enqueueEmail } from '@/lib/queues';
 import { createNotification } from '@/lib/notifications';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { markCronRun } from '@/lib/observability';
 import { APP_URL } from '@/lib/config';
 import { formatMAD } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
@@ -52,6 +53,8 @@ export async function GET(req: NextRequest) {
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
+
+  await markCronRun('overdue-invoices');
 
   const now = new Date();
   const startOfToday = new Date(now);

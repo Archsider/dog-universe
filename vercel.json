@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/refresh-revenue-mv",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/health-reconciliation",
+      "schedule": "0 6 * * *"
     }
   ]
 }

@@ -5,6 +5,7 @@ import { sendSMS } from '@/lib/sms';
 import { recordLocation, clearLocation, haversineKm } from '@/lib/taxi-location';
 import { maybeAutoTransition } from '@/lib/taxi-auto-transition';
 import { signTaxiToken } from '@/lib/taxi-token';
+import { withSpan } from '@/lib/observability';
 
 const MAX_ACCURACY_METERS = 50;
 const MAX_SPEED_KMH = 200;
@@ -78,6 +79,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // ── start ──────────────────────────────────────────────────────────────
   if (body.action === 'start') {
+    return withSpan(
+      'api.taxi.tracking.start',
+      { entityId: id, userId: session.user.id, bookingId: trip.bookingId, status: trip.status },
+      async () => {
     // P0 race: only mint a fresh token when the trip currently has none.
     // The conditional `where: { trackingToken: null }` makes the assignment
     // atomic — two concurrent admin clicks can't both win and overwrite the
@@ -149,6 +154,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       trackingToken,
       trackingUrl,
     });
+      },
+    );
   }
 
   // ── stop ───────────────────────────────────────────────────────────────

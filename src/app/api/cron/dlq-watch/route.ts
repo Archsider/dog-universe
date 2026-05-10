@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { markCronRun } from '@/lib/observability';
 import { getDlqQueue, DLQ_ALERT_THRESHOLD } from '@/lib/queues/index';
 import { isBullMQConfigured } from '@/lib/redis-bullmq';
 import { createNotification } from '@/lib/notifications';
@@ -29,6 +30,8 @@ export async function GET(req: NextRequest) {
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
+
+  await markCronRun('dlq-watch');
 
   if (!isBullMQConfigured()) {
     return NextResponse.json({ skipped: true, reason: 'BullMQ not configured', count: 0, alerted: false });

@@ -7,6 +7,7 @@ import { sendSMS, sendAdminSMS, formatMAD } from '@/lib/sms';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
 import { toNumber } from '@/lib/decimal';
 import { cacheDel } from '@/lib/cache';
+import { withSpan } from '@/lib/observability';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -117,19 +118,23 @@ export async function POST(request: Request, { params }: Params) {
     );
   }
 
-  // --- Insert Payment ---
-  await prisma.payment.create({
-    data: {
-      invoiceId: id,
-      amount: parsedAmount,
-      paymentMethod,
-      paymentDate: parsedDate,
-      notes: typeof notes === 'string' ? notes.trim() || null : null,
+  // --- Insert Payment + Reallocate (span for observability) ---
+  await withSpan(
+    'api.payment.create',
+    { entityId: id, userId: session.user.id, amount: parsedAmount, paymentMethod },
+    async () => {
+      await prisma.payment.create({
+        data: {
+          invoiceId: id,
+          amount: parsedAmount,
+          paymentMethod,
+          paymentDate: parsedDate,
+          notes: typeof notes === 'string' ? notes.trim() || null : null,
+        },
+      });
+      await allocatePayments(id);
     },
-  });
-
-  // --- Reallocate & derive status ---
-  await allocatePayments(id);
+  );
 
   // O5 — invalide le cache revenue du mois du paiement (KPIs dashboard /
   // analytics). Fail-open via cacheDel.

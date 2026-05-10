@@ -7,6 +7,7 @@ import { NOTIFICATION_MESSAGES } from '@/lib/notification-messages';
 import { petPossessive } from '@/lib/sms';
 import { enqueueEmail, enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
+import { markCronRun } from '@/lib/observability';
 
 export const maxDuration = 60;
 
@@ -37,6 +38,8 @@ export async function GET(request: Request) {
   if (!acquired) {
     return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
   }
+
+  await markCronRun('reminders');
 
   const now = new Date();
   const dateFormatOpts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };

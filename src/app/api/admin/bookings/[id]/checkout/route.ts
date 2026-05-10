@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
 import { getPensionPrice, getPricingSettings } from '@/lib/pricing';
+import { withSpan, logServerError } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -93,7 +94,10 @@ export async function POST(request: NextRequest, { params }: Params) {
   const newInvoiceAmount = boardingTotal.plus(nonBoardingItemsTotal);
 
   try {
-    await prisma.$transaction(async (tx) => {
+    await withSpan(
+      'api.booking.checkout',
+      { entityId: bookingId, userId: session.user.id, realNights, amount: toNumber(newInvoiceAmount), pets: booking.bookingPets.length },
+      () => prisma.$transaction(async (tx) => {
       await tx.booking.update({
         where: { id: bookingId },
         data: {
@@ -132,7 +136,8 @@ export async function POST(request: NextRequest, { params }: Params) {
           },
         });
       }
-    });
+    }),
+    );
 
     return NextResponse.json({
       success: true,
@@ -142,13 +147,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       invoiceAmount: toNumber(newInvoiceAmount),
     });
   } catch (err) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'booking-checkout',
-      message: 'checkout failed',
-      bookingId,
-      err: err instanceof Error ? err.message : String(err),
-    }));
+    logServerError('booking-checkout', 'checkout failed', err, { bookingId });
     return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });
   }
 }

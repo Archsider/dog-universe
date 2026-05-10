@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { z } from 'zod';
+import { withSpan } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -93,21 +94,25 @@ export async function POST(request: NextRequest, { params }: Params) {
     : `Remise${reason ? ` — ${reason}` : ''}`;
 
   // Une seule remise par facture : remplace si existe.
-  await prisma.$transaction(async (tx) => {
-    await tx.invoiceItem.deleteMany({
-      where: { invoiceId, category: 'DISCOUNT' },
-    });
-    await tx.invoiceItem.create({
-      data: {
-        invoiceId,
-        description,
-        quantity: 1,
-        unitPrice: new Prisma.Decimal(-discountAmount),
-        total: new Prisma.Decimal(-discountAmount),
-        category: 'DISCOUNT',
-      },
-    });
-  });
+  await withSpan(
+    'api.invoice.discount',
+    { entityId: invoiceId, userId: session.user.id, amount: discountAmount, discountType: type },
+    () => prisma.$transaction(async (tx) => {
+      await tx.invoiceItem.deleteMany({
+        where: { invoiceId, category: 'DISCOUNT' },
+      });
+      await tx.invoiceItem.create({
+        data: {
+          invoiceId,
+          description,
+          quantity: 1,
+          unitPrice: new Prisma.Decimal(-discountAmount),
+          total: new Prisma.Decimal(-discountAmount),
+          category: 'DISCOUNT',
+        },
+      });
+    }),
+  );
   // Le trigger DB recompute Invoice.amount automatiquement.
 
   await logAction({
