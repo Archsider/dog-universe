@@ -147,7 +147,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
       {/* Skyline décorative marocaine */}
       <SidebarSkyline />
 
-      {/* Logout */}
+      {/* Logout + status link */}
       <div className="px-3 pb-4 pt-2 border-t border-[#F0D98A]/20">
         <button
           onClick={() => signOut({ callbackUrl: `/${locale}/auth/login` })}
@@ -156,6 +156,14 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
           <LogOut className="h-4 w-4" />
           <span>{t('logout')}</span>
         </button>
+        <Link
+          href="/status"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block mt-2 px-3 py-1.5 text-xs text-charcoal/50 hover:text-charcoal/80 transition-colors"
+        >
+          Statut système ↗
+        </Link>
       </div>
     </div>
   );
