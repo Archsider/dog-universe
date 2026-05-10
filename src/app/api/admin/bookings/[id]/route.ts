@@ -856,6 +856,7 @@ export const PATCH = withSchema(
               date: dateStr,
               time: booking.arrivalTime ?? undefined,
               taxiType: booking.taxiDetail?.taxiType ?? undefined,
+              // price removed: source of truth is TaxiDetail.price
             },
           });
           await prisma.taxiStatusHistory.create({ data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: session.user.id } });

@@ -30,6 +30,7 @@ import { getBullMQConnection, isBullMQConfigured } from '@/lib/redis-bullmq';
 import { getEta } from '@/lib/osrm';
 import { tryAcquireFlag } from '@/lib/cache';
 import { createTaxiArrivingSoonNotification } from '@/lib/notifications';
+import { verifyTaxiToken } from '@/lib/taxi-token';
 
 // Vercel function timeout — Hobby caps at 60 s. We give ourselves a 6 s
 // buffer to flush the closing event before the platform kills the runtime.
@@ -176,13 +177,16 @@ async function readLatest(bookingId: string, tripId: string): Promise<TaxiLocati
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
+  const verified = verifyTaxiToken(token);
   const trip = await prisma.taxiTrip.findUnique({
-    where: { trackingToken: token },
+    where: verified ? { id: verified.tripId } : { trackingToken: token },
     select: {
       id: true,
       bookingId: true,
       status: true,
       trackingActive: true,
+      trackingToken: true,
+      trackingTokenExpiresAt: true,
       booking: {
         select: {
           deletedAt: true,
@@ -200,8 +204,22 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     },
   });
 
-  if (!trip || trip.booking.deletedAt) {
+  if (!trip || trip.booking.deletedAt || (verified && trip.trackingToken !== token)) {
+    if (!verified) {
+      console.error(JSON.stringify({
+        level: 'warn',
+        service: 'taxi-token',
+        event: '404',
+        ip: _request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+        tokenPrefix: token.slice(0, 8),
+        timestamp: new Date().toISOString(),
+      }));
+    }
     return new Response('Not found', { status: 404 });
+  }
+
+  if (trip.trackingTokenExpiresAt && trip.trackingTokenExpiresAt.getTime() < Date.now()) {
+    return new Response('Gone', { status: 410 });
   }
 
   if (!trip.trackingActive || TERMINAL_TRIP_STATUSES.has(trip.status)) {
@@ -419,6 +437,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       'Cache-Control': 'no-store, no-transform',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no', // hint for nginx-style proxies
+      'X-Robots-Tag': 'noindex, nofollow',
     },
   });
 }

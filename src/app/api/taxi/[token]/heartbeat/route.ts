@@ -23,8 +23,9 @@ import { prisma } from '@/lib/prisma';
 import { recordHeartbeat } from '@/lib/taxi-heartbeat';
 import { recordLocation, getLocation, haversineKm } from '@/lib/taxi-location';
 import { haversineDistance } from '@/lib/geo';
-import { tryAcquireFlag } from '@/lib/cache';
+import { tryAcquireFlag, cacheGet, cacheSet, cacheDel } from '@/lib/cache';
 import { maybeAutoTransition } from '@/lib/taxi-auto-transition';
+import { verifyTaxiToken } from '@/lib/taxi-token';
 import {
   createTaxiNearPickupNotification,
   createTaxiArrivedNotification,
@@ -68,13 +69,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const trip = await prisma.taxiTrip.findUnique({
-    where: { trackingToken: providedToken },
+  // HMAC verify first — invalid signatures return 401 *without* hitting DB.
+  // Legacy UUID tokens fall back to a DB lookup (no signature to verify).
+  const verified = verifyTaxiToken(providedToken);
+
+  const tripQuery = {
     select: {
       id: true,
       bookingId: true,
       tripType: true,
       status: true,
+      trackingToken: true,
+      trackingTokenExpiresAt: true,
       booking: {
         select: {
           status: true,
@@ -92,10 +98,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       },
     },
-  });
+  } as const;
 
-  if (!trip || trip.booking.deletedAt) {
+  const trip = verified
+    ? await prisma.taxiTrip.findUnique({ where: { id: verified.tripId }, ...tripQuery })
+    : await prisma.taxiTrip.findUnique({ where: { trackingToken: providedToken }, ...tripQuery });
+
+  // For HMAC-signed tokens, the token in DB must still match (not rotated).
+  if (
+    !trip ||
+    trip.booking.deletedAt ||
+    (verified && trip.trackingToken !== providedToken)
+  ) {
+    if (!verified) {
+      console.error(JSON.stringify({
+        level: 'warn',
+        service: 'taxi-token',
+        event: '404',
+        ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+        tokenPrefix: providedToken.slice(0, 8),
+        timestamp: new Date().toISOString(),
+      }));
+    }
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Hard expiry — leaked SMS link cannot be replayed forever.
+  if (trip.trackingTokenExpiresAt && trip.trackingTokenExpiresAt.getTime() < Date.now()) {
+    return NextResponse.json({ error: 'Gone' }, { status: 410 });
   }
   const bookingId = trip.bookingId;
 
@@ -188,7 +218,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }));
     }
 
-    // Geofencing: alert client when driver approaches pickup location.
+    // Geofencing with hysteresis (O6): a driver who *passes* within 95m
+    // without stopping should not fire ARRIVED. We track a per-booking zone
+    // state in Redis (FAR | NEAR | ARRIVED) plus a NEAR-entry timestamp,
+    // and only promote NEAR → ARRIVED after a 30s dwell. If the driver
+    // leaves the NEAR ring (>300m) without arriving, the zone resets to
+    // FAR so a re-approach can re-fire NEAR.
+    //
     // Skips silently when pickup coords are not set (legacy bookings).
     // Wrapped in try/catch so geofencing NEVER breaks the heartbeat.
     try {
@@ -197,20 +233,46 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (
         pickupLat != null &&
         pickupLng != null &&
-        trip.status === 'DRIVER_EN_ROUTE'
+        trip.status === 'EN_ROUTE_TO_CLIENT'
       ) {
         const distance = haversineDistance(body.latitude, body.longitude, pickupLat, pickupLng);
         const clientId = trip.booking.clientId;
+        const zoneKey = `taxi:zone:${bookingId}`;
+        type ZoneState = { zone: 'FAR' | 'NEAR' | 'ARRIVED'; nearSince?: number };
+        const prev = (await cacheGet<ZoneState>(zoneKey)) ?? { zone: 'FAR' };
+        const now = Date.now();
 
         if (distance < 100) {
-          const acquired = await tryAcquireFlag(`taxi:arrived_alert:${bookingId}`, 3600);
-          if (acquired) {
-            await createTaxiArrivedNotification(clientId, bookingId, 'fr');
+          if (prev.zone === 'NEAR' && prev.nearSince && now - prev.nearSince >= 30_000) {
+            // Dwell satisfied — promote to ARRIVED + notify (idempotent).
+            const acquired = await tryAcquireFlag(`taxi:arrived_alert:${bookingId}`, 3600);
+            if (acquired) {
+              await createTaxiArrivedNotification(clientId, bookingId, 'fr');
+            }
+            await cacheSet<ZoneState>(zoneKey, { zone: 'ARRIVED' }, 3600);
+          } else if (prev.zone !== 'ARRIVED' && prev.zone !== 'NEAR') {
+            // Entering the inner ring directly — start dwell timer.
+            await cacheSet<ZoneState>(zoneKey, { zone: 'NEAR', nearSince: now }, 3600);
+          } else if (prev.zone === 'NEAR') {
+            // Still inside but dwell not yet reached — keep waiting.
           }
         } else if (distance < 1000) {
-          const acquired = await tryAcquireFlag(`taxi:near_alert:${bookingId}`, 3600);
-          if (acquired) {
-            await createTaxiNearPickupNotification(clientId, bookingId, distance, 'fr');
+          if (prev.zone === 'FAR') {
+            // Crossing into NEAR ring — first announcement.
+            const acquired = await tryAcquireFlag(`taxi:near_alert:${bookingId}`, 3600);
+            if (acquired) {
+              await createTaxiNearPickupNotification(clientId, bookingId, distance, 'fr');
+            }
+            await cacheSet<ZoneState>(zoneKey, { zone: 'NEAR', nearSince: now }, 3600);
+          }
+          // already NEAR or ARRIVED → no-op
+        } else if (distance > 300) {
+          // Driver moved away from the inner ring without arriving —
+          // reset zone so a fresh approach can re-trigger NEAR. We
+          // intentionally use 300m (not 1000m) as the reset threshold so
+          // jitter near the boundary doesn't churn the state.
+          if (prev.zone === 'NEAR') {
+            await cacheDel(zoneKey);
           }
         }
       }

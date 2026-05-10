@@ -286,10 +286,12 @@ model TaxiTrip {
   time      String?
   address   String?
   taxiType  String?  // "STANDARD" | "VET" | "AIRPORT" — STANDALONE only
-  price     Decimal  @default(0) @db.Decimal(10, 2)
+  // NOTE: TaxiTrip.price was removed (2026-05-11) — sourced from
+  // TaxiDetail.price (STANDALONE) or BoardingDetail.taxiAddonPrice (addon).
   // GPS tracking — controlled per-trip by admin
   trackingActive Boolean @default(false)
-  trackingToken  String? @unique  // public token, allows client tracking without auth
+  trackingToken  String? @unique  // public token (HMAC-signed), allows client tracking without auth
+  trackingTokenExpiresAt DateTime? // hard expiry: token returns 410 Gone past this point
   distanceKm     Float   @default(0) // cumulative trip distance (haversine, incremented on each GPS push)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1,10 +1,12 @@
 /**
  * API tests — POST /api/taxi/[token]/heartbeat (geofencing branch)
  *
- * On exerce uniquement le bloc geofencing (pickup near / arrived) en variant
- * la distance entre la position GPS du chauffeur et le pickup. Les autres
- * branches (validation lat/lng, accuracy gate, speed outlier) sont déjà
- * couvertes implicitement par recordLocation/recordHeartbeat.
+ * Geofencing now uses a hysteresis state machine (FAR → NEAR → ARRIVED) with
+ * a 30s dwell-time before promotion to ARRIVED. The tests pre-seed the
+ * cacheGet mock to simulate the previous zone state.
+ *
+ * Status guard updated: EN_ROUTE_TO_CLIENT (was DRIVER_EN_ROUTE — never set
+ * anywhere in the code; the geofencing block was unreachable).
  */
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
@@ -16,9 +18,13 @@ const mocks = vi.hoisted(() => ({
   haversineKm: vi.fn(() => 0),
   haversineDistance: vi.fn(),
   tryAcquireFlag: vi.fn(),
+  cacheGet: vi.fn(),
+  cacheSet: vi.fn().mockResolvedValue(undefined),
+  cacheDel: vi.fn().mockResolvedValue(undefined),
   maybeAutoTransition: vi.fn().mockResolvedValue(null),
   createTaxiNearPickupNotification: vi.fn().mockResolvedValue(undefined),
   createTaxiArrivedNotification: vi.fn().mockResolvedValue(undefined),
+  verifyTaxiToken: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.prisma }));
@@ -29,8 +35,14 @@ vi.mock('@/lib/taxi-location', () => ({
   haversineKm: mocks.haversineKm,
 }));
 vi.mock('@/lib/geo', () => ({ haversineDistance: mocks.haversineDistance }));
-vi.mock('@/lib/cache', () => ({ tryAcquireFlag: mocks.tryAcquireFlag }));
+vi.mock('@/lib/cache', () => ({
+  tryAcquireFlag: mocks.tryAcquireFlag,
+  cacheGet: mocks.cacheGet,
+  cacheSet: mocks.cacheSet,
+  cacheDel: mocks.cacheDel,
+}));
 vi.mock('@/lib/taxi-auto-transition', () => ({ maybeAutoTransition: mocks.maybeAutoTransition }));
+vi.mock('@/lib/taxi-token', () => ({ verifyTaxiToken: mocks.verifyTaxiToken }));
 vi.mock('@/lib/notifications', () => ({
   createTaxiNearPickupNotification: mocks.createTaxiNearPickupNotification,
   createTaxiArrivedNotification: mocks.createTaxiArrivedNotification,
@@ -58,7 +70,9 @@ function tripFixture(overrides: Partial<Record<string, unknown>> = {}) {
     id: 'trip-1',
     bookingId: 'book-1',
     tripType: 'STANDALONE',
-    status: 'DRIVER_EN_ROUTE',
+    status: 'EN_ROUTE_TO_CLIENT',
+    trackingToken: TOKEN,
+    trackingTokenExpiresAt: null,
     booking: {
       status: 'IN_PROGRESS',
       serviceType: 'PET_TAXI',
@@ -73,6 +87,7 @@ function tripFixture(overrides: Partial<Record<string, unknown>> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.tryAcquireFlag.mockResolvedValue(true);
+  mocks.cacheGet.mockResolvedValue(null);
   mocks.haversineDistance.mockReset();
   mocks.prisma.taxiTrip.findUnique.mockResolvedValue(tripFixture());
 });
@@ -80,8 +95,10 @@ beforeEach(() => {
 describe('POST /api/taxi/[token]/heartbeat — geofencing', () => {
   const validBody = { latitude: 33.57, longitude: -7.59, accuracy: 10 };
 
-  it('< 100m → fires TAXI_ARRIVED + acquires flag', async () => {
+  it('< 100m with prior NEAR + dwell satisfied → fires TAXI_ARRIVED', async () => {
     mocks.haversineDistance.mockReturnValue(50);
+    // Pre-seed: zone=NEAR with nearSince 60s ago — dwell satisfied.
+    mocks.cacheGet.mockResolvedValueOnce({ zone: 'NEAR', nearSince: Date.now() - 60_000 });
     const res = await Heartbeat(makeReq(validBody), ctx);
     expect(res.status).toBe(200);
     expect(mocks.tryAcquireFlag).toHaveBeenCalledWith(
@@ -91,8 +108,19 @@ describe('POST /api/taxi/[token]/heartbeat — geofencing', () => {
     expect(mocks.createTaxiNearPickupNotification).not.toHaveBeenCalled();
   });
 
-  it('100m–1000m → fires TAXI_NEAR_PICKUP + acquires flag', async () => {
+  it('< 100m fresh entry (zone=FAR) → enters NEAR, NO ARRIVED yet (dwell)', async () => {
+    mocks.haversineDistance.mockReturnValue(50);
+    mocks.cacheGet.mockResolvedValueOnce({ zone: 'FAR' });
+    const res = await Heartbeat(makeReq(validBody), ctx);
+    expect(res.status).toBe(200);
+    expect(mocks.createTaxiArrivedNotification).not.toHaveBeenCalled();
+    // NEAR state was written
+    expect(mocks.cacheSet).toHaveBeenCalled();
+  });
+
+  it('100m–1000m fresh (zone=FAR) → fires TAXI_NEAR_PICKUP + acquires flag', async () => {
     mocks.haversineDistance.mockReturnValue(500);
+    mocks.cacheGet.mockResolvedValueOnce({ zone: 'FAR' });
     const res = await Heartbeat(makeReq(validBody), ctx);
     expect(res.status).toBe(200);
     expect(mocks.tryAcquireFlag).toHaveBeenCalledWith(
@@ -115,6 +143,7 @@ describe('POST /api/taxi/[token]/heartbeat — geofencing', () => {
 
   it('flag already taken (replay) → no notification fired', async () => {
     mocks.haversineDistance.mockReturnValue(50);
+    mocks.cacheGet.mockResolvedValueOnce({ zone: 'NEAR', nearSince: Date.now() - 60_000 });
     mocks.tryAcquireFlag.mockResolvedValueOnce(false);
     const res = await Heartbeat(makeReq(validBody), ctx);
     expect(res.status).toBe(200);
@@ -141,9 +170,9 @@ describe('POST /api/taxi/[token]/heartbeat — geofencing', () => {
     expect(mocks.createTaxiArrivedNotification).not.toHaveBeenCalled();
   });
 
-  it('trip status != DRIVER_EN_ROUTE → no geofencing notification', async () => {
+  it('trip status != EN_ROUTE_TO_CLIENT → no geofencing notification', async () => {
     mocks.prisma.taxiTrip.findUnique.mockResolvedValueOnce(
-      tripFixture({ status: 'AT_PICKUP' }),
+      tripFixture({ status: 'ON_SITE_CLIENT' }),
     );
     mocks.haversineDistance.mockReturnValue(50);
     const res = await Heartbeat(makeReq(validBody), ctx);
@@ -152,9 +181,9 @@ describe('POST /api/taxi/[token]/heartbeat — geofencing', () => {
     expect(mocks.createTaxiArrivedNotification).not.toHaveBeenCalled();
   });
 
-  it('Redis down (tryAcquireFlag throws) → fail-open: heartbeat OK', async () => {
+  it('Redis down (cacheGet throws) → fail-open: heartbeat OK', async () => {
     mocks.haversineDistance.mockReturnValue(50);
-    mocks.tryAcquireFlag.mockRejectedValueOnce(new Error('redis down'));
+    mocks.cacheGet.mockRejectedValueOnce(new Error('redis down'));
     const res = await Heartbeat(makeReq(validBody), ctx);
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
