@@ -7,7 +7,87 @@
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
-### 2026-05-04 (suite) — Session bugs prod + CI fixes
+### 2026-05-10 — Upsell smart espèce + âge + seed Ultra Premium/Canvit
+
+**1 commit sur `main` (PR #11) :**
+
+`dc099a2 feat(upsell): suggestions smart espèce+âge + seed Ultra Premium/Canvit complet`
+
+**DB :**
+- Migration `20260510_product_upsell` : ajout `targetSpecies` (`DOG`/`CAT`/`BOTH`), `targetAge` (`PUPPY`/`JUNIOR`/`ADULT`/`SENIOR`/`ALL`), `imageUrl`, `weight`, `supplier` sur `Product`. CHECK constraints sur enums + index composite `(targetSpecies, targetAge, available)`.
+- Migration `20260510_seed_products_upsell` : seed idempotent ~85 produits (Ultra Premium chien/chat + Canvit chien/chat/BOTH). Stock initial = 0 (Mehdi ajuste après réception), `available = true`. `WHERE NOT EXISTS` sur `(name, supplier)` → ré-exécution safe.
+
+**Code — source unique de vérité :**
+- `src/lib/pet-profile.ts` :
+  - `getAgeCategory(dob, species)` — `PUPPY` (<12 mo) / `JUNIOR` (12-23) / `ADULT` (24-83) / `SENIOR` (≥84). `dob = null` → `ADULT` par défaut.
+  - `getMatchingProducts(pets)` — génère 4 conditions OR par animal (espèce×âge | espèce×ALL | BOTH×âge | BOTH×ALL), filtre `stock > 0`, tri par pertinence (`SENIOR`/`PUPPY` > `JUNIOR` > `ADULT` > `ALL`) puis prix décroissant (upsell premium en premier). Option `includeOutOfStock` pour admin.
+- `prisma/seeds/products-upsell.ts` : source TS du catalogue.
+
+**API :**
+- `GET /api/client/products/suggestions?bookingId` — auth client owner, retourne `{ suggestions: [{pet, recommended (top 3), all}] }` par animal.
+- `GET /api/admin/products/suggestions?bookingId[&includeOutOfStock=1]` — version admin.
+- `POST /api/admin/bookings/[id]/suggest-products` — envoie une notif `ADMIN_MESSAGE` au client avec sélection produits par animal. Walk-in → skip silencieux.
+
+**UI :**
+- `src/components/shared/UpsellSuggestions.tsx` — composant unique mode `client` (ton premium "Pour le confort de [pet]") + mode `admin` (boutons "Suggérer au client" + "Ajouter directement"). Cards horizontales scrollables, image placeholder, badge stock faible.
+- `/client/bookings/[id]` — section affichée si `BOARDING` actif (`CONFIRMED`/`IN_PROGRESS`).
+- `/admin/reservations/[id]` — section affichée si `BOARDING` actif.
+- `/admin/products` — 3 nouvelles colonnes (Fournisseur, Espèce, Âge), 3 filtres déroulants (fournisseur/espèce/catégorie), 5 nouveaux champs au modal (`targetSpecies`, `targetAge`, `supplier`, `weight`, `imageUrl`). API admin/products POST + PATCH acceptent les 5 nouveaux champs avec validation Zod enum stricte.
+
+**Tests :** 532/532 verts. tsc 0 erreur. 19 nouveaux tests `pet-profile` (`getAgeCategory` cas-limites + `getMatchingProducts` mock prisma).
+
+**CLAUDE.md :** section « Upsell & produits (verrouillé 2026-05-10) » documente la règle d'utilisation obligatoire de `getMatchingProducts()`.
+
+**Décisions :**
+- Seed dans une migration SQL plutôt qu'un script Node : auto-câblé au build via `db-migrate.mjs` (cutoff baseline `20260506_`), pas de step manuel.
+- Stock initial 0 + `available = true` : les produits sont visibles dans `/admin/products` dès le seed pour que Mehdi voie le catalogue, mais invisibles côté recommandations client tant que le stock n'est pas ajusté (filtre `stock > 0`).
+- Composant unique client/admin via prop `context` : évite la duplication de logique d'affichage cards. La seule différence est le tone et les actions admin (suggérer/ajouter direct).
+
+---
+
+### 2026-05-08 — Pricing pension centralisé + recovery + invariants DB
+
+**Plusieurs commits sur `main` (PR #10) :**
+
+- `edb585c fix(pricing): tarif pension par animal centralisé + rollback DB`
+- `dd4d4f6 fix(billing): recovery v2 + invariants DB pour sécuriser à vie`
+- `4e379c3 fix(billing): normalize tous les InvoiceItem.total avant les invariants`
+
+**Pricing pension verrouillé :**
+- `src/lib/pricing.ts → getPensionPrice()` (Decimal) + `src/lib/pricing-rules.ts → getPensionPriceNumber()` (number, bundle-safe). Source unique de vérité.
+- Règle : `CAT (70) → long_stay≥32 (100) → multi-chiens (100) → 1 chien seul <32 (120)`. Seuil `>= 32` (cohérent avec « 32+ »).
+- `admin/bookings POST` + `checkout` : une ligne `InvoiceItem` BOARDING par animal, `unitPrice` via le helper.
+- Migration `20260508_fix_pension_pricing` : recale les `InvoiceItem` BOARDING legacy.
+
+**Recovery v2 (legacy quantities cassées) :**
+- Constat : la migration `fix_pension_pricing` v1 avait corrompu les factures legacy stockées en 1 ligne avec `qty=1, unitPrice=full_invoice_amount`. Symptôme : `paidAmount > amount`.
+- Migration `20260508_recover_legacy_boarding_quantities` (v1) puis `20260508_recover_v2_force_nights` : reconstruction inconditionnelle de `quantity = nights` du booking, `total = unitPrice × nights`. Pass safety net pour ré-équilibrer le BOARDING item d'écart manquant si `paidAmount > amount` après recompute.
+- Migration `20260508_zz_normalize_item_totals` : force `total = unitPrice × quantity` sur **tous** les items (préalable obligatoire à l'ajout des invariants).
+
+**Invariants DB (ne plus jamais casser) :**
+- Migration `20260509_billing_invariants` :
+  - `CHECK Product.stock >= 0`
+  - `CHECK InvoiceItem.quantity > 0`
+  - `CHECK ABS(InvoiceItem.total - unitPrice × quantity) < 0.01`
+  - `CHECK Invoice.paidAmount <= amount + 0.01` (sauf `CANCELLED`)
+  - `CHECK Invoice.amount >= 0 AND paidAmount >= 0`
+  - **Trigger** `trg_recompute_invoice_amount AFTER INSERT/UPDATE/DELETE ON InvoiceItem` → `Invoice.amount = SUM(items.total)` automatique. Plus de drift possible.
+
+**Fix UI billing/produits :**
+- `CreateStandaloneInvoiceModal` (nouvelle facture) : remplace `<select>` statique alimenté par prop `clients` non passée → `ClientSearchSelect` (autocomplete via `/api/admin/clients/search`). Plus le bug "dropdown vide".
+- Dropdown produits dans la modale : ajout d'un `<datalist>` HTML alimenté par `/api/admin/products`. L'admin peut soit taper du texte libre, soit choisir un produit du catalogue → auto-fill prix + catégorie + `productId`.
+- `POST /api/invoices` : ajout du décrément stock atomique pour items avec `productId` (SELECT FOR UPDATE + check `stock >= qty` + decrement en transaction). Codes erreur `OUT_OF_STOCK` / `PRODUCT_UNAVAILABLE` / `PRODUCT_NOT_FOUND` → rollback complet.
+
+**CLAUDE.md :** section « Pricing pension (verrouillé 2026-05-08) » documente la règle d'utilisation obligatoire de `getPensionPrice()`.
+
+**Décisions :**
+- Recovery v1 → v2 → safety net : approche défensive en couches plutôt qu'un fix monolithique. Permet de relancer les passes individuellement et de tracer ce qui a été touché.
+- Invariants DB en CHECK + TRIGGER plutôt qu'agent IA : déterministe, instantané, gratuit. L'agent LLM est gardé en backup pour escalade sur anomalies novelles.
+- Migration nommée `20260508_zz_normalize_item_totals` (préfixe `zz`) pour s'assurer qu'elle passe **après** les recovery (ordre alphabétique du runner) mais **avant** `20260509_billing_invariants`.
+
+---
+
+
 
 **3 commits sur `claude/work-in-progress-8MYIG` :**
 

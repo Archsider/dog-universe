@@ -502,6 +502,13 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ## ACTIONS MANUELLES EN ATTENTE
 
+### ⚠️ Migrations 20260510 à appliquer manuellement (2026-05-10)
+Le runner `db-migrate.mjs` ne les a pas jouées au build sur la prod actuelle.
+À exécuter dans Supabase SQL Editor **dans l'ordre** :
+1. `prisma/migrations/20260510_product_upsell/migration.sql` — colonnes `targetSpecies`/`targetAge`/`imageUrl`/`weight`/`supplier` sur `Product` + CHECK + index.
+2. `prisma/migrations/20260510_seed_products_upsell/migration.sql` — seed ~85 produits Ultra Premium + Canvit (idempotent).
+Vérifier après : `SELECT COUNT(*) FROM "Product" WHERE supplier IN ('Ultra Premium', 'Canvit');` → doit retourner ~85.
+
 ### ✅ Toutes les migrations Supabase exécutées (2026-05-01)
 - `ALTER TABLE "User"/"Pet" ADD COLUMN deletedAt` — soft-delete opérationnel
 - `ALTER TABLE "Booking"/"Invoice" ADD COLUMN version` — optimistic lock actif
@@ -548,6 +555,11 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | Cron worker tour à vide | RÉSOLU (2026-05-04) | `/api/workers/process` : early-exit si `getJobCounts(waiting+active+delayed)` = 0 sur les deux queues ET aucun TaxiTrip `DRIVER_EN_ROUTE`. Économise les Workers BullMQ + connexions IORedis quand l'app est inactive. |
 | Timing side-channel reset-password | RÉSOLU (2026-05-04) | `POST /api/reset-password` : floor de réponse 250 ms (pad au timeout résiduel). Empêche l'énumération par mesure du temps de réponse user-existe vs n'existe-pas. |
 | next-auth GA | EN ATTENTE | Encore beta (5.0.0-beta.31 au 2026-05-04). Surveillance des releases ; upgrade prévu dès la GA stable. |
+| Tarif pension corrompu sur factures legacy | RÉSOLU (2026-05-08) | Migration `20260508_recover_v2_force_nights` : reconstruction `quantity = nights` du booking + recompute `Invoice.amount`. Safety net pour ré-équilibrer le BOARDING item d'écart manquant si `paidAmount > amount`. |
+| Drift `Invoice.amount` vs `SUM(items.total)` | RÉSOLU (2026-05-09) | Trigger PG `trg_recompute_invoice_amount` AFTER INSERT/UPDATE/DELETE sur `InvoiceItem` recalcule `Invoice.amount` automatiquement. CHECK `paidAmount <= amount + 0.01`. Plus aucune écriture incohérente possible. |
+| Dropdown clients vide nouvelle facture | RÉSOLU (2026-05-08) | `CreateStandaloneInvoiceModal` utilisait `<select>` statique avec prop `clients` non passée. Remplacé par `ClientSearchSelect` (autocomplete via `/api/admin/clients/search`). |
+| Dropdown produits dans nouvelle facture | RÉSOLU (2026-05-08) | `<datalist>` HTML alimenté par `/api/admin/products` avec auto-fill prix + catégorie + `productId`. POST `/api/invoices` décrémente le stock atomique en transaction. |
+| Recommandations upsell par espèce + âge | LIVRÉ (2026-05-10) | `getMatchingProducts()` dans `lib/pet-profile.ts` (4 OR par animal, scoring SENIOR/PUPPY > JUNIOR > ADULT > ALL). Composant unique `UpsellSuggestions` mode client/admin. Catalogue Ultra Premium + Canvit ~85 produits seedé via migration. |
 
 ---
 
