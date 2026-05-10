@@ -662,3 +662,27 @@ model InvoiceSequence {
   year    Int @id
   lastSeq Int @default(0)
 }
+
+
+/// AI Guardian — auto-triage de chaque évènement Sentry reçu via webhook.
+/// Stocke la classification Claude + l'action prise (issue GH créée, admin
+/// notifié, silenced…). Voir `src/lib/guardian/*` et `docs/GUARDIAN.md`.
+model GuardianEvent {
+  id              String   @id @default(cuid())
+  sentryEventId   String   @unique
+  sentryIssueId   String?
+  projectSlug     String?
+  title           String
+  culprit         String?
+  level           String?  // 'fatal' | 'error' | 'warning' | 'info' | 'debug'
+  classification  String   // 'transient' | 'bug_code' | 'data_corruption' | 'infra' | 'spam' | 'unclassified'
+  severity        Int      // 1..5
+  action          String   // 'github_issue' | 'notify_admin' | 'silence' | 'unclassified'
+  reason          String?  // courte explication produite par le classifier (ou message d'erreur)
+  githubIssueUrl  String?
+  occurrencesSeen Int      @default(1)
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([classification])
+}

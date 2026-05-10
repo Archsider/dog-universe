@@ -37,6 +37,15 @@ const envSchema = z.object({
 
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
 
+  // AI Guardian — Sentry webhook → Claude triage → GitHub issue.
+  // All optional: fail-open if any are missing.
+  SENTRY_WEBHOOK_SECRET: z.string().min(1).optional(),
+  GITHUB_TOKEN: z.string().min(1).optional(),
+  GUARDIAN_GITHUB_REPO: z
+    .string()
+    .regex(/^[\w.-]+\/[\w.-]+$/, 'GUARDIAN_GITHUB_REPO must be "owner/name"')
+    .optional(),
+
   SENTRY_DSN: z.string().min(1).optional(),
   // CRON_SECRET: required in production (cron endpoints would be unprotected without it).
   // Optional in dev/test/build to keep local DX painless.
