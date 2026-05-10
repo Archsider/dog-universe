@@ -1,4 +1,5 @@
 -- Migration: 20260411_payment_refactor
+-- @safety: reviewed
 -- Refonte système de paiement — à exécuter sur Supabase SQL editor
 --
 -- Ordre impératif :

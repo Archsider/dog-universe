@@ -1,4 +1,5 @@
 -- Split "User.name" into firstName + lastName.
+-- @safety: reviewed
 -- "name" stays as the auto-synced concatenation for legacy callers / display fallbacks.
 
 ALTER TABLE "User" ADD COLUMN "firstName" TEXT;
