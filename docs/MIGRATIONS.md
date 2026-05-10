@@ -99,12 +99,64 @@ Runs on every PR / push that touches `prisma/**` or `scripts/db-migrate.mjs` :
 
 For long-running or risky migrations (data backfill, type changes, dropping columns) : either add `-- @safety: reviewed` and split the migration into multiple smaller steps, **or** apply the SQL manually via Supabase SQL editor and add the row in `_app_migrations` to mark it as applied.
 
-## Rollback plan
+## Rollback workflow
 
-There is **no automatic rollback**. Forward-only migrations are the rule. To revert :
+Migrations are forward-only by default, but every reversible migration **should** ship a `down.sql` next to its `migration.sql`. The convention is opt-in: missing `down.sql` files are tolerated, but explicitly-irreversible migrations must declare it.
 
-1. Write a new migration that reverses the change (`20260601_revert_xxx/migration.sql`).
-2. Apply it through the normal pipeline.
+### Convention
+
+```
+prisma/migrations/
+  20260512_addon_request/
+    migration.sql   # forward
+    down.sql        # reverse — optional
+```
+
+A `down.sql` either:
+
+1. **Reverses the schema** (`DROP TABLE IF EXISTS ...`, `ALTER TABLE ... DROP COLUMN IF EXISTS ...`), or
+2. **Declares itself non-applicable** with the header `-- @rollback: not-applicable` in the first 5 lines. Use this when the forward migration drops data that cannot be recovered, runs an irreversible backfill, or modifies state in a way that has no meaningful inverse. Example:
+
+```sql
+-- @rollback: not-applicable
+-- This migration drops Tenant rows; restoring would only recreate empty rows.
+```
+
+### Running a rollback
+
+```bash
+node scripts/db-rollback.mjs 20260512_addon_request           # apply down.sql + delete tracker row
+node scripts/db-rollback.mjs 20260512_addon_request --dry-run # print SQL without touching the DB
+```
+
+The runner:
+
+1. Refuses if `down.sql` is missing or marked `@rollback: not-applicable`.
+2. Wraps the SQL in a transaction (`BEGIN ... COMMIT`).
+3. Deletes the row from `_app_migrations` so the migration becomes pending again and can be re-applied.
+
+### Examples
+
+| Forward operation | Recommended `down.sql` |
+|---|---|
+| `CREATE TABLE "Foo"` | `DROP TABLE IF EXISTS "Foo" CASCADE;` |
+| `ALTER TABLE "X" ADD COLUMN "y"` | `ALTER TABLE "X" DROP COLUMN IF EXISTS "y";` |
+| `CREATE INDEX idx_x` | `DROP INDEX IF EXISTS idx_x;` |
+| Irreversible drop / data backfill | `-- @rollback: not-applicable` |
+
+### CI coverage : `.github/workflows/migration-rollback-check.yml`
+
+For every migration authored within the last 90 days that ships a runnable `down.sql`, CI runs the loop:
+
+1. `pg_dump -s` → snapshot the schema **before** the up.
+2. Apply `migration.sql` against an ephemeral `postgres:16-alpine`.
+3. `pg_dump -s` → snapshot **after** the up (reference only).
+4. `node scripts/db-rollback.mjs <name>` → apply `down.sql`.
+5. `pg_dump -s` → snapshot **after** the down. Must be byte-identical to the BEFORE snapshot.
+
+Any drift fails the job. Migrations marked `@rollback: not-applicable` and migrations with no `down.sql` are skipped (the latter prints a notice).
+
+### Partial failure recovery (legacy note)
 
 If a migration partially failed in production (e.g. one of two `ALTER TABLE` succeeded, the second crashed) :
 

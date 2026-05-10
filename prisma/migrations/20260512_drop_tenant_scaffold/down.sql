@@ -1,0 +1,6 @@
+-- @rollback: not-applicable
+-- This migration drops the multi-tenant scaffolding (Tenant table). The data
+-- in the legacy 'default' row is irrecoverable from a pure-SQL rollback —
+-- restoring the table would only recreate an empty shell, which would not
+-- satisfy a meaningful "undo" expectation. Use a Supabase point-in-time
+-- restore if the original Tenant rows are required.

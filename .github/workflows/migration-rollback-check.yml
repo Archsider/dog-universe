@@ -1,0 +1,120 @@
+name: Migration Rollback Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'prisma/migrations/**'
+      - 'scripts/db-rollback.mjs'
+      - 'scripts/db-migrate.mjs'
+      - '.github/workflows/migration-rollback-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'prisma/migrations/**'
+      - 'scripts/db-rollback.mjs'
+      - 'scripts/db-migrate.mjs'
+      - '.github/workflows/migration-rollback-check.yml'
+
+concurrency:
+  group: rollback-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  rollback-check:
+    name: Up → schema → down → schema (no drift)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rollback
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: rollback
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install postgresql-client (pg_dump)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Unit tests for the rollback parser
+        run: npx vitest run scripts/__tests__/db-rollback.test.mjs
+
+      - name: Up → down → schema-equivalence loop
+        # For every migration authored within the last 90 days that ships a
+        # down.sql WITHOUT the @rollback: not-applicable marker:
+        #   1. snapshot the schema (pg_dump -s) BEFORE applying the up.
+        #   2. apply migration.sql.
+        #   3. snapshot the schema AFTER.
+        #   4. apply down.sql.
+        #   5. snapshot the schema POST-DOWN — must equal the BEFORE snapshot.
+        # Any drift fails the job.
+        run: |
+          set -euo pipefail
+          MIG_DIR=prisma/migrations
+          CUTOFF_EPOCH=$(date -d '90 days ago' +%s)
+          FAIL=0
+          # Bootstrap the home-grown tracker — db-rollback.mjs deletes a row from it.
+          psql -c 'CREATE TABLE IF NOT EXISTS "_app_migrations" (name TEXT PRIMARY KEY, checksum TEXT, applied_at TIMESTAMP DEFAULT NOW());'
+          for d in $(ls -1 "$MIG_DIR" | sort); do
+            name="$d"
+            ymd="${name%%_*}"
+            # Skip non-dated entries.
+            [[ "$ymd" =~ ^[0-9]{8}$ ]] || continue
+            # Convert YYYYMMDD → epoch and skip anything older than 90d.
+            iso="${ymd:0:4}-${ymd:4:2}-${ymd:6:2}"
+            mig_epoch=$(date -d "$iso" +%s 2>/dev/null || echo 0)
+            [ "$mig_epoch" -ge "$CUTOFF_EPOCH" ] || continue
+
+            up="$MIG_DIR/$name/migration.sql"
+            down="$MIG_DIR/$name/down.sql"
+            [ -f "$up" ] || continue
+            if [ ! -f "$down" ]; then
+              echo "[rollback-check] $name: no down.sql — skip"
+              continue
+            fi
+            if head -n 5 "$down" | grep -qiE '^--\s*@rollback:\s*not-applicable'; then
+              echo "[rollback-check] $name: marked not-applicable — skip"
+              continue
+            fi
+
+            echo "[rollback-check] === $name ==="
+            pg_dump -s --no-owner --no-privileges > /tmp/before.sql
+            psql -v ON_ERROR_STOP=1 -f "$up"
+            pg_dump -s --no-owner --no-privileges > /tmp/after_up.sql
+            node scripts/db-rollback.mjs "$name"
+            pg_dump -s --no-owner --no-privileges > /tmp/after_down.sql
+
+            if ! diff -q /tmp/before.sql /tmp/after_down.sql > /dev/null; then
+              echo "::error::Rollback drift detected for $name"
+              diff /tmp/before.sql /tmp/after_down.sql || true
+              FAIL=1
+            else
+              echo "[rollback-check] $name: schema restored cleanly"
+            fi
+          done
+          exit $FAIL
