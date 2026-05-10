@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
-import { toNumber } from '@/lib/decimal';
 
 interface Params { params: Promise<{ id: string; itemId: string }> }
 
@@ -31,9 +29,12 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   await prisma.$transaction(async (tx) => {
     await tx.invoiceItem.delete({ where: { id: itemId } });
 
+    // Note: le trigger PG `trg_recompute_invoice_amount` recompute déjà
+    // Invoice.amount = SUM(items.total) après DELETE sur InvoiceItem.
+    // NE PAS écrire `amount` manuellement (drift garanti).
     await tx.invoice.update({
       where: { id: booking.invoice!.id },
-      data: { amount: { decrement: new Prisma.Decimal(toNumber(item.total)) } },
+      data: { version: { increment: 1 } },
     });
 
     // Restore stock; re-enable if was disabled by stock reaching 0

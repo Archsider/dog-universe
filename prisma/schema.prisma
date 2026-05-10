@@ -616,3 +616,12 @@ model Tenant {
   name      String
   createdAt DateTime @default(now())
 }
+
+
+// Numérotation atomique des factures par année.
+// `lastSeq` est incrémenté via `INSERT ... ON CONFLICT DO UPDATE RETURNING`,
+// garantissant l'absence de race au sein d'une même année.
+model InvoiceSequence {
+  year    Int @id
+  lastSeq Int @default(0)
+}

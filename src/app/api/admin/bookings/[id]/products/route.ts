@@ -103,9 +103,13 @@ export async function POST(request: NextRequest, { params }: Params) {
         },
       });
 
+      // Note: le trigger PG `trg_recompute_invoice_amount` recompute déjà
+      // Invoice.amount = SUM(items.total) après INSERT/UPDATE/DELETE sur InvoiceItem.
+      // NE PAS écrire `amount` manuellement (drift garanti).
+      // Bump de version uniquement pour optimistic lock.
       await tx.invoice.update({
         where: { id: invoiceId },
-        data: { amount: { increment: new Prisma.Decimal(total) } },
+        data: { version: { increment: 1 } },
       });
 
       return item;

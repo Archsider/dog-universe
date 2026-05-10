@@ -175,6 +175,66 @@ export function computeMonthlyRevenueByCategory(
   return result;
 }
 
+// Allocation séquentielle Payment → InvoiceItem.
+// Renvoie pour chaque item l'alloué cumulé sur la fenêtre [monthStart, monthEnd]
+// + le dernier paymentDate ayant contribué (utile pour trier par date de caisse).
+//
+// Règle identique à computeMonthlyRevenueByCategory : payments triés par date asc,
+// items dans l'ordre reçu, slots décrémentés au fur et à mesure. Seules les portions
+// allouées par un payment ∈ [monthStart, monthEnd] sont comptabilisées.
+//
+// Decimal exact, pas de toFixed(2) JS.
+export interface ItemAllocation {
+  amount: Prisma.Decimal;
+  lastPaidAt: Date | null;
+}
+
+export function allocateBetweenItems(
+  payments: AccountingPayment[],
+  items: AccountingItem[],
+  monthStart: Date,
+  monthEnd: Date,
+): ItemAllocation[] {
+  const allocations: ItemAllocation[] = items.map(() => ({
+    amount: new Prisma.Decimal(0),
+    lastPaidAt: null,
+  }));
+  if (payments.length === 0 || items.length === 0) return allocations;
+
+  const sortedPayments = [...payments].sort(
+    (a, b) => a.paymentDate.getTime() - b.paymentDate.getTime(),
+  );
+
+  const itemRemaining: Prisma.Decimal[] = items.map(
+    (it) => new Prisma.Decimal(toNumber(it.total)),
+  );
+  let itemIdx = 0;
+
+  for (const payment of sortedPayments) {
+    const inMonth = isWithin(payment.paymentDate, monthStart, monthEnd);
+    let remaining = new Prisma.Decimal(toNumber(payment.amount));
+
+    while (remaining.gt(0) && itemIdx < items.length) {
+      const slot = itemRemaining[itemIdx];
+      const allocated = Prisma.Decimal.min(remaining, slot);
+
+      if (inMonth && allocated.gt(0)) {
+        allocations[itemIdx].amount = allocations[itemIdx].amount.plus(allocated);
+        allocations[itemIdx].lastPaidAt = payment.paymentDate;
+      }
+
+      remaining = remaining.minus(allocated);
+      itemRemaining[itemIdx] = slot.minus(allocated);
+
+      if (itemRemaining[itemIdx].lte(0)) {
+        itemIdx += 1;
+      }
+    }
+  }
+
+  return allocations;
+}
+
 // Filtre mensuel comptabilité : déplacé dans `src/lib/billing.ts` —
 // `getMonthlyInvoicesWhere(monthStart, monthEnd)`. Source de vérité unique
 // pour TOUT rattachement de facture à un mois (caisse + en attente + manuel).

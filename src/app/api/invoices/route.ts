@@ -7,6 +7,7 @@ import { getEmailTemplate } from '@/lib/email';
 import { sendEmailNow } from '@/lib/notify-now';
 import { formatMAD } from '@/lib/utils';
 import { allocatePayments } from '@/lib/payments';
+import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -55,6 +56,25 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { clientId, bookingId, items, notes, serviceType, issuedAt, markPaid, paymentMethod, paidAt } = body;
 
+    // Idempotency-Key gate (optional header). Particulièrement critique quand
+    // markPaid === true — un replay pourrait double-créditer la caisse.
+    if (markPaid === true) {
+      try {
+        const idem = await tryAcquireIdempotency(request, 'invoice:create');
+        if (!idem.acquired) {
+          return NextResponse.json(
+            { error: 'DUPLICATE_REQUEST', message: 'Idempotency-Key replay detected.' },
+            { status: 409 },
+          );
+        }
+      } catch (err) {
+        if (err instanceof IdempotencyKeyInvalidError) {
+          return NextResponse.json({ error: 'IDEMPOTENCY_KEY_INVALID' }, { status: 400 });
+        }
+        throw err;
+      }
+    }
+
     if (!clientId || !items?.length) {
       return NextResponse.json({ error: 'MISSING_FIELDS' }, { status: 400 });
     }
@@ -93,6 +113,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'INVALID_PAYMENT_METHOD' }, { status: 400 });
     }
 
+    // Si paidAt fourni, refuser une date dans le futur (>= now + 24h) — un
+    // paiement enregistré "demain" décale faussement le mois comptable.
+    if (markPaid && paidAt) {
+      const paidAtDate = new Date(paidAt);
+      if (Number.isNaN(paidAtDate.getTime())) {
+        return NextResponse.json({ error: 'INVALID_PAID_AT' }, { status: 400 });
+      }
+      if (paidAtDate.getTime() >= Date.now() + 24 * 3600 * 1000) {
+        return NextResponse.json({ error: 'INVALID_PAID_AT' }, { status: 400 });
+      }
+    }
+
     // Validate each item: amounts must be positive numbers
     const VALID_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER'];
     for (const item of items as { description: string; quantity: number; unitPrice: number; total: number; category?: string }[]) {
@@ -116,14 +148,27 @@ export async function POST(request: Request) {
     const client = await prisma.user.findFirst({ where: { id: clientId, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
-    // Generate invoice number — retry on collision (race condition guard)
+    // Generate invoice number atomiquement via la table InvoiceSequence.
+    // INSERT ... ON CONFLICT DO UPDATE RETURNING garantit qu'aucun deux
+    // appels concurrents ne reçoivent le même seq (verrou de row PG).
+    // Retry max 5× sur P2002 si jamais une facture legacy (hors séquence)
+    // collisionne avec le seq calculé.
     const year = resolvedIssuedAt ? resolvedIssuedAt.getFullYear() : new Date().getFullYear();
     let invoiceNumber = '';
     for (let attempt = 0; attempt < 5; attempt++) {
-      const count = await prisma.invoice.count();
-      const candidate = `DU-${year}-${String(count + 1 + attempt).padStart(4, '0')}`;
+      const seqRow = await prisma.$queryRaw<{ lastSeq: number }[]>`
+        INSERT INTO "InvoiceSequence" (year, "lastSeq")
+        VALUES (${year}, 1)
+        ON CONFLICT (year)
+        DO UPDATE SET "lastSeq" = "InvoiceSequence"."lastSeq" + 1
+        RETURNING "lastSeq"
+      `;
+      const seq = seqRow[0]?.lastSeq;
+      if (typeof seq !== 'number') break;
+      const candidate = `DU-${year}-${String(seq).padStart(4, '0')}`;
       const exists = await prisma.invoice.findUnique({ where: { invoiceNumber: candidate } });
       if (!exists) { invoiceNumber = candidate; break; }
+      // Collision avec une facture legacy → on consomme un seq supplémentaire.
     }
     if (!invoiceNumber) {
       return NextResponse.json({ error: 'Could not generate invoice number' }, { status: 500 });

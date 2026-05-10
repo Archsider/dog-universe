@@ -61,7 +61,7 @@ beforeEach(() => {
     amount: 100,
     clientDisplayName: null,
     payments: [],
-    client: { name: 'Alice', email: 'a@a.com', phone: '+212', isWalkIn: true },
+    client: { name: 'Alice', email: 'a@a.com', phone: '+212', isWalkIn: true, role: 'CLIENT' },
     items: [],
   });
 });
@@ -88,7 +88,7 @@ describe('POST /api/invoices/[id]/payments — overpayment', () => {
       amount: 100,
       clientDisplayName: null,
       payments: [{ amount: 80 }],
-      client: { name: 'Alice', email: 'a@a.com', phone: '+212', isWalkIn: true },
+      client: { name: 'Alice', email: 'a@a.com', phone: '+212', isWalkIn: true, role: 'CLIENT' },
       items: [],
     });
     const res = await POST(
@@ -112,7 +112,7 @@ describe('POST /api/invoices/[id]/payments — overpayment', () => {
       amount: 100,
       clientDisplayName: null,
       payments: [{ amount: 99.995 }],
-      client: { name: 'Alice', email: 'a@a.com', phone: '+212', isWalkIn: true },
+      client: { name: 'Alice', email: 'a@a.com', phone: '+212', isWalkIn: true, role: 'CLIENT' },
       items: [],
     });
     mocks.prisma.payment.create.mockResolvedValue({ id: 'p-1' });

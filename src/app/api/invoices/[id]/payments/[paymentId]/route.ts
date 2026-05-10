@@ -21,8 +21,16 @@ export async function DELETE(_req: Request, { params }: Params) {
   if (!payment) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   if (payment.invoiceId !== id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    include: { client: { select: { role: true } } },
+  });
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  // Authz cross-role : ADMIN ne peut supprimer un paiement que sur une
+  // facture de CLIENT. SUPERADMIN passe partout.
+  if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+  }
   if (invoice.status === 'CANCELLED') {
     return NextResponse.json({ error: 'INVOICE_CANCELLED' }, { status: 400 });
   }

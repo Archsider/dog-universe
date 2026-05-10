@@ -13,7 +13,7 @@ import {
   inferItemCategory,
 } from '@/lib/metrics';
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
-import { computeMonthlyRevenueByCategory } from '@/lib/accounting';
+import { computeMonthlyRevenueByCategory, allocateBetweenItems } from '@/lib/accounting';
 import { toNumber } from '@/lib/decimal';
 // AnalyticsCharts is a 'use client' component that already lazy-loads its
 // Recharts sub-components internally via next/dynamic — no outer wrapper needed.
@@ -114,32 +114,17 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
       const out: Row[] = [];
       for (const inv of invoices) {
         if (inv.payments.length === 0 || inv.items.length === 0) continue;
-        // Sequential allocation Payment → InvoiceItem (cuid asc = chronological).
-        const sortedPayments = [...inv.payments].sort(
-          (a, b) => a.paymentDate.getTime() - b.paymentDate.getTime(),
+        // Allocation séquentielle Payment → InvoiceItem (Decimal exact).
+        // Voir `allocateBetweenItems` dans @/lib/accounting.
+        const allocations = allocateBetweenItems(
+          inv.payments,
+          inv.items,
+          thisMonthStart,
+          thisMonthEnd,
         );
-        const slots = inv.items.map((it) => ({ remaining: toNumber(it.total) }));
-        const itemAllocations = inv.items.map(() => ({ amount: 0, lastPaidAt: null as Date | null }));
-        let itemIdx = 0;
-        for (const payment of sortedPayments) {
-          const inMonth =
-            payment.paymentDate >= thisMonthStart && payment.paymentDate <= thisMonthEnd;
-          let remaining = toNumber(payment.amount);
-          while (remaining > 0 && itemIdx < inv.items.length) {
-            const slot = slots[itemIdx];
-            const allocated = Math.min(remaining, slot.remaining);
-            if (inMonth && allocated > 0) {
-              itemAllocations[itemIdx].amount += allocated;
-              itemAllocations[itemIdx].lastPaidAt = payment.paymentDate;
-            }
-            remaining -= allocated;
-            slot.remaining -= allocated;
-            if (slot.remaining <= 0) itemIdx += 1;
-          }
-        }
         for (let i = 0; i < inv.items.length; i++) {
-          const alloc = itemAllocations[i];
-          if (alloc.amount <= 0) continue;
+          const alloc = allocations[i];
+          if (alloc.amount.lte(0)) continue;
           const it = inv.items[i];
           const cat = inferItemCategory(it.category, it.description);
           if (cat === 'OTHER') continue;
@@ -148,7 +133,7 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
             quantity: it.quantity,
             unitPrice: toNumber(it.unitPrice),
             category: cat,
-            amount: Number(alloc.amount.toFixed(2)),
+            amount: alloc.amount.toNumber(),
             paymentDate: alloc.lastPaidAt,
             invoice: {
               invoiceNumber: inv.invoiceNumber,

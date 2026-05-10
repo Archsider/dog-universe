@@ -50,9 +50,12 @@ export function getMonthlyInvoicesWhere(
           },
         },
       },
-      // 2) Aucun paiement encore enregistré ET séjour actif ce mois.
+      // 2) Aucun paiement DANS LA FENÊTRE ET séjour actif ce mois.
+      //    Sémantique : on rattache au mois d'occupation tant qu'aucune
+      //    caisse n'a encore matérialisé le mois cible. Une facture déjà
+      //    encaissée AVANT le mois cible ne doit pas réapparaître ici.
       {
-        payments: { none: {} },
+        payments: { none: { paymentDate: { gte: monthStart, lte: monthEnd } } },
         booking: {
           status: { in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },
           startDate: { lte: monthEnd },

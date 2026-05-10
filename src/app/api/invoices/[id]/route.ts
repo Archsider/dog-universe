@@ -155,10 +155,12 @@ export async function PATCH(request: Request, { params }: Params) {
       //    status: CANCELLED → set it; otherwise PENDING (allocatePayments derives real status)
       //    paidAt: null → allocatePayments will set it on first PAID transition
       //    clientDisplayName/clientDisplayPhone/clientDisplayEmail: billing snapshot independent of User
+      // Note: le trigger PG `trg_recompute_invoice_amount` recompute déjà
+      // Invoice.amount = SUM(items.total) après les mutations sur InvoiceItem.
+      // NE PAS écrire `amount` manuellement (drift garanti).
       await tx.invoice.update({
         where: { id },
         data: {
-          amount: newAmount,
           version: { increment: 1 },
           ...(resolvedIssuedAt && { issuedAt: resolvedIssuedAt }),
           notes: typeof notes === 'string' ? notes.trim() || null : invoice.notes,
