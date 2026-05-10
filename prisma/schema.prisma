@@ -369,6 +369,7 @@ enum ItemCategory {
   GROOMING
   PRODUCT
   OTHER
+  DISCOUNT
 }
 
 model InvoiceItem {

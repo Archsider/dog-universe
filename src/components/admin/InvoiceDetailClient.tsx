@@ -11,10 +11,11 @@ import { toast } from '@/hooks/use-toast';
 import { formatDate, formatMAD, getInvoiceStatusColor, getInitials } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import type { Decimal } from '@prisma/client/runtime/library';
+import DiscountButton from './DiscountButton';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-type ItemCategory = 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER';
+type ItemCategory = 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' | 'DISCOUNT';
 
 const CATEGORY_OPTIONS: { value: ItemCategory; label: string }[] = [
   { value: 'BOARDING', label: '🏠 Pension' },
@@ -484,9 +485,17 @@ export default function InvoiceDetailClient({
 
             {/* Summary */}
             <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card p-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                {isFr ? 'Récapitulatif' : 'Summary'}
-              </p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  {isFr ? 'Récapitulatif' : 'Summary'}
+                </p>
+                <DiscountButton
+                  invoiceId={invoice.id}
+                  hasDiscount={invoice.items.some((it) => it.category === 'DISCOUNT')}
+                  locale={locale}
+                  disabled={invoice.status === 'CANCELLED'}
+                />
+              </div>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">{isFr ? 'Total facture' : 'Invoice total'}</span>
@@ -616,7 +625,7 @@ export default function InvoiceDetailClient({
                         <span className="text-gray-400 text-xs">{fmtPaymentDate(p.paymentDate, locale)}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="font-semibold text-green-700 text-sm">{p.amount.toFixed(2)} MAD</span>
+                        <span className="font-semibold text-green-700 text-sm">{Number(p.amount).toFixed(2)} MAD</span>
                         <button
                           onClick={() => handleDeletePayment(p.id)}
                           disabled={deletingPaymentId === p.id}
@@ -922,7 +931,7 @@ export default function InvoiceDetailClient({
                           <span className="text-gray-400 text-xs">{fmtPaymentDate(p.paymentDate, locale)}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-green-700">{p.amount.toFixed(2)} MAD</span>
+                          <span className="font-semibold text-green-700">{Number(p.amount).toFixed(2)} MAD</span>
                           <button
                             onClick={() => handleDeletePayment(p.id)}
                             disabled={deletingPaymentId === p.id}
