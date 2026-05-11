@@ -1,13 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import ClientSearchSelect from './ClientSearchSelect';
+import { InvoiceFormBody } from './standalone-invoice/InvoiceFormBody';
+import {
+  type LineItem,
+  type CatalogProduct,
+  type QuickAddPreset,
+  autoCategory,
+  today,
+} from './standalone-invoice/types';
 
 interface Client {
   id: string;
@@ -15,162 +19,20 @@ interface Client {
   email: string;
 }
 
-type ItemCategory = 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER';
-
-interface LineItem {
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  category: ItemCategory;
-  productId?: string;
-}
-
-interface CatalogProduct {
-  id: string;
-  name: string;
-  brand: string | null;
-  price: number;
-  stock: number;
-  available: boolean;
-}
-
-const CATEGORY_OPTIONS: { value: ItemCategory; label: string }[] = [
-  { value: 'BOARDING', label: '🏠 Pension' },
-  { value: 'PET_TAXI', label: '🚗 Pet Taxi' },
-  { value: 'GROOMING', label: '✂️ Toilettage / Soins' },
-  { value: 'PRODUCT',  label: '🐾 Croquettes / Produits' },
-  { value: 'OTHER',    label: '➕ Autre' },
-];
-
-const autoCategory = (desc: string): ItemCategory => {
-  const d = desc.toLowerCase();
-  if (d.includes('pension') || d.includes('nuit') || d.includes('hébergement')) return 'BOARDING';
-  if (d.includes('taxi') || d.includes('transport') || d.includes('aller') || d.includes('retour')) return 'PET_TAXI';
-  if (d.includes('toilettage') || d.includes('soin') || d.includes('médic') || d.includes('bain') || d.includes('coupe')) return 'GROOMING';
-  if (d.includes('croquette') || d.includes('kibble') || d.includes('royal') || d.includes('grain') || d.includes('lamb') || d.includes('nourriture')) return 'PRODUCT';
-  return 'OTHER';
-};
-
 interface CreateStandaloneInvoiceModalProps {
-  /**
-   * Optional. When omitted, the modal uses the autocomplete API
-   * (`/api/admin/clients/search`) instead of a fully-loaded dropdown.
-   * Kept for backward compatibility with call sites that already passed it
-   * (e.g. preselected client name resolution).
-   */
   clients?: Client[];
   locale: string;
   onCreated?: () => void;
-  /** Pre-fill and lock the client selector */
   preselectedClientId?: string;
-  /** Pre-fill the displayed name when `preselectedClientId` is set without `clients`. */
   preselectedClientName?: string;
 }
 
-const SERVICE_TYPES = [
-  { value: '', fr: '— Multiple / Divers', en: '— Multiple / Miscellaneous' },
-  { value: 'BOARDING', fr: 'Pension', en: 'Boarding' },
-  { value: 'PET_TAXI', fr: 'Taxi animalier', en: 'Pet Taxi' },
-  { value: 'GROOMING', fr: 'Toilettage', en: 'Grooming' },
-  { value: 'PRODUCT_SALE', fr: 'Vente produit / Croquettes', en: 'Product Sale / Croquettes' },
-];
-
-interface QuickAddPreset {
-  labelFr: string;
-  labelEn: string;
-  descriptionFr: string;
-  descriptionEn: string;
-  serviceType: string;
-  category: ItemCategory;
-  defaultPrice: number;
-  color: string;
-}
-
-const QUICK_ADD_PRESETS: QuickAddPreset[] = [
-  {
-    // Tarif pension non hardcodé : la règle métier (chat 70 / chien long-stay
-    // 100 / multi-chiens 100 / chien seul 120) est centralisée dans
-    // src/lib/pricing.ts. Pour la facturation manuelle standalone, l'admin
-    // saisit le prix appliqué au client.
-    labelFr: 'Pension (à saisir)',
-    labelEn: 'Boarding (enter price)',
-    descriptionFr: 'Pension (nuit)',
-    descriptionEn: 'Boarding (night)',
-    serviceType: 'BOARDING',
-    category: 'BOARDING',
-    defaultPrice: 0,
-    color: 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
-  },
-  {
-    labelFr: 'Pet Taxi',
-    labelEn: 'Pet Taxi',
-    descriptionFr: 'Pet Taxi',
-    descriptionEn: 'Pet Taxi',
-    serviceType: 'PET_TAXI',
-    category: 'PET_TAXI',
-    defaultPrice: 150,
-    color: 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100',
-  },
-  {
-    labelFr: 'Toilettage',
-    labelEn: 'Grooming',
-    descriptionFr: 'Toilettage',
-    descriptionEn: 'Grooming',
-    serviceType: 'GROOMING',
-    category: 'GROOMING',
-    defaultPrice: 0,
-    color: 'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100',
-  },
-  {
-    labelFr: 'Croquettes',
-    labelEn: 'Kibbles',
-    descriptionFr: 'Croquettes',
-    descriptionEn: 'Kibbles',
-    serviceType: 'PRODUCT_SALE',
-    category: 'PRODUCT',
-    defaultPrice: 0,
-    color: 'bg-green-50 border-green-200 text-green-800 hover:bg-green-100',
-  },
-  {
-    labelFr: 'Médicaments',
-    labelEn: 'Medication',
-    descriptionFr: 'Médicaments / soins',
-    descriptionEn: 'Medication / care',
-    serviceType: '',
-    category: 'GROOMING',
-    defaultPrice: 0,
-    color: 'bg-red-50 border-red-200 text-red-800 hover:bg-red-100',
-  },
-  {
-    labelFr: 'Autre',
-    labelEn: 'Other',
-    descriptionFr: '',
-    descriptionEn: '',
-    serviceType: '',
-    category: 'OTHER',
-    defaultPrice: 0,
-    color: 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100',
-  },
-];
-
-const PAYMENT_METHODS = [
-  { value: 'CASH', fr: 'Espèces', en: 'Cash' },
-  { value: 'CARD', fr: 'Carte', en: 'Card' },
-  { value: 'CHECK', fr: 'Chèque', en: 'Check' },
-  { value: 'TRANSFER', fr: 'Virement', en: 'Transfer' },
-];
-
-const today = () => new Date().toISOString().split('T')[0];
-
 export default function CreateStandaloneInvoiceModal({ clients, locale, onCreated, preselectedClientId, preselectedClientName }: CreateStandaloneInvoiceModalProps) {
   const fr = locale === 'fr';
-
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
   const [clientId, setClientId] = useState(preselectedClientId ?? '');
-  // Walk-in sub-fields (shown when clientId === 'WALK_IN')
   const [walkInName, setWalkInName] = useState('');
   const [walkInPhone, setWalkInPhone] = useState('');
   const [serviceType, setServiceType] = useState('');
@@ -178,30 +40,20 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<LineItem[]>([{ description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
-
-  // Charge le catalogue produits au montage (utilisé pour l'autocomplete des
-  // lignes d'articles → auto-fill prix/catégorie/productId quand l'admin
-  // sélectionne un produit existant).
-  useEffect(() => {
-    let alive = true;
-    fetch('/api/admin/products')
-      .then(r => r.ok ? r.json() : [])
-      .then((data: CatalogProduct[]) => {
-        if (alive && Array.isArray(data)) {
-          setCatalog(data.filter(p => p.available !== false));
-        }
-      })
-      .catch(() => { /* silencieux : la facture peut toujours être créée à la main */ });
-    return () => { alive = false; };
-  }, []);
-
-  // Libellé canonique d'un produit pour l'option du datalist + matching.
-  const productLabel = (p: CatalogProduct) =>
-    p.brand ? `${p.name} — ${p.brand}` : p.name;
   const [markPaid, setMarkPaid] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [paidAt, setPaidAt] = useState(today());
 
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/admin/products')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: CatalogProduct[]) => { if (alive && Array.isArray(data)) setCatalog(data.filter(p => p.available !== false)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const productLabel = (p: CatalogProduct) => p.brand ? `${p.name} — ${p.brand}` : p.name;
   const total = items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
 
   const addItem = () => setItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
@@ -210,379 +62,86 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
     setItems(prev => prev.map((it, idx) => {
       if (idx !== i) return it;
       const next = { ...it, [field]: value } as LineItem;
-      // Description change : tenter un match exact dans le catalogue produits.
-      // Match → auto-fill prix/catégorie/productId. Sinon → reset productId
-      // et auto-detect catégorie depuis le texte si elle est sur 'OTHER'.
       if (field === 'description') {
         const raw = String(value).trim().toLowerCase();
-        const matched = raw
-          ? catalog.find(p => productLabel(p).toLowerCase() === raw)
-          : undefined;
-        if (matched) {
-          next.productId = matched.id;
-          next.unitPrice = matched.price;
-          next.category = 'PRODUCT';
-        } else {
-          next.productId = undefined;
-          if (it.category === 'OTHER') {
-            next.category = autoCategory(String(value));
-          }
-        }
+        const matched = raw ? catalog.find(p => productLabel(p).toLowerCase() === raw) : undefined;
+        if (matched) { next.productId = matched.id; next.unitPrice = matched.price; next.category = 'PRODUCT'; }
+        else { next.productId = undefined; if (it.category === 'OTHER') next.category = autoCategory(String(value)); }
       }
       return next;
     }));
   };
 
   const addPreset = (preset: QuickAddPreset) => {
-    // If first item is blank, replace it; otherwise append
     setItems(prev => {
       const isEmpty = prev.length === 1 && !prev[0].description && prev[0].unitPrice === 0;
-      const newItem: LineItem = {
-        description: fr ? preset.descriptionFr : preset.descriptionEn,
-        quantity: 1,
-        unitPrice: preset.defaultPrice,
-        category: preset.category,
-      };
+      const newItem: LineItem = { description: fr ? preset.descriptionFr : preset.descriptionEn, quantity: 1, unitPrice: preset.defaultPrice, category: preset.category };
       return isEmpty ? [newItem] : [...prev, newItem];
     });
-    // Auto-select service type if not already set to multiple
-    if (preset.serviceType && !serviceType) {
-      setServiceType(preset.serviceType);
-    }
+    if (preset.serviceType && !serviceType) setServiceType(preset.serviceType);
   };
 
   const reset = () => {
-    setClientId(preselectedClientId ?? '');
-    setWalkInName('');
-    setWalkInPhone('');
-    setServiceType('');
-    setIssuedAt(today());
-    setNotes('');
+    setClientId(preselectedClientId ?? ''); setWalkInName(''); setWalkInPhone('');
+    setServiceType(''); setIssuedAt(today()); setNotes('');
     setItems([{ description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
-    setMarkPaid(false);
-    setPaymentMethod('CASH');
-    setPaidAt(today());
-    setError('');
+    setMarkPaid(false); setPaymentMethod('CASH'); setPaidAt(today()); setError('');
   };
 
   const handleSubmit = async () => {
     if (!clientId) { setError(fr ? 'Sélectionnez un client.' : 'Select a client.'); return; }
-    if (clientId === 'WALK_IN' && !walkInName.trim()) {
-      setError(fr ? 'Le nom du client de passage est obligatoire.' : 'Walk-in client name is required.');
-      return;
-    }
+    if (clientId === 'WALK_IN' && !walkInName.trim()) { setError(fr ? 'Le nom du client de passage est obligatoire.' : 'Walk-in client name is required.'); return; }
     if (items.some(it => !it.description.trim())) { setError(fr ? 'Tous les articles doivent avoir une description.' : 'All items must have a description.'); return; }
     if (total <= 0) { setError(fr ? 'Le total doit être supérieur à 0.' : 'Total must be greater than 0.'); return; }
-
-    // Non-blocking warning for lines classified as OTHER
     const otherCount = items.filter(it => it.category === 'OTHER').length;
-    if (otherCount > 0) {
-      const msg = fr
-        ? `⚠️ ${otherCount} ligne(s) classée(s) dans « Autre » — les analytics seront imprécis. Continuer ?`
-        : `⚠️ ${otherCount} line(s) classified as “Other” — analytics will be imprecise. Continue?`;
-      if (!window.confirm(msg)) return;
-    }
+    if (otherCount > 0 && !window.confirm(fr ? `⚠️ ${otherCount} ligne(s) classée(s) dans « Autre » — les analytics seront imprécis. Continuer ?` : `⚠️ ${otherCount} line(s) classified as "Other" — analytics will be imprecise. Continue?`)) return;
 
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
-      // Resolve walk-in client first
       let resolvedClientId = clientId;
       if (clientId === 'WALK_IN') {
-        const wiRes = await fetch('/api/admin/walkin-clients', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: walkInName.trim(), phone: walkInPhone.trim() || null }),
-        });
+        const wiRes = await fetch('/api/admin/walkin-clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: walkInName.trim(), phone: walkInPhone.trim() || null }) });
         if (!wiRes.ok) throw new Error(fr ? 'Erreur création client de passage.' : 'Failed to create walk-in client.');
-        const wiClient = await wiRes.json();
-        resolvedClientId = wiClient.id;
+        resolvedClientId = (await wiRes.json()).id;
       }
-
       const body: Record<string, unknown> = {
-        clientId: resolvedClientId,
-        serviceType,
-        issuedAt,
-        notes: notes.trim() || null,
-        items: items.map(it => ({
-          description: it.description.trim(),
-          quantity: it.quantity,
-          unitPrice: it.unitPrice,
-          total: it.quantity * it.unitPrice,
-          category: it.category,
-          ...(it.productId ? { productId: it.productId } : {}),
-        })),
+        clientId: resolvedClientId, serviceType, issuedAt, notes: notes.trim() || null,
+        items: items.map(it => ({ description: it.description.trim(), quantity: it.quantity, unitPrice: it.unitPrice, total: it.quantity * it.unitPrice, category: it.category, ...(it.productId ? { productId: it.productId } : {}) })),
       };
-      if (markPaid) {
-        body.markPaid = true;
-        body.paymentMethod = paymentMethod;
-        body.paidAt = paidAt;
-      }
-
-      const res = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'INTERNAL_ERROR');
-      }
-
-      setOpen(false);
-      reset();
-      onCreated?.();
-      // Reload page to show new invoice
-      window.location.reload();
+      if (markPaid) { body.markPaid = true; body.paymentMethod = paymentMethod; body.paidAt = paidAt; }
+      const res = await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || 'INTERNAL_ERROR'); }
+      setOpen(false); reset(); onCreated?.(); window.location.reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : (fr ? 'Erreur inattendue.' : 'Unexpected error.'));
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
     <>
-      <Button
-        size="sm"
-        className="flex items-center gap-1.5"
-        onClick={() => { reset(); setOpen(true); }}
-      >
+      <Button size="sm" className="flex items-center gap-1.5" onClick={() => { reset(); setOpen(true); }}>
         <Plus className="h-4 w-4" />
         {fr ? 'Créer une facture' : 'Create Invoice'}
       </Button>
-
       <Dialog open={open} onOpenChange={v => { if (!v) reset(); setOpen(v); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{fr ? 'Nouvelle facture' : 'New Invoice'}</DialogTitle>
           </DialogHeader>
-
-          <div className="space-y-5 py-2">
-            {/* Client */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs">{fr ? 'Client *' : 'Client *'}</Label>
-                {preselectedClientId ? (
-                  <div className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 bg-ivory-50 text-charcoal font-medium">
-                    {preselectedClientName ?? clients?.find(c => c.id === preselectedClientId)?.name ?? preselectedClientId}
-                  </div>
-                ) : (
-                  <>
-                    <ClientSearchSelect
-                      value={clientId}
-                      onChange={setClientId}
-                      locale={locale}
-                      includeWalkIn
-                      placeholder={fr ? 'Rechercher un client…' : 'Search a client…'}
-                    />
-                    {clientId === 'WALK_IN' && (
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-xs">{fr ? 'Nom *' : 'Name *'}</Label>
-                          <Input
-                            value={walkInName}
-                            onChange={e => setWalkInName(e.target.value)}
-                            placeholder={fr ? 'Nom du passager' : 'Walk-in name'}
-                            className="mt-1 text-sm h-8"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">{fr ? 'Téléphone' : 'Phone'}</Label>
-                          <Input
-                            value={walkInPhone}
-                            onChange={e => setWalkInPhone(e.target.value)}
-                            placeholder="+212..."
-                            className="mt-1 text-sm h-8"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              <div>
-                <Label className="text-xs">{fr ? 'Catégorie (optionnel)' : 'Category (optional)'}</Label>
-                <select
-                  value={serviceType}
-                  onChange={e => setServiceType(e.target.value)}
-                  className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 focus:outline-none focus:border-gold-400 bg-white"
-                >
-                  {SERVICE_TYPES.map(st => (
-                    <option key={st.value} value={st.value}>{fr ? st.fr : st.en}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-400 mt-1">{fr ? 'Laissez "Multiple" pour combiner plusieurs services' : 'Leave "Multiple" to combine several services'}</p>
-              </div>
-            </div>
-
-            {/* Date */}
-            <div className="w-48">
-              <Label className="text-xs">{fr ? 'Date de facturation' : 'Invoice date'}</Label>
-              <Input
-                type="date"
-                value={issuedAt}
-                onChange={e => setIssuedAt(e.target.value)}
-                className="mt-1 text-sm"
-              />
-            </div>
-
-            {/* Quick-add presets */}
-            <div>
-              <Label className="text-xs text-gray-500">{fr ? 'Ajout rapide' : 'Quick add'}</Label>
-              <div className="flex flex-wrap gap-2 mt-1.5">
-                {QUICK_ADD_PRESETS.map(preset => (
-                  <button
-                    key={preset.labelFr}
-                    type="button"
-                    onClick={() => addPreset(preset)}
-                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${preset.color}`}
-                  >
-                    + {fr ? preset.labelFr : preset.labelEn}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Line items */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-xs">{fr ? 'Articles *' : 'Items *'}</Label>
-                <Button size="sm" variant="outline" onClick={addItem} className="h-7 text-xs gap-1">
-                  <Plus className="h-3 w-3" />{fr ? 'Ligne vide' : 'Empty line'}
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                {/* Header */}
-                <div className="grid grid-cols-12 gap-2 text-xs text-gray-400 px-1">
-                  <span className="col-span-4">{fr ? 'Description' : 'Description'}</span>
-                  <span className="col-span-3">{fr ? 'Catégorie' : 'Category'}</span>
-                  <span className="col-span-1 text-center">{fr ? 'Qté' : 'Qty'}</span>
-                  <span className="col-span-3 text-right">{fr ? 'Prix unit.' : 'Unit price'}</span>
-                  <span className="col-span-1" />
-                </div>
-
-                {items.map((it, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                    <Input
-                      className="col-span-4 text-sm h-8"
-                      list="invoice-products-datalist"
-                      value={it.description}
-                      onChange={e => updateItem(i, 'description', e.target.value)}
-                      placeholder={fr ? 'Tape ou choisis un produit du catalogue…' : 'Type or pick from catalogue…'}
-                    />
-                    <select
-                      value={it.category}
-                      onChange={e => updateItem(i, 'category', e.target.value)}
-                      className={`col-span-3 text-sm h-8 px-2 rounded-lg border border-[#C4974A] bg-white focus:outline-none focus:ring-2 focus:ring-[#C4974A]/20 min-w-0 ${it.category === 'OTHER' ? 'border-l-4 border-l-amber-400' : ''}`}
-                    >
-                      {CATEGORY_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    <Input
-                      type="number"
-                      min={1}
-                      className="col-span-1 text-sm h-8 text-center"
-                      value={it.quantity}
-                      onChange={e => updateItem(i, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
-                    />
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      className="col-span-3 text-sm h-8 text-right"
-                      value={it.unitPrice}
-                      onChange={e => updateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                    />
-                    <button
-                      onClick={() => removeItem(i)}
-                      disabled={items.length === 1}
-                      className="col-span-1 flex items-center justify-center text-gray-400 hover:text-red-500 disabled:opacity-20"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Catalogue produits — alimente l'autocomplete des descriptions */}
-              <datalist id="invoice-products-datalist">
-                {catalog.map(p => (
-                  <option key={p.id} value={productLabel(p)}>
-                    {p.price.toLocaleString()} MAD · stock {p.stock}
-                  </option>
-                ))}
-              </datalist>
-
-              <div className="flex justify-end mt-3 pt-2 border-t border-gray-100">
-                <span className="text-sm font-bold text-charcoal">
-                  Total : {total.toLocaleString()} MAD
-                </span>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <Label className="text-xs">{fr ? 'Notes (optionnel)' : 'Notes (optional)'}</Label>
-              <Textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                rows={2}
-                className="mt-1 text-sm"
-                placeholder={fr ? 'Informations complémentaires…' : 'Additional information…'}
-              />
-            </div>
-
-            {/* Mark as paid */}
-            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={markPaid}
-                  onChange={e => setMarkPaid(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-gold-500"
-                />
-                <span className="text-sm font-medium text-charcoal">
-                  {fr ? 'Marquer comme payée immédiatement' : 'Mark as paid immediately'}
-                </span>
-              </label>
-
-              {markPaid && (
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <Label className="text-xs">{fr ? 'Moyen de paiement' : 'Payment method'}</Label>
-                    <select
-                      value={paymentMethod}
-                      onChange={e => setPaymentMethod(e.target.value)}
-                      className="mt-1 w-full border border-gray-200 rounded-md text-sm px-3 py-2 focus:outline-none focus:border-gold-400 bg-white"
-                    >
-                      {PAYMENT_METHODS.map(m => (
-                        <option key={m.value} value={m.value}>{fr ? m.fr : m.en}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <Label className="text-xs">{fr ? 'Date de paiement' : 'Payment date'}</Label>
-                    <Input
-                      type="date"
-                      value={paidAt}
-                      onChange={e => setPaidAt(e.target.value)}
-                      className="mt-1 text-sm"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>
-            )}
-          </div>
-
+          <InvoiceFormBody
+            locale={locale} clientId={clientId} onClientIdChange={setClientId}
+            walkInName={walkInName} onWalkInNameChange={setWalkInName}
+            walkInPhone={walkInPhone} onWalkInPhoneChange={setWalkInPhone}
+            preselectedClientId={preselectedClientId} preselectedClientName={preselectedClientName} clients={clients}
+            serviceType={serviceType} onServiceTypeChange={setServiceType}
+            issuedAt={issuedAt} onIssuedAtChange={setIssuedAt}
+            items={items} catalog={catalog}
+            onAddItem={addItem} onRemoveItem={removeItem} onUpdateItem={updateItem} onAddPreset={addPreset}
+            notes={notes} onNotesChange={setNotes}
+            markPaid={markPaid} paymentMethod={paymentMethod} paidAt={paidAt}
+            onMarkPaidChange={setMarkPaid} onPaymentMethodChange={setPaymentMethod} onPaidAtChange={setPaidAt}
+            error={error}
+          />
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
             <Button variant="outline" onClick={() => { setOpen(false); reset(); }} disabled={loading}>
               {fr ? 'Annuler' : 'Cancel'}
