@@ -8,6 +8,7 @@ import { petPossessive } from '@/lib/sms';
 import { enqueueEmail, enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
 import { markCronRun } from '@/lib/observability';
+import { getCasaStartOfDay, getCasaEndOfDay } from '@/lib/timezone';
 
 export const maxDuration = 60;
 
@@ -44,13 +45,14 @@ export async function GET(request: Request) {
   const now = new Date();
   const dateFormatOpts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
 
-  // Target: tomorrow's date range
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const rangeStart = new Date(tomorrow);
-  rangeStart.setHours(0, 0, 0, 0);
-  const rangeEnd = new Date(tomorrow);
-  rangeEnd.setHours(23, 59, 59, 999);
+  // Target: tomorrow's date range *in Casablanca local time*. Vercel runs in
+  // UTC — a naive `setHours(0,0,0,0)` would compute UTC midnight, so the cron
+  // would consider 00:00–01:00 Casablanca as part of "today", missing the
+  // bookings recorded between midnight and 1AM local.
+  const tomorrowSeed = new Date(now);
+  tomorrowSeed.setUTCDate(tomorrowSeed.getUTCDate() + 1);
+  const rangeStart = getCasaStartOfDay(tomorrowSeed);
+  const rangeEnd = getCasaEndOfDay(tomorrowSeed);
 
   // Fetch all admins for admin notifications
   const admins = await prisma.user.findMany({
@@ -64,9 +66,9 @@ export async function GET(request: Request) {
   const errors: string[] = [];
 
   // Marqueur de jour : permet de détecter une notif déjà créée aujourd'hui
-  // pour la même booking (anti double-fire du cron Vercel).
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
+  // pour la même booking (anti double-fire du cron Vercel). Borné en heure
+  // Casablanca pour rester cohérent avec la fenêtre `rangeStart`/`rangeEnd`.
+  const todayStart = getCasaStartOfDay(now);
 
   // ── Start reminders (CONFIRMED bookings starting tomorrow) ────────────────
   const startBookings = await prisma.booking.findMany({
