@@ -597,20 +597,20 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
             <h3 className="font-semibold text-charcoal text-sm">{t.pets}</h3>
           </div>
           <div className="flex flex-wrap gap-2">
-            {booking.bookingPets.map(bp => (
+            {booking.bookingPets.filter(bp => bp.pet).map(bp => (
               <Link
                 key={bp.id}
                 href={`/${locale}/client/pets/${bp.pet.id}`}
                 className="flex items-center gap-2 px-3 py-1.5 bg-ivory-50 rounded-lg border border-[#F0D98A]/30 hover:border-gold-400 transition-colors"
               >
                 {bp.pet.photoUrl ? (
-                  <Image src={bp.pet.photoUrl} alt={bp.pet.name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" />
+                  <Image src={bp.pet.photoUrl} alt={bp.pet.name ?? ''} width={24} height={24} className="w-6 h-6 rounded-full object-cover" />
                 ) : (
                   <div className="w-6 h-6 rounded-full bg-gold-100 flex items-center justify-center text-xs font-bold text-gold-600">
-                    {bp.pet.name[0]}
+                    {bp.pet.name?.[0] ?? '?'}
                   </div>
                 )}
-                <span className="text-sm font-medium text-charcoal">{bp.pet.name}</span>
+                <span className="text-sm font-medium text-charcoal">{bp.pet.name ?? '—'}</span>
                 <span className="text-xs text-gray-400">{bp.pet.breed || bp.pet.species}</span>
               </Link>
             ))}
