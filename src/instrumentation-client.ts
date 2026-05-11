@@ -16,6 +16,20 @@ Sentry.init({
   // attachés à un event sont nettoyés par beforeSend ci-dessous.
   sendDefaultPii: false,
 
+  // Bruit : fetch annulé par navigation utilisateur, plugins navigateur,
+  // erreurs réseau hors-app (Wi-Fi qui tombe, 4G qui change de cellule…).
+  ignoreErrors: [
+    'TypeError: network error',
+    'TypeError: Failed to fetch',
+    'TypeError: Load failed',
+    'TypeError: NetworkError when attempting to fetch resource.',
+    'AbortError',
+    'The user aborted a request.',
+    'ResizeObserver loop limit exceeded',
+    'ResizeObserver loop completed with undelivered notifications.',
+    'Non-Error promise rejection captured',
+  ],
+
   beforeSend(event) {
     // Strip PII from user context
     if (event.user) {
