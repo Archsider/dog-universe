@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { env } from '@/lib/env';
 
 /**
  * CSP violation report sink.
@@ -30,8 +31,8 @@ const MAX_BODY_BYTES = 16 * 1024; // 16 KB — generous; legitimate reports are 
 let limiter: Ratelimit | null = null;
 function getLimiter(): Ratelimit | null {
   if (limiter) return limiter;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = env.UPSTASH_REDIS_REST_URL;
+  const token = env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return null;
   limiter = new Ratelimit({
     redis: new Redis({ url, token }),

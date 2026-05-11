@@ -4,8 +4,24 @@ import { prisma } from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 import { readFile } from 'fs/promises';
 import path from 'path';
+import { z } from 'zod';
 import { createSignedUrl } from '@/lib/supabase';
 import { vaccinationExtractSchema, formatZodError } from '@/lib/validation';
+
+// Validates the JSON Claude returns. Strict mode rejects unknown keys —
+// defends against prototype pollution / unexpected field injection. All
+// fields nullable because the model is instructed to return null on missing
+// data; confidence/confidenceNote tolerant (defaults applied below).
+const extractionResultSchema = z
+  .object({
+    vaccineType: z.string().nullable().optional(),
+    date: z.string().nullable().optional(),
+    nextDueDate: z.string().nullable().optional(),
+    comment: z.string().nullable().optional(),
+    confidence: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
+    confidenceNote: z.string().optional(),
+  })
+  .strict();
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -141,8 +157,32 @@ async function callClaudeExtraction(base64: string, mimeType: string): Promise<E
     const text = message.content.find(b => b.type === 'text')?.text ?? '';
     // Strip possible markdown code fences
     const jsonStr = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
-    const parsed = JSON.parse(jsonStr) as ExtractionResult;
-    return parsed;
+    let raw: unknown;
+    try {
+      raw = JSON.parse(jsonStr);
+    } catch {
+      return null;
+    }
+    const validated = extractionResultSchema.safeParse(raw);
+    if (!validated.success) {
+      // Structured warn (no payload — PII safety, doc may include owner data).
+      console.warn(JSON.stringify({
+        level: 'warn',
+        service: 'pet',
+        message: 'Vaccination extraction Zod validation failed',
+        issueCount: validated.error.issues.length,
+        timestamp: new Date().toISOString(),
+      }));
+      return null;
+    }
+    return {
+      vaccineType: validated.data.vaccineType ?? null,
+      date: validated.data.date ?? null,
+      nextDueDate: validated.data.nextDueDate ?? null,
+      comment: validated.data.comment ?? null,
+      confidence: validated.data.confidence ?? 'LOW',
+      confidenceNote: validated.data.confidenceNote ?? '',
+    };
   } catch {
     return null;
   }

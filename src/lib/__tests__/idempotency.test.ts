@@ -48,11 +48,20 @@ describe('tryAcquireIdempotency — first writer', () => {
   });
 
   it('calls Redis SET with NX flag and TTL', async () => {
-    await tryAcquireIdempotency(req('my-key-12345'), 'bookings:create', 3600);
+    await tryAcquireIdempotency(req('my-key-12345'), 'bookings:create', undefined, 3600);
     expect(mockSet).toHaveBeenCalledWith(
-      'idem:bookings:create:my-key-12345',
+      'idem:bookings:create:anon:my-key-12345',
       '1',
       { nx: true, ex: 3600 },
+    );
+  });
+
+  it('namespaces key by userId when provided', async () => {
+    await tryAcquireIdempotency(req('my-key-12345'), 'bookings:create', 'user-A');
+    expect(mockSet).toHaveBeenCalledWith(
+      'idem:bookings:create:user-A:my-key-12345',
+      '1',
+      { nx: true, ex: 24 * 3600 },
     );
   });
 

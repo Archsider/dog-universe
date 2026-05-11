@@ -53,7 +53,7 @@ export async function POST(request: Request, { params }: Params) {
   // Idempotency-Key support — replays within 24h are rejected with 409.
   // Scope per-invoice so two distinct invoices can reuse the same client key.
   try {
-    const idem = await tryAcquireIdempotency(request, `payment:${id}`);
+    const idem = await tryAcquireIdempotency(request, `payment:${id}`, session.user.id);
     if (!idem.acquired) {
       return NextResponse.json({ error: 'DUPLICATE_REQUEST' }, { status: 409 });
     }

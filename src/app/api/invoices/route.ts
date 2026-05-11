@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     // markPaid === true — un replay pourrait double-créditer la caisse.
     if (markPaid === true) {
       try {
-        const idem = await tryAcquireIdempotency(request, 'invoice:create');
+        const idem = await tryAcquireIdempotency(request, 'invoice:create', session.user.id);
         if (!idem.acquired) {
           return NextResponse.json(
             { error: 'DUPLICATE_REQUEST', message: 'Idempotency-Key replay detected.' },

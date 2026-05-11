@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { env } from '@/lib/env';
 
 // Rate limiting is only active when Upstash env vars are set (production).
 // In development (no vars), all requests pass through.
 function getRatelimiter() {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = env.UPSTASH_REDIS_REST_URL;
+  const token = env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return null;
 
   const redis = new Redis({ url, token });
