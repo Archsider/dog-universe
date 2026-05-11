@@ -75,6 +75,10 @@ src/lib/
 | `ClientContract` | Contrat signé par le client |
 | `StayPhoto` | Photos de séjour |
 | `Review` | Avis post-séjour client (1-to-1 avec Booking, rating 1-5, comment optionnel) |
+| `AddonRequest` | Demande d'addon sur une réservation existante (remplace le scan `Notification.metadata` — PR #22) |
+| `GuardianEvent` | Évènement Sentry traité par l'AI Guardian (classification + action) — voir section AI GUARDIAN SENTRY |
+| `Heartbeat` | Ping de santé écrit par le cron `heartbeat` (rétention 30 j) — voir section UPTIME SELF-MONITORING |
+| `FeatureFlag` | Flag DB-backed (kill-switch + rollout % + targetRoles + whitelist) — voir section FEATURE FLAGS |
 
 **`Invoice.periodDate`** — date de début du séjour associé (`booking.startDate`), utilisée comme date de référence pour le mois de facturation dans `/admin/billing`. Filtre mensuel billing : `OR [{ periodDate: { gte, lte } }, { periodDate: null, issuedAt: { gte, lte } }]` — priorité à `periodDate` si présent, fallback sur `issuedAt` pour les factures legacy sans `periodDate`.
 
@@ -203,6 +207,9 @@ Définis dans `vercel.json`, tous à **08h00 UTC** :
 | `/api/cron/contract-reminders` | Lundi (hebdo) | Rappel signature contrat aux clients sans contrat |
 | `/api/cron/overdue-invoices` | Quotidien (09h UTC) | Relances factures impayées J+30 / J+60 (depuis 2026-05-04) |
 | `/api/cron/review-requests` | Quotidien 10h | Envoie REVIEW_REQUEST aux clients dont le séjour s'est terminé dans les 24h sans avis |
+| `/api/cron/heartbeat` | Toutes les 5 min | Self-monitoring : ping `/api/health/ping`, écrit `Heartbeat`, alerte SMS SUPERADMIN si 3 KO consécutifs (PR #26) |
+| `/api/cron/health-reconciliation` | Quotidien | Vérifie les invariants critiques (`Invoice.amount` vs `SUM(items.total)`, etc.) via `health-invariants.ts` (PR #23) |
+| `/api/cron/refresh-revenue-mv` | Quotidien 02h UTC | Refresh complet de `monthly_revenue_mv` (complément du tick horaire `refresh-monthly-revenue`) (PR #22) |
 
 **Protection :** header `x-cron-secret` vérifié contre `CRON_SECRET` (déjà défini sur Vercel).
 Vercel l'injecte automatiquement via `Authorization: Bearer` pour ses propres crons.
@@ -494,7 +501,8 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 | Zod | 3.23.8 |
 | @sentry/nextjs | (configuré server + edge + client + instrumentation-client) |
 | Playwright | configuré, skip gracieux si secrets absents (`test.skip()` dans `beforeEach`) |
-| Vitest | 4.1.5 (306 tests unitaires) |
+| Vitest | 4.1.5 (594+ tests unitaires au 2026-05-11, +24 feature-flags, +19 guardian, +13 heartbeat, +15 db-migrate, +10 db-rollback) |
+| k6 | scripts dans `tests/k6/` (booking-concurrent, dashboard-perf, invoice-payment-race, taxi-heartbeat-stress) — exécution manuelle, séparée d'E2E (PR #21) |
 
 **Pattern Next.js 15 params** : toujours `params: Promise<{ locale: string }>` + `const { locale } = await params` (async — pattern obligatoire sur main).
 
@@ -560,6 +568,19 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | Dropdown clients vide nouvelle facture | RÉSOLU (2026-05-08) | `CreateStandaloneInvoiceModal` utilisait `<select>` statique avec prop `clients` non passée. Remplacé par `ClientSearchSelect` (autocomplete via `/api/admin/clients/search`). |
 | Dropdown produits dans nouvelle facture | RÉSOLU (2026-05-08) | `<datalist>` HTML alimenté par `/api/admin/products` avec auto-fill prix + catégorie + `productId`. POST `/api/invoices` décrémente le stock atomique en transaction. |
 | Recommandations upsell par espèce + âge | LIVRÉ (2026-05-10) | `getMatchingProducts()` dans `lib/pet-profile.ts` (4 OR par animal, scoring SENIOR/PUPPY > JUNIOR > ADULT > ALL). Composant unique `UpsellSuggestions` mode client/admin. Catalogue Ultra Premium + Canvit ~85 produits seedé via migration. |
+| Validation + checksum migrations SQL | LIVRÉ (2026-05-11, PR #20) | `db-migrate.mjs` valide statiquement (DROP/DELETE sans WHERE, taille > 100l), enregistre SHA-256 dans `_app_migrations`, warn sur drift. CI `migration-check.yml` lance dry-run sur postgres:16-alpine. |
+| Multi-tenant scaffolding mort | RÉSOLU (2026-05-11, PR #21) | Modèle `Tenant` et colonnes `tenantId` retirés (jamais utilisés, ajoutaient du bruit). Migration `20260512_drop_tenant_scaffold` (irréversible, marqueur `@rollback: not-applicable`). |
+| k6 load tests | LIVRÉ (2026-05-11, PR #21) | 4 scénarios dans `tests/k6/` (booking concurrent, dashboard perf, invoice payment race, taxi heartbeat stress). Exécution manuelle, **séparée d'E2E** (objectifs et runtimes différents — k6 n'a rien à faire dans le pipeline PR). |
+| MV partout pour analytics monthly | LIVRÉ (2026-05-11, PR #22) | `revenueByCategoryProrata` lit `monthly_revenue_mv` en priorité, fallback live si MV vide pour ce mois. POST `/api/admin/refresh-revenue-mv` (SUPERADMIN) on-demand + cron daily 02h UTC. |
+| Scan fragile `Notification.metadata` pour addons | RÉSOLU (2026-05-11, PR #22) | Modèle dédié `AddonRequest`. POST `/api/bookings/[id]/addon-request` insère une row + rate-limit via `prisma.addonRequest.count`. Notifications legacy non migrées (par spec). |
+| Spans Sentry + invariants DB | LIVRÉ (2026-05-11, PR #23) | `withSpan` + `markCronRun` dans `src/lib/observability.ts`. Page `/admin/health` (SUPERADMIN) + cron `health-reconciliation` quotidien. `health-invariants.ts` vérifie cohérences (Invoice.amount, paidAmount, items orphelins). |
+| Rollback migrations | LIVRÉ (2026-05-11, PR #24 + #28) | Convention `down.sql` ou marker `@rollback: not-applicable`. Runner `db-rollback.mjs`. CI `migration-rollback-check.yml` fait `pg_dump -s` before/after up→down sur 90 derniers jours, bootstrap two-pass pour DB pré-peuplée. |
+| AI Guardian Sentry | LIVRÉ (2026-05-11, PR #25) | Webhook → HMAC → sanitize PII → Claude Haiku classify → action (issue GH / notif SUPERADMIN / silence). Voir section AI GUARDIAN SENTRY. Migration `20260513_guardian_events`. |
+| Uptime self-monitoring + page /status | LIVRÉ (2026-05-11, PR #26) | Cron `heartbeat` */5min, alerte SMS SUPERADMIN sur 3 KO consécutifs (dédup 1h). Page publique `/status` (uptime 24h/7j/30j + chart latence inline-SVG). Migration `20260513_heartbeat`. |
+| Feature flags DB-backed | LIVRÉ (2026-05-11, PR #27) | Modèle `FeatureFlag` + `isFeatureEnabled` async sticky bucketing SHA-256, cache Redis 60s (négatif aussi caché). Page `/admin/feature-flags` (SUPERADMIN) + hook `useFeatureFlag`. Voir section FEATURE FLAGS. |
+| CI rollback-check fail sur DB vide | RÉSOLU (2026-05-11, PR #28) | Bootstrap two-pass : applique toutes les migrations < CUTOFF pour avoir un état complet, puis boucle up→down sur les récentes. Insère aussi dans `_app_migrations` pour cohérence avec `db-rollback.mjs`. |
+| Sentry noise + crash SSR booking detail | RÉSOLU (2026-05-11, PR #29) | Filtre Sentry pour AbortError, ResizeObserver, "Failed to fetch" (fetch annulé par navigation, pas un bug). Hardening `client/bookings/[id]` : `filter(bp => bp.pet)` avant map (pet soft-deleté → `bp.pet null` faisait crasher), `bp.pet.name?.[0] ?? '?'`. |
+| CSP report endpoint flood | RÉSOLU (2026-05-11, PR #30) | `/api/csp-report` générait ~10K events "error" / jour Vercel. `console.warn` au lieu de `console.error` (Vercel classe par méthode console, pas par payload). Rate-limit Upstash 30 req/min/IP, fail-open. |
 
 ---
 
@@ -742,6 +763,147 @@ dropoffAddress  String?
 - **Nominatim vs Mapbox** : Nominatim choisi tant que volume < 1k req/jour (gratuit, fair-use 1 req/s). Migrer vers Mapbox/Google Geocoding si scale.
 - **`if/else if` 100m/1km** : volontaire — si 1km manqué et chauffeur direct <100m, ARRIVED tire seul. Si 1km déjà envoyé, ARRIVED tire indépendamment (clés Redis distinctes).
 - **Fail-open partout** : heartbeat est dans le chemin critique du chauffeur, jamais bloquer.
+
+---
+
+## AI GUARDIAN SENTRY (depuis 2026-05-11, PR #25)
+
+Agent autonome de triage des erreurs Sentry via Claude Haiku.
+
+### Pipeline
+```
+Sentry webhook → POST /api/webhooks/sentry
+  → vérification HMAC SHA-256 (header x-sentry-signature)
+  → idempotence Redis NX EX 24h sur l'event id
+  → sanitize PII (emails, téléphones, IPs, JWTs, cuids, UUIDs)
+  → Claude Haiku 4.5 classify (JSON strict : { category, severity, action, reason })
+  → action :
+      - bug_code (≥3 occurrences/24h) → ouvre issue GitHub (dedupe par label fingerprint)
+      - infra / data_corruption → notif SUPERADMIN
+      - transient / spam → silenced
+  → persiste GuardianEvent (visible dans /admin/guardian, 30 derniers events)
+```
+
+### Fichiers clés
+```
+src/app/api/webhooks/sentry/route.ts   — endpoint HMAC + orchestration
+src/lib/guardian/classifier.ts         — appel Anthropic Haiku, schéma JSON strict
+src/lib/guardian/sanitize.ts           — strip PII avant prompt
+src/lib/guardian/github.ts             — création issue + dedupe label
+src/app/[locale]/admin/guardian/       — UI SUPERADMIN (badges severity + classification)
+```
+
+### Variables d'env requises
+- `SENTRY_WEBHOOK_SECRET` — secret partagé avec Sentry pour vérifier HMAC
+- `GITHUB_TOKEN` — PAT scope `repo` pour créer des issues
+- `GUARDIAN_GITHUB_REPO` — `owner/repo` cible (ex: `Archsider/dog-universe`)
+- `ANTHROPIC_API_KEY` — déjà présent pour vaccinations (réutilisé)
+
+### Fail-open systémique
+- Pas de clé Anthropic → event persisté en `pending`, pas d'action
+- Pas de PAT GitHub → action loggée mais pas d'issue créée
+- Redis down → idempotence dégradée, possible doublon (accepté)
+
+Voir `docs/GUARDIAN.md` pour le setup Sentry + GitHub PAT.
+
+---
+
+## FEATURE FLAGS (depuis 2026-05-11, PR #27)
+
+Flags DB-backed, homemade (rejet de GrowthBook : trop lourd pour < 100 flags actifs).
+
+### Modèle
+```prisma
+model FeatureFlag {
+  key             String   @id           // ex: "ai-recommendations"
+  enabled         Boolean  @default(true) // kill-switch global
+  rolloutPercent  Int      @default(0)   // 0-100, sticky par userId
+  targetRoles     String[]               // ["SUPERADMIN", "ADMIN"]
+  userWhitelist   String[]               // userIds toujours ON
+}
+```
+
+### API
+- `isFeatureEnabled(key, ctx)` (`src/lib/feature-flags.ts`) — async, ordre :
+  1. `enabled === false` → false (kill-switch)
+  2. userId dans `userWhitelist` → true
+  3. role pas dans `targetRoles` (si défini) → false
+  4. sticky bucket `SHA-256(userId:key) % 100 < rolloutPercent`
+- Cache Redis 60 s (cache négatif aussi : `{__null:true}` pour éviter le hammering DB)
+- **Fail-safe** : Redis down → lecture DB ; DB down → `false`
+
+### UI
+- Hook `useFeatureFlag(key)` côté client — cache module-scope 60 s + dédupe promesse
+- Page `/admin/feature-flags` (SUPERADMIN) : table + modal créer/éditer (slider rollout, checkbox rôles, textarea whitelist)
+- API : `GET/POST /api/admin/feature-flags`, `PATCH/DELETE /api/admin/feature-flags/[key]`, `GET /api/feature-flags/me` (pour le hook)
+
+### Règle d'usage
+Toute nouvelle feature lourde (UI, modèle ML, redesign) → flag par défaut `enabled: false`, rollout progressif. Suppression du flag dès que la feature est stable depuis 2 semaines.
+
+---
+
+## UPTIME SELF-MONITORING (depuis 2026-05-11, PR #26)
+
+Watchdog interne — **ne remplace pas** un monitor externe (Better Stack / UptimeRobot recommandé en parallèle car ne détecte pas les outages plateforme Vercel).
+
+### Pipeline
+```
+/api/cron/heartbeat (*/5 * * * *)
+  → ping /api/health/ping (DB SELECT 1 < 500ms + Redis round-trip)
+  → INSERT Heartbeat { ok, dbLatencyMs, redisLatencyMs, error?, createdAt }
+  → si 3 derniers heartbeats KO → SMS aux SUPERADMIN (dédup 1h via Redis flag)
+  → purge des Heartbeat > 30 j
+```
+
+### Page publique `/status` (sans auth, sans préfixe locale)
+- Bandeau de statut courant (vert/jaune/rouge)
+- Uptime % sur 24h / 7j / 30j
+- Graphique latence inline-SVG (24h, sans dépendance lib chart)
+- Table des 10 derniers incidents
+
+### Helpers (`src/lib/heartbeat.ts`, 13 tests)
+`uptimePercent(rows, sinceMs)`, `consecutiveFailures(rows)`, `latencySeries(rows)`, `latestStatus(rows)`.
+
+Lien footer dans `AdminSidebar` pointant vers `/status`. Voir `docs/UPTIME.md`.
+
+---
+
+## ROLLBACK MIGRATIONS (depuis 2026-05-11, PR #20 + #24)
+
+Prisma `migrate` ne supporte pas le rollback. Convention maison :
+
+### Convention `down.sql`
+- À côté de chaque `migration.sql`, créer optionnellement `down.sql` qui défait l'opération en transaction.
+- Migration explicitement irréversible → `-- @rollback: not-applicable` dans les 5 premières lignes du `migration.sql`. Le runner skip et la CI passe.
+- Sinon, `down.sql` absent → CI échoue (force le choix explicite).
+
+### Runner
+- `scripts/db-migrate.mjs` — applique les migrations + record SHA-256 checksum dans `_app_migrations` (warn si drift). Validateur statique (`DROP TABLE` sans `IF EXISTS`, `DELETE/UPDATE` sans `WHERE`, > 100 lignes sans `-- @safety: reviewed`).
+- `scripts/db-rollback.mjs` — applique `<migration>/down.sql` en transaction et supprime la row dans `_app_migrations`.
+
+### CI
+- `.github/workflows/migration-check.yml` : prisma validate + validateur statique + tests unitaires + dry-run sur `postgres:16-alpine`.
+- `.github/workflows/migration-rollback-check.yml` : pour chaque migration < 90 j avec `down.sql` actionnable, `pg_dump -s` avant/après up→down, fail si drift de schéma. Bootstrap en deux passes (PR #28) : applique d'abord toutes les migrations < CUTOFF pour avoir une DB peuplée, puis teste up/down sur les récentes.
+
+Voir `docs/MIGRATIONS.md` pour la checklist pre-push.
+
+---
+
+## OBSERVABILITY (depuis 2026-05-11, PR #23)
+
+### `withSpan` (`src/lib/observability.ts`)
+Helper unifié qui wrap une opération dans `Sentry.startSpan()` + structured log. À utiliser dans toute API route ou job qui a une logique métier non triviale.
+
+### `markCronRun` (`src/lib/observability.ts`)
+À appeler en début et en fin de chaque cron — persiste un span Sentry avec attributs `cron.name`, `cron.duration_ms`, `cron.status`. Sert au dashboard `/admin/health`.
+
+### Page `/admin/health` (SUPERADMIN)
+- Statut des derniers runs de cron (succès, durée, dernière exécution)
+- Invariants DB (`health-invariants.ts`) : `Invoice.amount` vs `SUM(items.total)`, `paidAmount <= amount`, BookingItem orphelins, etc.
+- Bouton "Reconciler maintenant" → POST `/api/admin/health/reconcile`
+
+### Page `/status` publique
+Voir section UPTIME SELF-MONITORING.
 
 ---
 

@@ -7,6 +7,97 @@
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### 2026-05-11 — Sprint « 9.5 → 10/10 » : 11 PRs (#20 → #30)
+
+Session intensive de durcissement opérationnel post-MVP. 11 PRs mergées sur `main` couvrant la chaîne migrations, l'observabilité, la résilience, le triage automatique des erreurs, les feature flags et l'uptime monitoring.
+
+**PRs livrées :**
+
+1. **#20 `feat(migrations)` — shadow validation + checksum + CI check + docs**
+   - `scripts/db-migrate.mjs` valide statiquement chaque `migration.sql` (DROP TABLE sans IF EXISTS, DELETE/UPDATE sans WHERE, > 100 lignes sans `-- @safety: reviewed`).
+   - SHA-256 enregistré dans `_app_migrations` (colonnes ajoutées par `20260512_app_migrations_checksum`), warn sur drift.
+   - Flags `--dry-run` et `--validate-only`. CI `migration-check.yml` lance prisma validate + validateur + 15 tests Vitest + dry-run sur `postgres:16-alpine`.
+   - 4 migrations legacy backfillées avec `-- @safety: reviewed`.
+
+2. **#21 `feat(perf+cleanup)` — k6 load tests + drop multi-tenant scaffolding**
+   - 4 scénarios k6 dans `tests/k6/` : `booking-concurrent`, `dashboard-perf`, `invoice-payment-race`, `taxi-heartbeat-stress`.
+   - **Décision** : k6 reste **séparé d'E2E** (Playwright). Objectifs orthogonaux (E2E = correctness ; k6 = throughput sous charge), runtimes différents, pas de raison de polluer le pipeline PR avec un load test.
+   - Suppression du modèle `Tenant` + colonnes `tenantId` (jamais utilisé). Migration `20260512_drop_tenant_scaffold` marquée `@rollback: not-applicable` (irréversible).
+
+3. **#22 `feat(perf+ux)` — MV partout + AddonRequest + E2E setup docs**
+   - `revenueByCategoryProrata` lit `monthly_revenue_mv` en priorité avec **fallback live si MV vide pour le mois courant**. Étend l'usage MV au-delà de `cashByMonth`.
+   - POST `/api/admin/refresh-revenue-mv` (SUPERADMIN, on-demand) + cron `refresh-revenue-mv` daily 02h UTC (fenêtre creuse, complète le tick horaire).
+   - **Modèle `AddonRequest`** (Prisma + migration `20260512_addon_request`). Remplace le scan fragile `Notification.metadata` substring (ex-bug récurrent) par une row dédiée avec rate-limit `prisma.addonRequest.count`. Notifications legacy non migrées (par spec).
+   - `docs/E2E_SETUP.md` + `scripts/check-e2e-secrets.mjs` documentent le seed prod + secrets requis. CI imprime `::notice` si secrets E2E absents.
+
+4. **#23 `feat(observability)` — sentry spans + /admin/health + reconciliation cron**
+   - `src/lib/observability.ts` : `withSpan` (wrapper Sentry + structured log), `markCronRun` (span + attributs cron.name/duration_ms/status).
+   - `src/lib/health-invariants.ts` : vérifie `Invoice.amount = SUM(items.total)`, `paidAmount <= amount`, BookingItem orphelins.
+   - Cron `health-reconciliation` quotidien + page `/admin/health` (SUPERADMIN) + bouton "Reconciler maintenant".
+   - Pages `error.tsx` enrichies avec UX clair + Sentry capture.
+
+5. **#24 `feat(migrations)` — rollback convention + CI drift check**
+   - **Décision : `down.sql` plutôt que `prisma migrate rollback`** — Prisma ne supporte tout simplement pas le rollback. La convention manuelle `down.sql` (en transaction) est la seule option fiable.
+   - Migration explicitement irréversible → `-- @rollback: not-applicable` dans les 5 premières lignes.
+   - `scripts/db-rollback.mjs` applique le `down.sql` et supprime la row `_app_migrations`.
+   - 6 `down.sql` rétroactifs (5 reversibles + 1 not-applicable).
+   - CI `migration-rollback-check.yml` : pour chaque migration < 90j avec `down.sql`, `pg_dump -s` before/after up→down, fail si drift.
+
+6. **#25 `feat(guardian)` — AI agent for Sentry auto-triage via Claude Haiku**
+   - Pipeline : Sentry webhook → HMAC SHA-256 → idempotence Redis NX 24h → sanitize PII (emails/phones/IPs/JWTs/cuids/UUIDs) → Claude Haiku 4.5 classify → action (issue GH avec dedupe label / notif SUPERADMIN / silence).
+   - **Décisions** : (a) Claude Haiku choisi pour latence + coût (vs Sonnet) ; (b) **HMAC pattern Sentry** : signature dans `x-sentry-signature`, secret partagé `SENTRY_WEBHOOK_SECRET`, vérification timing-safe ; (c) sanitize **avant** envoi à Claude — règle RGPD absolue pour les API LLM ; (d) issue GH dedupliquée par label fingerprint (1 issue / fingerprint, pas de spam).
+   - Fail-open partout : pas de clé Anthropic / GitHub / Redis → degrade gracefully.
+   - Modèle `GuardianEvent` + migration `20260513_guardian_events`. Page `/admin/guardian` (SUPERADMIN, 30 derniers).
+   - 19 tests Vitest. Docs `docs/GUARDIAN.md`.
+
+7. **#26 `feat(uptime)` — self-monitoring + public /status page**
+   - Modèle `Heartbeat` + migration `20260513_heartbeat`. Cron `heartbeat` toutes les 5 min : ping `/api/health/ping` (DB SELECT 1 < 500ms + Redis round-trip), insert row, alerte SMS SUPERADMIN si 3 KO consécutifs (dédup 1h via Redis flag), purge > 30j.
+   - Page publique `/status` (sans auth, sans préfixe locale) : bandeau + uptime 24h/7j/30j + chart latence inline-SVG (zéro dépendance) + 10 derniers incidents.
+   - Helpers purs `src/lib/heartbeat.ts` (13 tests).
+   - **Décision** : monitor externe (Better Stack / UptimeRobot / Cronitor) **toujours recommandé en parallèle** — un watchdog interne ne peut pas détecter un outage plateforme Vercel (l'app est down → le cron ne tourne pas → pas d'alerte).
+
+8. **#27 `feat(feature-flags)` — homemade DB-backed flags with Redis 60s cache**
+   - **Décision : homemade plutôt que GrowthBook / LaunchDarkly** — < 100 flags actifs prévus, GrowthBook/LD ajoute une dépendance externe + coût + complexité injustifiés à ce stade.
+   - Modèle `FeatureFlag` (key PK, enabled kill-switch, rolloutPercent 0-100, targetRoles[], userWhitelist[]). Migration `20260513_feature_flags` + seed `ai-recommendations` (off) et `new-billing-ui` (0% SUPERADMIN).
+   - `isFeatureEnabled(key, ctx)` : sticky bucketing via `SHA-256(userId:key) % 100`. Cache Redis 60s, **cache négatif aussi** (`{__null:true}`) pour éviter le hammering DB sur clés inconnues.
+   - Fail-safe : Redis down → DB ; DB down → `false`.
+   - Hook `useFeatureFlag` (cache module-scope 60s + dédupe promesse in-flight). Page `/admin/feature-flags` SUPERADMIN.
+   - 24 tests (sticky bucketing 1000 calls, kill-switch, whitelist, role filter, distribution rollout 30%, cache, DB-down).
+
+9. **#28 `fix(ci)` — bootstrap rollback-check DB with all legacy migrations**
+   - Diagnostic : `migration-rollback-check` appliquait directement les migrations récentes sur DB vide → `20260511_invoice_sequence` échoue car `Invoice` n'existe pas encore.
+   - Fix two-pass : PASS 1 applique TOUTES les migrations < CUTOFF (état complet), PASS 2 boucle up→down sur les récentes avec `down.sql` actionnable.
+   - Insert dans `_app_migrations` également pour cohérence avec `db-rollback.mjs`.
+
+10. **#29 `fix(observability)` — silence noise + harden client booking detail SSR**
+    - Sentry filtre 16/2 events de "TypeError: network error", "Failed to fetch", AbortError, ResizeObserver loop — **fetch annulé par navigation utilisateur, pas des bugs**. Réduit drastiquement le bruit dans le dashboard Sentry.
+    - **Bug runtime "Heartbeat manquante" diagnostiqué via les logs Vercel MCP** : `client/bookings/[id]/page.tsx` ligne 600 crashait quand un pet était soft-deleté (`bp.pet === null` après filtre `deletedAt`). Fix : `filter(bp => bp.pet)` avant `.map`, `bp.pet.name?.[0] ?? '?'`, `bp.pet.name ?? '—'` partout.
+
+11. **#30 `fix(csp)` — rate-limit + downgrade severity to silence log flood**
+    - `/api/csp-report` générait ~10K events "error" / jour dans Vercel logs.
+    - Cause : code utilisait `console.error` ; **Vercel classe la sévérité d'après la méthode console, pas le payload JSON**.
+    - Fix : `console.warn` pour `csp-violation` et `csp-report-malformed-json`. `console.error` réservé à `csp-report-handler-failed` (vraie erreur app).
+    - Rate-limit Upstash 30 req/min/IP (fail-open). Un seul onglet avec CSP cassé peut sinon flooder en boucle.
+
+**Décisions techniques transverses :**
+
+- **MV-first avec live fallback** : pattern adopté pour toutes les analytics monthly. La MV peut être en retard (refresh horaire ou daily), le fallback live garantit que le mois courant est toujours juste, sans sacrifier la perf des mois passés.
+- **`AddonRequest` row dédiée vs `Notification.metadata` scan** : règle générale — toute donnée métier requêtée régulièrement mérite sa propre table avec ses propres index. Le scan substring sur metadata JSON était un bug récurrent et non scalable.
+- **Sanitize PII *avant* l'API LLM** : règle RGPD absolue. Le pipeline Guardian sanitize emails, téléphones, IPs, JWTs, cuids, UUIDs avant tout appel à Claude. Aucune donnée client en clair ne doit transiter par une API tierce.
+- **Two-pass bootstrap CI** : pour tester les migrations récentes, il faut d'abord reconstituer une DB représentative. PASS 1 = état réel, PASS 2 = test du diff. Pattern réutilisable pour tout test de migration sur DB vide.
+- **Vercel logs MCP utilisé pour diagnostic runtime** : le bug "Heartbeat manquante" ligne 600 a été identifié via inspection directe des stack traces Vercel, sans devoir reproduire localement.
+
+**Compteurs après session :**
+- 594+ tests Vitest verts (vs 306 au 2026-05-02)
+- 4 nouveaux modèles Prisma : `AddonRequest`, `GuardianEvent`, `Heartbeat`, `FeatureFlag`
+- 1 modèle supprimé : `Tenant` (scaffolding mort)
+- 6 migrations 20260512+/20260513+ appliquées
+- 14 crons Vercel actifs (3 nouveaux : `heartbeat`, `health-reconciliation`, `refresh-revenue-mv`)
+- 3 nouveaux docs : `docs/MIGRATIONS.md`, `docs/GUARDIAN.md`, `docs/UPTIME.md`, `docs/E2E_SETUP.md`
+- 2 workflows CI ajoutés : `migration-check.yml`, `migration-rollback-check.yml`
+
+---
+
 ### 2026-05-10 — Upsell smart espèce + âge + seed Ultra Premium/Canvit
 
 **1 commit sur `main` (PR #11) :**
