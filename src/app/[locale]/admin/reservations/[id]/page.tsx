@@ -96,7 +96,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
     originalBooking,
     before,
     after,
-    bookingMessages,
+    rawBookingMessages,
     addonRequestNotifs,
   ] = await Promise.all([
     prisma.invoice.findFirst({
@@ -148,9 +148,10 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
         })
       : Promise.resolve(null),
     prisma.notification.findMany({
-      where: { userId: clientId, type: 'ADMIN_MESSAGE', metadata: { contains: id } },
+      where: { userId: clientId, type: 'ADMIN_MESSAGE' },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, messageFr: true, messageEn: true, createdAt: true },
+      select: { id: true, messageFr: true, messageEn: true, createdAt: true, metadata: true },
+      take: 200,
     }),
     // Addon requests for this booking — dedicated model since 2026-05-10.
     // Legacy Notification.metadata rows are NOT migrated and ignored here.
@@ -161,6 +162,21 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       take: 100,
     }),
   ]);
+
+  // Filter booking messages by bookingId in JS (avoids fragile metadata.contains
+  // substring scan — same pattern as client/bookings/[id]/page.tsx).
+  const bookingMessages = rawBookingMessages.filter((n) => {
+    if (!n.metadata) return false;
+    try {
+      const parsed: unknown = JSON.parse(n.metadata);
+      return (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        !Array.isArray(parsed) &&
+        (parsed as Record<string, unknown>).bookingId === id
+      );
+    } catch { return false; }
+  });
 
   type ParsedAddonRequest = {
     requestId: string;
