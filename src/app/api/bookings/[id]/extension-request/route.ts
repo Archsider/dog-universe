@@ -3,6 +3,7 @@ import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { notifyAdminsExtensionRequest } from '@/lib/notifications';
 import { bookingExtensionRequestSchema, formatZodError } from '@/lib/validation';
+import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -123,6 +124,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const dateDisplay = newEndDate.toLocaleDateString('fr-MA');
 
   await notifyAdminsExtensionRequest(bookingRef, clientName, petNames, dateDisplay, id).catch(() => {});
+
+  await invalidateAvailabilityCache(extensionStartDate, newEndDate);
 
   return NextResponse.json({ message: 'extension_request_submitted', extensionBookingId: extensionBooking.id });
 }

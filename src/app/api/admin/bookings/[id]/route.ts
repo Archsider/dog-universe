@@ -7,6 +7,7 @@ import { revalidateTag } from 'next/cache';
 import { BookingError } from '@/lib/services/booking-errors';
 import { canTransition, isBookingStatus, type BookingStatus } from '@/lib/booking-state-machine';
 import { logger } from '@/lib/logger';
+import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 import {
   adminBookingPatchSchema,
   adminBookingParamsSchema,
@@ -185,6 +186,10 @@ export const PATCH = withSchema(
           forcePaidInvoice,
           actorId: session.user.id,
         });
+        if (booking.serviceType === 'BOARDING') {
+          await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+          await invalidateAvailabilityCache(new Date(newStartStr), new Date(newEndStr));
+        }
         return NextResponse.json(result);
       } catch (err) {
         // Preserve verbatim error messages for the legacy validation strings.
@@ -229,6 +234,7 @@ export const PATCH = withSchema(
           actorId: session.user.id,
           isApproval: Boolean(body.approveExtension),
         });
+        await invalidateAvailabilityCache(booking.startDate, new Date(newEndDateStr!));
         return NextResponse.json(result);
       } catch (err) {
         // Preserve the legacy human-readable validation messages.
@@ -289,6 +295,12 @@ export const PATCH = withSchema(
     // the admin-counts cache so the sidebar badge reflects the new state.
     revalidateTag('admin-counts');
 
+    // Any status mutation may move the booking in or out of the active set
+    // counted by `availability:*`. Invalidate the cached month(s).
+    if (status && status !== booking.status && booking.serviceType === 'BOARDING') {
+      await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+    }
+
     return NextResponse.json(updated);
   },
 );
@@ -319,6 +331,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   await prisma.booking.update({ where: { id }, data: { deletedAt: new Date() } });
+
+  if (booking.serviceType === 'BOARDING') {
+    await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+  }
 
   await logAction({
     userId: session.user.id,
