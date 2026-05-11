@@ -41,9 +41,17 @@ export async function middleware(request: NextRequest) {
   const isAdminProfilePage = /^\/(?:fr|en|ar)\/admin\/profile(?:\/|$)/.test(pathname);
   const isLogoutApi = pathname === '/api/auth/signout';
 
+  // C1 fix: gate ALL API routes that may carry privileged actions, not just
+  // /api/admin/*. Many sensitive endpoints live elsewhere (e.g. /api/invoices,
+  // /api/bookings PATCH) and would otherwise let an admin session bypass TOTP.
+  // CLIENT sessions are filtered inside the block — no behavior change for them.
   const needsTotpCheck =
     (!isTotpPage && !isApiRoute && !isStaticRoute) ||
-    (isAdminApi && !isTotpApi);
+    (isApiRoute && !isTotpApi && !isLogoutApi);
+
+  // Reference isAdminApi so it stays available for future targeted logic
+  // (and avoid an unused-var lint error after the broader gate above).
+  void isAdminApi;
 
   if (needsTotpCheck) {
     try {
@@ -52,6 +60,11 @@ export async function middleware(request: NextRequest) {
 
       const localeMatch = pathname.match(/^\/(fr|en|ar)\//);
       const locale = localeMatch?.[1] ?? 'fr';
+
+      // CLIENT sessions are not subject to TOTP enforcement at all.
+      if (session?.user && session.user.role === 'CLIENT') {
+        return applyI18nAndCsp(request);
+      }
 
       // (A) TOTP pending — already enrolled, just hasn't validated this session.
       if (session?.user?.totpPending) {

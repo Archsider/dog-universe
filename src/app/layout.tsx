@@ -45,11 +45,16 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const h = await headers();
-  const nonce = h.get('x-nonce') ?? undefined;
+  // Note (C5/L2): we intentionally do NOT pass nonce to <html>. React does not
+  // propagate the `nonce` attribute on <html> to child <script>/<style>
+  // tags — each tag must receive its own nonce explicitly (Next.js does this
+  // for framework-emitted scripts using the x-nonce header forwarded by
+  // src/middleware/i18n.ts). Setting it on <html> was a no-op and
+  // misleadingly suggested global nonce inheritance.
   const lang = h.get('x-locale') ?? 'fr';
 
   return (
-    <html lang={lang} dir={lang === 'ar' ? 'rtl' : 'ltr'} suppressHydrationWarning nonce={nonce} className={`${playfair.variable} ${inter.variable} ${notoArabic.variable}`}>
+    <html lang={lang} dir={lang === 'ar' ? 'rtl' : 'ltr'} suppressHydrationWarning className={`${playfair.variable} ${inter.variable} ${notoArabic.variable}`}>
       <body className={lang === 'ar' ? 'font-arabic' : ''}>
         <PWAInstaller />
         {children}
