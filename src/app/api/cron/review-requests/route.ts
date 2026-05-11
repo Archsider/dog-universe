@@ -1,3 +1,4 @@
+import { parseMetadata } from '@/lib/notifications/metadata';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
@@ -67,7 +68,7 @@ export async function GET(request: Request) {
   const alreadyNotifiedBookingIds = new Set<string>();
   for (const n of existingNotifs) {
     try {
-      const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+      const meta = parseMetadata(n.metadata);
       if (typeof meta.bookingId === 'string') alreadyNotifiedBookingIds.add(meta.bookingId);
     } catch { /* ignore */ }
   }

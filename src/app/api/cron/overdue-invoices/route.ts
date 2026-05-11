@@ -1,3 +1,4 @@
+import { parseMetadata } from '@/lib/notifications/metadata';
 import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
     const alreadySent = new Set<string>();
     for (const n of existing) {
       try {
-        const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+        const meta = parseMetadata(n.metadata);
         if (typeof meta.invoiceId === 'string' && typeof meta.reminderKind === 'string') {
           alreadySent.add(`${meta.invoiceId}:${meta.reminderKind}`);
         }

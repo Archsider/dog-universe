@@ -1,3 +1,4 @@
+import { parseMetadata } from '@/lib/notifications/metadata';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { log, logger } from '@/lib/logger';
@@ -101,7 +102,7 @@ export async function GET(request: Request) {
   const notifiedStartBookingIds = new Set<string>();
   for (const n of existingStartReminders) {
     try {
-      const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+      const meta = parseMetadata(n.metadata);
       if (typeof meta.bookingId === 'string') notifiedStartBookingIds.add(meta.bookingId);
     } catch { /* ignore malformed metadata */ }
   }
@@ -230,7 +231,7 @@ export async function GET(request: Request) {
   const notifiedEndBookingIds = new Set<string>();
   for (const n of existingEndReminders) {
     try {
-      const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+      const meta = parseMetadata(n.metadata);
       if (typeof meta.bookingId === 'string') notifiedEndBookingIds.add(meta.bookingId);
     } catch { /* ignore malformed metadata */ }
   }
