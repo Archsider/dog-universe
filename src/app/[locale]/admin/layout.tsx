@@ -57,16 +57,17 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
           </div>
         </header>
         <main className="relative flex-1 p-4 lg:p-8 bg-[#FEFCF9] min-h-screen">
-          <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ opacity: 0.12 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/images/zellige-pattern.png"
-              alt=""
-              aria-hidden="true"
-              className="w-full h-full"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          </div>
+          {/* Zellige discret en tile répété, opacity 4% */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage: 'url(/images/zellige-pattern.png)',
+              backgroundRepeat: 'repeat',
+              backgroundSize: '180px 180px',
+              opacity: 0.04,
+            }}
+          />
           <SessionWatcher loginPath={`/${locale}/auth/login`} />
           <div className="relative z-10">{children}</div>
         </main>

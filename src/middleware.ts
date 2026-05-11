@@ -37,20 +37,23 @@ export async function middleware(request: NextRequest) {
   const isApiRoute = pathname.startsWith('/api/');
   const isStaticRoute = /\/_next\/|\/favicon/.test(pathname);
   const isAdminApi = pathname.startsWith('/api/admin/');
-  const isTotpApi = pathname.startsWith('/api/auth/totp/');
+  const isNextAuthApi = pathname.startsWith('/api/auth/'); // NextAuth core + TOTP subroutes
+  const isCronApi = pathname.startsWith('/api/cron/'); // header-auth via CRON_SECRET
+  const isWebhookApi = pathname.startsWith('/api/webhooks/'); // HMAC signed
+  const isHealthApi = pathname.startsWith('/api/health'); // public health probe
   const isAdminProfilePage = /^\/(?:fr|en|ar)\/admin\/profile(?:\/|$)/.test(pathname);
-  const isLogoutApi = pathname === '/api/auth/signout';
 
-  // C1 fix: gate ALL API routes that may carry privileged actions, not just
-  // /api/admin/*. Many sensitive endpoints live elsewhere (e.g. /api/invoices,
-  // /api/bookings PATCH) and would otherwise let an admin session bypass TOTP.
-  // CLIENT sessions are filtered inside the block — no behavior change for them.
+  // C1 fix (revised): gate API routes that may carry privileged actions, but
+  // NEVER gate the auth machinery itself (/api/auth/*) — including
+  // /api/auth/session, csrf, callback/*, signout, and the TOTP setup/validate
+  // subroutes. Cron + webhook routes authenticate via their own mechanism
+  // (header / HMAC) and don't carry a session, so they're exempt too. Health
+  // is public by design.
   const needsTotpCheck =
     (!isTotpPage && !isApiRoute && !isStaticRoute) ||
-    (isApiRoute && !isTotpApi && !isLogoutApi);
+    (isApiRoute && !isNextAuthApi && !isCronApi && !isWebhookApi && !isHealthApi);
 
-  // Reference isAdminApi so it stays available for future targeted logic
-  // (and avoid an unused-var lint error after the broader gate above).
+  // Keep isAdminApi referenced for future targeted logic.
   void isAdminApi;
 
   if (needsTotpCheck) {
@@ -79,12 +82,12 @@ export async function middleware(request: NextRequest) {
       // (B) Mandatory TOTP enrollment for ADMIN / SUPERADMIN.
       const isPrivileged = session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPERADMIN';
       if (isPrivileged && !session.user.totpEnabled) {
-        // Allow access to /admin/profile (where they configure TOTP) and to
-        // the TOTP setup APIs + signout. Block everything else.
+        // Allow access to /admin/profile (where they configure TOTP). For API
+        // routes, the outer gate already exempts /api/auth/*, cron, webhook,
+        // health — anything reaching here is a privileged endpoint we must
+        // block until enrollment completes.
         if (isApiRoute) {
-          if (!isTotpApi && !isLogoutApi) {
-            return NextResponse.json({ error: 'TOTP_ENROLLMENT_REQUIRED' }, { status: 403 });
-          }
+          return NextResponse.json({ error: 'TOTP_ENROLLMENT_REQUIRED' }, { status: 403 });
         } else if (!isAdminProfilePage) {
           const profileUrl = new URL(`/${locale}/admin/profile?totp=required`, request.url);
           return NextResponse.redirect(profileUrl);
