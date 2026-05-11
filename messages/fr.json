@@ -74,6 +74,7 @@
       "diagnostics": "Diagnostique",
       "health": "Santé système",
       "guardian": "Agent IA Gardien",
+      "backups": "Sauvegardes DB",
       "loyalty": "Réclamations fidélité",
       "reviews": "Avis clients",
       "logout": "Déconnexion",

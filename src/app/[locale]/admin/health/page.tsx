@@ -51,6 +51,7 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
 
   return (
     <HealthClient
+      isFr={locale !== 'en'}
       initial={{
         invariants,
         cronRuns,
