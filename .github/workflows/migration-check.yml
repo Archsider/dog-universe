@@ -6,12 +6,16 @@ on:
     paths:
       - 'prisma/**'
       - 'scripts/db-migrate.mjs'
+      - 'scripts/generate-schema-doc.mjs'
+      - 'docs/SCHEMA.md'
       - '.github/workflows/migration-check.yml'
   pull_request:
     branches: [main]
     paths:
       - 'prisma/**'
       - 'scripts/db-migrate.mjs'
+      - 'scripts/generate-schema-doc.mjs'
+      - 'docs/SCHEMA.md'
       - '.github/workflows/migration-check.yml'
 
 concurrency:
@@ -74,3 +78,15 @@ jobs:
         # which forces evaluation even in CI.
         run: |
           CI= node scripts/db-migrate.mjs --dry-run
+
+      - name: SCHEMA.md is up to date
+        # Regenerates docs/SCHEMA.md from schema.prisma and fails if it differs
+        # from the version committed. Forces contributors to run `npm run db:doc`
+        # after touching prisma/schema.prisma.
+        run: |
+          node scripts/generate-schema-doc.mjs
+          if ! git diff --quiet docs/SCHEMA.md; then
+            echo "::error::docs/SCHEMA.md is out of date. Run 'npm run db:doc' and commit."
+            git diff docs/SCHEMA.md
+            exit 1
+          fi
