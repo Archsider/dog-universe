@@ -4,11 +4,25 @@
 // the Setting table and merges with PRICING_DEFAULTS.
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { cacheReadThrough, cacheDel } from '@/lib/cache';
 import {
   PRICING_DEFAULTS,
   getPensionPriceNumber,
   type PricingSettings,
 } from '@/lib/pricing-rules';
+
+const PRICING_CACHE_KEY = 'pricing:settings';
+const PRICING_CACHE_TTL = 300; // 5 min — pricing settings change rarely (<1×/month).
+
+/**
+ * Invalidate the pricing-settings cache. Call after every successful mutation
+ * of the `Setting` table (PUT /api/admin/settings) so the next
+ * `getPricingSettings()` reflects the new value within ~1 second.
+ * Pattern mirrors `invalidateCapacityCache()`.
+ */
+export async function invalidatePricingCache(): Promise<void> {
+  await cacheDel(PRICING_CACHE_KEY);
+}
 
 export {
   PRICING_DEFAULTS,
@@ -67,17 +81,19 @@ export const GROOMING_PRICES = {
 export const TAXI_ADDON_PRICE = 150;
 
 export async function getPricingSettings(): Promise<PricingSettings> {
-  try {
-    const rows = await prisma.setting.findMany();
-    const settings = { ...PRICING_DEFAULTS };
-    for (const row of rows) {
-      const key = row.key as keyof PricingSettings;
-      if (key in settings) {
-        settings[key] = parseFloat(row.value) || settings[key];
+  return cacheReadThrough(PRICING_CACHE_KEY, PRICING_CACHE_TTL, async () => {
+    try {
+      const rows = await prisma.setting.findMany();
+      const settings = { ...PRICING_DEFAULTS };
+      for (const row of rows) {
+        const key = row.key as keyof PricingSettings;
+        if (key in settings) {
+          settings[key] = parseFloat(row.value) || settings[key];
+        }
       }
+      return settings;
+    } catch {
+      return { ...PRICING_DEFAULTS };
     }
-    return settings;
-  } catch {
-    return { ...PRICING_DEFAULTS };
-  }
+  });
 }

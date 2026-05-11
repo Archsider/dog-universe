@@ -95,7 +95,7 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
   // create two bookings within 24h — defends against client retries and
   // double-clicks creating duplicate stays. Absent header = legacy behaviour.
   try {
-    const idem = await tryAcquireIdempotency(request, 'bookings:create');
+    const idem = await tryAcquireIdempotency(request, 'bookings:create', session.user.id);
     if (!idem.acquired) {
       return NextResponse.json(
         { error: 'DUPLICATE_REQUEST', message: 'Idempotency-Key replay detected.' },

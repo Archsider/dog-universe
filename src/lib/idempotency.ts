@@ -19,13 +19,14 @@
 // when Redis is down.
 import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
+import { env } from '@/lib/env';
 
 let cachedRedis: Redis | null | undefined;
 
 function getRedis(): Redis | null {
   if (cachedRedis !== undefined) return cachedRedis;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = env.UPSTASH_REDIS_REST_URL;
+  const token = env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) {
     cachedRedis = null;
     return null;
@@ -59,10 +60,16 @@ export interface IdempotencyResult {
  *
  * The `scope` argument namespaces the key (e.g. `'bookings:create'`) so two
  * unrelated endpoints can't collide.
+ *
+ * `userId` is folded into the Redis key so one client cannot block another
+ * client's request by replaying the same `Idempotency-Key`. Anonymous callers
+ * share the `'anon'` namespace — fine, since anon endpoints are heavily
+ * rate-limited anyway and the worst case is one anon blocking another anon.
  */
 export async function tryAcquireIdempotency(
   request: Request,
   scope: string,
+  userId?: string | null,
   ttlSeconds: number = DEFAULT_TTL_SECONDS,
 ): Promise<IdempotencyResult> {
   const raw = request.headers.get('idempotency-key');
@@ -77,7 +84,8 @@ export async function tryAcquireIdempotency(
   const redis = getRedis();
   if (!redis) return { acquired: true, redisAvailable: false }; // fail-open
 
-  const redisKey = `idem:${scope}:${key}`;
+  const owner = userId && userId.length > 0 ? userId : 'anon';
+  const redisKey = `idem:${scope}:${owner}:${key}`;
   try {
     const result = await redis.set(redisKey, '1', { nx: true, ex: ttlSeconds });
     return { acquired: result === 'OK', redisAvailable: true };

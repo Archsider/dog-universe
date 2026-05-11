@@ -4,6 +4,7 @@ import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { invalidateCapacityCache } from '@/lib/capacity';
+import { invalidatePricingCache } from '@/lib/pricing';
 
 // Body schema: open record of string keys → numeric (string|number) values.
 // Stricter validation (allowed keys + positive number) is done after parse.
@@ -93,6 +94,13 @@ export async function PUT(request: Request) {
   const hasCapacityUpdate = updates.some(([k]) => k === 'capacity_dog' || k === 'capacity_cat');
   if (hasCapacityUpdate) {
     await invalidateCapacityCache();
+  }
+
+  // Invalidate pricing cache if any non-capacity setting was updated.
+  // Capacity keys don't drive pricing — split for cheapest invalidation.
+  const hasPricingUpdate = updates.some(([k]) => !CAPACITY_KEYS.has(k));
+  if (hasPricingUpdate) {
+    await invalidatePricingCache();
   }
 
   return NextResponse.json({ ok: true });
