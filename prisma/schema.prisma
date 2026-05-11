@@ -223,6 +223,7 @@ model BookingItem {
   unitPrice   Decimal      @db.Decimal(10, 2)
   total       Decimal      @db.Decimal(10, 2)
   category    ItemCategory @default(OTHER)
+  version     Int          @default(0) // H9 — optimistic lock against concurrent product mutations
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
@@ -446,6 +447,7 @@ model LoyaltyGrade {
   isOverride Boolean   @default(false)
   overrideBy String?
   overrideAt DateTime?
+  version    Int       @default(0) // H8 — optimistic lock (admin override vs auto-recompute race)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 

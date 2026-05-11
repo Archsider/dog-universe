@@ -98,6 +98,7 @@ export async function GET(req: NextRequest) {
       createdAt: { gte: todayStart },
     },
     select: { userId: true, metadata: true },
+    take: 1000,
   });
   const alreadySentKeys = new Set<string>();
   for (const n of existingBirthdayNotifs) {

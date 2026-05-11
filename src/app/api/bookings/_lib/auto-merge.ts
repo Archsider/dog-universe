@@ -12,6 +12,7 @@ import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacit
 import { getPricingSettings, calculateBoardingTotalForExtension } from '@/lib/pricing';
 import { logAction } from '@/lib/log';
 import { runWithSerializableRetry } from '@/lib/services/booking-client.service';
+import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 
 export interface AutoMergeArgs {
   clientId: string;
@@ -184,6 +185,9 @@ export async function tryAutoMerge(args: AutoMergeArgs): Promise<AutoMergeRespon
         petIds: args.petIds,
       },
     });
+    // Cache de disponibilité : couvrir l'ancien intervalle ET la nouvelle date de fin
+    // (au cas où le merge étire la booking sur un mois supplémentaire).
+    await invalidateAvailabilityCache(merged.startDate, mergedEndDate);
     return {
       merged: true,
       response: NextResponse.json(

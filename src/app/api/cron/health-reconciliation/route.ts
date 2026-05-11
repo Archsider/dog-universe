@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
       const admins = await prisma.user.findMany({
         where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null },
         select: { email: true, name: true },
+        take: 100,
       });
 
       const lines = anomalies.map(

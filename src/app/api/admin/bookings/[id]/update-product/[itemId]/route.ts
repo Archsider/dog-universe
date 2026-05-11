@@ -3,6 +3,7 @@ import { auth } from '../../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
+import { isPaidExceedsCheckViolation, PAID_EXCEEDS_PAYLOAD } from '@/lib/billing-errors';
 import { logger } from '@/lib/logger';
 
 interface Params { params: Promise<{ id: string; itemId: string }> }
@@ -20,11 +21,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   } catch {
     return NextResponse.json({ error: 'INVALID_BODY' }, { status: 400 });
   }
-  const parsed = body as { quantity?: unknown };
+  const parsed = body as { quantity?: unknown; bookingVersion?: unknown };
   const newQty = Number(parsed.quantity);
   if (!Number.isInteger(newQty) || newQty <= 0 || newQty > 1000) {
     return NextResponse.json({ error: 'INVALID_QUANTITY' }, { status: 400 });
   }
+  // H9 — optional optimistic lock on Booking.version (opt-in via body).
+  const expectedBookingVersion = Number.isInteger(parsed.bookingVersion)
+    ? (parsed.bookingVersion as number)
+    : null;
 
   const booking = await prisma.booking.findFirst({
     where: { id: bookingId, deletedAt: null },
@@ -45,6 +50,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      // H9 — Booking.version guard (only when caller opted in).
+      if (expectedBookingVersion !== null) {
+        const bumped = await tx.booking.updateMany({
+          where: { id: bookingId, version: expectedBookingVersion, deletedAt: null },
+          data: { version: { increment: 1 } },
+        });
+        if (bumped.count === 0) {
+          throw new Error('BOOKING_VERSION_MISMATCH');
+        }
+      }
       // SELECT ... FOR UPDATE — lock the product row so the stock check + decrement
       // are atomic versus concurrent requests touching the same product.
       const locked = await tx.$queryRaw<Array<{
@@ -112,6 +127,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const msg = err instanceof Error ? err.message : 'UNKNOWN';
     if (['PRODUCT_UNAVAILABLE', 'OUT_OF_STOCK', 'PRODUCT_NOT_FOUND'].includes(msg)) {
       return NextResponse.json({ error: msg }, { status: 400 });
+    }
+    if (msg === 'BOOKING_VERSION_MISMATCH') {
+      return NextResponse.json(
+        {
+          error: 'BOOKING_VERSION_MISMATCH',
+          message: 'La réservation a été modifiée entre-temps. Rechargez la page avant de relancer.',
+        },
+        { status: 409 },
+      );
+    }
+    if (isPaidExceedsCheckViolation(err)) {
+      return NextResponse.json(PAID_EXCEEDS_PAYLOAD, { status: 409 });
     }
     logger.error('booking-update-product', 'update product failed', { err: msg });
     return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });

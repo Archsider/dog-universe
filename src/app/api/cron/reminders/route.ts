@@ -56,6 +56,7 @@ export async function GET(request: Request) {
   const admins = await prisma.user.findMany({
     where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { id: true, email: true, language: true },
+    take: 100,
   });
 
   let sent = 0;
@@ -80,6 +81,7 @@ export async function GET(request: Request) {
       client: { select: { name: true, email: true, language: true, phone: true } },
       bookingPets: { include: { pet: { select: { name: true, gender: true } } } },
     },
+    take: 500,
   });
 
   // Batch dedup: load all STAY_REMINDER notifications sent today for these clients
@@ -92,6 +94,7 @@ export async function GET(request: Request) {
       createdAt: { gte: todayStart },
     },
     select: { metadata: true },
+    take: 1000,
   });
   const notifiedStartBookingIds = new Set<string>();
   for (const n of existingStartReminders) {
@@ -207,6 +210,7 @@ export async function GET(request: Request) {
       taxiDetail: { select: { id: true } }, // taxi standalone (PET_TAXI service)
       boardingDetail: { select: { taxiReturnEnabled: true } }, // taxi retour en addon d'un BOARDING
     },
+    take: 500,
   });
 
   // Batch dedup: load all STAY_END_REMINDER notifications sent today for these clients
@@ -219,6 +223,7 @@ export async function GET(request: Request) {
       createdAt: { gte: todayStart },
     },
     select: { metadata: true },
+    take: 1000,
   });
   const notifiedEndBookingIds = new Set<string>();
   for (const n of existingEndReminders) {

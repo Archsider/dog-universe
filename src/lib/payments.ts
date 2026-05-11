@@ -187,15 +187,28 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
         });
 
         if (currentGrade && !currentGrade.isOverride && currentGrade.grade !== suggestedGrade) {
-          await tx.loyaltyGrade.update({
-            where: { clientId: invoice.clientId },
-            data: { grade: suggestedGrade },
+          // H8 — Conditional update guarded by version + isOverride=false.
+          // If an admin override commits concurrently (bumping version or
+          // toggling isOverride), updateMany returns count=0 and we skip
+          // silently — the admin's decision wins, no notification fires.
+          const updated = await tx.loyaltyGrade.updateMany({
+            where: {
+              id: currentGrade.id,
+              version: currentGrade.version,
+              isOverride: false,
+            },
+            data: {
+              grade: suggestedGrade,
+              version: { increment: 1 },
+            },
           });
-          notifyGrade = {
-            clientId: invoice.clientId,
-            grade: suggestedGrade,
-            language: client.language || 'fr',
-          };
+          if (updated.count > 0) {
+            notifyGrade = {
+              clientId: invoice.clientId,
+              grade: suggestedGrade,
+              language: client.language || 'fr',
+            };
+          }
         }
 
         // Collect notification intent (executed after commit)

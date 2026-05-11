@@ -27,6 +27,7 @@ import * as Sentry from '@sentry/nextjs';
 import { tryAutoMerge } from './_lib/auto-merge';
 import { resolveBookingPrice } from './_lib/resolve-price';
 import { notifyAdminsBookingCreated } from './_lib/notify-new-booking';
+import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -333,6 +334,11 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
     });
 
     revalidateTag('admin-counts');
+
+    // Public availability cache must reflect the new occupancy on the next read.
+    if (serviceType === 'BOARDING') {
+      await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+    }
 
     return NextResponse.json({ ...booking, bookingRef }, { status: 201 });
   } catch (error) {

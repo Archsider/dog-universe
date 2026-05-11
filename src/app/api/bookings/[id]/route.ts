@@ -6,6 +6,7 @@ import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { bookingClientCancelSchema, bookingClientRescheduleSchema, formatZodError } from '@/lib/validation';
 import { createNotification } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
+import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -133,6 +134,11 @@ export async function PATCH(request: Request, { params }: Params) {
       details: { oldStart, oldEnd, newStart, newEnd },
     });
 
+    // Reschedule moves the booking back to PENDING — counted by availability.
+    if (booking.serviceType === 'BOARDING') {
+      await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+    }
+
     // Notify all admins (in-app)
     try {
       const admins = await prisma.user.findMany({
@@ -185,6 +191,11 @@ export async function PATCH(request: Request, { params }: Params) {
     entityType: 'Booking',
     entityId: id,
   });
+
+  // Cancellation removes the booking from the active set in availability.
+  if (booking.serviceType === 'BOARDING') {
+    await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+  }
 
   // ── Notifications admin (SMS + in-app) — annulation initiée par le client ─
   const cancelPetNames = booking.bookingPets.map(bp => bp.pet.name).join(' et ') || 'votre animal';

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
+import { isPaidExceedsCheckViolation, PAID_EXCEEDS_PAYLOAD } from '@/lib/billing-errors';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 type Params = { params: Promise<{ id: string }> };
@@ -137,7 +138,8 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const isCancel = status === 'CANCELLED';
 
-    await prisma.$transaction(async (tx) => {
+    try {
+      await prisma.$transaction(async (tx) => {
       // 1. Replace items
       await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
       await tx.invoiceItem.createMany({
@@ -177,11 +179,18 @@ export async function PATCH(request: Request, { params }: Params) {
             : null,
         },
       });
-    });
+      });
 
-    // Recompute allocation (skipped if CANCELLED — allocatePayments ignores CANCELLED)
-    if (!isCancel) {
-      await allocatePayments(id);
+      // Recompute allocation (skipped if CANCELLED — allocatePayments ignores CANCELLED)
+      if (!isCancel) {
+        await allocatePayments(id);
+      }
+    } catch (err) {
+      // H10 — Postgres CHECK violation (paidAmount would exceed new amount).
+      if (isPaidExceedsCheckViolation(err)) {
+        return NextResponse.json(PAID_EXCEEDS_PAYLOAD, { status: 409 });
+      }
+      throw err;
     }
 
     // P0-4: audit log on full invoice edit

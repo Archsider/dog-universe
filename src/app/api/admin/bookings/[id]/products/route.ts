@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
 import { resolveItemCategory } from '@/lib/billing';
+import { isPaidExceedsCheckViolation, PAID_EXCEEDS_PAYLOAD } from '@/lib/billing-errors';
 import { logger } from '@/lib/logger';
 
 interface Params { params: Promise<{ id: string }> }
@@ -32,12 +33,16 @@ export async function POST(request: NextRequest, { params }: Params) {
   } catch {
     return NextResponse.json({ error: 'INVALID_BODY' }, { status: 400 });
   }
-  const parsed = body as { productId?: unknown; quantity?: unknown };
+  const parsed = body as { productId?: unknown; quantity?: unknown; bookingVersion?: unknown };
   const productId = typeof parsed.productId === 'string' ? parsed.productId : '';
   const quantity = Number(parsed.quantity);
   if (!productId || !Number.isInteger(quantity) || quantity <= 0 || quantity > 1000) {
     return NextResponse.json({ error: 'INVALID_PARAMS' }, { status: 400 });
   }
+  // H9 — optional optimistic lock on Booking.version (opt-in via body).
+  const expectedBookingVersion = Number.isInteger(parsed.bookingVersion)
+    ? (parsed.bookingVersion as number)
+    : null;
 
   const booking = await prisma.booking.findFirst({
     where: { id: bookingId, deletedAt: null },
@@ -54,6 +59,16 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      // H9 — Booking.version guard (only when caller opted in).
+      if (expectedBookingVersion !== null) {
+        const bumped = await tx.booking.updateMany({
+          where: { id: bookingId, version: expectedBookingVersion, deletedAt: null },
+          data: { version: { increment: 1 } },
+        });
+        if (bumped.count === 0) {
+          throw new Error('BOOKING_VERSION_MISMATCH');
+        }
+      }
       // SELECT ... FOR UPDATE — lock the row to prevent concurrent stock decrement
       // races between two parallel "add product" requests. Without this lock, two
       // requests reading stock=1 simultaneously could both pass the check and over-sell.
@@ -128,6 +143,18 @@ export async function POST(request: NextRequest, { params }: Params) {
     const msg = err instanceof Error ? err.message : 'UNKNOWN';
     if (msg === 'PRODUCT_UNAVAILABLE' || msg === 'OUT_OF_STOCK') {
       return NextResponse.json({ error: msg }, { status: 400 });
+    }
+    if (msg === 'BOOKING_VERSION_MISMATCH') {
+      return NextResponse.json(
+        {
+          error: 'BOOKING_VERSION_MISMATCH',
+          message: 'La réservation a été modifiée entre-temps. Rechargez la page avant de relancer.',
+        },
+        { status: 409 },
+      );
+    }
+    if (isPaidExceedsCheckViolation(err)) {
+      return NextResponse.json(PAID_EXCEEDS_PAYLOAD, { status: 409 });
     }
     logger.error('booking-products', 'add product failed', { err: msg });
     return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });

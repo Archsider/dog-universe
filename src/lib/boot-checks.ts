@@ -13,6 +13,7 @@ const REQUIRED_VARS: RequiredVar[] = [
   { name: 'CRON_SECRET', minLength: 16 },
   { name: 'NEXTAUTH_SECRET', minLength: 16 },
   { name: 'DATABASE_URL', minLength: 10 },
+  { name: 'DIRECT_URL', minLength: 10 },
   { name: 'SUPABASE_URL', minLength: 10 },
   { name: 'SUPABASE_SERVICE_ROLE_KEY', minLength: 10 },
   { name: 'UPSTASH_REDIS_REST_URL', minLength: 10 },

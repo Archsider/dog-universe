@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => {
     loyaltyGrade: {
       findUnique: vi.fn(),
       update: vi.fn().mockResolvedValue(undefined),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     booking: {
       count: vi.fn(),
@@ -313,17 +314,20 @@ describe('allocatePayments', () => {
     mocks.mockTx.invoice.aggregate.mockResolvedValue({ _sum: { amount: 600 } });
     mocks.mockTx.booking.count.mockResolvedValue(1);
     mocks.mockTx.loyaltyGrade.findUnique.mockResolvedValue({
+      id: 'lg-1',
       clientId: 'client-1',
       grade: 'BRONZE',
       isOverride: false,
+      version: 0,
     });
     mocks.calculateSuggestedGrade.mockReturnValue('SILVER'); // upgrade!
 
     await allocatePayments('inv-1');
 
-    expect(mocks.mockTx.loyaltyGrade.update).toHaveBeenCalledWith(
+    expect(mocks.mockTx.loyaltyGrade.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { grade: 'SILVER' },
+        where: { id: 'lg-1', version: 0, isOverride: false },
+        data: { grade: 'SILVER', version: { increment: 1 } },
       }),
     );
     expect(mocks.invalidateLoyaltyCache).toHaveBeenCalledWith('client-1');
