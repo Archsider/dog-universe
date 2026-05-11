@@ -17,6 +17,7 @@ import { logAction } from '@/lib/log';
 import { BookingError } from '../booking-errors';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { logger } from '@/lib/logger';
+import { ServiceType } from './constants';
 
 type BookingWithDetails = Awaited<ReturnType<typeof loadBookingWithDetails>>;
 
@@ -215,7 +216,7 @@ export interface ApplyExtensionArgs {
 export async function applyExtension(args: ApplyExtensionArgs) {
   const { booking, newEndDateStr, forcePaidInvoice, actorId, isApproval } = args;
 
-  if (booking.serviceType !== 'BOARDING') {
+  if (booking.serviceType !== ServiceType.BOARDING) {
     throw new BookingError('ONLY_BOARDING', { message: 'Extensions only apply to boarding stays' });
   }
 
@@ -252,8 +253,7 @@ export async function applyExtension(args: ApplyExtensionArgs) {
   }
 
   let invoiceWarning = false;
-  let capacityError: CapacityCheckExceeded | null = null;
-  await prisma.$transaction(async (tx) => {
+  const txResult = await prisma.$transaction(async (tx): Promise<{ kind: 'ok' } | { kind: 'capacity_exceeded'; payload: CapacityCheckExceeded }> => {
     const extCapacity2 = await checkBoardingCapacity(
       {
         petIds: booking.bookingPets.map(bp => bp.pet.id),
@@ -264,8 +264,7 @@ export async function applyExtension(args: ApplyExtensionArgs) {
       tx,
     );
     if (!extCapacity2.ok) {
-      capacityError = extCapacity2;
-      return;
+      return { kind: 'capacity_exceeded', payload: extCapacity2 };
     }
 
     if (booking.invoice) {
@@ -313,10 +312,12 @@ export async function applyExtension(args: ApplyExtensionArgs) {
         version: { increment: 1 },
       },
     });
+
+    return { kind: 'ok' };
   }, { isolationLevel: 'Serializable' });
 
-  if (capacityError) {
-    throw new BookingError('CAPACITY_EXCEEDED', { message: 'Capacity exceeded', payload: capacityError });
+  if (txResult.kind === 'capacity_exceeded') {
+    throw new BookingError('CAPACITY_EXCEEDED', { message: 'Capacity exceeded', payload: txResult.payload });
   }
 
   if (booking.invoice) {
