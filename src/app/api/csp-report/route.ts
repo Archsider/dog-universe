@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
 
 /**
  * CSP violation report sink.
@@ -15,14 +17,45 @@ import { NextRequest, NextResponse } from 'next/server';
  *  - No auth, no session, no PII surface. Payload size capped at 16 KB.
  *  - Report-Only mode: violations DO NOT block the page; this endpoint is
  *    purely observational until we flip to enforce.
+ *  - Rate-limited per IP (30/min) — a single tab with a misconfigured CSP
+ *    can fire one report per script tag on every reload, drowning logs.
  *
  * Rollout: see docs/CSP_ROLLOUT.md.
  */
 
 const MAX_BODY_BYTES = 16 * 1024; // 16 KB — generous; legitimate reports are < 2 KB.
 
+// Fail-open rate-limit: 30 reports per minute per IP. Cheap defence against
+// browsers that loop violations on every render.
+let limiter: Ratelimit | null = null;
+function getLimiter(): Ratelimit | null {
+  if (limiter) return limiter;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  limiter = new Ratelimit({
+    redis: new Redis({ url, token }),
+    limiter: Ratelimit.slidingWindow(30, '60 s'),
+    prefix: 'csp-report',
+    analytics: false,
+  });
+  return limiter;
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // Per-IP rate-limit — drop silently if exceeded. We still 204 (no 429)
+    // because the browser doesn't care and 4xx pollutes logs.
+    const ip =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+      request.headers.get('x-real-ip') ??
+      'unknown';
+    const rl = getLimiter();
+    if (rl) {
+      const { success } = await rl.limit(ip).catch(() => ({ success: true }));
+      if (!success) return new NextResponse(null, { status: 204 });
+    }
+
     // Browsers send CSP reports as either:
     //   - application/csp-report → { "csp-report": { ... } }
     //   - application/reports+json → [{ "type": "csp-violation", "body": { ... } }]
@@ -44,7 +77,7 @@ export async function POST(request: NextRequest) {
     } catch {
       // Malformed body — log and return 204 (don't 4xx the browser; it'll
       // just retry and we lose nothing).
-      console.error(
+      console.warn(
         JSON.stringify({
           level: 'warn',
           service: 'csp',
@@ -57,7 +90,9 @@ export async function POST(request: NextRequest) {
       return new NextResponse(null, { status: 204 });
     }
 
-    console.error(
+    // console.warn (not error) — Vercel classifies severity from the console
+    // method. These are observability data, not failures.
+    console.warn(
       JSON.stringify({
         level: 'warn',
         service: 'csp',
