@@ -18,7 +18,7 @@ import { getISOWeek, getISOWeekYear } from 'date-fns';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 
-export type CronPeriod = 'daily' | 'weekly' | 'monthly';
+export type CronPeriod = 'daily' | 'weekly' | 'monthly' | '5min';
 
 let cachedRedis: Redis | null | undefined;
 
@@ -45,6 +45,11 @@ export function periodKey(period: CronPeriod, now: Date = new Date()): string {
     return `${y}-${m}`;
   }
   const d = String(now.getUTCDate()).padStart(2, '0');
+  if (period === '5min') {
+    const h = String(now.getUTCHours()).padStart(2, '0');
+    const bucket = String(Math.floor(now.getUTCMinutes() / 5) * 5).padStart(2, '0');
+    return `${y}-${m}-${d}-${h}-${bucket}`;
+  }
   return `${y}-${m}-${d}`;
 }
 

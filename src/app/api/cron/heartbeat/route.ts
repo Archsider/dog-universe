@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendSMS } from '@/lib/sms';
 import { tryAcquireFlag } from '@/lib/cache';
+import { acquireCronLock } from '@/lib/cron-lock';
 import { countConsecutiveFailures } from '@/lib/heartbeat';
 import { logger } from '@/lib/logger';
 
@@ -33,6 +34,13 @@ export async function GET(request: Request) {
     providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf);
   if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Idempotence : un seul heartbeat par fenêtre 5min (TTL 5min). Fail-open
+  // si Redis down — meilleur un ping dupliqué qu'un trou dans /status.
+  const acquired = await acquireCronLock('heartbeat', 300, '5min');
+  if (!acquired) {
+    return NextResponse.json({ ok: true, skipped: 'duplicate-tick' });
   }
 
   // Build the internal ping URL — prefer NEXTAUTH_URL (canonical), fall back
