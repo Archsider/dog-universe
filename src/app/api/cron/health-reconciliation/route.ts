@@ -3,44 +3,24 @@
 // If any invariant has count > 0, emails all ADMIN/SUPERADMIN with a digest.
 // Lock Redis prevents duplicate execution within 23h.
 
-import { timingSafeEqual } from 'crypto';
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { acquireCronLock } from '@/lib/cron-lock';
-import { markCronRun, withSpan, logServerError } from '@/lib/observability';
+import { withSpan, logServerError } from '@/lib/observability';
 import { runAllInvariantChecks } from '@/lib/health-invariants';
 import { sendEmailNow } from '@/lib/notify-now';
+import { defineCron } from '@/lib/cron-runner';
 
 export const maxDuration = 60;
 
-export async function GET(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
-  }
-  const provided = req.headers.get('x-cron-secret')
-    ?? req.headers.get('authorization')?.replace('Bearer ', '')
-    ?? '';
-  const a = Buffer.from(provided);
-  const b = Buffer.from(cronSecret);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const acquired = await acquireCronLock('health-reconciliation', 23 * 3600, 'daily');
-  if (!acquired) {
-    return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
-  }
-
-  await markCronRun('health-reconciliation');
-
-  try {
+export const GET = defineCron({
+  name: 'health-reconciliation',
+  period: 'daily',
+  fn: async () => {
     return await withSpan('cron.health-reconciliation', {}, async () => {
       const invariants = await runAllInvariantChecks();
       const anomalies = invariants.filter((i) => i.count > 0);
 
       if (anomalies.length === 0) {
-        return NextResponse.json({ ok: true, anomalies: 0 });
+        return { anomalies: 0 };
       }
 
       // Alert: email all ADMIN/SUPERADMIN
@@ -72,15 +52,11 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({
-        ok: true,
+      return {
         anomalies: anomalies.length,
         emailedAdmins: sent,
         details: anomalies.map((a) => ({ key: a.key, count: a.count, severity: a.severity })),
-      });
+      };
     });
-  } catch (err) {
-    logServerError('cron-health-reconciliation', 'cron failed', err);
-    return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });
-  }
-}
+  },
+});

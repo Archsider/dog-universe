@@ -57,17 +57,8 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
           </div>
         </header>
         <main className="relative flex-1 p-4 lg:p-8 bg-[#FEFCF9] min-h-screen">
-          {/* Zellige discret en tile répété, opacity 4% */}
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              backgroundImage: 'url(/images/zellige-pattern.png)',
-              backgroundRepeat: 'repeat',
-              backgroundSize: '200px 200px',
-              opacity: 0.07,
-            }}
-          />
+          {/* Zellige discret — classe CSS (pas inline style : banni par style-src-attr none CSP) */}
+          <div aria-hidden="true" className="absolute inset-0 pointer-events-none zellige-bg" />
           <SessionWatcher loginPath={`/${locale}/auth/login`} />
           <div className="relative z-10">{children}</div>
         </main>

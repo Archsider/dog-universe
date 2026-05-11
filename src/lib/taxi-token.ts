@@ -1,7 +1,7 @@
 // HMAC-signed taxi tracking tokens.
 //
-// Format: `{tripId}.{nonce16hex}.{sig16hex}` where sig = HMAC-SHA256(secret,
-// `${tripId}.${nonce}`).slice(0, 16). The signed format lets us reject
+// Format: `{tripId}.{nonce16hex}.{sig64hex}` where sig = HMAC-SHA256(secret,
+// `${tripId}.${nonce}`) — full 256-bit signature. The signed format lets us reject
 // invalid tokens with a 404 *without* hitting the DB — neutralizes brute
 // force / token enumeration vectors.
 //
@@ -50,7 +50,7 @@ export function signTaxiToken(tripId: string): string {
   const secret = getSecret();
   const nonce = randomBytes(16).toString('hex');
   const payload = `${tripId}.${nonce}`;
-  const sig = createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
+  const sig = createHmac('sha256', secret).update(payload).digest('hex'); // full 256-bit
   return `${payload}.${sig}`;
 }
 
@@ -61,7 +61,7 @@ export function verifyTaxiToken(token: string): { tripId: string } | null {
   const [tripId, nonce, sig] = parts;
   if (!tripId || !nonce || !sig) return null;
   const secret = getSecret();
-  const expected = createHmac('sha256', secret).update(`${tripId}.${nonce}`).digest('hex').slice(0, 16);
+  const expected = createHmac('sha256', secret).update(`${tripId}.${nonce}`).digest('hex');
   if (sig.length !== expected.length) return null;
   // timing-safe compare
   let diff = 0;
