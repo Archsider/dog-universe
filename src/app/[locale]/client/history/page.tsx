@@ -1,6 +1,7 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { BookingStatus } from '@prisma/client';
 import Link from 'next/link';
 import { Calendar, PawPrint, Package, Car, Plus, FileText, Clock, CheckCircle2, XCircle, AlertCircle, PlayCircle, Camera, MapPin } from 'lucide-react';
 import Image from 'next/image';
@@ -47,8 +48,8 @@ export default async function HistoryPage(props: PageProps) {
       deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       ...(statusFilter && {
       status: statusFilter === 'CANCELLED'
-        ? { in: ['CANCELLED', 'REJECTED'] as const }
-        : statusFilter,
+        ? { in: ['CANCELLED', 'REJECTED'] as const satisfies BookingStatus[] }
+        : statusFilter as BookingStatus,
     }),
     },
     include: {

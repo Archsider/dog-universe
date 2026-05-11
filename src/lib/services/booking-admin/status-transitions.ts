@@ -11,6 +11,7 @@
  * Kept separate from the route so the route stays a router.
  */
 import { prisma } from '@/lib/prisma';
+import { BookingStatus } from '@prisma/client';
 import * as Sentry from '@sentry/nextjs';
 import { log, logger } from '@/lib/logger';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
@@ -50,7 +51,7 @@ type BookingForStatus = {
 
 export interface ApplyStatusUpdateArgs {
   bookingId: string;
-  status?: string;
+  status?: BookingStatus;
   notes?: string;
   cancellationReason?: string;
 }

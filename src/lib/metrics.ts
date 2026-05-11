@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { BookingStatus } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
 import { ACTIVE_STAY_STATUSES } from '@/lib/booking-status';
 import {
@@ -396,7 +397,7 @@ export async function currentBoarders(): Promise<{
   // Capacity check et facturation continuent à inclure CONFIRMED ailleurs.
   const boardingFilter = {
     serviceType: 'BOARDING' as const,
-    status: 'IN_PROGRESS',
+    status: 'IN_PROGRESS' as const,
     deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
   };
   const [cat, dog] = await Promise.all([

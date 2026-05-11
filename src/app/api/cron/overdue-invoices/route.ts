@@ -2,6 +2,7 @@ import { parseMetadata } from '@/lib/notifications/metadata';
 import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { InvoiceStatus } from '@prisma/client';
 import { getEmailTemplate } from '@/lib/email';
 import { enqueueEmail } from '@/lib/queues';
 import { createNotification } from '@/lib/notifications';
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
 
     const invoices = await prisma.invoice.findMany({
       where: {
-        status: { in: ['PENDING', 'PARTIAL', 'PARTIALLY_PAID'] },
+        status: { in: [InvoiceStatus.PENDING, InvoiceStatus.PARTIALLY_PAID] },
         issuedAt: { gte: windowStart, lt: windowEnd },
         client: { deletedAt: null, isWalkIn: false, role: 'CLIENT' },
       },

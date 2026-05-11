@@ -145,7 +145,7 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
     }
 
     // ── 5. Derive invoice status ─────────────────────────────────────────
-    let newStatus: string = deriveInvoiceStatus(paidAmount, toNumber(invoice.amount));
+    const newStatus = deriveInvoiceStatus(paidAmount, toNumber(invoice.amount));
     let paidAt = invoice.paidAt;
 
     if (newStatus === 'PAID' && !paidAt) {
