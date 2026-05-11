@@ -7,16 +7,11 @@ import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, getBookingStatusColor } from '@/lib/utils';
 import ReservationActions from './ReservationActions';
-import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
-import TaxiTrackingButton from '@/components/admin/TaxiTrackingButton';
-import { TaxiNavBlock } from '@/components/admin/TaxiNavigationButton';
+import type { TaxiTripData } from '@/components/shared/TaxiTimeline';
 import DeleteBookingButton from './DeleteBookingButton';
 import StayPhotosSection from './StayPhotosSection';
 import AdminMessageSection from './AdminMessageSection';
 import AddonRequestsSection from './AddonRequestsSection';
-import TaxiHeartbeatIndicator from './TaxiHeartbeatIndicator';
-import AdminTaxiLiveMap from './AdminTaxiLiveMap';
-import AdminTaxiReplay from './AdminTaxiReplay';
 import ExtendBookingSection from './ExtendBookingSection';
 import MergeBookingsSection from './MergeBookingsSection';
 import EditDatesSection from './EditDatesSection';
@@ -29,6 +24,7 @@ import BookingServiceSection from './BookingServiceSection';
 import AddProductSection from './AddProductSection';
 import UpsellSuggestions from '@/components/shared/UpsellSuggestions';
 import CheckoutBookingButton from './CheckoutBookingButton';
+import BookingTaxiSection from './BookingTaxiSection';
 import { toNumber } from '@/lib/decimal';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
@@ -423,95 +419,17 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
 
           <ReservationActions booking={{ id: booking.id, version: booking.version, status: booking.status, serviceType: booking.serviceType }} locale={locale} />
 
-          {/* PET_TAXI navigation — pickup + dropoff (driver helper) */}
+          {/* PET_TAXI navigation + standalone timeline */}
           {!isBoarding && booking.taxiDetail && (
-            <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-4">
-              <div>
-                <h3 className="font-semibold text-charcoal text-sm flex items-center gap-2 mb-3">
-                  <span className="text-base">📍</span>
-                  {locale === 'fr' ? 'Localisation pickup' : 'Pickup location'}
-                </h3>
-                <TaxiNavBlock
-                  lat={booking.taxiDetail.pickupLat}
-                  lng={booking.taxiDetail.pickupLng}
-                  address={booking.taxiDetail.pickupAddress}
-                  locale={locale === 'en' ? 'en' : 'fr'}
-                />
-              </div>
-              {(booking.taxiDetail.dropoffLat || booking.taxiDetail.dropoffLng || booking.taxiDetail.dropoffAddress) && (
-                <div className="pt-4 border-t border-ivory-100">
-                  <h3 className="font-semibold text-charcoal text-sm flex items-center gap-2 mb-3">
-                    <span className="text-base">📍</span>
-                    {locale === 'fr' ? 'Localisation dropoff' : 'Dropoff location'}
-                  </h3>
-                  <TaxiNavBlock
-                    lat={booking.taxiDetail.dropoffLat}
-                    lng={booking.taxiDetail.dropoffLng}
-                    address={booking.taxiDetail.dropoffAddress}
-                    locale={locale === 'en' ? 'en' : 'fr'}
-                  />
-                </div>
-              )}
-            </div>
+            <BookingTaxiSection
+              bookingId={booking.id}
+              bookingStatus={booking.status}
+              taxiDetail={booking.taxiDetail}
+              standaloneTrip={standaloneTrip}
+              rawStandaloneTrip={booking.taxiTrips.find(t => t.tripType === 'STANDALONE') ?? null}
+              locale={locale}
+            />
           )}
-
-          {/* Standalone PET_TAXI timeline */}
-          {!isBoarding && standaloneTrip && (() => {
-            const rawStandalone = booking.taxiTrips.find(t => t.tripType === 'STANDALONE');
-            return (
-              <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-3">
-                <h3 className="font-semibold text-charcoal text-sm flex items-center gap-2">
-                  <span className="text-base">🚗</span>
-                  {locale === 'fr' ? 'Suivi du transport' : 'Transport tracking'}
-                </h3>
-                <TaxiTimeline trip={standaloneTrip} locale={locale} />
-                {booking.status === 'IN_PROGRESS' && (
-                  <TaxiHeartbeatIndicator bookingId={booking.id} locale={locale} />
-                )}
-                {rawStandalone && (
-                  <TaxiTrackingButton
-                    taxiTripId={rawStandalone.id}
-                    tripType={rawStandalone.tripType}
-                    status={rawStandalone.status}
-                    trackingActive={rawStandalone.trackingActive}
-                    trackingToken={rawStandalone.trackingToken}
-                    locale={locale}
-                  />
-                )}
-                {rawStandalone?.trackingActive && rawStandalone.trackingToken && (
-                  <AdminTaxiLiveMap trackingToken={rawStandalone.trackingToken} locale={locale} />
-                )}
-                {/* REPLAY mode — visible once the trip reaches a terminal status
-                    (driver arrived at destination) and live tracking is off. */}
-                {rawStandalone && !rawStandalone.trackingActive && (
-                  rawStandalone.status === 'ARRIVED_AT_PENSION' ||
-                  rawStandalone.status === 'ARRIVED_AT_CLIENT' ||
-                  rawStandalone.status === 'COMPLETED' ||
-                  booking.status === 'COMPLETED'
-                ) && (
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-semibold text-charcoal/70 uppercase tracking-wider">
-                      {locale === 'fr' ? 'Replay du trajet' : 'Trip replay'}
-                    </h4>
-                    <AdminTaxiReplay taxiTripId={rawStandalone.id} locale={locale} />
-                  </div>
-                )}
-                {/* Persistent cumulative distance — survives tracking stop and page refresh. */}
-                {rawStandalone && rawStandalone.distanceKm > 0 && (
-                  <div className="flex items-center justify-between text-xs px-3 py-2 bg-[#FEFCF9] rounded-lg border border-[rgba(196,151,74,0.2)]">
-                    <span className="text-charcoal/60">
-                      {locale === 'fr' ? 'Distance totale parcourue' : 'Total distance traveled'}
-                    </span>
-                    <span className="font-semibold text-[#C4974A]">
-                      {rawStandalone.distanceKm >= 10
-                        ? `${rawStandalone.distanceKm.toFixed(1)} km`
-                        : `${rawStandalone.distanceKm.toFixed(2)} km`}
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
 
           {/* Edit dates (available on all BOARDING bookings) */}
           {isBoarding && (
