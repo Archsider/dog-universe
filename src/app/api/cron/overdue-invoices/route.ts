@@ -9,6 +9,7 @@ import { markCronRun } from '@/lib/observability';
 import { APP_URL } from '@/lib/config';
 import { formatMAD } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
+import { getCasaStartOfDay } from '@/lib/timezone';
 import { log, logger } from '@/lib/logger';
 
 export const maxDuration = 60;
@@ -52,8 +53,10 @@ export async function GET(req: NextRequest) {
   await markCronRun('overdue-invoices');
 
   const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
+  // Today's window in Casablanca local time so J+30 / J+60 calendar arithmetic
+  // matches what a Moroccan operator expects (an UTC-anchored midnight would
+  // shift the overdue threshold by one hour).
+  const startOfToday = getCasaStartOfDay(now);
   const startOfTomorrow = new Date(startOfToday);
   startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 

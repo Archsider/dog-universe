@@ -5,6 +5,7 @@ import { markCronRun } from '@/lib/observability';
 import { createNotification } from '@/lib/notifications';
 import { enqueueEmail } from '@/lib/queues';
 import { getEmailTemplate } from '@/lib/email';
+import { getCasaStartOfDay } from '@/lib/timezone';
 
 export const maxDuration = 60;
 
@@ -54,8 +55,8 @@ export async function GET(request: Request) {
   });
 
   // Déduplication : on ne veut pas envoyer deux fois si la notif existe déjà
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
+  // aujourd'hui — fenêtre alignée sur l'heure locale Casablanca.
+  const todayStart = getCasaStartOfDay(now);
   const existingNotifs = await prisma.notification.findMany({
     where: {
       type: 'REVIEW_REQUEST',

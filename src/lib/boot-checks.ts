@@ -62,6 +62,24 @@ export function assertProductionEnv(): void {
     if (err) warnings.push(err);
   }
 
+  // TLS / HTTPS guards — required in prod. Refusing http:// for NEXTAUTH_URL
+  // prevents cookie leakage on the session callback; warning on a DATABASE_URL
+  // without sslmode=require flags an unencrypted Postgres link.
+  if (isProd) {
+    const nextauthUrl = process.env.NEXTAUTH_URL;
+    if (nextauthUrl && !nextauthUrl.startsWith('https://')) {
+      errors.push('NEXTAUTH_URL must be https:// in production');
+    }
+    const databaseUrl = process.env.DATABASE_URL;
+    if (
+      databaseUrl &&
+      !databaseUrl.includes('sslmode=require') &&
+      !databaseUrl.includes('?sslmode=')
+    ) {
+      warnings.push('DATABASE_URL should include sslmode=require');
+    }
+  }
+
   if (warnings.length > 0) {
     logger.warn('boot', 'optional env vars missing — feature degraded', { warnings });
   }
