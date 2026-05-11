@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { BookingError } from '../booking-errors';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
+import { ServiceType } from './constants';
 
 type Booking = NonNullable<Awaited<ReturnType<typeof loadBooking>>>;
 
@@ -57,15 +58,10 @@ export async function editDates(args: EditDatesArgs) {
     throw new BookingError('INVALID_FIELDS', { message: 'endDate must be after startDate' });
   }
 
-  if (booking.serviceType === 'PET_TAXI') {
-    const { validateTaxiSlot } = await import('../booking-client.service');
-    validateTaxiSlot({ startDate: newStart, arrivalTime: booking.arrivalTime });
-  }
-
   const newNights = Math.floor((newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60 * 24));
 
   let newTotal = Number(booking.totalPrice);
-  if (booking.serviceType === 'BOARDING') {
+  if (booking.serviceType === ServiceType.BOARDING) {
     const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
     const pricingSettings = await getPricingSettings();
     const pets = booking.bookingPets.map(bp => bp.pet);
@@ -78,26 +74,35 @@ export async function editDates(args: EditDatesArgs) {
     throw new BookingError('INVALID_COMPUTED_TOTAL', { message: 'Invalid computed total' });
   }
 
+  // Reordered (was before pricing): the BOARDING capacity check inside the
+  // transaction below is the canonical authoritative rejection (matches the
+  // create-booking path's order). validateTaxiSlot only applies to PET_TAXI
+  // and is mutually exclusive with the capacity branch, so this ordering is
+  // purely about source-level consistency with the create path.
+  if (booking.serviceType === ServiceType.PET_TAXI) {
+    const { validateTaxiSlot } = await import('../booking-client.service');
+    validateTaxiSlot({ startDate: newStart, arrivalTime: booking.arrivalTime });
+  }
+
   const oldStartDate = booking.startDate.toISOString().slice(0, 10);
   const oldEndDate = booking.endDate?.toISOString().slice(0, 10) ?? null;
 
-  let editCapacityError: CapacityCheckExceeded | null = null;
-  await prisma.$transaction(async (tx) => {
-    if (booking.serviceType === 'BOARDING') {
-      const capResult = await checkBoardingCapacity(
-        {
-          petIds: booking.bookingPets.map(bp => bp.pet.id),
-          startDate: newStart,
-          endDate: newEnd,
-          excludeBookingId: booking.id,
-        },
-        tx,
-      );
-      if (!capResult.ok) {
-        editCapacityError = capResult;
-        return;
+  const editTxResult = await prisma.$transaction(
+    async (tx): Promise<{ kind: 'ok' } | { kind: 'capacity_exceeded'; payload: CapacityCheckExceeded }> => {
+      if (booking.serviceType === ServiceType.BOARDING) {
+        const capResult = await checkBoardingCapacity(
+          {
+            petIds: booking.bookingPets.map(bp => bp.pet.id),
+            startDate: newStart,
+            endDate: newEnd,
+            excludeBookingId: booking.id,
+          },
+          tx,
+        );
+        if (!capResult.ok) {
+          return { kind: 'capacity_exceeded', payload: capResult };
+        }
       }
-    }
 
     await tx.booking.update({
       where: { id: booking.id },
@@ -133,10 +138,12 @@ export async function editDates(args: EditDatesArgs) {
         },
       });
     }
+
+    return { kind: 'ok' };
   }, { isolationLevel: 'Serializable' });
 
-  if (editCapacityError) {
-    throw new BookingError('CAPACITY_EXCEEDED', { message: 'Capacity exceeded', payload: editCapacityError });
+  if (editTxResult.kind === 'capacity_exceeded') {
+    throw new BookingError('CAPACITY_EXCEEDED', { message: 'Capacity exceeded', payload: editTxResult.payload });
   }
 
   if (booking.invoice) {
