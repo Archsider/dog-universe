@@ -12,6 +12,7 @@
 // - Fail-open: if Redis is unconfigured or unreachable, returns true so
 //   the cron still runs. Better a missed lock than a missed reminder; the
 //   per-row dedup inside each cron prevents user-visible duplicates.
+import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
 import { getISOWeek, getISOWeekYear } from 'date-fns';
 import { env } from '@/lib/env';
@@ -65,6 +66,12 @@ export async function acquireCronLock(
     // Upstash returns 'OK' when set succeeded, null when NX prevented the write.
     return result === 'OK';
   } catch (err) {
+    Sentry.addBreadcrumb({
+      category: 'redis',
+      level: 'warning',
+      message: 'cron-lock: Redis SET failed, failing open',
+      data: { op: 'set-nx', key },
+    });
     console.error(JSON.stringify({ level: 'error', service: 'cron-lock', message: 'Redis SET failed, failing open', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return true;
   }
