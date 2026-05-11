@@ -56,11 +56,21 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
-    select: { id: true, status: true, paidAmount: true, items: true },
+    select: { id: true, status: true, paidAmount: true, items: true, clientId: true },
   });
   if (!invoice) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
   if (invoice.status === 'CANCELLED') {
     return NextResponse.json({ error: 'INVOICE_CANCELLED' }, { status: 400 });
+  }
+
+  // H2 cross-role guard: ADMIN may only act on invoices owned by CLIENT users.
+  // SUPERADMIN passes through. Mirrors payments/route.ts:77.
+  const target = await prisma.user.findUnique({
+    where: { id: invoice.clientId },
+    select: { role: true },
+  });
+  if (session.user.role === 'ADMIN' && target?.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
   // Sous-total = somme des items NON DISCOUNT
@@ -139,6 +149,22 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // H2 cross-role guard.
+  const invoiceForGuard = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { clientId: true },
+  });
+  if (!invoiceForGuard) {
+    return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+  }
+  const targetUser = await prisma.user.findUnique({
+    where: { id: invoiceForGuard.clientId },
+    select: { role: true },
+  });
+  if (session.user.role === 'ADMIN' && targetUser?.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
   const removed = await prisma.invoiceItem.deleteMany({

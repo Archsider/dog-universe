@@ -57,7 +57,7 @@ beforeEach(() => {
     clientId: 'client-1',
     benefitLabelFr: 'Toilettage offert',
     benefitLabelEn: 'Free grooming',
-    client: { id: 'client-1', name: 'Foo', email: 'foo@x.com', language: 'fr' },
+    client: { id: 'client-1', name: 'Foo', email: 'foo@x.com', language: 'fr', role: 'CLIENT' },
   });
 });
 

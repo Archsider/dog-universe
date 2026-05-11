@@ -25,10 +25,15 @@ export async function POST(_req: Request, { params }: Params) {
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },
-    include: { client: { select: { id: true, name: true, email: true, language: true } } },
+    include: { client: { select: { id: true, name: true, email: true, language: true, role: true } } },
   });
 
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // H2 cross-role guard: ADMIN cannot resend invoices owned by ADMIN/SUPERADMIN.
+  if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+  }
 
   const client = invoice.client;
   const locale = client.language ?? 'fr';

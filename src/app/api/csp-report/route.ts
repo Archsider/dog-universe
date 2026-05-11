@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { env } from '@/lib/env';
+import { logger } from '@/lib/logger';
 
 /**
  * CSP violation report sink.
@@ -78,42 +79,24 @@ export async function POST(request: NextRequest) {
     } catch {
       // Malformed body — log and return 204 (don't 4xx the browser; it'll
       // just retry and we lose nothing).
-      console.warn(
-        JSON.stringify({
-          level: 'warn',
-          service: 'csp',
-          message: 'csp-report-malformed-json',
-          contentType: request.headers.get('content-type'),
-          length: text.length,
-          timestamp: new Date().toISOString(),
-        }),
-      );
+      logger.warn('csp-report', 'csp-report-malformed-json', {
+        contentType: request.headers.get('content-type'),
+        length: text.length,
+      });
       return new NextResponse(null, { status: 204 });
     }
 
-    // console.warn (not error) — Vercel classifies severity from the console
-    // method. These are observability data, not failures.
-    console.warn(
-      JSON.stringify({
-        level: 'warn',
-        service: 'csp',
-        message: 'csp-violation',
-        userAgent: request.headers.get('user-agent') ?? null,
-        contentType: request.headers.get('content-type') ?? null,
-        violation: report,
-        timestamp: new Date().toISOString(),
-      }),
-    );
+    // logger.warn (not error) — Vercel classifies severity from the console
+    // method via logger; these are observability data, not failures.
+    logger.warn('csp-report', 'csp-violation', {
+      userAgent: request.headers.get('user-agent') ?? null,
+      contentType: request.headers.get('content-type') ?? null,
+      violation: report,
+    });
   } catch (err) {
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        service: 'csp',
-        message: 'csp-report-handler-failed',
-        error: err instanceof Error ? err.message : String(err),
-        timestamp: new Date().toISOString(),
-      }),
-    );
+    logger.error('csp-report', 'csp-report-handler-failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // Always 204 — the browser doesn't care about the response, and a non-2xx
