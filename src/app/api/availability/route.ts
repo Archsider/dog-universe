@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cacheReadThrough } from '@/lib/cache';
 import { getCapacityLimits } from '@/lib/capacity';
+import { getCasaStartOfDay, getCasaEndOfDay } from '@/lib/timezone';
 
 // Edge / CDN caching — public route, varies on query string by default
 export const revalidate = 60;
@@ -43,10 +44,11 @@ async function computeAvailability(
   const year = parseInt(yearStr, 10);
   const monthNum = parseInt(monthStr, 10);
 
-  const start = new Date(year, monthNum - 1, 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(year, monthNum, 0);
-  end.setHours(23, 59, 59, 999);
+  // Month window in Casablanca local time. Without TZ adjustment, the first
+  // day of the month near midnight could land on the previous month in UTC
+  // and break the overlap query.
+  const start = getCasaStartOfDay(new Date(year, monthNum - 1, 1, 12, 0, 0, 0));
+  const end = getCasaEndOfDay(new Date(year, monthNum, 0, 12, 0, 0, 0));
 
   // Fetch all closed-range BOARDING bookings overlapping the month.
   // Open-ended bookings (isOpenEnded=true OR endDate=null) are intentionally
@@ -89,10 +91,10 @@ async function computeAvailability(
 
     let booked = 0;
     for (const b of filtered) {
-      const bStart = new Date(b.startDate);
-      bStart.setHours(0, 0, 0, 0);
-      const bEnd = new Date(b.endDate);
-      bEnd.setHours(23, 59, 59, 999);
+      // Align booking bounds to a Casablanca-local day so the overlap test
+      // doesn't shift by an hour when the booking instant straddles UTC midnight.
+      const bStart = getCasaStartOfDay(b.startDate);
+      const bEnd = getCasaEndOfDay(b.endDate);
       if (bStart <= day && bEnd >= day) {
         booked += b.petCount;
       }
