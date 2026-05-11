@@ -2,6 +2,7 @@
 // Counts active boarding bookings overlapping a date range, by species.
 // Accepts an optional Prisma client/tx so reads stay consistent inside a
 // $transaction({ isolationLevel: Serializable }) block.
+import { cache } from 'react';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { cacheReadThrough, cacheDel, CacheKeys, CacheTTL } from '@/lib/cache';
@@ -51,16 +52,24 @@ async function readLimitsFromDb(client: PrismaClientLike): Promise<CapacityLimit
   );
 }
 
+// React-cache memoised non-tx reader — dedupes calls within a single RSC
+// render. In API routes it's a no-op (no cache scope). Redis still backs it.
+const getCapacityLimitsCached = cache(
+  async (): Promise<CapacityLimits> =>
+    cacheReadThrough<CapacityLimits>(
+      CacheKeys.capacityLimits(),
+      CacheTTL.capacityLimits,
+      () => readLimitsFromDb(prisma),
+    ),
+);
+
 // When called inside a $transaction (client !== prisma), MUST read from DB so
 // the limits participate in the same Serializable snapshot as the booking
-// insert. Outside a tx, reads go through the 5-min Redis cache.
+// insert. Outside a tx, reads go through the 5-min Redis cache (and the
+// per-request React `cache()` memo above).
 export async function getCapacityLimits(client: PrismaClientLike = prisma): Promise<CapacityLimits> {
   if (client !== prisma) return readLimitsFromDb(client);
-  return cacheReadThrough<CapacityLimits>(
-    CacheKeys.capacityLimits(),
-    CacheTTL.capacityLimits,
-    () => readLimitsFromDb(prisma),
-  );
+  return getCapacityLimitsCached();
 }
 
 /** Invalidate after any update to `capacity_dog` / `capacity_cat` settings. */
