@@ -747,3 +747,19 @@ model FeatureFlag {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
+
+// Persistent SMS deduplication log — survives Redis restarts.
+// @@unique([phone, contentHash]) ensures BullMQ retry storms and Redis flushes
+// never deliver the same SMS twice within the 24h dedup window.
+model SmsLog {
+  id          String   @id @default(cuid())
+  phone       String   // phone number or 'ADMIN'
+  contentHash String   // SHA-256(phone + '\x00' + message)
+  sentAt      DateTime @default(now())
+  status      String   @default("SENT") // SENT | FAILED | SKIPPED
+  bookingId   String?
+
+  @@unique([phone, contentHash])
+  @@index([phone, sentAt])
+  @@index([sentAt])
+}

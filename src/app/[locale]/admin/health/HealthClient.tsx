@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RefreshCw, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle2, Clock, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface InvariantResult {
@@ -12,10 +12,16 @@ interface InvariantResult {
   severity: 'critical' | 'warning';
 }
 
+interface SmsStats {
+  sent24h: number;
+  lastSentAt: string | null;
+}
+
 interface Snapshot {
   invariants: InvariantResult[];
   cronRuns: Array<{ name: string; lastRun: string | null }>;
   dlqCount: number | null;
+  smsStats: SmsStats | null;
   sentry: { available: boolean; note: string };
   generatedAt: string;
 }
@@ -128,6 +134,33 @@ export default function HealthClient({ initial }: { initial: Snapshot }) {
               </span>
             )}
           </div>
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <MessageSquare className="h-5 w-5 text-gray-500" />
+          SMS
+        </h2>
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          {data.smsStats === null ? (
+            <p className="text-sm text-gray-500">Données SMS indisponibles.</p>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700">
+                  {data.smsStats.sent24h} envoyé{data.smsStats.sent24h !== 1 ? 's' : ''}
+                </span>
+                <span className="text-sm text-gray-600">dernières 24 h (doublons bloqués par SmsLog)</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                <Clock className="h-3 w-3" />
+                {data.smsStats.lastSentAt
+                  ? `Dernier : ${new Date(data.smsStats.lastSentAt).toLocaleString('fr-FR')}`
+                  : 'Aucun SMS envoyé'}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

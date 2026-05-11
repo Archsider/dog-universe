@@ -7,6 +7,7 @@ import type { Job } from 'bullmq';
 import { z } from 'zod';
 import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
+import { isSmsDedup, recordSmsSent } from '@/lib/sms-dedup';
 import { tryAcquireFlag } from '@/lib/cache';
 import type { EmailJobData, SmsJobData } from '@/lib/queues/index';
 import { logger } from '@/lib/logger';
@@ -14,6 +15,7 @@ import { logger } from '@/lib/logger';
 // Idempotence : Redis NX EX 24h. Si un Worker BullMQ retraite par erreur le
 // même jobId (réseau perdu après ack, dédoublement éventuel), le second
 // passage voit le flag déjà posé → no-op silencieux. Fail-open via tryAcquireFlag.
+// Second layer: DB SmsLog dedup below (survives Redis restarts).
 const PROCESSED_TTL_SECONDS = 86_400;
 function processedKey(queue: 'email' | 'sms', jobId: string): string {
   return `job:processed:${queue}:${jobId}`;
@@ -64,9 +66,20 @@ export async function processSmsJob(job: Job<SmsJobData>): Promise<void> {
     }
   }
   const { to, message } = parsed.data;
+  if (!to) return; // null = skip silently
+
+  // DB-level dedup: second line of defence after Redis idempotence flag above.
+  // Guarantees no duplicate delivery even when Redis is restarted/flushed.
+  const dup = await isSmsDedup(to, message);
+  if (dup) {
+    logger.info('worker', 'sms doublon bloqué (DB)', { queue: 'sms', jobId });
+    return;
+  }
+
   if (to === 'ADMIN') {
     await sendAdminSMS(message);
-  } else if (to) {
+  } else {
     await sendSMS(to, message);
   }
+  await recordSmsSent(to, message);
 }
