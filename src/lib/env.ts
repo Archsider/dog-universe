@@ -11,6 +11,7 @@
 //  - Production (NODE_ENV=production at boot) throws loudly with the list
 //    of missing/invalid keys.
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 
 const envSchema = z.object({
   // ── Hard-required (boot-blocking) ─────────────────────────────────────
@@ -81,7 +82,7 @@ if (!parsed.success) {
     .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
     .join('\n');
   if (skip) {
-    console.warn(`[env] validation skipped (test/build):\n${issues}`);
+    logger.warn('env', 'validation skipped (test/build)', { issues });
   } else {
     throw new Error(`Invalid environment variables:\n${issues}`);
   }

@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
-import { log } from '@/lib/logger';
+import { log, logger } from '@/lib/logger';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import {
   createBookingConfirmationNotification,
@@ -649,7 +649,7 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
             return Promise.resolve();
           }));
         } catch (err) {
-          console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin new booking notification loop failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+          logger.error('booking', 'admin new booking notification loop failed', { error: err instanceof Error ? err.message : String(err) });
         }
         },
       ).catch(() => {});
@@ -683,12 +683,11 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
     return NextResponse.json({ ...booking, bookingRef }, { status: 201 });
   } catch (error) {
     // Log enough context to diagnose without exposing internals to the client.
-    console.error('[BOOKING CREATE ERROR]', JSON.stringify({
-      message: error instanceof Error ? error.message : String(error),
+    await log('error', 'booking', 'Create booking error', {
+      error: error instanceof Error ? error.message : String(error),
       code: (error as { code?: string })?.code,
       meta: (error as { meta?: unknown })?.meta,
-    }));
-    await log('error', 'booking', 'Create booking error', { error: error instanceof Error ? error.message : String(error) });
+    });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 });

@@ -20,6 +20,7 @@
 import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
 import type { EmailJobData, SmsJobData } from '@/lib/queues/index';
+import { logger } from '@/lib/logger';
 
 const RETRY_DELAYS_MS = [0, 1_000, 3_000];
 
@@ -44,16 +45,7 @@ export async function sendEmailWithRetry(data: EmailJobData): Promise<void> {
       lastErr = err;
     }
   }
-  console.error(
-    JSON.stringify({
-      level: 'error',
-      service: 'notify-now',
-      message: 'email failed after 3 attempts',
-      to: maskEmail(data.to),
-      error: lastErr instanceof Error ? lastErr.message : String(lastErr),
-      timestamp: new Date().toISOString(),
-    }),
-  );
+  logger.error('notify-now', 'email failed after 3 attempts', { to: maskEmail(data.to), error: lastErr instanceof Error ? lastErr.message : String(lastErr) });
 }
 
 export async function sendSmsWithRetry(data: SmsJobData): Promise<void> {
@@ -76,21 +68,11 @@ export async function sendSmsWithRetry(data: SmsJobData): Promise<void> {
       lastErr = err;
     }
   }
-  console.error(
-    JSON.stringify({
-      level: 'error',
-      service: 'notify-now',
-      message: 'sms failed after 3 attempts',
-      to:
-        data.to === 'ADMIN'
+  logger.error('notify-now', 'sms failed after 3 attempts', { to: data.to === 'ADMIN'
           ? 'ADMIN'
           : data.to
             ? maskPhone(data.to)
-            : 'null',
-      error: lastErr instanceof Error ? lastErr.message : String(lastErr),
-      timestamp: new Date().toISOString(),
-    }),
-  );
+            : 'null', error: lastErr instanceof Error ? lastErr.message : String(lastErr) });
 }
 
 /**

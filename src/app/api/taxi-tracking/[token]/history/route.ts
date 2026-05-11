@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyTaxiToken } from '@/lib/taxi-token';
+import { logger } from '@/lib/logger';
 
 // Public endpoint — token-auth via HMAC-signed trackingToken (legacy UUID
 // fallback). Returns the trail (last 200 GPS points, asc by createdAt) for
@@ -28,14 +29,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   if (!trip || (verified && trip.trackingToken !== token)) {
     if (!verified) {
       const ip = _req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
-      console.error(JSON.stringify({
-        level: 'warn',
-        service: 'taxi-token',
+      logger.warn('taxi-token', 'unauthorized history access', {
         event: '404',
         ip,
         tokenPrefix: token.slice(0, 8),
-        timestamp: new Date().toISOString(),
-      }));
+      });
     }
     return NextResponse.json({ error: 'Not found' }, { status: 404, headers: HEADERS });
   }

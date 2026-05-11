@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Worker } from 'bullmq';
 import { Redis } from '@upstash/redis';
-import { log } from '@/lib/logger';
+import { log, logger } from '@/lib/logger';
 import { getBullMQConnection, isBullMQConfigured } from '@/lib/redis-bullmq';
 import {
   QUEUE_EMAIL, QUEUE_SMS, QUEUE_DLQ,
@@ -72,11 +72,11 @@ async function alertDlqJob(params: {
           metadata: { jobType, bookingId, jobId: jobId ?? 'unknown', failedReason },
         });
       } catch (err) {
-        console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'DLQ alert createNotification failed', userId: sa.id, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+        logger.error('workers-process', 'DLQ alert createNotification failed', { userId: sa.id, error: err instanceof Error ? err.message : String(err) });
       }
     }
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'alertDlqJob failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('workers-process', 'alertDlqJob failed', { error: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -116,11 +116,11 @@ async function checkTaxiHeartbeats(): Promise<{ scanned: number; alerted: number
         await notifyAdminsTaxiHeartbeatLost({ bookingId: b.id, bookingRef, clientName, petNames });
         alerted++;
       } catch (err) {
-        console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'notifyAdmins failed for taxi heartbeat', bookingId: b.id, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+        logger.error('workers-process', 'notifyAdmins failed for taxi heartbeat', { bookingId: b.id, error: err instanceof Error ? err.message : String(err) });
       }
     }
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'checkTaxiHeartbeats failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('workers-process', 'checkTaxiHeartbeats failed', { error: err instanceof Error ? err.message : String(err) });
   }
   return { scanned, alerted };
 }
@@ -158,7 +158,7 @@ async function runWorker<T>(
           failedAt: new Date().toISOString(),
         });
       } catch (dlqErr) {
-        console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'Failed to archive dead job to DLQ', error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr), timestamp: new Date().toISOString() }));
+        logger.error('workers-process', 'Failed to archive dead job to DLQ', { error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr) });
       }
 
       // Fire-and-forget SUPERADMIN alert (deduped per hour per jobType).
@@ -249,7 +249,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: true, reason: 'no work', heartbeat: heartbeatResult });
     }
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'workers-process', message: 'early-exit check failed (proceeding with full run)', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('workers-process', 'early-exit check failed (proceeding with full run)', { error: err instanceof Error ? err.message : String(err) });
   }
 
   const results: Record<string, QueueResult> = {};

@@ -2,6 +2,7 @@ import React from 'react';
 import fs from 'fs';
 import path from 'path';
 import { renderToBuffer, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
+import { logger } from '@/lib/logger';
 
 // Lire les assets au module-init et les convertir en DATA URLS strings :
 //   1. Path littéral → Vercel Node File Tracer les bundle dans la lambda.
@@ -19,13 +20,13 @@ try {
   const buf = fs.readFileSync(path.join(process.cwd(), 'public', 'logo_rgba.png'));
   LOGO_DATA_URL = `data:image/png;base64,${buf.toString('base64')}`;
 } catch (err) {
-  console.error(JSON.stringify({ level: 'error', service: 'contract-pdf', message: 'logo_rgba.png not found', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+  logger.error('contract-pdf', 'logo_rgba.png not found', { error: err instanceof Error ? err.message : String(err) });
 }
 try {
   const buf = fs.readFileSync(path.join(process.cwd(), 'private', 'stamp.png'));
   STAMP_DATA_URL = `data:image/png;base64,${buf.toString('base64')}`;
 } catch (err) {
-  console.error(JSON.stringify({ level: 'error', service: 'contract-pdf', message: 'stamp.png not found', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+  logger.error('contract-pdf', 'stamp.png not found', { error: err instanceof Error ? err.message : String(err) });
 }
 
 const styles = StyleSheet.create({

@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 // OSRM (Open Source Routing Machine) helper — public demo server.
 //
 // Returns a routed driving ETA + encoded polyline geometry between two
@@ -94,13 +95,7 @@ export async function getEta(
     cache.set(key, { data, expiresAt: now + CACHE_TTL_MS });
     return data;
   } catch (err) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'osrm',
-      message: 'getEta failed',
-      error: err instanceof Error ? err.message : String(err),
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('osrm', 'getEta failed', { error: err instanceof Error ? err.message : String(err) });
     cache.set(key, { data: null, expiresAt: now + CACHE_TTL_MS });
     return null;
   } finally {

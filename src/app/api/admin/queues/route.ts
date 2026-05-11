@@ -5,6 +5,7 @@ import { auth } from '../../../../../auth';
 import { isBullMQConfigured, getBullMQConnection } from '@/lib/redis-bullmq';
 import { getEmailQueue, getSmsQueue, getDlqQueue, QUEUE_EMAIL, QUEUE_SMS, QUEUE_DLQ } from '@/lib/queues/index';
 import type { Queue } from 'bullmq';
+import { logger } from '@/lib/logger';
 
 async function getQueueStats(queue: Queue, name: string) {
   const [counts, failed, completed] = await Promise.all([
@@ -47,7 +48,7 @@ export async function GET() {
     ]);
     return NextResponse.json({ configured: true, queues: [emailStats, smsStats, dlqStats] });
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'admin-queues', message: 'queue stats error', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('admin-queues', 'queue stats error', { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: 'REDIS_ERROR' }, { status: 503 });
   }
 }
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
     await job.retry('failed');
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'admin-queues', message: 'job retry error', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('admin-queues', 'job retry error', { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: 'RETRY_FAILED' }, { status: 500 });
   }
 }

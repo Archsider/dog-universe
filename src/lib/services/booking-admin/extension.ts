@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { BookingError } from '../booking-errors';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
+import { logger } from '@/lib/logger';
 
 type BookingWithDetails = Awaited<ReturnType<typeof loadBookingWithDetails>>;
 
@@ -134,7 +135,7 @@ export async function approveExtensionMerge(args: ApproveExtensionMergeArgs) {
   const newEndDateDisplay = newEndDate.toLocaleDateString(originalBooking.client?.language === 'en' ? 'en-GB' : 'fr-MA');
   const { createBookingExtendedNotification } = await import('@/lib/notifications');
   await createBookingExtendedNotification(originalBooking.clientId, bookingRef, newEndDateDisplay, originalBooking.client?.language ?? 'fr')
-    .catch(err => console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Failed to create notification', error: err instanceof Error ? err.message : String(err) })));
+    .catch(err => logger.error('notification', 'Failed to create notification', { error: err instanceof Error ? err.message : String(err) }));
 
   await logAction({
     userId: actorId,
@@ -185,7 +186,7 @@ export async function rejectExtensionMerge(args: RejectExtensionMergeArgs) {
     const bookingRef = originalBookingId.slice(0, 8).toUpperCase();
     const { createExtensionRejectedNotification } = await import('@/lib/notifications');
     await createExtensionRejectedNotification(booking.clientId, bookingRef)
-      .catch(err => console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Failed to create notification', error: err instanceof Error ? err.message : String(err) })));
+      .catch(err => logger.error('notification', 'Failed to create notification', { error: err instanceof Error ? err.message : String(err) }));
   }
 
   await logAction({
@@ -327,7 +328,7 @@ export async function applyExtension(args: ApplyExtensionArgs) {
   const newEndDateDisplay = newEndDate.toLocaleDateString(booking.client.language === 'en' ? 'en-GB' : 'fr-MA');
   const { createBookingExtendedNotification } = await import('@/lib/notifications');
   await createBookingExtendedNotification(booking.clientId, bookingRef, newEndDateDisplay, booking.client.language ?? 'fr')
-    .catch(err => console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Failed to create notification', error: err instanceof Error ? err.message : String(err) })));
+    .catch(err => logger.error('notification', 'Failed to create notification', { error: err instanceof Error ? err.message : String(err) }));
 
   await logAction({
     userId: actorId,

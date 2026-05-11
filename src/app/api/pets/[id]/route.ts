@@ -3,6 +3,7 @@ import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { petUpdateSchema, formatZodError } from '@/lib/validation';
+import { logger } from '@/lib/logger';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -121,7 +122,7 @@ export async function PATCH(_req: Request, { params }: Params) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Update pet error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('pet', 'Update pet error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

@@ -3,6 +3,7 @@ import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { petCreateSchema, formatZodError } from '@/lib/validation';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   const session = await auth();
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(pet, { status: 201 });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Create pet error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('pet', 'Create pet error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

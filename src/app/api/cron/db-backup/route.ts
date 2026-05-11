@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
 import { markCronRun } from '@/lib/observability';
 import { env } from '@/lib/env';
-import { log } from '@/lib/logger';
+import { log, logger } from '@/lib/logger';
 
 export const maxDuration = 300;
 

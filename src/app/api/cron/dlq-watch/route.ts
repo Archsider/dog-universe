@@ -6,6 +6,7 @@ import { markCronRun } from '@/lib/observability';
 import { getDlqQueue, DLQ_ALERT_THRESHOLD } from '@/lib/queues/index';
 import { isBullMQConfigured } from '@/lib/redis-bullmq';
 import { createNotification } from '@/lib/notifications';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 30;
 
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error(JSON.stringify({ level: 'error', service: 'cron-dlq-watch', message: 'CRON_SECRET not configured', timestamp: new Date().toISOString() }));
+    logger.error('cron-dlq-watch', 'CRON_SECRET not configured');
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
   const secretBuf = Buffer.from(secret ?? '');
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
     const dlqQueue = getDlqQueue();
     count = await dlqQueue.count();
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'cron-dlq-watch', message: 'Failed to get DLQ count', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('cron-dlq-watch', 'Failed to get DLQ count', { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: 'DLQ_COUNT_FAILED' }, { status: 500 });
   }
 
@@ -70,7 +71,7 @@ export async function GET(req: NextRequest) {
       });
       notified++;
     } catch (err) {
-      console.error(JSON.stringify({ level: 'error', service: 'cron-dlq-watch', message: 'createNotification failed', userId: sa.id, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+      logger.error('cron-dlq-watch', 'createNotification failed', { userId: sa.id, error: err instanceof Error ? err.message : String(err) });
     }
   }
 

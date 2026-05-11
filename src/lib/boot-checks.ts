@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 type RequiredVar = {
   name: string;
   minLength?: number;
@@ -42,13 +43,5 @@ export function assertProductionEnv(): void {
     throw new Error(`BOOT_CHECK_FAILED: ${errors.join('; ')}`);
   }
 
-  console.warn(
-    JSON.stringify({
-      level: 'warn',
-      service: 'boot',
-      message: 'boot-check missing env vars (dev mode — non-blocking)',
-      errors,
-      timestamp: new Date().toISOString(),
-    }),
-  );
+  logger.warn('boot', 'boot-check missing env vars (dev mode — non-blocking)', { errors });
 }

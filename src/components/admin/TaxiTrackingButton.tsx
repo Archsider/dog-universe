@@ -12,6 +12,7 @@ import {
   QUEUE_MAX,
   QUEUE_MAX_AGE_MS,
 } from '@/lib/taxi-gps';
+import { logger } from '@/lib/logger';
 
 interface Props {
   taxiTripId: string;
@@ -89,7 +90,7 @@ export default function TaxiTrackingButton({
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
     navigator.serviceWorker
       .register('/sw-driver.js', { scope: '/admin/reservations/' })
-      .catch((err) => console.warn('[sw-driver register]', err));
+      .catch((err) => logger.warn('sw-driver', 'register failed', { error: err }));
   }, []);
 
   // Polling toutes les 5 s : récupère la taille de la queue offline + écoute les messages push du SW.
@@ -248,7 +249,7 @@ export default function TaxiTrackingButton({
       lastFixAtRef.current = Date.now();
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => pushLocation(pos.coords),
-        (err) => console.error('[GPS]', err.code, err.message),
+        (err) => logger.error('gps', 'watch error', { code: err.code, message: err.message }),
         { enableHighAccuracy: true, maximumAge: 0, timeout: 15000, distanceFilter: 5 } as PositionOptions,
       );
     };
@@ -257,14 +258,14 @@ export default function TaxiTrackingButton({
     lastFixAtRef.current = Date.now();
     navigator.geolocation.getCurrentPosition(
       (pos) => pushLocation(pos.coords),
-      (err) => console.error('[GPS init]', err.code, err.message),
+      (err) => logger.error('gps-init', 'getCurrentPosition failed', { code: err.code, message: err.message }),
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
     );
 
     // 2) Watch continu — émet à chaque changement de position significatif
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => pushLocation(pos.coords),
-      (err) => console.error('[GPS]', err.code, err.message),
+      (err) => logger.error('gps', 'watch error', { code: err.code, message: err.message }),
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000, distanceFilter: 5 } as PositionOptions,
     );
     setGpsHealth('live');
@@ -276,7 +277,7 @@ export default function TaxiTrackingButton({
         if (!nav.wakeLock?.request) return;
         wakeLockRef.current = await nav.wakeLock.request('screen');
         wakeLockRef.current.addEventListener('release', acquireWakeLock);
-      } catch (e) { console.warn('Wake Lock non supporté:', e); }
+      } catch (e) { logger.warn('wake-lock', 'unsupported', { error: e }); }
     };
     acquireWakeLock();
 
@@ -288,7 +289,7 @@ export default function TaxiTrackingButton({
       const health = gpsHealthFor(lastFixAtRef.current, now);
       setGpsHealth(health);
       if (shouldRestartWatch(lastFixAtRef.current, now)) {
-        console.warn('[GPS watchdog] silence prolongé, restart watch');
+        logger.warn('gps-watchdog', 'prolonged silence, restarting watch');
         restartWatch();
       }
       if (
@@ -321,7 +322,7 @@ export default function TaxiTrackingButton({
       if (typeof navigator === 'undefined' || !navigator.geolocation) return;
       navigator.geolocation.getCurrentPosition(
         (pos) => pushLocation(pos.coords),
-        (err) => console.warn('[GPS forced]', err.code, err.message),
+        (err) => logger.warn('gps-forced', 'getCurrentPosition failed', { code: err.code, message: err.message }),
         { enableHighAccuracy: true, maximumAge: 0, timeout: 10_000 },
       );
     }, FORCED_PING_INTERVAL_MS);

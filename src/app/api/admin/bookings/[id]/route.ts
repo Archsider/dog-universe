@@ -6,6 +6,7 @@ import { withSchema } from '@/lib/with-schema';
 import { revalidateTag } from 'next/cache';
 import { BookingError } from '@/lib/services/booking-errors';
 import { canTransition, isBookingStatus, type BookingStatus } from '@/lib/booking-state-machine';
+import { logger } from '@/lib/logger';
 import {
   adminBookingPatchSchema,
   adminBookingParamsSchema,
@@ -246,14 +247,7 @@ export const PATCH = withSchema(
     // preserve existing taxi flows that key off it.
     if (newStatus && newStatus !== booking.status && newStatus !== 'AT_PICKUP') {
       if (!isBookingStatus(booking.status) || !isBookingStatus(newStatus)) {
-        console.warn(JSON.stringify({
-          level: 'warn',
-          service: 'booking',
-          message: 'state machine bypass: unknown status',
-          from: booking.status,
-          to: newStatus,
-          bookingId: id,
-        }));
+        logger.warn('booking', 'state machine bypass: unknown status', { from: booking.status, to: newStatus, bookingId: id });
       } else if (!canTransition(booking.status as BookingStatus, newStatus as BookingStatus)) {
         return NextResponse.json(
           { error: 'INVALID_TRANSITION', from: booking.status, to: newStatus },

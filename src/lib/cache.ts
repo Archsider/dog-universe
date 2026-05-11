@@ -8,6 +8,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
+import { logger } from '@/lib/logger';
 import { env } from '@/lib/env';
 
 function breadcrumb(op: string, key: string, message: string): void {
@@ -52,7 +53,7 @@ export async function tryAcquireFlag(key: string, ttlSeconds: number): Promise<b
     return res === 'OK';
   } catch (err) {
     breadcrumb('set-nx', key, 'tryAcquireFlag failed, failing open');
-    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'tryAcquireFlag failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('cache', 'tryAcquireFlag failed', { key, error: err instanceof Error ? err.message : String(err) });
     return true;
   }
 }
@@ -67,7 +68,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     return raw ?? null;
   } catch (err) {
     breadcrumb('get', key, 'GET failed, failing open (returning null)');
-    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'GET failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('cache', 'GET failed', { key, error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
@@ -79,7 +80,7 @@ export async function cacheSet<T>(key: string, value: T, ttlSeconds: number): Pr
     await redis.set(key, value, { ex: ttlSeconds });
   } catch (err) {
     breadcrumb('set', key, 'SET failed, failing open');
-    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'SET failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('cache', 'SET failed', { key, error: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -90,7 +91,7 @@ export async function cacheDel(key: string): Promise<void> {
     await redis.del(key);
   } catch (err) {
     breadcrumb('del', key, 'DEL failed, failing open');
-    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'DEL failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('cache', 'DEL failed', { key, error: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -143,7 +144,7 @@ export async function markWorkerRun(): Promise<void> {
     await redis.set('worker:lastRun', new Date().toISOString(), { ex: 86400 });
   } catch (err) {
     breadcrumb('set', 'worker:lastRun', 'markWorkerRun failed, failing open');
-    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'markWorkerRun failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('cache', 'markWorkerRun failed', { error: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -156,7 +157,7 @@ export async function getWorkerLastRun(): Promise<string | null> {
     return val ?? null;
   } catch (err) {
     breadcrumb('get', 'worker:lastRun', 'getWorkerLastRun failed, failing open');
-    console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'getWorkerLastRun failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('cache', 'getWorkerLastRun failed', { error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }

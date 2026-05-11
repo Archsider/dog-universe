@@ -17,6 +17,7 @@
 import { createHash } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { cacheGet, cacheSet, cacheDel } from '@/lib/cache';
+import { logger } from '@/lib/logger';
 
 export interface FeatureFlagRecord {
   key: string;
@@ -71,7 +72,7 @@ export async function loadFlag(key: string): Promise<FeatureFlagRecord | null> {
       };
     }
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'feature-flags', message: 'DB load failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('feature-flags', 'DB load failed', { key, error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 
@@ -117,7 +118,7 @@ export async function getAllFlagsForUser(ctx: EvalContext): Promise<Record<strin
       userWhitelist: f.userWhitelist,
     }));
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'feature-flags', message: 'getAllFlagsForUser DB failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('feature-flags', 'getAllFlagsForUser DB failed', { error: err instanceof Error ? err.message : String(err) });
     return {};
   }
   const out: Record<string, boolean> = {};

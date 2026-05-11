@@ -31,6 +31,7 @@ import { getEta } from '@/lib/osrm';
 import { tryAcquireFlag } from '@/lib/cache';
 import { createTaxiArrivingSoonNotification } from '@/lib/notifications';
 import { verifyTaxiToken } from '@/lib/taxi-token';
+import { logger } from '@/lib/logger';
 
 // Vercel function timeout — Hobby caps at 60 s. We give ourselves a 6 s
 // buffer to flush the closing event before the platform kills the runtime.
@@ -92,7 +93,7 @@ async function acquireSubscriber(
   try {
     subscriber = getBullMQConnection().duplicate();
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'taxi-stream', message: 'duplicate failed', channel, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('taxi-stream', 'duplicate failed', { channel, error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 
@@ -101,7 +102,7 @@ async function acquireSubscriber(
   channelPool.set(channel, entry);
 
   subscriber.on('error', (err: Error) => {
-    console.error(JSON.stringify({ level: 'error', service: 'taxi-stream', message: 'subscriber error', channel, error: err.message, timestamp: new Date().toISOString() }));
+    logger.error('taxi-stream', 'subscriber error', { channel, error: err.message });
   });
   subscriber.on('message', (_chan: string, msg: string) => {
     // Snapshot listeners — a release() mid-iteration mutates the set.
@@ -120,7 +121,7 @@ async function acquireSubscriber(
     entry.pending = undefined;
     channelPool.delete(channel);
     try { await subscriber.quit(); } catch { /* noop */ }
-    console.error(JSON.stringify({ level: 'error', service: 'taxi-stream', message: 'subscribe failed', channel, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('taxi-stream', 'subscribe failed', { channel, error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 
@@ -206,14 +207,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
   if (!trip || trip.booking.deletedAt || (verified && trip.trackingToken !== token)) {
     if (!verified) {
-      console.error(JSON.stringify({
-        level: 'warn',
-        service: 'taxi-token',
+      logger.warn('taxi-token', 'unauthorized stream access', {
         event: '404',
         ip: _request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
         tokenPrefix: token.slice(0, 8),
-        timestamp: new Date().toISOString(),
-      }));
+      });
     }
     return new Response('Not found', { status: 404 });
   }
@@ -389,14 +387,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
               await createTaxiArrivingSoonNotification(clientId, bookingId, eta.durationSec, 'fr');
             }
           } catch (err) {
-            console.error(JSON.stringify({
-              level: 'error',
-              service: 'taxi-stream',
-              message: 'arriving-soon notif failed',
-              bookingId,
-              error: err instanceof Error ? err.message : String(err),
-              timestamp: new Date().toISOString(),
-            }));
+            logger.error('taxi-stream', 'arriving-soon notif failed', { bookingId, error: err instanceof Error ? err.message : String(err) });
           }
         }
       };

@@ -13,6 +13,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { cacheSet, cacheGet } from './cache';
+import { logger } from './logger';
 
 type SpanAttr = string | number | boolean | undefined | null;
 
@@ -53,19 +54,8 @@ export function logServerError(
   extra?: Record<string, unknown>,
 ): void {
   const err = error instanceof Error ? error : new Error(String(error));
-  // Structured JSON line — easy to parse from Vercel logs.
-  // eslint-disable-next-line no-console
-  console.error(
-    JSON.stringify({
-      level: 'error',
-      service,
-      message,
-      error: err.message,
-      stack: err.stack,
-      extra,
-      timestamp: new Date().toISOString(),
-    }),
-  );
+  // Delegates to the structured logger — JSON line on stdout, indexed by Vercel.
+  logger.error(service, message, { error: err.message, stack: err.stack, ...(extra ?? {}) });
   try {
     Sentry.captureException(err, { tags: { service }, extra });
   } catch {

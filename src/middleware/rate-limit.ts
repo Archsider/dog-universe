@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { env } from '@/lib/env';
+import { logger } from '@/lib/logger';
 
 // Rate limiting is only active when Upstash env vars are set (production).
 // In development (no vars), all requests pass through.
@@ -338,7 +339,7 @@ export async function checkRateLimit(
       typeof result.remaining !== 'number' ||
       typeof result.reset !== 'number'
     ) {
-      console.error('[middleware] rate-limit malformed response, fail-closed:', result);
+      logger.error('rate-limit', 'malformed response, fail-closed', { result });
       return {
         ok: false,
         response: NextResponse.json(
@@ -369,8 +370,7 @@ export async function checkRateLimit(
     }
   } catch (err) {
     // Upstash unreachable / timeout / unexpected error → fail-closed.
-    // Sentry picks this up via console.error in production.
-    console.error('[middleware] rate-limit check failed, fail-closed:', err);
+    logger.error('rate-limit', 'check failed, fail-closed', { error: err instanceof Error ? err.message : String(err) });
     return {
       ok: false,
       response: NextResponse.json(

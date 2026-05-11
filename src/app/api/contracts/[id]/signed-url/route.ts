@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { createSignedUrl } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -45,7 +46,7 @@ export async function GET(_req: Request, { params }: Params) {
   try {
     url = await createSignedUrl(contract.storageKey, SIGNED_URL_TTL_SECONDS);
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'contracts', message: 'Supabase signed-url error', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('contracts', 'Supabase signed-url error', { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json(
       { error: 'Storage temporarily unavailable' },
       { status: 503 },

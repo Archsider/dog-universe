@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
-import { log } from '@/lib/logger';
+import { log, logger } from '@/lib/logger';
 
 export const maxDuration = 60;
 

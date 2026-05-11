@@ -3,6 +3,7 @@ import { auth } from '../../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
+import { logger } from '@/lib/logger';
 
 interface Params { params: Promise<{ id: string; itemId: string }> }
 
@@ -112,7 +113,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (['PRODUCT_UNAVAILABLE', 'OUT_OF_STOCK', 'PRODUCT_NOT_FOUND'].includes(msg)) {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
-    console.error(JSON.stringify({ level: 'error', service: 'booking-update-product', message: 'update product failed', err: msg }));
+    logger.error('booking-update-product', 'update product failed', { err: msg });
     return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });
   }
 }

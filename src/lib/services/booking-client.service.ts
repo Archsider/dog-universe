@@ -19,6 +19,7 @@ import { prisma } from '@/lib/prisma';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { getDayOfWeekMaroc, getHourMaroc, getMinuteMaroc } from '@/lib/timezone';
 import { BookingError } from './booking-errors';
+import { logger } from '@/lib/logger';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Pet Taxi slot validation
@@ -313,14 +314,6 @@ export async function runWithSerializableRetry<T>(
       }
     }
   }
-  console.error(
-    JSON.stringify({
-      level: 'error',
-      service: 'booking',
-      message: 'serializable retry exhausted',
-      error: lastErr instanceof Error ? lastErr.message : String(lastErr),
-      timestamp: new Date().toISOString(),
-    }),
-  );
+  logger.error('booking', 'serializable retry exhausted', { error: lastErr instanceof Error ? lastErr.message : String(lastErr) });
   throw new Error('CONFLICT_RETRY_EXCEEDED');
 }

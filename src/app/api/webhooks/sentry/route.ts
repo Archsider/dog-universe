@@ -26,6 +26,7 @@ import { sanitizePayload, sanitizeString } from '@/lib/guardian/sanitize';
 import { classifyEvent, unclassifiedResult, type ClassifierInput } from '@/lib/guardian/classifier';
 import { openOrReuseIssue } from '@/lib/guardian/github';
 import { createNotification } from '@/lib/notifications';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 30;
 
@@ -157,14 +158,7 @@ async function notifySuperadmins(title: string, message: string, metadata: Recor
 export async function POST(request: Request) {
   const secret = process.env.SENTRY_WEBHOOK_SECRET;
   if (!secret) {
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        service: 'guardian',
-        message: 'SENTRY_WEBHOOK_SECRET missing — refusing webhook',
-        timestamp: new Date().toISOString(),
-      }),
-    );
+    logger.error('guardian', 'SENTRY_WEBHOOK_SECRET missing — refusing webhook');
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
 
@@ -239,15 +233,7 @@ export async function POST(request: Request) {
         { sentryEventId: eventId, classification: result.classification },
       );
     } catch (err) {
-      console.error(
-        JSON.stringify({
-          level: 'error',
-          service: 'guardian',
-          message: 'admin notification failed',
-          error: err instanceof Error ? err.message : String(err),
-          timestamp: new Date().toISOString(),
-        }),
-      );
+      logger.error('guardian', 'admin notification failed', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -273,15 +259,7 @@ export async function POST(request: Request) {
     // our Redis flag in pathological cases. Treat as success.
     const code = (err as { code?: string }).code;
     if (code !== 'P2002') {
-      console.error(
-        JSON.stringify({
-          level: 'error',
-          service: 'guardian',
-          message: 'GuardianEvent create failed',
-          error: err instanceof Error ? err.message : String(err),
-          timestamp: new Date().toISOString(),
-        }),
-      );
+      logger.error('guardian', 'GuardianEvent create failed', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 

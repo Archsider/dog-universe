@@ -9,7 +9,7 @@ import { markCronRun } from '@/lib/observability';
 import { APP_URL } from '@/lib/config';
 import { formatMAD } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
-import { log } from '@/lib/logger';
+import { log, logger } from '@/lib/logger';
 
 export const maxDuration = 60;
 
@@ -33,12 +33,7 @@ export async function GET(req: NextRequest) {
 
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'cron-overdue-invoices',
-      message: 'CRON_SECRET not configured',
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('cron-overdue-invoices', 'CRON_SECRET not configured');
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
 

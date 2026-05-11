@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { vaccinationCreateSchema, vaccinationConfirmSchema, formatZodError } from '@/lib/validation';
+import { logger } from '@/lib/logger';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -36,7 +37,7 @@ export async function POST(request: Request, { params }: Params) {
 
     return NextResponse.json(vaccination, { status: 201 });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Create vaccination error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('pet', 'Create vaccination error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }
@@ -74,7 +75,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
     return NextResponse.json(vaccination);
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Confirm vaccination error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('pet', 'Confirm vaccination error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

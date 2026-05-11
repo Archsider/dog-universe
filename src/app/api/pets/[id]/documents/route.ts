@@ -3,6 +3,7 @@ import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { uploadFile } from '@/lib/upload';
 import { petDocumentNameSchema, formatZodError } from '@/lib/validation';
+import { logger } from '@/lib/logger';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -47,7 +48,7 @@ export async function POST(request: Request, { params }: Params) {
 
     return NextResponse.json(document, { status: 201 });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Upload document error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('pet', 'Upload document error', { error: error instanceof Error ? error.message : String(error) });
     // SECURITY (P2): never echo raw error message to the client — would leak filesystem paths,
     // stack traces, and internal library internals (info disclosure / fingerprinting aid).
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });

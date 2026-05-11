@@ -5,6 +5,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendAdminSMS, formatDateFR } from '@/lib/sms';
 import { bookingClientCancelSchema, bookingClientRescheduleSchema, formatZodError } from '@/lib/validation';
 import { createNotification } from '@/lib/notifications';
+import { logger } from '@/lib/logger';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -156,7 +157,7 @@ export async function PATCH(request: Request, { params }: Params) {
         }).catch(() => { /* non-blocking */ })),
       );
     } catch (err) {
-      console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin reschedule notif failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+      logger.error('booking', 'admin reschedule notif failed', { error: err instanceof Error ? err.message : String(err) });
     }
 
     return NextResponse.json(updated);
@@ -217,11 +218,11 @@ export async function PATCH(request: Request, { params }: Params) {
             metadata: JSON.stringify({ bookingId: id }),
             read: false,
           },
-        }).catch(err => console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin cancel notification failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }))),
+        }).catch(err => logger.error('booking', 'admin cancel notification failed', { error: err instanceof Error ? err.message : String(err) })),
       ),
     );
   } catch (err) {
-    console.error(JSON.stringify({ level: 'error', service: 'booking', message: 'admin lookup failed on client cancel', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('booking', 'admin lookup failed on client cancel', { error: err instanceof Error ? err.message : String(err) });
   }
 
   return NextResponse.json(updated);

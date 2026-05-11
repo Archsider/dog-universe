@@ -3,6 +3,7 @@ import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { deleteFromPrivateStorage } from '@/lib/supabase';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { logger } from '@/lib/logger';
 
 // DELETE /api/admin/contracts/[id] — delete a contract (forces client to re-sign)
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -26,7 +27,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     try {
       await deleteFromPrivateStorage(contract.storageKey);
     } catch (e) {
-      console.warn(JSON.stringify({ level: 'warn', service: 'admin-contracts', message: 'Could not delete contract file from storage', error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() }));
+      logger.warn('admin-contracts', 'Could not delete contract file from storage', { error: e instanceof Error ? e.message : String(e) });
     }
   }
 

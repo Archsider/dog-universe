@@ -12,7 +12,7 @@
  */
 import { prisma } from '@/lib/prisma';
 import * as Sentry from '@sentry/nextjs';
-import { log } from '@/lib/logger';
+import { log, logger } from '@/lib/logger';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import {
   createBookingValidationNotification,
@@ -94,14 +94,11 @@ export async function handleNoShowInvoice(args: NoShowInvoiceHandlingArgs) {
   const isPaidOrPartial = inv.status === 'PAID' || inv.status === 'PARTIALLY_PAID';
 
   if (isPaidOrPartial) {
-    console.warn(JSON.stringify({
-      level: 'warn',
-      service: 'no-show',
-      message: 'invoice already paid, kept as-is',
+    logger.warn('no-show', 'invoice already paid, kept as-is', {
       invoiceId: inv.id,
       paidAmount: Number(inv.paidAmount),
       bookingId,
-    }));
+    });
     await logAction({
       userId: actorId,
       action: 'NO_SHOW_INVOICE_PAID_KEPT',
