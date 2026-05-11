@@ -23,7 +23,7 @@ const config: Config = {
           200: "#F0D98A",
           300: "#E2C048",
           400: "#C9A84C",
-          500: "#B8860B",
+          500: "#946A09", // darkened from #B8860B → WCAG AA 4.77:1 on white
           600: "#A07830",
           700: "#8A6420",
           800: "#6B4E10",

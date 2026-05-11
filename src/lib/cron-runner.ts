@@ -20,6 +20,9 @@ interface CronContext {
 interface DefineCronArgs {
   name: string;
   period: CronPeriod;
+  /** Override the Redis lock key name. Defaults to `name`. Useful when the lock
+   *  key is dynamic (e.g. hourly crons that embed the current hour in the key). */
+  lockName?: string | (() => string);
   ttlSeconds?: number;
   maxDuration?: number;
   fn: (ctx: CronContext) => Promise<Record<string, unknown>>;
@@ -34,7 +37,7 @@ function defaultTtl(period: CronPeriod): number {
   }
 }
 
-export function defineCron({ name, period, ttlSeconds, fn }: DefineCronArgs) {
+export function defineCron({ name, period, lockName, ttlSeconds, fn }: DefineCronArgs) {
   return async function GET(request: Request) {
     const cronSecret = process.env.CRON_SECRET;
     if (!cronSecret) {
@@ -42,14 +45,23 @@ export function defineCron({ name, period, ttlSeconds, fn }: DefineCronArgs) {
       return NextResponse.json({ error: 'misconfig' }, { status: 500 });
     }
     const { timingSafeEqual } = await import('crypto');
-    const provided = Buffer.from(request.headers.get('authorization') ?? '');
-    const expected = Buffer.from('Bearer ' + cronSecret);
-    if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    // Accept both Vercel-injected Authorization: Bearer header and legacy
+    // x-cron-secret header (kept for backward compat with older test infra).
+    const authHeader = request.headers.get('authorization') ?? '';
+    const legacyHeader = request.headers.get('x-cron-secret') ?? '';
+    const bearerExpected = Buffer.from('Bearer ' + cronSecret);
+    const legacyExpected = Buffer.from(cronSecret);
+    const bearerBuf = Buffer.from(authHeader);
+    const legacyBuf = Buffer.from(legacyHeader);
+    const bearerOk = bearerBuf.length === bearerExpected.length && timingSafeEqual(bearerBuf, bearerExpected);
+    const legacyOk = legacyBuf.length === legacyExpected.length && timingSafeEqual(legacyBuf, legacyExpected);
+    if (!bearerOk && !legacyOk) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const ttl = ttlSeconds ?? defaultTtl(period);
-    const acquired = await acquireCronLock(name, ttl, period);
-    if (!acquired) return NextResponse.json({ ok: true, skipped: 'duplicate' });
+    const resolvedLockName = lockName === undefined ? name : typeof lockName === 'function' ? lockName() : lockName;
+    const acquired = await acquireCronLock(resolvedLockName, ttl, period);
+    if (!acquired) return NextResponse.json({ ok: true, skipped: true, reason: 'already_run' });
     const startedAt = Date.now();
     try {
       await markCronRun(name);

@@ -1,17 +1,15 @@
 import { parseMetadata } from '@/lib/notifications/metadata';
-import { timingSafeEqual } from 'crypto';
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getEmailTemplate } from '@/lib/email';
 import { enqueueEmail } from '@/lib/queues';
 import { createNotification } from '@/lib/notifications';
-import { acquireCronLock } from '@/lib/cron-lock';
-import { markCronRun } from '@/lib/observability';
 import { APP_URL } from '@/lib/config';
 import { formatMAD } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
 import { getCasaStartOfDay } from '@/lib/timezone';
-import { log, logger } from '@/lib/logger';
+import { log } from '@/lib/logger';
+import { defineCron } from '@/lib/cron-runner';
+import { InvoiceStatus } from '@prisma/client';
 
 export const maxDuration = 60;
 
@@ -29,158 +27,137 @@ const REMINDERS: Array<{ kind: ReminderKind; minDays: number; maxDays: number; t
  * (pas d'espace portail). Déduplication par notification `INVOICE_OVERDUE`
  * + metadata { invoiceId, reminderKind } sur les 24h.
  */
-export async function GET(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret')
-    ?? req.headers.get('authorization')?.replace('Bearer ', '');
+export const GET = defineCron({
+  name: 'overdue-invoices',
+  period: 'daily',
+  fn: async ({ now }) => {
+    // Today's window in Casablanca local time so J+30 / J+60 calendar arithmetic
+    // matches what a Moroccan operator expects (an UTC-anchored midnight would
+    // shift the overdue threshold by one hour).
+    const startOfToday = getCasaStartOfDay(now);
+    const startOfTomorrow = new Date(startOfToday);
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    logger.error('cron-overdue-invoices', 'CRON_SECRET not configured');
-    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
-  }
+    let sent = 0;
+    let skipped = 0;
+    let failures = 0;
+    const errors: string[] = [];
 
-  const secretBuf = Buffer.from(secret ?? '');
-  const expectedBuf = Buffer.from(cronSecret);
-  const authorized = secretBuf.length === expectedBuf.length && timingSafeEqual(secretBuf, expectedBuf);
-  if (!authorized) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+    for (const reminder of REMINDERS) {
+      const windowEnd = new Date(startOfTomorrow);
+      windowEnd.setDate(windowEnd.getDate() - reminder.minDays);
+      const windowStart = new Date(startOfTomorrow);
+      windowStart.setDate(windowStart.getDate() - reminder.maxDays);
 
-  const acquired = await acquireCronLock('overdue-invoices', 23 * 3600, 'daily');
-  if (!acquired) {
-    return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
-  }
+      const invoices = await prisma.invoice.findMany({
+        where: {
+          status: { in: [InvoiceStatus.PENDING, InvoiceStatus.PARTIALLY_PAID] },
+          issuedAt: { gte: windowStart, lt: windowEnd },
+          client: { deletedAt: null, isWalkIn: false, role: 'CLIENT' },
+        },
+        select: {
+          id: true,
+          invoiceNumber: true,
+          amount: true,
+          paidAmount: true,
+          issuedAt: true,
+          client: { select: { id: true, name: true, email: true, language: true } },
+        },
+        take: 500,
+      });
 
-  await markCronRun('overdue-invoices');
+      if (invoices.length === 0) continue;
 
-  const now = new Date();
-  // Today's window in Casablanca local time so J+30 / J+60 calendar arithmetic
-  // matches what a Moroccan operator expects (an UTC-anchored midnight would
-  // shift the overdue threshold by one hour).
-  const startOfToday = getCasaStartOfDay(now);
-  const startOfTomorrow = new Date(startOfToday);
-  startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+      // Déduplication 24h via notifications INVOICE_OVERDUE existantes.
+      const last24h = new Date(now);
+      last24h.setHours(last24h.getHours() - 24);
+      const existing = await prisma.notification.findMany({
+        where: {
+          userId: { in: invoices.map(i => i.client.id) },
+          type: 'INVOICE_OVERDUE',
+          createdAt: { gte: last24h },
+        },
+        select: { metadata: true },
+      });
+      const alreadySent = new Set<string>();
+      for (const n of existing) {
+        try {
+          const meta = parseMetadata(n.metadata);
+          if (typeof meta.invoiceId === 'string' && typeof meta.reminderKind === 'string') {
+            alreadySent.add(`${meta.invoiceId}:${meta.reminderKind}`);
+          }
+        } catch { /* ignore */ }
+      }
 
-  let sent = 0;
-  let skipped = 0;
-  let failures = 0;
-  const errors: string[] = [];
+      await Promise.all(invoices.map(async (invoice) => {
+        try {
+          const dedupKey = `${invoice.id}:${reminder.kind}`;
+          if (alreadySent.has(dedupKey)) { skipped++; return; }
 
-  for (const reminder of REMINDERS) {
-    const windowEnd = new Date(startOfTomorrow);
-    windowEnd.setDate(windowEnd.getDate() - reminder.minDays);
-    const windowStart = new Date(startOfTomorrow);
-    windowStart.setDate(windowStart.getDate() - reminder.maxDays);
+          const remaining = Math.max(0, toNumber(invoice.amount) - toNumber(invoice.paidAmount));
+          if (remaining <= 0) { skipped++; return; }
 
-    const invoices = await prisma.invoice.findMany({
-      where: {
-        status: { in: ['PENDING', 'PARTIAL', 'PARTIALLY_PAID'] },
-        issuedAt: { gte: windowStart, lt: windowEnd },
-        client: { deletedAt: null, isWalkIn: false, role: 'CLIENT' },
-      },
-      select: {
-        id: true,
-        invoiceNumber: true,
-        amount: true,
-        paidAmount: true,
-        issuedAt: true,
-        client: { select: { id: true, name: true, email: true, language: true } },
-      },
-      take: 500,
-    });
+          const locale = invoice.client.language ?? 'fr';
+          const isFr = locale === 'fr';
+          const issuedAt = invoice.issuedAt.toLocaleDateString(
+            isFr ? 'fr-MA' : 'en-GB',
+            { day: 'numeric', month: 'long', year: 'numeric' },
+          );
+          const portalUrl = `${APP_URL}/${locale}/client/invoices/${invoice.id}`;
 
-    if (invoices.length === 0) continue;
+          const { subject, html } = getEmailTemplate(
+            reminder.template,
+            {
+              clientName: invoice.client.name ?? invoice.client.email,
+              invoiceNumber: invoice.invoiceNumber,
+              amountDue: formatMAD(remaining),
+              issuedAt,
+              portalUrl,
+            },
+            locale,
+          );
 
-    // Déduplication 24h via notifications INVOICE_OVERDUE existantes.
-    const last24h = new Date(now);
-    last24h.setHours(last24h.getHours() - 24);
-    const existing = await prisma.notification.findMany({
-      where: {
-        userId: { in: invoices.map(i => i.client.id) },
-        type: 'INVOICE_OVERDUE',
-        createdAt: { gte: last24h },
-      },
-      select: { metadata: true },
-    });
-    const alreadySent = new Set<string>();
-    for (const n of existing) {
-      try {
-        const meta = parseMetadata(n.metadata);
-        if (typeof meta.invoiceId === 'string' && typeof meta.reminderKind === 'string') {
-          alreadySent.add(`${meta.invoiceId}:${meta.reminderKind}`);
+          const titleFr = reminder.kind === 'overdue_30'
+            ? `Facture ${invoice.invoiceNumber} en attente`
+            : `Second rappel : facture ${invoice.invoiceNumber}`;
+          const titleEn = reminder.kind === 'overdue_30'
+            ? `Invoice ${invoice.invoiceNumber} pending`
+            : `Second reminder: invoice ${invoice.invoiceNumber}`;
+          const messageFr = `Solde restant dû : ${formatMAD(remaining)} (émise le ${issuedAt}).`;
+          const messageEn = `Outstanding balance: ${formatMAD(remaining)} (issued on ${issuedAt}).`;
+
+          await Promise.all([
+            enqueueEmail(
+              { to: invoice.client.email, subject, html },
+              `overdue:${invoice.id}:${reminder.kind}`,
+            ),
+            createNotification({
+              userId: invoice.client.id,
+              type: 'INVOICE_OVERDUE',
+              titleFr,
+              titleEn,
+              messageFr,
+              messageEn,
+              metadata: { invoiceId: invoice.id, reminderKind: reminder.kind },
+            }),
+          ]);
+          sent++;
+        } catch (err) {
+          failures++;
+          errors.push(`${reminder.kind}:${invoice.id}: ${String(err)}`);
         }
-      } catch { /* ignore */ }
+      }));
     }
 
-    await Promise.all(invoices.map(async (invoice) => {
-      try {
-        const dedupKey = `${invoice.id}:${reminder.kind}`;
-        if (alreadySent.has(dedupKey)) { skipped++; return; }
+    if (errors.length) {
+      await log('error', 'cron-overdue-invoices', 'Some overdue reminders failed', { errors });
+    }
 
-        const remaining = Math.max(0, toNumber(invoice.amount) - toNumber(invoice.paidAmount));
-        if (remaining <= 0) { skipped++; return; }
-
-        const locale = invoice.client.language ?? 'fr';
-        const isFr = locale === 'fr';
-        const issuedAt = invoice.issuedAt.toLocaleDateString(
-          isFr ? 'fr-MA' : 'en-GB',
-          { day: 'numeric', month: 'long', year: 'numeric' },
-        );
-        const portalUrl = `${APP_URL}/${locale}/client/invoices/${invoice.id}`;
-
-        const { subject, html } = getEmailTemplate(
-          reminder.template,
-          {
-            clientName: invoice.client.name ?? invoice.client.email,
-            invoiceNumber: invoice.invoiceNumber,
-            amountDue: formatMAD(remaining),
-            issuedAt,
-            portalUrl,
-          },
-          locale,
-        );
-
-        const titleFr = reminder.kind === 'overdue_30'
-          ? `Facture ${invoice.invoiceNumber} en attente`
-          : `Second rappel : facture ${invoice.invoiceNumber}`;
-        const titleEn = reminder.kind === 'overdue_30'
-          ? `Invoice ${invoice.invoiceNumber} pending`
-          : `Second reminder: invoice ${invoice.invoiceNumber}`;
-        const messageFr = `Solde restant dû : ${formatMAD(remaining)} (émise le ${issuedAt}).`;
-        const messageEn = `Outstanding balance: ${formatMAD(remaining)} (issued on ${issuedAt}).`;
-
-        await Promise.all([
-          enqueueEmail(
-            { to: invoice.client.email, subject, html },
-            `overdue:${invoice.id}:${reminder.kind}`,
-          ),
-          createNotification({
-            userId: invoice.client.id,
-            type: 'INVOICE_OVERDUE',
-            titleFr,
-            titleEn,
-            messageFr,
-            messageEn,
-            metadata: { invoiceId: invoice.id, reminderKind: reminder.kind },
-          }),
-        ]);
-        sent++;
-      } catch (err) {
-        failures++;
-        errors.push(`${reminder.kind}:${invoice.id}: ${String(err)}`);
-      }
-    }));
-  }
-
-  if (errors.length) {
-    await log('error', 'cron-overdue-invoices', 'Some overdue reminders failed', { errors });
-  }
-
-  return NextResponse.json({
-    ok: true,
-    sent,
-    skipped,
-    failures,
-    errors: errors.length ? errors : undefined,
-  });
-}
+    return {
+      sent,
+      skipped,
+      failures,
+      errors: errors.length ? errors : undefined,
+    };
+  },
+});

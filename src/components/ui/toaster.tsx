@@ -8,10 +8,17 @@ export function Toaster() {
   const { toasts, dismissToast } = useToast();
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm">
+    <div
+      role="region"
+      aria-live="polite"
+      aria-atomic="false"
+      aria-label="Notifications"
+      className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm"
+    >
       {toasts.map((toast) => (
         <div
           key={toast.id}
+          role="status"
           className={cn(
             'flex items-start gap-3 rounded-lg border p-4 shadow-gold-lg bg-white animate-fade-in',
             toast.variant === 'destructive' && 'border-red-200 bg-red-50',
@@ -19,7 +26,7 @@ export function Toaster() {
             !toast.variant && 'border-[#F0D98A]/50'
           )}
         >
-          <div className="flex-shrink-0 mt-0.5">
+          <div className="flex-shrink-0 mt-0.5" aria-hidden="true">
             {toast.variant === 'destructive' && <AlertCircle className="h-4 w-4 text-red-600" />}
             {toast.variant === 'success' && <CheckCircle className="h-4 w-4 text-green-600" />}
             {(!toast.variant) && <Info className="h-4 w-4 text-gold-500" />}
@@ -44,9 +51,10 @@ export function Toaster() {
           </div>
           <button
             onClick={() => dismissToast(toast.id)}
-            className="flex-shrink-0 rounded-sm opacity-70 hover:opacity-100 focus:outline-none"
+            aria-label="Fermer la notification"
+            className="flex-shrink-0 rounded-sm opacity-70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-gold-400/50"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       ))}

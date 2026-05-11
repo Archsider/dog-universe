@@ -67,7 +67,7 @@ export const PATCH = withSchema(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { status, notes } = body as { status?: string; notes?: string };
+    const { status, notes } = body;
     const forcePaidInvoice = Boolean(body.forcePaidInvoice);
 
     const booking = await prisma.booking.findFirst({
@@ -251,16 +251,15 @@ export const PATCH = withSchema(
     // ── End extension handling ────────────────────────────────────────────────
 
     // ── Status / notes change ─────────────────────────────────────────────────
-    const newStatus = status as string | undefined;
     // State-machine guard: refuse arbitrary jumps. AT_PICKUP is accepted by the
     // status enum but is not part of the canonical machine — let it through to
     // preserve existing taxi flows that key off it.
-    if (newStatus && newStatus !== booking.status && newStatus !== 'AT_PICKUP') {
-      if (!isBookingStatus(booking.status) || !isBookingStatus(newStatus)) {
-        logger.warn('booking', 'state machine bypass: unknown status', { from: booking.status, to: newStatus, bookingId: id });
-      } else if (!canTransition(booking.status as BookingStatus, newStatus as BookingStatus)) {
+    if (status && status !== booking.status && status !== 'AT_PICKUP') {
+      if (!isBookingStatus(booking.status as string) || !isBookingStatus(status)) {
+        logger.warn('booking', 'state machine bypass: unknown status', { from: booking.status, to: status, bookingId: id });
+      } else if (!canTransition(booking.status as BookingStatus, status as BookingStatus)) {
         return NextResponse.json(
-          { error: 'INVALID_TRANSITION', from: booking.status, to: newStatus },
+          { error: 'INVALID_TRANSITION', from: booking.status, to: status },
           { status: 400 },
         );
       }

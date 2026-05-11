@@ -1,12 +1,9 @@
-import { timingSafeEqual } from 'crypto';
 import { gzipSync } from 'node:zlib';
-import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { prisma } from '@/lib/prisma';
-import { acquireCronLock } from '@/lib/cron-lock';
-import { markCronRun } from '@/lib/observability';
 import { env } from '@/lib/env';
-import { log, logger } from '@/lib/logger';
+import { log } from '@/lib/logger';
+import { defineCron } from '@/lib/cron-runner';
 
 export const maxDuration = 300;
 
@@ -25,44 +22,23 @@ const BACKUP_PREFIX = 'backups/';
  *
  * Retention: dumps older than 30 days are deleted on the same run.
  */
-export async function GET(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret')
-    ?? req.headers.get('authorization')?.replace('Bearer ', '');
+export const GET = defineCron({
+  name: 'db-backup',
+  period: 'daily',
+  fn: async ({ logger }) => {
+    const supabaseUrl = env.SUPABASE_URL;
+    const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseKey) {
+      await log('error', 'cron-db-backup', 'Supabase env vars not configured');
+      throw new Error('Storage not configured');
+    }
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false },
+    });
 
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    await log('error', 'cron-db-backup', 'CRON_SECRET not configured');
-    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
-  }
-  const secretBuf = Buffer.from(secret ?? '');
-  const expectedBuf = Buffer.from(cronSecret);
-  const authorized =
-    secretBuf.length === expectedBuf.length && timingSafeEqual(secretBuf, expectedBuf);
-  if (!authorized) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const objectKey = `${BACKUP_PREFIX}${today}.json.gz`;
 
-  const acquired = await acquireCronLock('db-backup', 23 * 3600, 'daily');
-  if (!acquired) {
-    return NextResponse.json({ skipped: true, reason: 'already_run' }, { status: 200 });
-  }
-
-  await markCronRun('db-backup');
-
-  const supabaseUrl = env.SUPABASE_URL;
-  const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !supabaseKey) {
-    await log('error', 'cron-db-backup', 'Supabase env vars not configured');
-    return NextResponse.json({ error: 'Storage not configured' }, { status: 500 });
-  }
-  const supabase = createClient(supabaseUrl, supabaseKey, {
-    auth: { persistSession: false },
-  });
-
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const objectKey = `${BACKUP_PREFIX}${today}.json.gz`;
-
-  try {
     // Read critical tables in parallel. Caps avoid loading pathological
     // amounts of data into a Lambda; bump if the table grows beyond.
     const [
@@ -184,7 +160,7 @@ export async function GET(req: NextRequest) {
       });
     if (uploadErr) {
       await log('error', 'cron-db-backup', 'upload failed', { error: uploadErr.message });
-      return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+      throw new Error('Upload failed');
     }
 
     // Rotation — list and delete dumps older than RETENTION_DAYS.
@@ -222,16 +198,10 @@ export async function GET(req: NextRequest) {
       rotated: deleted,
     });
 
-    return NextResponse.json({
-      ok: true,
+    return {
       key: objectKey,
       bytes: gz.length,
       rotated: deleted,
-    });
-  } catch (err) {
-    await log('error', 'cron-db-backup', 'backup failed', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return NextResponse.json({ error: 'Backup failed' }, { status: 500 });
-  }
-}
+    };
+  },
+});

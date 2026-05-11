@@ -156,8 +156,8 @@ model PetDocument {
 model Booking {
   id          String   @id @default(cuid())
   clientId    String
-  serviceType String   // "BOARDING" | "PET_TAXI"
-  status      String   @default("PENDING") // "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "CANCELLED" | "REJECTED" | "COMPLETED" | "NO_SHOW" | "WAITLIST" | "PENDING_EXTENSION"
+  serviceType BookingServiceType   // "BOARDING" | "PET_TAXI"
+  status      BookingStatus   @default(PENDING) // "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "CANCELLED" | "REJECTED" | "COMPLETED" | "NO_SHOW" | "WAITLIST" | "PENDING_EXTENSION"
   startDate   DateTime
   endDate     DateTime?
   isOpenEnded Boolean  @default(false) // séjour à durée indéterminée — endDate fixé au checkout
@@ -341,7 +341,7 @@ model Invoice {
   invoiceNumber String   @unique
   amount        Decimal  @db.Decimal(10, 2)
   paidAmount    Decimal  @default(0) @db.Decimal(10, 2) // Calculé = SUM(payments.amount), mis à jour par allocatePayments()
-  status        String   @default("PENDING") // "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED"
+  status        InvoiceStatus   @default(PENDING) // "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED"
   serviceType   String?  // "BOARDING" | "PET_TAXI" | "GROOMING" | "PRODUCT_SALE" | null (legacy)
   pdfUrl        String?
   notes                     String?
@@ -366,6 +366,38 @@ model Invoice {
   @@index([createdAt])
   @@index([supplementaryForBookingId])
   @@index([clientId, status]) // factures impayées par client
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REJECTED
+  AT_PICKUP
+  NO_SHOW
+  WAITLIST
+  PENDING_EXTENSION
+}
+
+enum BookingServiceType {
+  BOARDING
+  PET_TAXI
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  CHECK
+  TRANSFER
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  CANCELLED
+  PARTIALLY_PAID
 }
 
 enum ItemCategory {
@@ -406,7 +438,7 @@ model Payment {
   invoiceId     String
   invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   amount        Decimal  @db.Decimal(10, 2)
-  paymentMethod String   // "CASH" | "CARD" | "CHECK" | "TRANSFER"
+  paymentMethod PaymentMethod   // "CASH" | "CARD" | "CHECK" | "TRANSFER"
   paymentDate   DateTime
   notes         String?
   createdAt     DateTime @default(now())
