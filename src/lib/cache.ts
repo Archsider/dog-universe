@@ -6,8 +6,18 @@
 // a user-private cache entry whose key isn't bound to the requesting user
 // — that would be classic cache-poisoning / cross-user data leak.
 
+import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
 import { env } from '@/lib/env';
+
+function breadcrumb(op: string, key: string, message: string): void {
+  Sentry.addBreadcrumb({
+    category: 'redis',
+    level: 'warning',
+    message: `cache: ${message}`,
+    data: { op, key },
+  });
+}
 
 let cached: Redis | null | undefined;
 
@@ -41,6 +51,7 @@ export async function tryAcquireFlag(key: string, ttlSeconds: number): Promise<b
     const res = await redis.set(key, '1', { nx: true, ex: ttlSeconds });
     return res === 'OK';
   } catch (err) {
+    breadcrumb('set-nx', key, 'tryAcquireFlag failed, failing open');
     console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'tryAcquireFlag failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return true;
   }
@@ -55,6 +66,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     const raw = await redis.get<T>(key);
     return raw ?? null;
   } catch (err) {
+    breadcrumb('get', key, 'GET failed, failing open (returning null)');
     console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'GET failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return null;
   }
@@ -66,6 +78,7 @@ export async function cacheSet<T>(key: string, value: T, ttlSeconds: number): Pr
   try {
     await redis.set(key, value, { ex: ttlSeconds });
   } catch (err) {
+    breadcrumb('set', key, 'SET failed, failing open');
     console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'SET failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }
@@ -76,6 +89,7 @@ export async function cacheDel(key: string): Promise<void> {
   try {
     await redis.del(key);
   } catch (err) {
+    breadcrumb('del', key, 'DEL failed, failing open');
     console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'DEL failed', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }
@@ -128,6 +142,7 @@ export async function markWorkerRun(): Promise<void> {
   try {
     await redis.set('worker:lastRun', new Date().toISOString(), { ex: 86400 });
   } catch (err) {
+    breadcrumb('set', 'worker:lastRun', 'markWorkerRun failed, failing open');
     console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'markWorkerRun failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }
@@ -140,6 +155,7 @@ export async function getWorkerLastRun(): Promise<string | null> {
     const val = await redis.get<string>('worker:lastRun');
     return val ?? null;
   } catch (err) {
+    breadcrumb('get', 'worker:lastRun', 'getWorkerLastRun failed, failing open');
     console.error(JSON.stringify({ level: 'error', service: 'cache', message: 'getWorkerLastRun failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return null;
   }

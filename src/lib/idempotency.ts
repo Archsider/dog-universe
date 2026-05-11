@@ -17,6 +17,7 @@
 // request through. The accounting risk of a duplicate booking under a Redis
 // outage is far smaller than the availability risk of blocking every booking
 // when Redis is down.
+import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
 
 let cachedRedis: Redis | null | undefined;
@@ -81,6 +82,12 @@ export async function tryAcquireIdempotency(
     const result = await redis.set(redisKey, '1', { nx: true, ex: ttlSeconds });
     return { acquired: result === 'OK', redisAvailable: true };
   } catch (err) {
+    Sentry.addBreadcrumb({
+      category: 'redis',
+      level: 'warning',
+      message: 'idempotency: Redis SET failed, failing open',
+      data: { op: 'set-nx', key: redisKey },
+    });
     console.error(JSON.stringify({ level: 'error', service: 'idempotency', message: 'Redis SET failed, failing open', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return { acquired: true, redisAvailable: false };
   }

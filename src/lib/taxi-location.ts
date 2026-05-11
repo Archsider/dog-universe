@@ -6,7 +6,17 @@
 // tracking endpoint when the driver POSTs through it; this Redis cache
 // is the hot read path. Fail-open everywhere — if Redis is missing or
 // down, callers get null and fall back to DB / polling.
+import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
+
+function breadcrumb(op: string, bookingId: string, message: string): void {
+  Sentry.addBreadcrumb({
+    category: 'redis',
+    level: 'warning',
+    message: `taxi-location: ${message}`,
+    data: { op, key: `taxi:location:${bookingId}` },
+  });
+}
 
 let cached: Redis | null | undefined;
 
@@ -58,6 +68,7 @@ export async function recordLocation(bookingId: string, snap: TaxiLocationSnapsh
   try {
     await redis.set(locationKey(bookingId), payload, { ex: TTL_SECONDS });
   } catch (err) {
+    breadcrumb('set', bookingId, 'recordLocation SET failed, failing open');
     console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'recordLocation set failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
   // Publish on the channel so any SSE subscriber (future ioredis upgrade) gets
@@ -67,6 +78,7 @@ export async function recordLocation(bookingId: string, snap: TaxiLocationSnapsh
   try {
     await redis.publish(locationChannel(bookingId), payload);
   } catch (err) {
+    breadcrumb('publish', bookingId, 'recordLocation PUBLISH failed, failing open');
     console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'recordLocation publish failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }
@@ -84,6 +96,7 @@ export async function getLocation(bookingId: string): Promise<TaxiLocationSnapsh
     if (typeof parsed?.lat !== 'number' || typeof parsed?.lng !== 'number') return null;
     return parsed;
   } catch (err) {
+    breadcrumb('get', bookingId, 'getLocation failed, failing open');
     console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'getLocation failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return null;
   }
@@ -96,6 +109,7 @@ export async function clearLocation(bookingId: string): Promise<void> {
   try {
     await redis.del(locationKey(bookingId));
   } catch (err) {
+    breadcrumb('del', bookingId, 'clearLocation failed, failing open');
     console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'clearLocation failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
   }
 }

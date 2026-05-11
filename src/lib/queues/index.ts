@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { Queue, JobsOptions } from 'bullmq';
 import { getBullMQConnection, isBullMQConfigured } from '@/lib/redis-bullmq';
 import { sendEmail } from '@/lib/email';
@@ -115,6 +116,12 @@ export async function enqueueEmail(data: EmailJobData, jobId?: string): Promise<
   try {
     await getEmailQueue().add('send', data, jobId ? { ...EMAIL_JOB_OPTIONS, jobId } : EMAIL_JOB_OPTIONS);
   } catch (err) {
+    Sentry.addBreadcrumb({
+      category: 'redis',
+      level: 'warning',
+      message: 'queues: email enqueue failed, falling back to direct send',
+      data: { op: 'queue.add', queue: QUEUE_EMAIL },
+    });
     console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'email enqueue failed, falling back to direct send', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     await sendEmail(data).catch((e) => console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'email direct send failed', masked, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() })));
   }
@@ -130,6 +137,12 @@ export async function enqueueSms(data: SmsJobData, jobId?: string): Promise<void
   try {
     await getSmsQueue().add('send', data, jobId ? { ...SMS_JOB_OPTIONS, jobId } : SMS_JOB_OPTIONS);
   } catch (err) {
+    Sentry.addBreadcrumb({
+      category: 'redis',
+      level: 'warning',
+      message: 'queues: sms enqueue failed, falling back to direct send',
+      data: { op: 'queue.add', queue: QUEUE_SMS },
+    });
     console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'sms enqueue failed, falling back to direct send', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     const fallback = data.to === 'ADMIN' ? sendAdminSMS(data.message) : sendSMS(data.to, data.message);
     await fallback.catch((e) => console.error(JSON.stringify({ level: 'error', service: 'bullmq', message: 'sms direct send failed', masked, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() })));

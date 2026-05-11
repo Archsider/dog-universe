@@ -2,6 +2,7 @@
 // account anonymization. Backed by Upstash Redis (REST). Fail-open : if
 // Redis is missing/down, the rate limit is skipped (we'd rather let the
 // user exercise their RGPD right than block them silently).
+import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
 
 let cached: Redis | null | undefined;
@@ -51,6 +52,12 @@ export async function consumeExportSlot(
     }
     return { ok: true, remaining: Math.max(0, EXPORT_DAILY_LIMIT - count) };
   } catch (err) {
+    Sentry.addBreadcrumb({
+      category: 'redis',
+      level: 'warning',
+      message: 'rgpd: consumeExportSlot failed, failing open',
+      data: { op: 'incr', key },
+    });
     console.error(JSON.stringify({ level: 'error', service: 'rgpd', message: 'consumeExportSlot failed, failing open', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
     return { ok: true, remaining: EXPORT_DAILY_LIMIT - 1 };
   }
