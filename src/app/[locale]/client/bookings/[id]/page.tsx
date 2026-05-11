@@ -1,135 +1,27 @@
 import { auth } from '../../../../../../auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import Link from 'next/link';
-import Image from 'next/image';
-import {
-  ArrowLeft, Calendar, PawPrint, Package, Car,
-  FileText, Camera, MessageSquare,
-  XCircle, Clock,
-  Check, MapPin,
-} from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
-import { differenceInDays } from 'date-fns';
-import CancelBookingButton from '../../history/CancelBookingButton';
 import AutoRefresh from '@/components/shared/AutoRefresh';
-import RequestExtensionButton from './RequestExtensionButton';
-import RequestAddonButton from './RequestAddonButton';
-import RescheduleBookingButton from './RescheduleBookingButton';
-import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
-import { RebookButton } from '@/components/client/RebookButton';
-import StayPhotoFeed from '@/components/client/StayPhotoFeed';
-import ClientProductOrder from './ClientProductOrder';
 import UpsellSuggestions from '@/components/shared/UpsellSuggestions';
+import ClientProductOrder from './ClientProductOrder';
+import { getTranslations } from './_lib/i18n';
+import { serializeTrips, computeRunningTotal } from './_lib/derived';
+import BookingHeader from './_components/BookingHeader';
+import BookingProgressCard from './_components/BookingProgressCard';
+import BookingServiceCard from './_components/BookingServiceCard';
+import BookingPetsCard from './_components/BookingPetsCard';
+import BookingAddonCard from './_components/BookingAddonCard';
+import BookingPricingCard from './_components/BookingPricingCard';
+import BookingRunningTotalCard from './_components/BookingRunningTotalCard';
+import BookingInvoiceCard from './_components/BookingInvoiceCard';
+import BookingSupplementaryInvoiceCard from './_components/BookingSupplementaryInvoiceCard';
+import BookingStayPhotosCard from './_components/BookingStayPhotosCard';
+import BookingMessagesCard from './_components/BookingMessagesCard';
+import BookingRebookCard from './_components/BookingRebookCard';
+import RescheduleBanner from './_components/RescheduleBanner';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
-
-// Stepper steps par pipeline
-const BOARDING_STEPS = [
-  { status: 'PENDING',     labelFr: 'Demande reçue',       labelEn: 'Request received',   labelAr: 'تم استلام الطلب',       descFr: 'Votre demande est en cours de traitement',        descEn: 'Your request is being processed',      descAr: 'طلبك قيد المعالجة' },
-  { status: 'CONFIRMED',   labelFr: 'Séjour confirmé',      labelEn: 'Stay confirmed',      labelAr: 'تأكيد الإقامة',         descFr: 'Notre équipe a confirmé votre réservation',        descEn: 'Our team confirmed your booking',       descAr: 'أكد فريقنا حجزك' },
-  { status: 'IN_PROGRESS', labelFr: 'Dans nos murs',        labelEn: 'Currently staying',   labelAr: 'في رعايتنا',            descFr: 'Votre animal est avec nous',                       descEn: 'Your pet is with us',                   descAr: 'حيوانك الأليف معنا' },
-  { status: 'COMPLETED',   labelFr: 'Séjour terminé',       labelEn: 'Stay completed',      labelAr: 'انتهت الإقامة',         descFr: 'Le séjour s\'est terminé avec succès',             descEn: 'The stay completed successfully',       descAr: 'انتهت الإقامة بنجاح' },
-];
-
-const TAXI_STEPS = [
-  { status: 'PENDING',     labelFr: 'Transport planifié',              labelEn: 'Transport planned',    labelAr: 'النقل مجدول',            descFr: 'Votre transport a été programmé',                  descEn: 'Your transport has been scheduled',   descAr: 'تم جدولة نقلك' },
-  { status: 'CONFIRMED',   labelFr: 'Véhicule en route vers le point de départ', labelEn: 'Vehicle en route to pickup', labelAr: 'السيارة في الطريق', descFr: 'Le véhicule est en chemin vers le point de départ', descEn: 'The vehicle is heading to the pickup point', descAr: 'السيارة في طريقها إلى نقطة الانطلاق' },
-  { status: 'AT_PICKUP',   labelFr: 'Véhicule sur place',              labelEn: 'Vehicle on site',      labelAr: 'السيارة في المكان',      descFr: 'Le véhicule est arrivé au point de départ',        descEn: 'The vehicle has arrived at the pickup point', descAr: 'وصلت السيارة إلى نقطة الانطلاق' },
-  { status: 'IN_PROGRESS', labelFr: 'Animal à bord',                   labelEn: 'Pet on board',         labelAr: 'الحيوان على متن السيارة', descFr: 'Votre animal est dans le véhicule',                descEn: 'Your pet is in the vehicle',          descAr: 'حيوانك الأليف في السيارة' },
-  { status: 'COMPLETED',   labelFr: 'Arrivé à destination',            labelEn: 'Arrived',              labelAr: 'وصل إلى الوجهة',         descFr: 'Votre animal est arrivé à destination',            descEn: 'Your pet has arrived safely',         descAr: 'وصل حيوانك الأليف بأمان' },
-];
-
-const BOARDING_STATUS_ORDER = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED'];
-const TAXI_STATUS_ORDER = ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS', 'COMPLETED'];
-
-function BookingStepper({
-  status,
-  serviceType,
-  locale,
-}: {
-  status: string;
-  serviceType: string;
-  locale: string;
-}) {
-  const isFr = locale === 'fr';
-  const isAr = locale === 'ar';
-  const isCancelled = status === 'CANCELLED' || status === 'REJECTED';
-  const steps = serviceType === 'PET_TAXI' ? TAXI_STEPS : BOARDING_STEPS;
-  const statusOrder = serviceType === 'PET_TAXI' ? TAXI_STATUS_ORDER : BOARDING_STATUS_ORDER;
-  const currentIdx = statusOrder.indexOf(status);
-
-  if (isCancelled) {
-    return (
-      <div className="flex items-center gap-3 p-4 bg-red-50 rounded-xl border border-red-200">
-        <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-        <div>
-          <p className="font-semibold text-red-700 text-sm">
-            {status === 'CANCELLED'
-              ? (isFr ? 'Réservation annulée' : isAr ? 'تم إلغاء الحجز' : 'Booking cancelled')
-              : (isFr ? 'Réservation refusée' : isAr ? 'تم رفض الحجز' : 'Booking refused')}
-          </p>
-          <p className="text-xs text-red-500 mt-0.5">
-            {isFr ? 'Cette réservation n\'est plus active.' : isAr ? 'هذا الحجز لم يعد نشطًا.' : 'This booking is no longer active.'}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-0">
-      {steps.map((step, idx) => {
-        const isDone = currentIdx > idx;
-        const isActive = currentIdx === idx;
-
-        return (
-          <div key={step.status} className="flex gap-4">
-            {/* Indicateur vertical */}
-            <div className="flex flex-col items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                isDone
-                  ? 'bg-green-500 text-white'
-                  : isActive
-                  ? 'bg-charcoal text-white ring-4 ring-charcoal/10'
-                  : 'bg-ivory-100 text-gray-300 border border-ivory-200'
-              }`}>
-                {isDone ? (
-                  <Check className="h-4 w-4" />
-                ) : isActive ? (
-                  <span className="text-xs font-bold">{idx + 1}</span>
-                ) : (
-                  <span className="text-xs text-gray-300">{idx + 1}</span>
-                )}
-              </div>
-              {idx < steps.length - 1 && (
-                <div className={`w-0.5 flex-1 my-1 min-h-[20px] ${
-                  isDone ? 'bg-green-300' : 'bg-ivory-200'
-                }`} />
-              )}
-            </div>
-
-            {/* Contenu */}
-            <div className={`pb-4 flex-1 ${idx === steps.length - 1 ? 'pb-0' : ''}`}>
-              <p className={`text-sm font-semibold leading-tight mt-1 ${
-                isDone ? 'text-green-700' : isActive ? 'text-charcoal' : 'text-gray-300'
-              }`}>
-                {isFr ? step.labelFr : isAr ? step.labelAr : step.labelEn}
-              </p>
-              {isActive && (
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {isFr ? step.descFr : isAr ? step.descAr : step.descEn}
-                </p>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 export default async function ClientBookingDetailPage({ params }: PageProps) {
   const { locale, id } = await params;
@@ -153,28 +45,24 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
 
   if (!booking || booking.clientId !== session.user.id) notFound();
 
-  // Supplementary extension invoice (bookingId: null, tracked via supplementaryForBookingId or legacy notes)
-  const supplementaryInvoice = await prisma.invoice.findFirst({
-    where: {
-      status: { notIn: ['CANCELLED'] },
-      OR: [
-        { supplementaryForBookingId: id },
-        // legacy fallback for rows created before the FK column was added
-        { clientId: session.user.id, notes: `EXTENSION_SURCHARGE:${id}` },
-      ],
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  // Admin messages related to this booking
-  const adminMessages = await prisma.notification.findMany({
-    where: {
-      userId: session.user.id,
-      type: { in: ['ADMIN_MESSAGE', 'STAY_PHOTO'] },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  });
+  const [supplementaryInvoice, adminMessages] = await Promise.all([
+    prisma.invoice.findFirst({
+      where: {
+        status: { notIn: ['CANCELLED'] },
+        OR: [
+          { supplementaryForBookingId: id },
+          // legacy fallback for rows created before the FK column was added
+          { clientId: session.user.id, notes: `EXTENSION_SURCHARGE:${id}` },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.notification.findMany({
+      where: { userId: session.user.id, type: { in: ['ADMIN_MESSAGE', 'STAY_PHOTO'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    }),
+  ]);
 
   const bookingMessages = adminMessages.filter(n => {
     if (!n.metadata) return false;
@@ -185,724 +73,118 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
     } catch { return false; }
   });
 
-  const l = {
-    fr: {
-      back: 'Mes réservations',
-      service: 'Service',
-      boarding: 'Pension',
-      taxi: 'Taxi animalier',
-      pets: 'Animaux',
-      dates: 'Dates',
-      duration: 'Durée',
-      nights: 'nuit(s)',
-      arrival: 'Arrivée',
-      departure: 'Départ',
-      grooming: 'Toilettage',
-      yes: 'Inclus',
-      no: 'Non',
-      taxiType: 'Type de course',
-      notes: 'Notes',
-      pricing: 'Détail du prix',
-      perNight: '/nuit',
-      invoice: 'Facture',
-      noPdf: 'Télécharger PDF',
-      photos: 'Photos de séjour',
-      noPhotos: 'Aucune photo publiée pour l\'instant',
-      messages: 'Messages de Dog Universe',
-      noMessages: 'Aucun message pour l\'instant',
-      cancel: 'Annuler la réservation',
-      progression: 'Suivi de votre réservation',
-      supplementaryInvoice: 'Supplément prolongation',
-      invoiceNumber: 'Facture',
-      amount: 'Montant',
-      paid: 'Payé',
-      remaining: 'Reste à payer',
-      statusPaid: 'Payée',
-      statusPending: 'En attente',
-      statusPartial: 'Partiellement payée',
-      statusLabels: {
-        PENDING: 'En attente', CONFIRMED: 'Confirmée', IN_PROGRESS: 'En cours',
-        COMPLETED: 'Terminée', CANCELLED: 'Annulée', REJECTED: 'Refusée',
-      },
-      taxiTypes: { STANDARD: 'Course standard', VET: 'Transport vétérinaire', AIRPORT: 'Navette aéroport' },
-      pickup: 'Départ',
-      dropoff: 'Arrivée',
-    },
-    en: {
-      back: 'My bookings',
-      service: 'Service',
-      boarding: 'Boarding',
-      taxi: 'Pet Taxi',
-      pets: 'Pets',
-      dates: 'Dates',
-      duration: 'Duration',
-      nights: 'night(s)',
-      arrival: 'Arrival',
-      departure: 'Departure',
-      grooming: 'Grooming',
-      yes: 'Included',
-      no: 'No',
-      taxiType: 'Trip type',
-      notes: 'Notes',
-      pricing: 'Price breakdown',
-      perNight: '/night',
-      invoice: 'Invoice',
-      noPdf: 'Download PDF',
-      photos: 'Stay photos',
-      noPhotos: 'No photos published yet',
-      messages: 'Messages from Dog Universe',
-      noMessages: 'No messages yet',
-      cancel: 'Cancel booking',
-      progression: 'Booking progress',
-      supplementaryInvoice: 'Extension supplement',
-      invoiceNumber: 'Invoice',
-      amount: 'Amount',
-      paid: 'Paid',
-      remaining: 'Remaining',
-      statusPaid: 'Paid',
-      statusPending: 'Pending',
-      statusPartial: 'Partially paid',
-      statusLabels: {
-        PENDING: 'Pending', CONFIRMED: 'Confirmed', IN_PROGRESS: 'In progress',
-        COMPLETED: 'Completed', CANCELLED: 'Cancelled', REJECTED: 'Rejected',
-      },
-      taxiTypes: { STANDARD: 'Standard ride', VET: 'Vet transport', AIRPORT: 'Airport shuttle' },
-      pickup: 'Pickup',
-      dropoff: 'Dropoff',
-    },
-    ar: {
-      back: 'حجوزاتي',
-      service: 'الخدمة',
-      boarding: 'نزالة',
-      taxi: 'سيارة أجرة للحيوانات',
-      pets: 'الحيوانات',
-      dates: 'التواريخ',
-      duration: 'المدة',
-      nights: 'ليلة',
-      arrival: 'الوصول',
-      departure: 'المغادرة',
-      grooming: 'تزيين',
-      yes: 'مشمول',
-      no: 'لا',
-      taxiType: 'نوع الرحلة',
-      notes: 'ملاحظات',
-      pricing: 'تفاصيل السعر',
-      perNight: '/ليلة',
-      invoice: 'الفاتورة',
-      noPdf: 'تحميل PDF',
-      photos: 'صور الإقامة',
-      noPhotos: 'لم تُنشر أي صور بعد',
-      messages: 'رسائل من Dog Universe',
-      noMessages: 'لا توجد رسائل بعد',
-      cancel: 'إلغاء الحجز',
-      progression: 'تتبع حجزك',
-      supplementaryInvoice: 'ملحق التمديد',
-      invoiceNumber: 'الفاتورة',
-      amount: 'المبلغ',
-      paid: 'مدفوع',
-      remaining: 'المتبقي',
-      statusPaid: 'مدفوعة',
-      statusPending: 'معلقة',
-      statusPartial: 'مدفوعة جزئيًا',
-      statusLabels: {
-        PENDING: 'قيد الانتظار', CONFIRMED: 'مؤكد', IN_PROGRESS: 'جارٍ',
-        COMPLETED: 'منتهي', CANCELLED: 'ملغى', REJECTED: 'مرفوض',
-      },
-      taxiTypes: { STANDARD: 'رحلة عادية', VET: 'نقل بيطري', AIRPORT: 'مكوك المطار' },
-      pickup: 'نقطة الانطلاق',
-      dropoff: 'نقطة الوصول',
-    },
-  };
-  const t = l[locale as keyof typeof l] || l.fr;
-
-  const isActive = ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'].includes(booking.status);
+  const t = getTranslations(locale);
   const isBoarding = booking.serviceType === 'BOARDING';
-
-  // Serialize TaxiTrip data for client component
-  const serializedTrips: TaxiTripData[] = booking.taxiTrips.map(t => ({
-    id: t.id,
-    tripType: t.tripType,
-    status: t.status,
-    date: t.date,
-    time: t.time,
-    address: t.address,
-    history: t.history.map(h => ({
-      id: h.id,
-      status: h.status,
-      timestamp: h.timestamp.toISOString(),
-      updatedBy: h.updatedBy,
-    })),
-  }));
-  const standaloneTrip = serializedTrips.find(t => t.tripType === 'STANDALONE') ?? null;
-  const goTrip         = serializedTrips.find(t => t.tripType === 'OUTBOUND')   ?? null;
-  const returnTrip     = serializedTrips.find(t => t.tripType === 'RETURN')     ?? null;
-  const nights = booking.endDate
-    ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))
-    : 0;
-
-  // Compteur "en cours" — séjour actif = status CONFIRMED/IN_PROGRESS et
-  // startDate dépassée. endDate jamais utilisé (admin déclenche COMPLETED).
-  // Open-ended (isOpenEnded OR endDate=null) traités identiquement : on
-  // compte les nuits depuis startDate jusqu'à aujourd'hui.
-  const nowForCounter = new Date();
-  const isStayActive =
-    isBoarding &&
-    (booking.status === 'IN_PROGRESS' ||
-      (booking.status === 'CONFIRMED' && booking.startDate <= nowForCounter));
-  const elapsedNights = isStayActive
-    ? Math.max(1, differenceInDays(nowForCounter, booking.startDate))
-    : 0;
-  const dailyRate = booking.boardingDetail
-    ? toNumber(booking.boardingDetail.pricePerNight)
-    : 0;
-  const elapsedBoardingTotal = elapsedNights * dailyRate;
-  const nonBoardingItems = booking.invoice
-    ? booking.invoice.items.filter((it) => it.category !== 'BOARDING')
-    : [];
-  const nonBoardingTotal = nonBoardingItems.reduce(
-    (sum, it) => sum + toNumber(it.total),
-    0
-  );
-  const provisionalTotal = elapsedBoardingTotal + nonBoardingTotal;
-
+  const isActive = ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'].includes(booking.status);
   const canCancel = ['PENDING', 'CONFIRMED'].includes(booking.status);
   const statusLabel = t.statusLabels[booking.status as keyof typeof t.statusLabels] || booking.status;
 
-  // Parse taxi addresses from notes
+  const nights = booking.endDate
+    ? Math.max(0, Math.floor((booking.endDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)))
+    : 0;
   const taxiDeparture = booking.notes?.match(/Départ:\s*([^|]+)/)?.[1]?.trim() ?? null;
   const taxiArrival = booking.notes?.match(/Arrivée:\s*([^|]+)/)?.[1]?.trim() ?? null;
-
-  // P1-8: Detect pending reschedule request tag in notes
   const hasRescheduleRequest =
-    booking.status === 'PENDING' &&
-    /\[RESCHEDULE_REQUEST\]\{/.test(booking.notes ?? '');
+    booking.status === 'PENDING' && /\[RESCHEDULE_REQUEST\]\{/.test(booking.notes ?? '');
+
+  const serializedTrips = serializeTrips(booking.taxiTrips);
+  const standaloneTrip = serializedTrips.find(t => t.tripType === 'STANDALONE') ?? null;
+  const goTrip         = serializedTrips.find(t => t.tripType === 'OUTBOUND')   ?? null;
+  const returnTrip     = serializedTrips.find(t => t.tripType === 'RETURN')     ?? null;
+
+  const { isStayActive, elapsedNights, elapsedBoardingTotal, nonBoardingItems, provisionalTotal } =
+    computeRunningTotal({
+      isBoarding,
+      status: booking.status,
+      startDate: booking.startDate,
+      boardingDetail: booking.boardingDetail,
+      invoiceItems: booking.invoice?.items ?? null,
+    });
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Auto-refresh pour les réservations actives (toutes les 30s) */}
       {isActive && <AutoRefresh intervalMs={30000} />}
+      {hasRescheduleRequest && <RescheduleBanner locale={locale} />}
 
-      {/* P1-8: Reschedule request banner */}
-      {hasRescheduleRequest && (
-        <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
-          <div className="mt-0.5 flex-shrink-0 text-amber-500">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-amber-800">
-              {locale === 'fr'
-                ? 'Votre demande de modification est en cours d\'examen'
-                : locale === 'ar'
-                ? 'طلب التعديل قيد المراجعة'
-                : 'Your reschedule request is under review'}
-            </p>
-            <p className="mt-0.5 text-xs text-amber-700">
-              {locale === 'fr'
-                ? 'Notre équipe va traiter votre demande de modification de dates rapidement.'
-                : locale === 'ar'
-                ? 'سيعالج فريقنا طلب تغيير التواريخ قريبًا.'
-                : 'Our team will process your date change request shortly.'}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link href={`/${locale}/client/history`} className="text-gray-400 hover:text-charcoal transition-colors">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="font-mono font-bold text-charcoal text-lg">{booking.id.slice(0, 8).toUpperCase()}</h1>
-            <Badge className={getBookingStatusColor(booking.status)}>
-              {statusLabel}
-            </Badge>
-          </div>
-          <p className="text-xs text-gray-400">{formatDate(booking.createdAt, locale)}</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {canCancel && (
-            <RescheduleBookingButton
-              bookingId={booking.id}
-              serviceType={booking.serviceType as 'BOARDING' | 'PET_TAXI'}
-              species={(booking.bookingPets[0]?.pet?.species as 'DOG' | 'CAT' | undefined) ?? null}
-              currentStart={booking.startDate.toISOString()}
-              currentEnd={booking.endDate ? booking.endDate.toISOString() : null}
-              locale={locale}
-            />
-          )}
-          {canCancel && <CancelBookingButton bookingId={booking.id} locale={locale} />}
-        </div>
-      </div>
+      <BookingHeader
+        bookingId={booking.id}
+        bookingCreatedAt={booking.createdAt}
+        bookingStatus={booking.status}
+        serviceType={booking.serviceType as 'BOARDING' | 'PET_TAXI'}
+        species={(booking.bookingPets[0]?.pet?.species as 'DOG' | 'CAT' | undefined) ?? null}
+        startDate={booking.startDate.toISOString()}
+        endDate={booking.endDate ? booking.endDate.toISOString() : null}
+        canCancel={canCancel}
+        statusLabel={statusLabel}
+        locale={locale}
+        t={t}
+      />
 
       <div className="space-y-4">
-        {/* Stepper de progression — card premium */}
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-          <div className="flex items-center gap-2 mb-4">
-            <div className={`p-2 rounded-lg ${isBoarding ? 'bg-gold-50' : 'bg-blue-50'}`}>
-              {isBoarding
-                ? <Package className="h-4 w-4 text-gold-500" />
-                : <Car className="h-4 w-4 text-blue-500" />}
-            </div>
-            <div>
-              <p className="font-semibold text-charcoal text-sm">{isBoarding ? t.boarding : t.taxi}</p>
-              <p className="text-xs text-gray-400">{t.progression}</p>
-            </div>
-          </div>
-          {isBoarding || !standaloneTrip
-            ? <BookingStepper status={booking.status} serviceType={booking.serviceType} locale={locale} />
-            : <TaxiTimeline trip={standaloneTrip} readOnly locale={locale} />}
-        </div>
+        <BookingProgressCard status={booking.status} serviceType={booking.serviceType} standaloneTrip={standaloneTrip} locale={locale} t={t} />
 
-        {/* Service + Dates */}
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-          <div className="space-y-2 text-sm">
-            {isBoarding ? (
-              <>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{t.arrival}</span>
-                  <span className="font-medium text-charcoal">{formatDate(booking.startDate, locale)}</span>
-                </div>
-                {booking.endDate && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{t.departure}</span>
-                    <span className="font-medium text-charcoal">{formatDate(booking.endDate, locale)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-gray-500 flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{t.duration}</span>
-                  <span className="font-semibold text-gold-600">{nights} {t.nights}</span>
-                </div>
-                {booking.boardingDetail && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">{t.grooming}</span>
-                    <span className="font-medium text-charcoal">{booking.boardingDetail.includeGrooming ? t.yes : t.no}</span>
-                  </div>
-                )}
-                {booking.boardingDetail?.taxiGoEnabled && (
-                  <>
-                    <div className="mt-2 pt-2 border-t border-ivory-100">
-                      <p className="text-xs font-semibold text-orange-700 mb-1">{locale === 'fr' ? 'Taxi aller — dépôt à la pension' : locale === 'ar' ? 'تاكسي الذهاب — التوصيل إلى الحضيرة' : 'Taxi go — drop-off at facility'}</p>
-                    </div>
-                    {booking.boardingDetail.taxiGoDate && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-500 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{locale === 'fr' ? 'Date' : 'Date'}</span>
-                        <span className="font-medium text-charcoal">{booking.boardingDetail.taxiGoDate}{booking.boardingDetail.taxiGoTime ? ` — ${booking.boardingDetail.taxiGoTime}` : ''}</span>
-                      </div>
-                    )}
-                    {booking.boardingDetail.taxiGoAddress && (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-orange-400" />{locale === 'fr' ? 'Adresse' : locale === 'ar' ? 'العنوان' : 'Address'}</span>
-                        <span className="font-medium text-charcoal text-right">{booking.boardingDetail.taxiGoAddress}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-                {booking.boardingDetail?.taxiReturnEnabled && (
-                  <>
-                    <div className="mt-2 pt-2 border-t border-ivory-100">
-                      <p className="text-xs font-semibold text-orange-700 mb-1">{locale === 'fr' ? 'Taxi retour — récupération à domicile' : locale === 'ar' ? 'تاكسي العودة — الاستلام من المنزل' : 'Taxi return — pick-up at home'}</p>
-                    </div>
-                    {booking.boardingDetail.taxiReturnDate && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-500 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{locale === 'fr' ? 'Date' : 'Date'}</span>
-                        <span className="font-medium text-charcoal">{booking.boardingDetail.taxiReturnDate}{booking.boardingDetail.taxiReturnTime ? ` — ${booking.boardingDetail.taxiReturnTime}` : ''}</span>
-                      </div>
-                    )}
-                    {booking.boardingDetail.taxiReturnAddress && (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-orange-400" />{locale === 'fr' ? 'Adresse' : locale === 'ar' ? 'العنوان' : 'Address'}</span>
-                        <span className="font-medium text-charcoal text-right">{booking.boardingDetail.taxiReturnAddress}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-                {/* Taxi addon timelines — read-only */}
-                {goTrip && (
-                  <div className="mt-3 pt-3 border-t border-ivory-100">
-                    <p className="text-xs font-semibold text-orange-700 mb-2">
-                      {locale === 'fr' ? '↗ Taxi aller' : locale === 'ar' ? '↗ تاكسي الذهاب' : '↗ Taxi go'}
-                    </p>
-                    <TaxiTimeline trip={goTrip} readOnly locale={locale} />
-                  </div>
-                )}
-                {returnTrip && (
-                  <div className="mt-3 pt-3 border-t border-ivory-100">
-                    <p className="text-xs font-semibold text-orange-700 mb-2">
-                      {locale === 'fr' ? '↙ Taxi retour' : locale === 'ar' ? '↙ تاكسي العودة' : '↙ Taxi return'}
-                    </p>
-                    <TaxiTimeline trip={returnTrip} readOnly locale={locale} />
-                  </div>
-                )}
+        <BookingServiceCard
+          bookingId={booking.id} isBoarding={isBoarding} status={booking.status}
+          startDate={booking.startDate} endDate={booking.endDate} arrivalTime={booking.arrivalTime}
+          notes={booking.notes} nights={nights} boardingDetail={booking.boardingDetail}
+          taxiDetail={booking.taxiDetail} goTrip={goTrip} returnTrip={returnTrip}
+          taxiDeparture={taxiDeparture} taxiArrival={taxiArrival}
+          hasExtensionRequest={booking.hasExtensionRequest} locale={locale} t={t}
+        />
 
-                {['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && booking.endDate && (
-                  <div className="mt-3 pt-3 border-t border-ivory-100">
-                    <RequestExtensionButton
-                      bookingId={booking.id}
-                      currentEndDate={booking.endDate}
-                      hasExtensionRequest={booking.hasExtensionRequest}
-                      locale={locale}
-                    />
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{t.dates}</span>
-                  <span className="font-medium text-charcoal">{formatDate(booking.startDate, locale)}</span>
-                </div>
-                {booking.arrivalTime && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500 flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />Heure</span>
-                    <span className="font-medium text-charcoal">{booking.arrivalTime}</span>
-                  </div>
-                )}
-                {booking.taxiDetail && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">{t.taxiType}</span>
-                    <span className="font-medium text-charcoal">{t.taxiTypes[booking.taxiDetail.taxiType as keyof typeof t.taxiTypes] || booking.taxiDetail.taxiType}</span>
-                  </div>
-                )}
-                {taxiDeparture && (
-                  <div className="flex justify-between gap-4">
-                    <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-green-500" />{t.pickup}</span>
-                    <span className="font-medium text-charcoal text-right">{taxiDeparture}</span>
-                  </div>
-                )}
-                {taxiArrival && (
-                  <div className="flex justify-between gap-4">
-                    <span className="text-gray-500 flex items-center gap-1.5 flex-shrink-0"><MapPin className="h-3.5 w-3.5 text-red-400" />{t.dropoff}</span>
-                    <span className="font-medium text-charcoal text-right">{taxiArrival}</span>
-                  </div>
-                )}
-              </>
-            )}
-            {booking.notes && !booking.notes.includes('Départ:') && !booking.notes.includes('Arrivée:') && (
-              <div className="mt-2 pt-2 border-t border-ivory-100">
-                <p className="text-gray-400 text-xs mb-1">{t.notes}</p>
-                <p className="text-charcoal italic">{booking.notes}</p>
-              </div>
-            )}
-          </div>
-        </div>
+        <BookingPetsCard bookingPets={booking.bookingPets.filter(bp => bp.pet)} locale={locale} t={t} />
 
-        {/* Pets */}
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-          <div className="flex items-center gap-2 mb-3">
-            <PawPrint className="h-4 w-4 text-gold-500" />
-            <h3 className="font-semibold text-charcoal text-sm">{t.pets}</h3>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {booking.bookingPets.filter(bp => bp.pet).map(bp => (
-              <Link
-                key={bp.id}
-                href={`/${locale}/client/pets/${bp.pet.id}`}
-                className="flex items-center gap-2 px-3 py-1.5 bg-ivory-50 rounded-lg border border-[#F0D98A]/30 hover:border-gold-400 transition-colors"
-              >
-                {bp.pet.photoUrl ? (
-                  <Image src={bp.pet.photoUrl} alt={bp.pet.name ?? ''} width={24} height={24} className="w-6 h-6 rounded-full object-cover" />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-gold-100 flex items-center justify-center text-xs font-bold text-gold-600">
-                    {bp.pet.name?.[0] ?? '?'}
-                  </div>
-                )}
-                <span className="text-sm font-medium text-charcoal">{bp.pet.name ?? '—'}</span>
-                <span className="text-xs text-gray-400">{bp.pet.breed || bp.pet.species}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* Addon request (Pet Taxi / Grooming / Other) — only for active bookings */}
         {['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && (
-          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-3">
-            <div>
-              <p className="font-semibold text-charcoal text-sm">
-                {locale === 'fr' ? 'Un service en plus ?' : locale === 'ar' ? 'تحتاج خدمة إضافية؟' : 'Need an extra service?'}
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {locale === 'fr'
-                  ? 'Pet Taxi, toilettage ou autre — nous vous contactons rapidement.'
-                  : locale === 'ar'
-                  ? 'سيارة أجرة، تزيين أو غيره — سنتواصل معك قريبًا.'
-                  : 'Pet Taxi, grooming or other — we\'ll get back to you shortly.'}
-              </p>
-            </div>
-            <RequestAddonButton bookingId={booking.id} locale={locale} />
-          </div>
+          <BookingAddonCard bookingId={booking.id} locale={locale} />
         )}
 
-        {/* Pricing */}
         {(booking.boardingDetail || booking.taxiDetail) && (
-          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-            <h3 className="font-semibold text-charcoal text-sm mb-3">{t.pricing}</h3>
-            <div className="space-y-2 text-sm">
-              {booking.boardingDetail && (
-                <>
-                  {Number(booking.boardingDetail.pricePerNight) > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">{t.boarding} × {nights} {t.nights}</span>
-                      <span className="text-charcoal">{formatMAD(Number(booking.boardingDetail.pricePerNight) * nights)}</span>
-                    </div>
-                  )}
-                  {booking.boardingDetail.includeGrooming && Number(booking.boardingDetail.groomingPrice) > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">{t.grooming}</span>
-                      <span className="text-charcoal">{formatMAD(booking.boardingDetail.groomingPrice)}</span>
-                    </div>
-                  )}
-                  {Number(booking.boardingDetail.taxiAddonPrice) > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">{t.taxi}</span>
-                      <span className="text-charcoal">{formatMAD(booking.boardingDetail.taxiAddonPrice)}</span>
-                    </div>
-                  )}
-                </>
-              )}
-              {booking.taxiDetail && Number(booking.taxiDetail.price) > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{t.taxi}</span>
-                  <span className="text-charcoal">{formatMAD(booking.taxiDetail.price)}</span>
-                </div>
-              )}
-              <div className="flex justify-between pt-2 border-t border-ivory-100 font-semibold">
-                <span className="text-charcoal">Total</span>
-                <span className="text-gold-600 text-base">
-                  {booking.invoice ? formatMAD(booking.invoice.amount) : formatMAD(booking.totalPrice)}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Compteur séjour en cours — total provisoire */}
-        {isStayActive && (
-          <div className="bg-gradient-to-br from-gold-50 to-white rounded-xl border border-gold-300 p-5 shadow-card">
-            <div className="flex items-center gap-2 mb-3">
-              <Clock className="h-4 w-4 text-gold-600" />
-              <h3 className="font-semibold text-charcoal text-sm">
-                {locale === 'fr' ? 'Total en cours' : locale === 'ar' ? 'الإجمالي الجاري' : 'Running total'}
-              </h3>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">
-                  {locale === 'fr'
-                    ? `Nuits écoulées (${elapsedNights})`
-                    : locale === 'ar'
-                    ? `الليالي المنقضية (${elapsedNights})`
-                    : `Nights elapsed (${elapsedNights})`}
-                </span>
-                <span className="text-charcoal">{formatMAD(elapsedBoardingTotal)}</span>
-              </div>
-              {nonBoardingItems.map((it) => (
-                <div key={it.id} className="flex justify-between">
-                  <span className="text-gray-500">{it.description}</span>
-                  <span className="text-charcoal">{formatMAD(it.total)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between pt-2 border-t border-gold-200 font-semibold">
-                <span className="text-charcoal">
-                  {locale === 'fr' ? 'Total provisoire' : locale === 'ar' ? 'الإجمالي المؤقت' : 'Provisional total'}
-                </span>
-                <span className="text-gold-600 text-base">{formatMAD(provisionalTotal)}</span>
-              </div>
-              <p className="text-xs text-gray-400 italic pt-1">
-                {locale === 'fr'
-                  ? 'Estimation au prorata des nuits déjà passées. Le total final figurera sur la facture.'
-                  : locale === 'ar'
-                  ? 'تقدير حسب الليالي المنقضية. سيظهر الإجمالي النهائي على الفاتورة.'
-                  : 'Pro-rata estimate based on nights elapsed. Final total will appear on the invoice.'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Invoice */}
-        {booking.invoice && (
-          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-            <div className="flex items-center gap-2 mb-3">
-              <FileText className="h-4 w-4 text-gold-500" />
-              <h3 className="font-semibold text-charcoal text-sm">{t.invoice}</h3>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-mono text-sm font-semibold text-charcoal">{booking.invoice.invoiceNumber}</p>
-                <p className="text-lg font-bold text-gold-600">{formatMAD(booking.invoice.amount)}</p>
-                <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                  booking.invoice.status === 'PAID'
-                    ? 'bg-green-100 text-green-700'
-                    : booking.invoice.status === 'PARTIALLY_PAID'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-amber-100 text-amber-700'
-                }`}>
-                  {booking.invoice.status === 'PAID'
-                    ? (locale === 'fr' ? 'Payée' : locale === 'ar' ? 'مدفوعة' : 'Paid')
-                    : booking.invoice.status === 'PARTIALLY_PAID'
-                    ? (locale === 'fr' ? 'Partiellement payée' : locale === 'ar' ? 'مدفوعة جزئيًا' : 'Partially paid')
-                    : (locale === 'fr' ? 'En attente' : locale === 'ar' ? 'معلقة' : 'Pending')}
-                </span>
-              </div>
-              <a
-                href={`/api/invoices/${booking.invoice.id}/pdf`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-2 bg-gold-50 text-gold-700 rounded-lg text-sm font-medium hover:bg-gold-100 transition-colors border border-gold-200"
-              >
-                <FileText className="h-4 w-4" />
-                PDF
-              </a>
-            </div>
-          </div>
-        )}
-
-        {/* Supplementary extension invoice */}
-        {supplementaryInvoice && (
-          <div className="bg-white rounded-xl border border-amber-200 p-5 shadow-card">
-            <div className="flex items-center gap-2 mb-3">
-              <FileText className="h-4 w-4 text-amber-500" />
-              <h3 className="font-semibold text-charcoal text-sm">{t.supplementaryInvoice}</h3>
-              <span className="ml-auto text-xs px-2 py-0.5 rounded font-medium bg-amber-100 text-amber-700">
-                {locale === 'fr' ? `Réservation #${booking.id.slice(0, 8).toUpperCase()}` : locale === 'ar' ? `حجز #${booking.id.slice(0, 8).toUpperCase()}` : `Booking #${booking.id.slice(0, 8).toUpperCase()}`}
-              </span>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">{t.invoiceNumber}</span>
-                <span className="font-mono font-semibold text-charcoal">{supplementaryInvoice.invoiceNumber}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">{t.amount}</span>
-                <span className="font-bold text-amber-600">{formatMAD(supplementaryInvoice.amount)}</span>
-              </div>
-              {Number(supplementaryInvoice.paidAmount) > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{t.paid}</span>
-                  <span className="text-green-600">{formatMAD(supplementaryInvoice.paidAmount)}</span>
-                </div>
-              )}
-              <div className="flex justify-between pt-2 border-t border-ivory-100">
-                <span className="text-gray-500">{t.remaining}</span>
-                <span className="font-semibold text-charcoal">{formatMAD(Number(supplementaryInvoice.amount) - Number(supplementaryInvoice.paidAmount))}</span>
-              </div>
-              <div className="flex justify-between items-center pt-1">
-                <span className="text-gray-500">Statut</span>
-                <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                  supplementaryInvoice.status === 'PAID'
-                    ? 'bg-green-100 text-green-700'
-                    : supplementaryInvoice.status === 'PARTIALLY_PAID'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-amber-100 text-amber-700'
-                }`}>
-                  {supplementaryInvoice.status === 'PAID'
-                    ? t.statusPaid
-                    : supplementaryInvoice.status === 'PARTIALLY_PAID'
-                    ? t.statusPartial
-                    : t.statusPending}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Suggestions upsell smart — détection auto espèce + âge */}
-        {isBoarding && ['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && (
-          <UpsellSuggestions
-            bookingId={booking.id}
-            context="client"
-            locale={locale}
-            hasInvoice={!!booking.invoice}
+          <BookingPricingCard
+            boardingDetail={booking.boardingDetail} taxiDetail={booking.taxiDetail} nights={nights}
+            invoiceAmount={booking.invoice ? toNumber(booking.invoice.amount) : null}
+            totalPrice={toNumber(booking.totalPrice)} t={t}
           />
         )}
 
-        {/* Product ordering — only for active BOARDING stays */}
+        {isStayActive && (
+          <BookingRunningTotalCard
+            elapsedNights={elapsedNights} elapsedBoardingTotal={elapsedBoardingTotal}
+            nonBoardingItems={nonBoardingItems.map(it => ({ id: it.id, description: it.description, total: toNumber(it.total) }))}
+            provisionalTotal={provisionalTotal} locale={locale}
+          />
+        )}
+
+        {booking.invoice && <BookingInvoiceCard invoice={booking.invoice} locale={locale} t={t} />}
+
+        {supplementaryInvoice && (
+          <BookingSupplementaryInvoiceCard bookingId={booking.id} supplementaryInvoice={supplementaryInvoice} locale={locale} t={t} />
+        )}
+
+        {isBoarding && ['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && (
+          <UpsellSuggestions bookingId={booking.id} context="client" locale={locale} hasInvoice={!!booking.invoice} />
+        )}
+
         {isBoarding && ['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && (
           <ClientProductOrder
-            bookingId={booking.id}
-            locale={locale}
-            initialItems={
-              (booking.invoice?.items ?? [])
-                .filter((it) => it.category === 'PRODUCT')
-                .map((it) => ({
-                  id: it.id,
-                  description: it.description,
-                  quantity: it.quantity,
-                  total: toNumber(it.total),
-                }))
-            }
+            bookingId={booking.id} locale={locale}
+            initialItems={(booking.invoice?.items ?? []).filter(it => it.category === 'PRODUCT').map(it => ({ id: it.id, description: it.description, quantity: it.quantity, total: toNumber(it.total) }))}
           />
         )}
 
-        {/* Stay photos — Instagram-like feed */}
-        {isBoarding && (
-          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-            <div className="flex items-center gap-2 mb-4">
-              <Camera className="h-4 w-4 text-gold-500" />
-              <h3 className="font-semibold text-charcoal text-sm">{t.photos}</h3>
-            </div>
-            <StayPhotoFeed
-              photos={booking.stayPhotos.map(p => ({
-                id: p.id,
-                url: p.url,
-                caption: p.caption,
-                createdAt: p.createdAt.toISOString(),
-              }))}
-              locale={locale}
-            />
-          </div>
-        )}
+        {isBoarding && <BookingStayPhotosCard stayPhotos={booking.stayPhotos} locale={locale} t={t} />}
 
-        {/* Admin messages */}
-        <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-          <div className="flex items-center gap-2 mb-3">
-            <MessageSquare className="h-4 w-4 text-gold-500" />
-            <h3 className="font-semibold text-charcoal text-sm">{t.messages}</h3>
-          </div>
-          {bookingMessages.length === 0 ? (
-            <p className="text-sm text-gray-400">{t.noMessages}</p>
-          ) : (
-            <div className="space-y-3">
-              {bookingMessages.map(msg => (
-                <div key={msg.id} className="bg-[#FEFCE8] border border-[#F0D98A]/50 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <div className="w-5 h-5 rounded-full bg-gold-500 flex items-center justify-center">
-                      <span className="text-white text-xs font-bold">D</span>
-                    </div>
-                    <span className="text-xs font-semibold text-gold-700">Dog Universe</span>
-                    <span className="text-xs text-gray-400 ml-auto">
-                      {formatDate(new Date(msg.createdAt), locale)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-charcoal">
-                    {locale === 'en' ? msg.messageEn : msg.messageFr}
-                  </p>
-                  {/* Note: Arabic falls back to French for notification messages (no titleAr/messageAr in DB) */}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <BookingMessagesCard messages={bookingMessages} locale={locale} t={t} />
 
-        {/* Rebook — available only on completed bookings */}
         {booking.status === 'COMPLETED' && (
-          <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-            <h3 className="font-semibold text-charcoal text-sm mb-3">
-              {locale === 'fr' ? 'Réserver à nouveau' : locale === 'ar' ? 'احجز مجددًا' : 'Book again'}
-            </h3>
-            <RebookButton
-              booking={{
-                id: booking.id,
-                serviceType: booking.serviceType as 'BOARDING' | 'PET_TAXI',
-                bookingPets: booking.bookingPets.map((bp) => ({ pet: { id: bp.pet.id, name: bp.pet.name } })),
-                totalPrice: Number(booking.totalPrice),
-              }}
-              locale={locale}
-            />
-          </div>
+          <BookingRebookCard
+            booking={{
+              id: booking.id,
+              serviceType: booking.serviceType as 'BOARDING' | 'PET_TAXI',
+              bookingPets: booking.bookingPets.filter(bp => bp.pet).map(bp => ({ pet: { id: bp.pet.id, name: bp.pet.name ?? '' } })),
+              totalPrice: toNumber(booking.totalPrice),
+            }}
+            locale={locale}
+          />
         )}
       </div>
     </div>
