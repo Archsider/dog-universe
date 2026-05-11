@@ -3,6 +3,7 @@ import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { APP_URL } from '@/lib/config';
+import { logger } from '@/lib/logger';
 
 const LOGIN_URL = `${APP_URL}/fr/auth/login`;
 
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
       await sendEmail({ to: client.email, subject, html });
       sent++;
     } catch (e) {
-      console.error(JSON.stringify({ level: 'error', service: 'admin-contracts', message: 'Failed to send contract reminder', clientId: client.id, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() }));
+      logger.error('admin-contracts', 'Failed to send contract reminder', { clientId: client.id, error: e instanceof Error ? e.message : String(e) });
     }
   }
 

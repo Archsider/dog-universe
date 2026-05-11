@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
 import { markCronRun } from '@/lib/observability';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 60;
 
@@ -27,12 +28,7 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'cron-taxi-retention',
-      message: 'CRON_SECRET is not configured — cron endpoint is unprotected',
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('cron-taxi-retention', 'CRON_SECRET is not configured — cron endpoint is unprotected');
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
   const { timingSafeEqual } = await import('crypto');
@@ -78,25 +74,11 @@ export async function GET(request: Request) {
       deleted = result.count;
     }
 
-    console.error(JSON.stringify({
-      level: 'info',
-      service: 'cron-taxi-retention',
-      message: 'retention sweep complete',
-      deleted,
-      cutoff: cutoff.toISOString(),
-      batchLimit: BATCH_LIMIT,
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('cron-taxi-retention', 'retention sweep complete', { deleted, cutoff: cutoff.toISOString(), batchLimit: BATCH_LIMIT });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     errors.push(msg);
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'cron-taxi-retention',
-      message: 'retention sweep failed',
-      error: msg,
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('cron-taxi-retention', 'retention sweep failed', { error: msg });
   }
 
   return NextResponse.json({

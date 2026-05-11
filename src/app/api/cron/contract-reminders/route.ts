@@ -6,6 +6,7 @@ import { enqueueEmail, enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
 import { markCronRun } from '@/lib/observability';
 import { APP_URL } from '@/lib/config';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 60;
 
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error(JSON.stringify({ level: 'error', service: 'cron-contract-reminders', message: 'CRON_SECRET not configured', timestamp: new Date().toISOString() }));
+    logger.error('cron-contract-reminders', 'CRON_SECRET not configured');
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
   const secretBuf = Buffer.from(secret ?? '');
@@ -84,7 +85,7 @@ export async function GET(req: NextRequest) {
             messageEn: 'Your Dog Universe contract is pending signature.',
             read: false,
           },
-        }).catch(err => console.error(JSON.stringify({ level: 'error', service: 'cron-contract-reminders', message: 'contract reminder notification trace failed', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }))),
+        }).catch(err => logger.error('cron-contract-reminders', 'contract reminder notification trace failed', { error: err instanceof Error ? err.message : String(err) })),
       ];
 
       // SMS rappel contrat — premium tone (additif, échec ne bloque pas)
@@ -103,7 +104,7 @@ export async function GET(req: NextRequest) {
       for (const s of settled) if (s.status === 'rejected') failures++;
       sent++;
     } catch (e) {
-      console.error(JSON.stringify({ level: 'error', service: 'cron-contract-reminders', message: 'contract reminder failed for client', clientId: client.id, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() }));
+      logger.error('cron-contract-reminders', 'contract reminder failed for client', { clientId: client.id, error: e instanceof Error ? e.message : String(e) });
     }
   }));
 

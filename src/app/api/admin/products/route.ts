@@ -3,6 +3,7 @@ import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 
 function isAdmin(role?: string) {
   return role === 'ADMIN' || role === 'SUPERADMIN';
@@ -59,13 +60,7 @@ export async function GET() {
     take: 1000,
   });
 
-  console.error(JSON.stringify({
-    level: 'info',
-    service: 'admin-products',
-    message: 'GET',
-    count: products.length,
-    timestamp: new Date().toISOString(),
-  }));
+  logger.error('admin-products', 'GET', { count: products.length });
 
   return NextResponse.json(products.map(serializeProduct));
 }

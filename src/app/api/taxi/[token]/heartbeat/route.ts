@@ -31,6 +31,7 @@ import {
   createTaxiArrivedNotification,
 } from '@/lib/notifications';
 import { withSpan } from '@/lib/observability';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 10;
 
@@ -116,14 +117,11 @@ async function heartbeatImpl(request: NextRequest, urlToken: string) {
     (verified && trip.trackingToken !== providedToken)
   ) {
     if (!verified) {
-      console.error(JSON.stringify({
-        level: 'warn',
-        service: 'taxi-token',
+      logger.warn('taxi-token', 'unauthorized heartbeat', {
         event: '404',
         ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
         tokenPrefix: providedToken.slice(0, 8),
-        timestamp: new Date().toISOString(),
-      }));
+      });
     }
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -158,14 +156,7 @@ async function heartbeatImpl(request: NextRequest, urlToken: string) {
       Number.isFinite(body.accuracy) &&
       body.accuracy > MAX_ACCURACY_METERS
     ) {
-      console.error(JSON.stringify({
-        level: 'info',
-        service: 'taxi-heartbeat',
-        message: 'gps point ignored (low_accuracy)',
-        bookingId,
-        accuracy: body.accuracy,
-        timestamp: new Date().toISOString(),
-      }));
+      logger.error('taxi-heartbeat', 'gps point ignored (low_accuracy)', { bookingId, accuracy: body.accuracy });
       return NextResponse.json({ ok: true, ignored: 'low_accuracy' });
     }
 
@@ -177,16 +168,7 @@ async function heartbeatImpl(request: NextRequest, urlToken: string) {
         const dtSec = Math.max(0.001, (Date.now() - prev.timestamp) / 1000);
         const speedKmh = (dKm / dtSec) * 3600;
         if (speedKmh > MAX_SPEED_KMH) {
-          console.error(JSON.stringify({
-            level: 'info',
-            service: 'taxi-heartbeat',
-            message: 'gps point ignored (speed_outlier)',
-            bookingId,
-            speedKmh: Math.round(speedKmh),
-            deltaKm: dKm,
-            dtSec,
-            timestamp: new Date().toISOString(),
-          }));
+          logger.error('taxi-heartbeat', 'gps point ignored (speed_outlier)', { bookingId, speedKmh: Math.round(speedKmh), deltaKm: dKm, dtSec });
           return NextResponse.json({ ok: true, ignored: 'speed_outlier' });
         }
       }
@@ -213,14 +195,7 @@ async function heartbeatImpl(request: NextRequest, urlToken: string) {
         dropoffLng: trip.booking.taxiDetail?.dropoffLng ?? null,
       });
     } catch (err) {
-      console.error(JSON.stringify({
-        level: 'error',
-        service: 'taxi-heartbeat',
-        message: 'auto-transition failed (non-blocking)',
-        bookingId,
-        error: err instanceof Error ? err.message : String(err),
-        timestamp: new Date().toISOString(),
-      }));
+      logger.error('taxi-heartbeat', 'auto-transition failed (non-blocking)', { bookingId, error: err instanceof Error ? err.message : String(err) });
     }
 
     // Geofencing with hysteresis (O6): a driver who *passes* within 95m
@@ -282,14 +257,7 @@ async function heartbeatImpl(request: NextRequest, urlToken: string) {
         }
       }
     } catch (err) {
-      console.error(JSON.stringify({
-        level: 'error',
-        service: 'taxi-heartbeat',
-        message: 'geofencing failed (non-blocking)',
-        bookingId,
-        error: err instanceof Error ? err.message : String(err),
-        timestamp: new Date().toISOString(),
-      }));
+      logger.error('taxi-heartbeat', 'geofencing failed (non-blocking)', { bookingId, error: err instanceof Error ? err.message : String(err) });
     }
   }
 

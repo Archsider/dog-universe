@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { Map as LeafletMap, Marker as LeafletMarker } from 'leaflet';
 import { sseHealthFor, shouldRestartSse, SSE_LOST_MS } from '@/lib/taxi-gps';
+import { logger } from '@/lib/logger';
 
 // Fallback poll interval (used only if the SSE stream cannot be established
 // — old browsers, blocked proxies, repeated server errors).
@@ -293,7 +294,7 @@ export default function TrackPage() {
         // Stream silencieusement mort ? L'EventSource onerror ne fire pas
         // toujours sur certains proxies / mobile networks.
         if (shouldRestartSse(lastSseEventAtRef.current, now)) {
-          console.warn('[SSE watchdog] silence prolongé, force reconnect');
+          logger.warn('sse-watchdog', 'prolonged silence, force reconnect');
           forceReconnect();
           return;
         }

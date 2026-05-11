@@ -9,6 +9,7 @@ import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
 import { tryAcquireFlag } from '@/lib/cache';
 import type { EmailJobData, SmsJobData } from '@/lib/queues/index';
+import { logger } from '@/lib/logger';
 
 // Idempotence : Redis NX EX 24h. Si un Worker BullMQ retraite par erreur le
 // même jobId (réseau perdu après ack, dédoublement éventuel), le second
@@ -42,7 +43,7 @@ export async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
   if (jobId) {
     const acquired = await tryAcquireFlag(processedKey('email', jobId), PROCESSED_TTL_SECONDS);
     if (!acquired) {
-      console.info(JSON.stringify({ level: 'info', service: 'worker', message: 'job already processed', queue: 'email', jobId, timestamp: new Date().toISOString() }));
+      logger.info('worker', 'job already processed', { queue: 'email', jobId });
       return;
     }
   }
@@ -58,7 +59,7 @@ export async function processSmsJob(job: Job<SmsJobData>): Promise<void> {
   if (jobId) {
     const acquired = await tryAcquireFlag(processedKey('sms', jobId), PROCESSED_TTL_SECONDS);
     if (!acquired) {
-      console.info(JSON.stringify({ level: 'info', service: 'worker', message: 'job already processed', queue: 'sms', jobId, timestamp: new Date().toISOString() }));
+      logger.info('worker', 'job already processed', { queue: 'sms', jobId });
       return;
     }
   }

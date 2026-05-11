@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { uploadFile, type UploadType } from '@/lib/upload';
+import { logger } from '@/lib/logger';
 
 const VALID_UPLOAD_TYPES: UploadType[] = ['pet-photo', 'document', 'stay-photo'];
 
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     const result = await uploadFile(file, uploadType);
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'upload', message: 'Upload error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('upload', 'Upload error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: String(error) }, { status: 400 });
   }
 }

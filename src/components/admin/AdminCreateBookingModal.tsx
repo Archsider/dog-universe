@@ -16,6 +16,7 @@ import {
   type GroomingSize,
   type TaxiType,
 } from '@/lib/pricing-client';
+import { logger } from '@/lib/logger';
 
 interface Pet extends PetInfo {
   species: string;
@@ -396,10 +397,10 @@ export default function AdminCreateBookingModal({
             invoiceCreated = true;
           } else {
             const invErr = await invRes.json().catch(() => ({}));
-            console.error(JSON.stringify({ level: 'error', service: 'walk-in-booking', message: 'Auto-invoice failed', status: invRes.status, error: invErr, timestamp: new Date().toISOString() }));
+            logger.error('walk-in-booking', 'Auto-invoice failed', { status: invRes.status, error: invErr });
           }
         } catch (err) {
-          console.error(JSON.stringify({ level: 'error', service: 'walk-in-booking', message: 'Auto-invoice threw', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+          logger.error('walk-in-booking', 'Auto-invoice threw', { error: err instanceof Error ? err.message : String(err) });
         }
         toast({
           title: invoiceCreated

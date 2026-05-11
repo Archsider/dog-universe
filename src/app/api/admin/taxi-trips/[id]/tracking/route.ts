@@ -6,6 +6,7 @@ import { recordLocation, clearLocation, haversineKm } from '@/lib/taxi-location'
 import { maybeAutoTransition } from '@/lib/taxi-auto-transition';
 import { signTaxiToken } from '@/lib/taxi-token';
 import { withSpan } from '@/lib/observability';
+import { logger } from '@/lib/logger';
 
 const MAX_ACCURACY_METERS = 50;
 const MAX_SPEED_KMH = 200;
@@ -181,14 +182,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // ── Quality gate: reject low-accuracy fixes (>50 m horizontal error) ──
     if (isValidNumber(accuracy) && accuracy > MAX_ACCURACY_METERS) {
-      console.error(JSON.stringify({
-        level: 'info',
-        service: 'taxi-tracking',
-        message: 'gps point ignored (low_accuracy)',
-        tripId: id,
-        accuracy,
-        timestamp: new Date().toISOString(),
-      }));
+      logger.error('taxi-tracking', 'gps point ignored (low_accuracy)', { tripId: id, accuracy });
       return NextResponse.json({ ok: true, ignored: 'low_accuracy' });
     }
 
@@ -206,16 +200,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const dtSec = Math.max(0.001, (Date.now() - prev.createdAt.getTime()) / 1000);
       const speedKmh = (d / dtSec) * 3600;
       if (speedKmh > MAX_SPEED_KMH) {
-        console.error(JSON.stringify({
-          level: 'info',
-          service: 'taxi-tracking',
-          message: 'gps point ignored (speed_outlier)',
-          tripId: id,
-          speedKmh: Math.round(speedKmh),
-          deltaKm: d,
-          dtSec,
-          timestamp: new Date().toISOString(),
-        }));
+        logger.error('taxi-tracking', 'gps point ignored (speed_outlier)', { tripId: id, speedKmh: Math.round(speedKmh), deltaKm: d, dtSec });
         return NextResponse.json({ ok: true, ignored: 'speed_outlier' });
       }
       if (d >= 0.01) deltaKm = d; // ignore < 10 m (GPS drift)
@@ -284,14 +269,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         dropoffLng: trip.booking?.taxiDetail?.dropoffLng ?? null,
       });
     } catch (err) {
-      console.error(JSON.stringify({
-        level: 'error',
-        service: 'taxi-tracking',
-        message: 'auto-transition failed (non-blocking)',
-        tripId: id,
-        error: err instanceof Error ? err.message : String(err),
-        timestamp: new Date().toISOString(),
-      }));
+      logger.error('taxi-tracking', 'auto-transition failed (non-blocking)', { tripId: id, error: err instanceof Error ? err.message : String(err) });
     }
 
     return NextResponse.json({ ok: true });

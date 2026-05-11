@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { enqueueSms } from '@/lib/queues';
 import { acquireCronLock } from '@/lib/cron-lock';
 import { markCronRun } from '@/lib/observability';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 60;
 
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error(JSON.stringify({ level: 'error', service: 'cron-birthday', message: 'CRON_SECRET is not configured — cron endpoint is unprotected', timestamp: new Date().toISOString() }));
+    logger.error('cron-birthday', 'CRON_SECRET is not configured — cron endpoint is unprotected');
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
   const providedBuf = Buffer.from(authHeader ?? '');

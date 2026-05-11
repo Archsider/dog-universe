@@ -20,6 +20,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
 import { env } from '@/lib/env';
+import { logger } from '@/lib/logger';
 
 let cachedRedis: Redis | null | undefined;
 
@@ -96,7 +97,7 @@ export async function tryAcquireIdempotency(
       message: 'idempotency: Redis SET failed, failing open',
       data: { op: 'set-nx', key: redisKey },
     });
-    console.error(JSON.stringify({ level: 'error', service: 'idempotency', message: 'Redis SET failed, failing open', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('idempotency', 'Redis SET failed, failing open', { error: err instanceof Error ? err.message : String(err) });
     return { acquired: true, redisAvailable: false };
   }
 }

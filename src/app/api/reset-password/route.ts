@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { resetPasswordRequestSchema, resetPasswordConfirmSchema, formatZodError } from '@/lib/validation';
 import { APP_URL } from '@/lib/config';
+import { logger } from '@/lib/logger';
 
 // Floor de temps de réponse — masque l'écart "user existe vs n'existe pas"
 // (timing side-channel qui permettrait l'énumération malgré la réponse uniforme).
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
     // Always return success to prevent email enumeration
     return await padResponse(start, NextResponse.json({ message: 'ok' }));
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'reset-password', message: 'Reset password error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('reset-password', 'Reset password error', { error: error instanceof Error ? error.message : String(error) });
     return await padResponse(start, NextResponse.json({ message: 'ok' })); // Still return ok
   }
 }
@@ -88,7 +89,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ message: 'ok' });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'reset-password', message: 'Reset password PUT error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('reset-password', 'Reset password PUT error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import CircuitBreaker from 'opossum';
 import { petCompanion, petVerb, petArrived } from '../sms';
+import { logger } from '@/lib/logger';
 
 let transporter: nodemailer.Transporter;
 
@@ -93,9 +94,9 @@ function getEmailBreaker(): CircuitBreaker<[EmailSendParams], void> {
     rollingCountBuckets: 6,
     volumeThreshold: 5,
   });
-  _emailBreaker.on('open',     () => console.error(JSON.stringify({ level: 'error', service: 'email', message: 'Circuit breaker OPEN', timestamp: new Date().toISOString() })));
-  _emailBreaker.on('halfOpen', () => console.warn(JSON.stringify({ level: 'warn',  service: 'email', message: 'Circuit breaker HALF-OPEN', timestamp: new Date().toISOString() })));
-  _emailBreaker.on('close',    () => console.warn(JSON.stringify({ level: 'warn',  service: 'email', message: 'Circuit breaker CLOSED', timestamp: new Date().toISOString() })));
+  _emailBreaker.on('open',     () => logger.error('email', 'Circuit breaker OPEN'));
+  _emailBreaker.on('halfOpen', () => logger.warn('email', 'Circuit breaker HALF-OPEN'));
+  _emailBreaker.on('close',    () => logger.warn('email', 'Circuit breaker CLOSED'));
   return _emailBreaker;
 }
 
@@ -113,14 +114,7 @@ export async function sendEmail({
   try {
     await getEmailBreaker().fire({ to, subject, html, text });
   } catch (error) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'email',
-      message: 'Failed to send email',
-      to: maskEmail(to),
-      error: error instanceof Error ? error.message : String(error),
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('email', 'Failed to send email', { to: maskEmail(to), error: error instanceof Error ? error.message : String(error) });
     // Propagate to BullMQ worker (retries per `attempts: 4`).
     throw error instanceof Error ? error : new Error(String(error));
   }

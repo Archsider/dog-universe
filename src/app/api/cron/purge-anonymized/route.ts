@@ -21,6 +21,7 @@ import { acquireCronLock } from '@/lib/cron-lock';
 import { markCronRun } from '@/lib/observability';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { deleteFromPrivateStorage } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 
 const THREE_YEARS_MS = 3 * 365 * 24 * 60 * 60 * 1000;
 
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
-    console.error(JSON.stringify({ level: 'error', service: 'cron-purge', message: 'CRON_SECRET is not configured — cron endpoint is unprotected', timestamp: new Date().toISOString() }));
+    logger.error('cron-purge', 'CRON_SECRET is not configured — cron endpoint is unprotected');
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
   if (authHeader !== `Bearer ${cronSecret}`) {
@@ -81,7 +82,7 @@ export async function GET(request: Request) {
         try {
           await deleteFromPrivateStorage(contract.storageKey);
         } catch (storageErr) {
-          console.error(JSON.stringify({ level: 'error', service: 'cron-purge', message: 'storage delete failed', userId, error: storageErr instanceof Error ? storageErr.message : String(storageErr), timestamp: new Date().toISOString() }));
+          logger.error('cron-purge', 'storage delete failed', { userId, error: storageErr instanceof Error ? storageErr.message : String(storageErr) });
           // Continue — DB row will still be deleted; orphaned storage key is acceptable
         }
       }
@@ -119,7 +120,7 @@ export async function GET(request: Request) {
 
       purged += 1;
     } catch (err) {
-      console.error(JSON.stringify({ level: 'error', service: 'cron-purge', message: 'purge failed for user', userId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+      logger.error('cron-purge', 'purge failed for user', { userId, error: err instanceof Error ? err.message : String(err) });
       errors.push(userId);
     }
   }

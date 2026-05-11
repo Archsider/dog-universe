@@ -3,6 +3,7 @@ import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { createAdminMessageNotification } from '@/lib/notifications';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { logger } from '@/lib/logger';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(notification, { status: 201 });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Send notification error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('notification', 'Send notification error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

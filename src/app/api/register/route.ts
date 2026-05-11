@@ -6,6 +6,7 @@ import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { notifyAdminsNewClient } from '@/lib/notifications';
 import { registerSchema, formatZodError } from '@/lib/validation';
 import { APP_URL } from '@/lib/config';
+import { logger } from '@/lib/logger';
 
 export async function POST(request: Request) {
   try {
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json({ error: 'EMAIL_TAKEN', message: 'Email already in use' }, { status: 409 });
     }
-    console.error(JSON.stringify({ level: 'error', service: 'register', message: 'Register error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('register', 'Register error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'INTERNAL_ERROR', message: 'An error occurred' }, { status: 500 });
   }
 }

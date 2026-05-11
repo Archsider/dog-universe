@@ -16,6 +16,7 @@ import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
 import { getISOWeek, getISOWeekYear } from 'date-fns';
 import { env } from '@/lib/env';
+import { logger } from '@/lib/logger';
 
 export type CronPeriod = 'daily' | 'weekly' | 'monthly';
 
@@ -72,7 +73,7 @@ export async function acquireCronLock(
       message: 'cron-lock: Redis SET failed, failing open',
       data: { op: 'set-nx', key },
     });
-    console.error(JSON.stringify({ level: 'error', service: 'cron-lock', message: 'Redis SET failed, failing open', key, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('cron-lock', 'Redis SET failed, failing open', { key, error: err instanceof Error ? err.message : String(err) });
     return true;
   }
 }

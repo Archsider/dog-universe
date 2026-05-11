@@ -14,6 +14,7 @@
 //                                 indefinitely (keeps Vercel function timeouts short).
 import IORedis from 'ioredis';
 import { env } from '@/lib/env';
+import { logger } from '@/lib/logger';
 
 let _connection: IORedis | null = null;
 
@@ -43,7 +44,7 @@ export function getBullMQConnection(): IORedis {
   });
 
   _connection.on('error', (err) => {
-    console.error(JSON.stringify({ level: 'error', service: 'bullmq-redis', message: err.message, timestamp: new Date().toISOString() }));
+    logger.error('bullmq-redis', err.message);
   });
 
   return _connection;

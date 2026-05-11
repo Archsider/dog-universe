@@ -4,6 +4,7 @@
 // user exercise their RGPD right than block them silently).
 import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
+import { logger } from '@/lib/logger';
 
 let cached: Redis | null | undefined;
 
@@ -58,7 +59,7 @@ export async function consumeExportSlot(
       message: 'rgpd: consumeExportSlot failed, failing open',
       data: { op: 'incr', key },
     });
-    console.error(JSON.stringify({ level: 'error', service: 'rgpd', message: 'consumeExportSlot failed, failing open', error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('rgpd', 'consumeExportSlot failed, failing open', { error: err instanceof Error ? err.message : String(err) });
     return { ok: true, remaining: EXPORT_DAILY_LIMIT - 1 };
   }
 }

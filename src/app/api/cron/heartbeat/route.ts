@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { sendSMS } from '@/lib/sms';
 import { tryAcquireFlag } from '@/lib/cache';
 import { countConsecutiveFailures } from '@/lib/heartbeat';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -67,13 +68,7 @@ export async function GET(request: Request) {
   } catch (err) {
     latencyMs = Date.now() - startedAt;
     status = 'down';
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'cron-heartbeat',
-      message: 'ping fetch failed',
-      error: err instanceof Error ? err.message : String(err),
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('cron-heartbeat', 'ping fetch failed', { error: err instanceof Error ? err.message : String(err) });
   }
 
   // Persist the row (best-effort — if DB is down we can't insert, but the
@@ -83,13 +78,7 @@ export async function GET(request: Request) {
       data: { status, latencyMs, dbStatus, redisStatus },
     });
   } catch (err) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'cron-heartbeat',
-      message: 'heartbeat insert failed',
-      error: err instanceof Error ? err.message : String(err),
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('cron-heartbeat', 'heartbeat insert failed', { error: err instanceof Error ? err.message : String(err) });
   }
 
   // Downtime detection: 3 consecutive non-ok → alert.
@@ -121,13 +110,7 @@ export async function GET(request: Request) {
         }
       }
     } catch (err) {
-      console.error(JSON.stringify({
-        level: 'error',
-        service: 'cron-heartbeat',
-        message: 'downtime alert failed',
-        error: err instanceof Error ? err.message : String(err),
-        timestamp: new Date().toISOString(),
-      }));
+      logger.error('cron-heartbeat', 'downtime alert failed', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -140,13 +123,7 @@ export async function GET(request: Request) {
     });
     deleted = result.count;
   } catch (err) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'cron-heartbeat',
-      message: 'retention sweep failed',
-      error: err instanceof Error ? err.message : String(err),
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('cron-heartbeat', 'retention sweep failed', { error: err instanceof Error ? err.message : String(err) });
   }
 
   return NextResponse.json({

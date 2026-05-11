@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
 import { resolveItemCategory } from '@/lib/billing';
+import { logger } from '@/lib/logger';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (msg === 'PRODUCT_UNAVAILABLE' || msg === 'OUT_OF_STOCK') {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
-    console.error(JSON.stringify({ level: 'error', service: 'booking-products', message: 'add product failed', err: msg }));
+    logger.error('booking-products', 'add product failed', { err: msg });
     return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });
   }
 }

@@ -8,6 +8,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { logger } from '@/lib/logger';
 
 let _client: Anthropic | null = null;
 
@@ -81,13 +82,7 @@ End with a reassuring sentence about the animal's well-being.`;
 
     return block.text.trim() || null;
   } catch (err) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'ai',
-      message: 'generateWeeklyPetReport failed',
-      error: err instanceof Error ? err.message : String(err),
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('ai', 'generateWeeklyPetReport failed', { error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }

@@ -16,7 +16,7 @@ import { BookingError } from '@/lib/services/booking-errors';
 import { createBookingConfirmationNotification } from '@/lib/notifications';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { revalidateTag } from 'next/cache';
-import { log } from '@/lib/logger';
+import { log, logger } from '@/lib/logger';
 import { taxiDescription } from '@/lib/invoice-descriptions';
 import { getPensionPriceNumber, getPricingSettings } from '@/lib/pricing';
 

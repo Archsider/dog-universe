@@ -15,6 +15,7 @@ export function deltaPercent(cur: number, prev: number): number {
 }
 
 import { categoryKey } from '@/lib/category';
+import { logger } from '@/lib/logger';
 // Re-export pour rétro-compat des call sites existants (analytics, etc.).
 export { inferItemCategory } from '@/lib/category';
 export { categoryKey };
@@ -77,13 +78,7 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
   } catch (err) {
     // MV indisponible (ex: première migration pas encore appliquée) → fallback
     // immédiat sur la lecture par mois.
-    console.error(JSON.stringify({
-      level: 'warn',
-      service: 'metrics',
-      message: 'monthly_revenue_mv unavailable, falling back to per-month query',
-      error: err instanceof Error ? err.message : String(err),
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('metrics', 'monthly_revenue_mv unavailable, falling back to per-month query', { error: err instanceof Error ? err.message : String(err) });
   }
 
   if (mvRows.length > 0) {
@@ -293,13 +288,7 @@ async function readRevenueFromMV(
     return breakdown;
   } catch (err) {
     // MV missing / DB down → fall back to live computation upstream.
-    console.error(JSON.stringify({
-      level: 'warn',
-      service: 'metrics',
-      message: 'monthly_revenue_mv unavailable for revenueByCategoryProrata',
-      error: err instanceof Error ? err.message : String(err),
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('metrics', 'monthly_revenue_mv unavailable for revenueByCategoryProrata', { error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }

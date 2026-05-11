@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
-import { log } from '@/lib/logger';
+import { log, logger } from '@/lib/logger';
 
 /**
  * POST /api/admin/refresh-revenue-mv

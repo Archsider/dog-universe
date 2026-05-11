@@ -8,6 +8,7 @@
 // down, callers get null and fall back to DB / polling.
 import * as Sentry from '@sentry/nextjs';
 import { Redis } from '@upstash/redis';
+import { logger } from '@/lib/logger';
 
 function breadcrumb(op: string, bookingId: string, message: string): void {
   Sentry.addBreadcrumb({
@@ -69,7 +70,7 @@ export async function recordLocation(bookingId: string, snap: TaxiLocationSnapsh
     await redis.set(locationKey(bookingId), payload, { ex: TTL_SECONDS });
   } catch (err) {
     breadcrumb('set', bookingId, 'recordLocation SET failed, failing open');
-    console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'recordLocation set failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('taxi-location', 'recordLocation set failed', { bookingId, error: err instanceof Error ? err.message : String(err) });
   }
   // Publish on the channel so any SSE subscriber (future ioredis upgrade) gets
   // an instant push. The current SSE poll at 2s still works without this —
@@ -79,7 +80,7 @@ export async function recordLocation(bookingId: string, snap: TaxiLocationSnapsh
     await redis.publish(locationChannel(bookingId), payload);
   } catch (err) {
     breadcrumb('publish', bookingId, 'recordLocation PUBLISH failed, failing open');
-    console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'recordLocation publish failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('taxi-location', 'recordLocation publish failed', { bookingId, error: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -97,7 +98,7 @@ export async function getLocation(bookingId: string): Promise<TaxiLocationSnapsh
     return parsed;
   } catch (err) {
     breadcrumb('get', bookingId, 'getLocation failed, failing open');
-    console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'getLocation failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('taxi-location', 'getLocation failed', { bookingId, error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
@@ -110,6 +111,6 @@ export async function clearLocation(bookingId: string): Promise<void> {
     await redis.del(locationKey(bookingId));
   } catch (err) {
     breadcrumb('del', bookingId, 'clearLocation failed, failing open');
-    console.error(JSON.stringify({ level: 'error', service: 'taxi-location', message: 'clearLocation failed', bookingId, error: err instanceof Error ? err.message : String(err), timestamp: new Date().toISOString() }));
+    logger.error('taxi-location', 'clearLocation failed', { bookingId, error: err instanceof Error ? err.message : String(err) });
   }
 }

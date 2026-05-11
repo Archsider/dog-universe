@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { logger } from '@/lib/logger';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -68,7 +69,7 @@ export async function GET(req: Request, { params }: Params) {
       },
     });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'invoice', message: 'PDF generation error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('invoice', 'PDF generation error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'PDF generation failed' }, { status: 500 });
   }
 }

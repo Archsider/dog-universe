@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { log } from '@/lib/logger';
+import { log, logger } from '@/lib/logger';
 import { getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
 import { NOTIFICATION_MESSAGES } from '@/lib/notification-messages';
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error(JSON.stringify({ level: 'error', service: 'cron-reminders', message: 'CRON_SECRET is not configured — cron endpoint is unprotected', timestamp: new Date().toISOString() }));
+    logger.error('cron-reminders', 'CRON_SECRET is not configured — cron endpoint is unprotected');
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
   const { timingSafeEqual } = await import('crypto');

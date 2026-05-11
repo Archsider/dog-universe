@@ -22,6 +22,7 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 
 type AnyZod = z.ZodTypeAny;
 
@@ -44,7 +45,7 @@ function validationError(issues: z.ZodIssue[]): NextResponse {
   const isProd = process.env.NODE_ENV === 'production';
   // Always log server-side so we can diagnose validation failures from logs
   // without leaking the schema structure to clients.
-  console.error('[VALIDATION_ERROR]', JSON.stringify(issues));
+  logger.error('with-schema', 'VALIDATION_ERROR', { issues });
   const payload: Record<string, unknown> = { error: 'VALIDATION_ERROR' };
   if (!isProd) {
     payload.details = issues;

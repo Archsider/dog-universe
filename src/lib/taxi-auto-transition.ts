@@ -20,6 +20,7 @@ import { prisma } from '@/lib/prisma';
 import { haversineDistance } from '@/lib/geo';
 import { tryAcquireFlag } from '@/lib/cache';
 import { notifyTaxiTransition } from '@/lib/taxi-notifications';
+import { logger } from '@/lib/logger';
 
 const AUTO_TRANSITION_RADIUS_M = 50;
 const AUTO_TRANSITION_TTL_SEC = 600; // 10 min
@@ -124,15 +125,7 @@ export async function maybeAutoTransition(args: MaybeAutoTransitionArgs): Promis
       pets: ctx?.booking?.bookingPets.map(bp => bp.pet) ?? [],
     });
   } catch (err) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'taxi-auto-transition',
-      message: 'notify failed (non-blocking)',
-      tripId,
-      newStatus: target.newStatus,
-      error: err instanceof Error ? err.message : String(err),
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('taxi-auto-transition', 'notify failed (non-blocking)', { tripId, newStatus: target.newStatus, error: err instanceof Error ? err.message : String(err) });
   }
 
   return target.newStatus;

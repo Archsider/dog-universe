@@ -7,6 +7,7 @@ import path from 'path';
 import { z } from 'zod';
 import { createSignedUrl } from '@/lib/supabase';
 import { vaccinationExtractSchema, formatZodError } from '@/lib/validation';
+import { logger } from '@/lib/logger';
 
 // Validates the JSON Claude returns. Strict mode rejects unknown keys —
 // defends against prototype pollution / unexpected field injection. All
@@ -166,13 +167,7 @@ async function callClaudeExtraction(base64: string, mimeType: string): Promise<E
     const validated = extractionResultSchema.safeParse(raw);
     if (!validated.success) {
       // Structured warn (no payload — PII safety, doc may include owner data).
-      console.warn(JSON.stringify({
-        level: 'warn',
-        service: 'pet',
-        message: 'Vaccination extraction Zod validation failed',
-        issueCount: validated.error.issues.length,
-        timestamp: new Date().toISOString(),
-      }));
+      logger.warn('pet', 'Vaccination extraction Zod validation failed', { issueCount: validated.error.issues.length });
       return null;
     }
     return {
@@ -249,7 +244,7 @@ export async function POST(request: Request, { params }: Params) {
       _extractionNote: extraction?.confidenceNote ?? null,
     }, { status: 201 });
   } catch (error) {
-    console.error(JSON.stringify({ level: 'error', service: 'pet', message: 'Vaccination extraction error', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('pet', 'Vaccination extraction error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
 }

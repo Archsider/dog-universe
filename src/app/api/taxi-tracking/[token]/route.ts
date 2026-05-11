@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getEta } from '@/lib/osrm';
 import { verifyTaxiToken } from '@/lib/taxi-token';
+import { logger } from '@/lib/logger';
 
 // Public endpoint — accédé via un token signé HMAC partagé au client par
 // l'admin. Aucune session requise. PII réduite : prénom uniquement, jamais
@@ -62,14 +63,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   if (!trip || (verified && trip.trackingToken !== token)) {
     if (!verified) {
       const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
-      console.error(JSON.stringify({
-        level: 'warn',
-        service: 'taxi-token',
+      logger.warn('taxi-token', 'unauthorized tracking access', {
         event: '404',
         ip,
         tokenPrefix: token.slice(0, 8),
-        timestamp: new Date().toISOString(),
-      }));
+      });
     }
     return maskedJson({ error: 'Not found' }, 404);
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { logger } from '@/lib/logger';
 
 /**
  * GET /api/admin/clients/search?q=...
@@ -44,12 +45,7 @@ export async function GET(request: NextRequest) {
       const rows = await prisma.user.findMany({ ...args, select: fullSelect });
       return rows as unknown as T[];
     } catch (err) {
-      console.error(JSON.stringify({
-        level: 'warn',
-        service: 'clients-search',
-        message: 'firstName/lastName select failed — falling back to safe select',
-        err: err instanceof Error ? err.message : String(err),
-      }));
+      logger.error('clients-search', 'firstName/lastName select failed — falling back to safe select', { err: err instanceof Error ? err.message : String(err) });
       const rows = await prisma.user.findMany({ ...args, select: safeSelect });
       return rows as unknown as T[];
     }
@@ -61,13 +57,7 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
-    console.error(JSON.stringify({
-      level: 'info',
-      service: 'admin-clients-search',
-      message: 'GET (no query)',
-      count: clients.length,
-      timestamp: new Date().toISOString(),
-    }));
+    logger.error('admin-clients-search', 'GET (no query)', { count: clients.length });
     return NextResponse.json({ clients });
   }
 
@@ -83,14 +73,7 @@ export async function GET(request: NextRequest) {
     take: 50,
   });
 
-  console.error(JSON.stringify({
-    level: 'info',
-    service: 'admin-clients-search',
-    message: 'GET (query)',
-    q: q.slice(0, 50),
-    count: clients.length,
-    timestamp: new Date().toISOString(),
-  }));
+  logger.error('admin-clients-search', 'GET (query)', { q: q.slice(0, 50), count: clients.length });
 
   return NextResponse.json({ clients });
 }

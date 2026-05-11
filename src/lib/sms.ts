@@ -1,5 +1,6 @@
 import { env } from 'process'
 import CircuitBreaker from 'opossum'
+import { logger } from '@/lib/logger';
 
 // Normalise un numéro marocain vers +212XXXXXXXXX
 function normalizePhone(phone: string): string {
@@ -68,9 +69,9 @@ function getSmsBreaker(): CircuitBreaker<[SmsSendParams], true> {
     rollingCountBuckets: 6,
     volumeThreshold: 5,              // need ≥5 calls before tripping
   })
-  _smsBreaker.on('open',     () => console.error(JSON.stringify({ level: 'error', service: 'sms', message: 'Circuit breaker OPEN', timestamp: new Date().toISOString() })))
-  _smsBreaker.on('halfOpen', () => console.warn(JSON.stringify({ level: 'warn',  service: 'sms', message: 'Circuit breaker HALF-OPEN', timestamp: new Date().toISOString() })))
-  _smsBreaker.on('close',    () => console.warn(JSON.stringify({ level: 'warn',  service: 'sms', message: 'Circuit breaker CLOSED', timestamp: new Date().toISOString() })))
+  _smsBreaker.on('open',     () => logger.error('sms', 'Circuit breaker OPEN'))
+  _smsBreaker.on('halfOpen', () => logger.warn('sms', 'Circuit breaker HALF-OPEN'))
+  _smsBreaker.on('close',    () => logger.warn('sms', 'Circuit breaker CLOSED'))
   return _smsBreaker
 }
 
@@ -88,7 +89,7 @@ export async function sendSMS(
   const password = env.SMS_GATEWAY_PASSWORD
 
   if (!url || !username || !password) {
-    console.warn(JSON.stringify({ level: 'warn', service: 'sms', message: 'Missing env vars — SMS skipped', timestamp: new Date().toISOString() }))
+    logger.warn('sms', 'Missing env vars — SMS skipped')
     return false
   }
 
@@ -99,14 +100,7 @@ export async function sendSMS(
     await getSmsBreaker().fire({ baseUrl, username, password, phone, message })
     return true
   } catch (err) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'sms',
-      message: 'Send failed',
-      to: maskPhone(phone),
-      error: err instanceof Error ? err.message : String(err),
-      timestamp: new Date().toISOString(),
-    }))
+    logger.error('sms', 'Send failed', { to: maskPhone(phone), error: err instanceof Error ? err.message : String(err) })
     throw err instanceof Error ? err : new Error(String(err))
   }
 }

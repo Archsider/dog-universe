@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { logger } from '@/lib/logger';
 
 interface LogActionData {
   userId?: string;
@@ -23,7 +24,7 @@ export async function logAction(data: LogActionData): Promise<void> {
     });
   } catch (error) {
     // Logs should never break the main flow
-    console.error(JSON.stringify({ level: 'error', service: 'action-log', message: 'Failed to write action log', error: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString() }));
+    logger.error('action-log', 'Failed to write action log', { error: error instanceof Error ? error.message : String(error) });
   }
 }
 

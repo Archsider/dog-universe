@@ -17,7 +17,7 @@ import bcrypt from 'bcryptjs';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
-import { log } from '@/lib/logger';
+import { log, logger } from '@/lib/logger';
 
 const BLOCKING_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'AT_PICKUP', 'PENDING_EXTENSION'] as const;
 
