@@ -1,35 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
-import { log } from '@/lib/logger';
-import * as Sentry from '@sentry/nextjs';
-import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { logAction } from '@/lib/log';
 import { withSchema } from '@/lib/with-schema';
-import {
-  createBookingValidationNotification,
-  createBookingRefusalNotification,
-  createBookingInProgressNotification,
-  createBookingCompletedNotification,
-  createBookingNoShowNotification,
-  promoteWaitlistedBooking,
-} from '@/lib/notifications';
-import { sendEmail, getEmailTemplate } from '@/lib/email';
-import {
-  sendSMS, sendAdminSMS, formatDateFR,
-  petVerb, petArrived, petChouchoute,
-} from '@/lib/sms';
-import { sendEmailNow, sendSmsNow } from '@/lib/notify-now';
-import { checkBoardingCapacity, CapacityCheckExceeded } from '@/lib/capacity';
 import { revalidateTag } from 'next/cache';
-import {
-  patchBoardingDetail as patchBoardingDetailService,
-  addBookingItems as addBookingItemsService,
-  rejectExtensionRequest as rejectExtensionRequestService,
-} from '@/lib/services/booking-admin.service';
 import { BookingError } from '@/lib/services/booking-errors';
 import { canTransition, isBookingStatus, type BookingStatus } from '@/lib/booking-state-machine';
+import {
+  adminBookingPatchSchema,
+  adminBookingParamsSchema,
+  patchBoardingDetail,
+  addBookingItems,
+  rejectExtensionRequest,
+  approveExtensionMerge,
+  rejectExtensionMerge,
+  applyExtension,
+  editDates,
+  applyStatusUpdate,
+  handleNoShowInvoice,
+  runStatusSideEffects,
+} from '@/lib/services/booking-admin';
 
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/bookings/[id]
+// ────────────────────────────────────────────────────────────────────────────
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
@@ -52,977 +46,262 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   return NextResponse.json(booking);
 }
 
-// Top-level envelope for PATCH /api/admin/bookings/[id].
-// This file dispatches on many discriminator fields (patchBoardingDetail,
-// addBookingItems, approveExtension, rejectExtension, editDates, extendEndDate,
-// status, notes, version, ...) with custom error responses per branch. Each
-// dispatch branch keeps its own per-field validation downstream — at this
-// envelope level we whitelist the discriminator names so unknown fields are
-// rejected (no more `.passthrough()` foot-gun on an admin mutation surface).
-const VALID_BOOKING_STATUSES = [
-  'PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS',
-  'CANCELLED', 'REJECTED', 'COMPLETED', 'NO_SHOW',
-  'WAITLIST', 'PENDING_EXTENSION',
-] as const;
-
-const adminBookingPatchSchema = z
-  .object({
-    status: z.enum(VALID_BOOKING_STATUSES).optional(),
-    notes: z.string().optional(),
-    version: z.number().int().optional(),
-    cancellationReason: z.string().optional(),
-    // Discriminator branches — each one's payload is validated by its own
-    // service downstream. We accept `unknown` here only to gate the field name.
-    patchBoardingDetail: z.unknown().optional(),
-    addBookingItems: z.unknown().optional(),
-    approveExtension: z.unknown().optional(),
-    rejectExtension: z.unknown().optional(),
-    editDates: z.unknown().optional(),
-    extendEndDate: z.unknown().optional(),
-    forcePaidInvoice: z.unknown().optional(),
-  })
-  .strict();
-
-const adminBookingParamsSchema = z.object({ id: z.string().min(1) });
-
+// ────────────────────────────────────────────────────────────────────────────
+// PATCH /api/admin/bookings/[id] — dispatcher
+//
+// Body validated against `adminBookingPatchSchema` (strict whitelist of
+// discriminator field names). Each branch delegates to a service in
+// `@/lib/services/booking-admin` — see that folder's README for the contract.
+//
+// `BookingError` thrown by a service is mapped here back to the HTTP shape so
+// the on-the-wire response is unchanged from the pre-split implementation.
+// ────────────────────────────────────────────────────────────────────────────
 export const PATCH = withSchema(
   { body: adminBookingPatchSchema, params: adminBookingParamsSchema },
   async (_request, { body, params }) => {
-  const { id } = params;
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+    const { id } = params;
+    const session = await auth();
+    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-  const { status, notes } = body as { status?: string; notes?: string };
+    const { status, notes } = body as { status?: string; notes?: string };
+    const forcePaidInvoice = Boolean(body.forcePaidInvoice);
 
-  const booking = await prisma.booking.findFirst({
-    where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
-    include: {
-      client: true,
-      bookingPets: { include: { pet: true } },
-      boardingDetail: true,
-      taxiDetail: true,
-      invoice: true,
-    },
-  });
-  if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const booking = await prisma.booking.findFirst({
+      where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      include: {
+        client: true,
+        bookingPets: { include: { pet: true } },
+        boardingDetail: true,
+        taxiDetail: true,
+        invoice: true,
+      },
+    });
+    if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Optimistic concurrency: when caller provides `version`, refuse to apply
-  // the patch if the row was modified since they read it. Backward compatible
-  // — callers that don't send `version` skip the check (legacy behavior).
-  const expectedVersion = typeof body.version === 'number' ? body.version : null;
-  if (expectedVersion !== null && expectedVersion !== booking.version) {
-    return NextResponse.json(
-      { error: 'VERSION_CONFLICT', message: 'This booking was modified by someone else. Please refresh.', currentVersion: booking.version },
-      { status: 409 },
-    );
-  }
-
-  // ── Status transition guards ──────────────────────────────────────────────
-  // REJECTED / CANCELLED require a cancellationReason (min 10 chars) so the
-  // client always receives a meaningful explanation and admins cannot skip
-  // the justification step by calling the API directly. The previous escape
-  // hatch (`patchBoardingDetail === undefined`) was an arbitrary back-door
-  // that allowed an admin to flip status while patching boarding details —
-  // removed: cancellation always requires a reason, regardless of the
-  // sibling fields in the same body.
-  if (status === 'REJECTED' || status === 'CANCELLED') {
-    const reason = typeof body.cancellationReason === 'string' ? body.cancellationReason.trim() : '';
-    if (reason.length < 10) {
+    // Optimistic concurrency: when caller provides `version`, refuse to apply
+    // the patch if the row was modified since they read it. Backward compatible
+    // — callers that don't send `version` skip the check (legacy behavior).
+    const expectedVersion = typeof body.version === 'number' ? body.version : null;
+    if (expectedVersion !== null && expectedVersion !== booking.version) {
       return NextResponse.json(
-        { error: 'CANCELLATION_REASON_REQUIRED', message: 'cancellationReason (min 10 chars) is required when rejecting or cancelling a booking' },
+        { error: 'VERSION_CONFLICT', message: 'This booking was modified by someone else. Please refresh.', currentVersion: booking.version },
+        { status: 409 },
+      );
+    }
+
+    // ── Status transition guards ──────────────────────────────────────────────
+    if (status === 'REJECTED' || status === 'CANCELLED') {
+      const reason = typeof body.cancellationReason === 'string' ? body.cancellationReason.trim() : '';
+      if (reason.length < 10) {
+        return NextResponse.json(
+          { error: 'CANCELLATION_REASON_REQUIRED', message: 'cancellationReason (min 10 chars) is required when rejecting or cancelling a booking' },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (status === 'NO_SHOW' && !['CONFIRMED', 'IN_PROGRESS'].includes(booking.status)) {
+      return NextResponse.json(
+        { error: 'INVALID_TRANSITION', message: 'NO_SHOW only from CONFIRMED or IN_PROGRESS' },
         { status: 400 },
       );
     }
-  }
-
-  // NO_SHOW : seulement depuis CONFIRMED ou IN_PROGRESS (pas depuis PENDING,
-  // CANCELLED, COMPLETED, WAITLIST, etc. — un séjour non confirmé ne peut
-  // pas être un "no-show", il est juste annulé).
-  if (status === 'NO_SHOW' && !['CONFIRMED', 'IN_PROGRESS'].includes(booking.status)) {
-    return NextResponse.json(
-      { error: 'INVALID_TRANSITION', message: 'NO_SHOW only from CONFIRMED or IN_PROGRESS' },
-      { status: 400 },
-    );
-  }
-  // WAITLIST : un booking déjà sur liste d'attente ne peut sortir que vers
-  // PENDING (promotion manuelle) ou CANCELLED (le client se désiste).
-  if (
-    status &&
-    booking.status === 'WAITLIST' &&
-    !['PENDING', 'CANCELLED', 'WAITLIST'].includes(status)
-  ) {
-    return NextResponse.json(
-      { error: 'INVALID_TRANSITION', message: 'From WAITLIST only PENDING or CANCELLED' },
-      { status: 400 },
-    );
-  }
-
-  // ── Patch BoardingDetail fields (taxi return / taxi go) ───────────────────
-  // Delegated to `patchBoardingDetailService` — see booking-admin.service.ts.
-  // The catch block mirrors the previous inline error shapes exactly so the
-  // HTTP contract is unchanged.
-  if (body.patchBoardingDetail !== undefined) {
-    try {
-      const result = await patchBoardingDetailService({
-        bookingId: id,
-        patch: body.patchBoardingDetail as Record<string, unknown>,
-        actorId: session.user.id,
-      });
-      return NextResponse.json(result);
-    } catch (err) {
-      if (err instanceof BookingError) {
-        // Preserve original message-style payloads for these two codes —
-        // older clients may key on the human-readable string.
-        if (err.code === 'ONLY_BOARDING') {
-          return NextResponse.json({ error: 'Only applies to BOARDING bookings' }, { status: 400 });
-        }
-        if (err.code === 'INVALID_FIELDS') {
-          return NextResponse.json({ error: err.message }, { status: 400 });
-        }
-        return NextResponse.json(
-          { error: err.code, ...(err.payload ?? {}) },
-          { status: err.status },
-        );
-      }
-      throw err;
-    }
-  }
-
-  // ── Add booking items (croquettes / extras) with invoice auto-sync ────────
-  // Generic addon path: admin adds custom line(s) to an existing booking and,
-  // if a linked invoice exists, the corresponding InvoiceItem(s) are created
-  // automatically with the same category. Used for PRODUCT / OTHER items
-  // (croquettes, supplements, etc.) for which there's no dedicated UI like
-  // EditTaxiAddonSection / EditGroomingSection.
-  if (Array.isArray(body.addBookingItems) && body.addBookingItems.length > 0) {
-    try {
-      const result = await addBookingItemsService({
-        bookingId: id,
-        rawItems: body.addBookingItems as unknown[],
-        actorId: session.user.id,
-      });
-      return NextResponse.json(result);
-    } catch (err) {
-      if (err instanceof BookingError) {
-        return NextResponse.json(
-          { error: err.code, ...(err.payload ?? {}) },
-          { status: err.status },
-        );
-      }
-      throw err;
-    }
-  }
-  // ── End addBookingItems ───────────────────────────────────────────────────
-
-  // ── PENDING_EXTENSION: Approve (merge into original) ──────────────────────
-  if (body.approveExtension && booking.status === 'PENDING_EXTENSION') {
-    if (!booking.extensionForBookingId) {
-      return NextResponse.json({ error: 'NO_ORIGINAL_BOOKING' }, { status: 400 });
+    if (
+      status &&
+      booking.status === 'WAITLIST' &&
+      !['PENDING', 'CANCELLED', 'WAITLIST'].includes(status)
+    ) {
+      return NextResponse.json(
+        { error: 'INVALID_TRANSITION', message: 'From WAITLIST only PENDING or CANCELLED' },
+        { status: 400 },
+      );
     }
 
-    const originalBooking = await prisma.booking.findFirst({
-      where: { id: booking.extensionForBookingId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
-      include: { invoice: true, bookingPets: { include: { pet: true } }, boardingDetail: true, client: true },
-    });
-
-    if (!originalBooking) {
-      return NextResponse.json({ error: 'ORIGINAL_BOOKING_NOT_FOUND' }, { status: 404 });
-    }
-
-    const newEndDate = booking.endDate ?? booking.startDate;
-
-    // Capacity check for the extension window (period originalBooking.endDate → newEndDate).
-    // excludeBookingId prevents the original booking from counting against itself
-    // (its endDate equals the extension startDate, so the overlap predicate fires).
-    const extCapacity1 = await checkBoardingCapacity({
-      petIds: originalBooking.bookingPets.map(bp => bp.pet.id),
-      startDate: originalBooking.endDate ?? originalBooking.startDate,
-      endDate: newEndDate,
-      excludeBookingId: originalBooking.id,
-    });
-    if (!extCapacity1.ok) {
-      return NextResponse.json({ error: 'CAPACITY_EXCEEDED', ...extCapacity1 }, { status: 400 });
-    }
-
-    // Recalculate new total based on the full merged duration (not a naive sum)
-    // The extension booking is created with totalPrice:0 and no invoice, so summing would
-    // produce the original total unchanged — i.e. a free extension. We compute from scratch.
-    const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
-    const pricingSettingsForExt = await getPricingSettings();
-    const petsForExt = originalBooking.bookingPets.map(bp => bp.pet);
-    const mergedNights = Math.floor(
-      (newEndDate.getTime() - originalBooking.startDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    const groomingPriceForExt = Number(originalBooking.boardingDetail?.groomingPrice ?? 0);
-    const taxiAddonPriceForExt = Number(originalBooking.boardingDetail?.taxiAddonPrice ?? 0);
-    const newTotal = Math.round(
-      calculateBoardingTotalForExtension(petsForExt, mergedNights, groomingPriceForExt, taxiAddonPriceForExt, pricingSettingsForExt) * 100
-    ) / 100;
-
-    if (newTotal <= 0) {
-      return NextResponse.json({ error: 'INVALID_COMPUTED_TOTAL' }, { status: 400 });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      // Migrate photos and items from extension booking to original
-      await tx.stayPhoto.updateMany({ where: { bookingId: id }, data: { bookingId: originalBooking.id } });
-      await tx.bookingItem.updateMany({ where: { bookingId: id }, data: { bookingId: originalBooking.id } });
-
-      // Update invoice
-      if (originalBooking.invoice && booking.invoice) {
-        const newPaidAmount = Math.round((Number(originalBooking.invoice.paidAmount) + Number(booking.invoice.paidAmount)) * 100) / 100;
-        const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
-        await tx.invoice.update({
-          where: { id: originalBooking.invoice.id },
-          data: {
-            amount: newTotal,
-            paidAmount: newPaidAmount,
-            status: newStatus,
-            ...(newStatus === 'PAID' && !originalBooking.invoice.paidAt ? { paidAt: new Date() } : {}),
-          },
-        });
-        await tx.invoiceItem.deleteMany({ where: { invoiceId: booking.invoice.id } });
-        await tx.invoice.delete({ where: { id: booking.invoice.id } });
-      } else if (!originalBooking.invoice && booking.invoice) {
-        await tx.invoice.update({ where: { id: booking.invoice.id }, data: { bookingId: originalBooking.id, amount: newTotal } });
-      } else if (originalBooking.invoice && !booking.invoice) {
-        const newPaidAmount = Number(originalBooking.invoice.paidAmount);
-        const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
-        await tx.invoice.update({ where: { id: originalBooking.invoice.id }, data: { amount: newTotal, status: newStatus } });
-      }
-
-      // Update original booking end date and total
-      await tx.booking.update({
-        where: { id: originalBooking.id },
-        data: {
-          endDate: newEndDate,
-          totalPrice: newTotal,
-          hasExtensionRequest: false,
-          extensionRequestedEndDate: null,
-          extensionRequestNote: null,
-        },
-      });
-
-      // Delete the extension booking (cascades BookingPets, BoardingDetail, etc.)
-      await tx.booking.delete({ where: { id: id } });
-    });
-
-    const bookingRef = originalBooking.id.slice(0, 8).toUpperCase();
-    const newEndDateDisplay = newEndDate.toLocaleDateString(originalBooking.client?.language === 'en' ? 'en-GB' : 'fr-MA');
-    const { createBookingExtendedNotification } = await import('@/lib/notifications');
-    await createBookingExtendedNotification(originalBooking.clientId, bookingRef, newEndDateDisplay, originalBooking.client?.language ?? 'fr').catch(err => console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Failed to create notification', error: err instanceof Error ? err.message : String(err) })));
-
-    await logAction({
-      userId: session.user.id,
-      action: 'EXTENSION_APPROVED',
-      entityType: 'Booking',
-      entityId: originalBooking.id,
-      details: { extensionBookingId: id, newEndDate: newEndDate.toISOString().slice(0, 10), newTotal },
-    });
-
-    return NextResponse.json({ message: 'extension_approved', originalBookingId: originalBooking.id, newTotal });
-  }
-
-  // ── PENDING_EXTENSION: Reject (delete extension booking) ─────────────────
-  if (body.rejectExtension && booking.status === 'PENDING_EXTENSION') {
-    const originalBookingId = booking.extensionForBookingId;
-
-    await prisma.$transaction(async (tx) => {
-      // Delete extension invoice if exists
-      if (booking.invoice) {
-        await tx.invoiceItem.deleteMany({ where: { invoiceId: booking.invoice.id } });
-        await tx.invoice.delete({ where: { id: booking.invoice.id } });
-      }
-      await tx.booking.delete({ where: { id: id } });
-
-      // Clear hasExtensionRequest flag on original booking
-      if (originalBookingId) {
-        await tx.booking.update({
-          where: { id: originalBookingId },
-          data: { hasExtensionRequest: false, extensionRequestedEndDate: null, extensionRequestNote: null },
-        });
-      }
-    });
-
-    if (originalBookingId) {
-      const bookingRef = originalBookingId.slice(0, 8).toUpperCase();
-      const { createExtensionRejectedNotification } = await import('@/lib/notifications');
-      await createExtensionRejectedNotification(booking.clientId, bookingRef).catch(err => console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Failed to create notification', error: err instanceof Error ? err.message : String(err) })));
-    }
-
-    await logAction({
-      userId: session.user.id,
-      action: 'EXTENSION_REJECTED',
-      entityType: 'Booking',
-      entityId: id,
-      details: { originalBookingId },
-    });
-
-    return NextResponse.json({ message: 'extension_rejected', originalBookingId });
-  }
-
-  // ── Edit dates (admin corrects start/end date + regenerates invoice) ──────
-  if (body.editDates) {
-    const { startDate: newStartStr, endDate: newEndStr } = body.editDates as { startDate?: string; endDate?: string };
-    if (!newStartStr || !newEndStr) {
-      return NextResponse.json({ error: 'editDates requires startDate and endDate' }, { status: 400 });
-    }
-
-    // Block edit if invoice is PAID unless the admin explicitly acknowledges the risk
-    if (booking.invoice?.status === 'PAID' && !body.forcePaidInvoice) {
-      return NextResponse.json({ error: 'INVOICE_ALREADY_PAID', hint: 'Pass forcePaidInvoice:true to override' }, { status: 409 });
-    }
-
-    const newStart = new Date(newStartStr + 'T12:00:00Z');
-    const newEnd = new Date(newEndStr + 'T12:00:00Z');
-
-    if (isNaN(newStart.getTime()) || isNaN(newEnd.getTime())) {
-      return NextResponse.json({ error: 'Invalid dates' }, { status: 400 });
-    }
-    if (newEnd <= newStart) {
-      return NextResponse.json({ error: 'endDate must be after startDate' }, { status: 400 });
-    }
-
-    // PET_TAXI: enforce Sunday-closed + 10h–17h slot rules even when an admin
-    // moves the booking. The validation throws a BookingError that mirrors
-    // the same shape POST /api/bookings would return for the client path.
-    if (booking.serviceType === 'PET_TAXI') {
+    // ── Branch: patchBoardingDetail ───────────────────────────────────────────
+    if (body.patchBoardingDetail !== undefined) {
       try {
-        const { validateTaxiSlot } = await import('@/lib/services/booking-client.service');
-        validateTaxiSlot({ startDate: newStart, arrivalTime: booking.arrivalTime });
-      } catch (err) {
-        if (err instanceof BookingError) {
-          return NextResponse.json(
-            { error: err.code, ...(err.payload ?? {}) },
-            { status: err.status },
-          );
-        }
-        throw err;
-      }
-    }
-
-    const newNights = Math.floor((newEnd.getTime() - newStart.getTime()) / (1000 * 60 * 60 * 24));
-
-    // Recalculate price
-    let newTotal = Number(booking.totalPrice);
-    if (booking.serviceType === 'BOARDING') {
-      const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
-      const pricingSettings = await getPricingSettings();
-      const pets = booking.bookingPets.map(bp => bp.pet);
-      const groomingPrice = Number(booking.boardingDetail?.groomingPrice ?? 0);
-      const taxiAddonPrice = Number(booking.boardingDetail?.taxiAddonPrice ?? 0);
-      newTotal = calculateBoardingTotalForExtension(pets, newNights, groomingPrice, taxiAddonPrice, pricingSettings);
-    }
-
-    if (newTotal <= 0) {
-      return NextResponse.json({ error: 'INVALID_COMPUTED_TOTAL' }, { status: 400 });
-    }
-
-    // Snapshot old dates for the audit log (captured before the transaction).
-    const oldStartDate = booking.startDate.toISOString().slice(0, 10);
-    const oldEndDate = booking.endDate?.toISOString().slice(0, 10) ?? null;
-
-    // Capacity check + booking/invoice update inside a Serializable transaction
-    // to prevent TOCTOU: no concurrent booking can slip in between the check and
-    // the write. allocatePayments runs after the tx (needs committed state).
-    let editCapacityError: CapacityCheckExceeded | null = null;
-    await prisma.$transaction(async (tx) => {
-      // Capacity check for BOARDING — full new window, excluding this booking so
-      // its own pets don't count against the limit during the move.
-      if (booking.serviceType === 'BOARDING') {
-        const capResult = await checkBoardingCapacity(
-          {
-            petIds: booking.bookingPets.map(bp => bp.pet.id),
-            startDate: newStart,
-            endDate: newEnd,
-            excludeBookingId: id,
-          },
-          tx,
-        );
-        if (!capResult.ok) {
-          editCapacityError = capResult;
-          return;
-        }
-      }
-
-      await tx.booking.update({
-        where: { id: id },
-        data: { startDate: newStart, endDate: newEnd, totalPrice: newTotal, version: { increment: 1 } },
-      });
-
-      if (booking.invoice && ['PENDING', 'PARTIALLY_PAID', 'PAID'].includes(booking.invoice.status)) {
-        // Update pension InvoiceItems to reflect the new night count
-        const invoiceItems = await tx.invoiceItem.findMany({
-          where: { invoiceId: booking.invoice.id },
-          select: { id: true, description: true, unitPrice: true },
-        });
-        await Promise.all(
-          invoiceItems
-            .filter(item => {
-              const d = item.description.toLowerCase();
-              return (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi') && Number(item.unitPrice) > 0;
-            })
-            .map(item => tx.invoiceItem.update({
-              where: { id: item.id },
-              data: { quantity: newNights, total: newNights * Number(item.unitPrice) },
-            }))
-        );
-
-        const newPaidAmount = Number(booking.invoice.paidAmount);
-        const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
-        // Si la facture sortait PAID et redevient PENDING/PARTIAL après l'édition,
-        // on reset paidAt pour ne pas garder une date périmée — allocatePayments
-        // re-positionnera paidAt si un nouveau crédit complet apparaît.
-        const droppedFromPaid = newStatus !== 'PAID' && booking.invoice.status === 'PAID';
-        await tx.invoice.update({
-          where: { id: booking.invoice.id },
-          data: {
-            amount: newTotal,
-            status: newStatus,
-            ...(droppedFromPaid && { paidAt: null }),
-          },
-        });
-      }
-    }, { isolationLevel: 'Serializable' });
-
-    if (editCapacityError) {
-      const ce = editCapacityError as CapacityCheckExceeded;
-      return NextResponse.json({ error: 'CAPACITY_EXCEEDED', ...ce }, { status: 400 });
-    }
-
-    // Reallocate payments after dates/items update (outside tx — has own locking)
-    if (booking.invoice) {
-      const { allocatePayments } = await import('@/lib/payments');
-      await allocatePayments(booking.invoice.id);
-    }
-
-    await logAction({
-      userId: session.user.id,
-      action: 'BOOKING_DATES_EDITED',
-      entityType: 'Booking',
-      entityId: id,
-      details: { oldStartDate, oldEndDate, newStartDate: newStartStr, newEndDate: newEndStr, newNights, newTotal },
-    });
-
-    return NextResponse.json({ message: 'dates_updated', newStartDate: newStartStr, newEndDate: newEndStr, newNights, newTotal });
-  }
-
-  // ── Extension: direct admin extend OR approve client request (flag-based) ─
-  const newEndDateStr: string | undefined = (body.extendEndDate as string | undefined) ?? (body.approveExtension ? booking.extensionRequestedEndDate?.toISOString().slice(0, 10) : undefined);
-
-  if (newEndDateStr || body.rejectExtension) {
-    if (booking.serviceType !== 'BOARDING') {
-      return NextResponse.json({ error: 'Extensions only apply to boarding stays' }, { status: 400 });
-    }
-
-    // ── Reject extension request (flag-based) — extracted to service ────────
-    if (body.rejectExtension) {
-      try {
-        const result = await rejectExtensionRequestService({
+        const result = await patchBoardingDetail({
           bookingId: id,
+          patch: body.patchBoardingDetail as Record<string, unknown>,
           actorId: session.user.id,
         });
         return NextResponse.json(result);
       } catch (err) {
-        if (err instanceof BookingError) {
-          // Map back to the original human-readable message shapes.
-          if (err.code === 'INVALID_TRANSITION') {
-            return NextResponse.json({ error: 'No pending extension request' }, { status: 400 });
-          }
-          if (err.code === 'ONLY_BOARDING') {
-            return NextResponse.json({ error: 'Extensions only apply to boarding stays' }, { status: 400 });
-          }
-          return NextResponse.json(
-            { error: err.code, ...(err.payload ?? {}) },
-            { status: err.status },
-          );
+        return mapBookingError(err, {
+          ONLY_BOARDING: () => NextResponse.json({ error: 'Only applies to BOARDING bookings' }, { status: 400 }),
+          INVALID_FIELDS: (e) => NextResponse.json({ error: e.message }, { status: 400 }),
+        });
+      }
+    }
+
+    // ── Branch: addBookingItems ───────────────────────────────────────────────
+    if (Array.isArray(body.addBookingItems) && body.addBookingItems.length > 0) {
+      try {
+        const result = await addBookingItems({
+          bookingId: id,
+          rawItems: body.addBookingItems as unknown[],
+          actorId: session.user.id,
+        });
+        return NextResponse.json(result);
+      } catch (err) {
+        return mapBookingError(err);
+      }
+    }
+
+    // ── Branch: approveExtension on a separate PENDING_EXTENSION booking ─────
+    if (body.approveExtension && booking.status === 'PENDING_EXTENSION') {
+      try {
+        const result = await approveExtensionMerge({ bookingId: id, actorId: session.user.id });
+        return NextResponse.json(result);
+      } catch (err) {
+        return mapBookingError(err);
+      }
+    }
+
+    // ── Branch: rejectExtension on a separate PENDING_EXTENSION booking ──────
+    if (body.rejectExtension && booking.status === 'PENDING_EXTENSION') {
+      try {
+        const result = await rejectExtensionMerge({ bookingId: id, actorId: session.user.id });
+        return NextResponse.json(result);
+      } catch (err) {
+        return mapBookingError(err);
+      }
+    }
+
+    // ── Branch: editDates ─────────────────────────────────────────────────────
+    if (body.editDates) {
+      const { startDate: newStartStr, endDate: newEndStr } = body.editDates as { startDate?: string; endDate?: string };
+      if (!newStartStr || !newEndStr) {
+        return NextResponse.json({ error: 'editDates requires startDate and endDate' }, { status: 400 });
+      }
+      try {
+        const result = await editDates({
+          booking,
+          newStartStr,
+          newEndStr,
+          forcePaidInvoice,
+          actorId: session.user.id,
+        });
+        return NextResponse.json(result);
+      } catch (err) {
+        // Preserve verbatim error messages for the legacy validation strings.
+        if (err instanceof BookingError && err.code === 'INVALID_FIELDS') {
+          return NextResponse.json({ error: err.message }, { status: 400 });
         }
-        throw err;
+        return mapBookingError(err);
       }
     }
 
-    // ── Apply extension (direct or approved) ─────────────────────────────────
-    // Block if invoice is PAID unless admin explicitly acknowledges the risk
-    if (booking.invoice?.status === 'PAID' && !body.forcePaidInvoice) {
-      return NextResponse.json({ error: 'INVOICE_ALREADY_PAID', hint: 'Pass forcePaidInvoice:true to override' }, { status: 409 });
-    }
+    // ── Branch: extension (direct extend OR approve flag-based request) ──────
+    const newEndDateStr: string | undefined = (body.extendEndDate as string | undefined)
+      ?? (body.approveExtension ? booking.extensionRequestedEndDate?.toISOString().slice(0, 10) : undefined);
 
-    const newEndDate = new Date(newEndDateStr + 'T12:00:00');
-    if (isNaN(newEndDate.getTime())) {
-      return NextResponse.json({ error: 'Invalid end date' }, { status: 400 });
-    }
-    if (newEndDate <= booking.startDate) {
-      return NextResponse.json({ error: 'New end date must be after start date' }, { status: 400 });
-    }
-    if (booking.endDate && newEndDate <= booking.endDate) {
-      return NextResponse.json({ error: 'New end date must be after current end date' }, { status: 400 });
-    }
-
-    const newNights = Math.floor((newEndDate.getTime() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24));
-    const pets = booking.bookingPets.map(bp => bp.pet);
-    const groomingPrice = Number(booking.boardingDetail?.groomingPrice ?? 0);
-    const taxiAddonPrice = Number(booking.boardingDetail?.taxiAddonPrice ?? 0);
-
-    const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
-    const pricingSettings = await getPricingSettings();
-    const newTotal = calculateBoardingTotalForExtension(pets, newNights, groomingPrice, taxiAddonPrice, pricingSettings);
-
-    if (newTotal <= 0) {
-      return NextResponse.json({ error: 'INVALID_COMPUTED_TOTAL' }, { status: 400 });
-    }
-
-    // Capacity check + invoice/booking update run inside a single Serializable
-    // transaction so that no concurrent booking can slip in between the check
-    // and the write (TOCTOU prevention). Pass `tx` to checkBoardingCapacity so
-    // the occupancy count reads from the same snapshot as the booking update.
-    // allocatePayments runs AFTER the tx — it has its own $transaction + FOR
-    // UPDATE lock and must see the committed state.
-    let invoiceWarning = false;
-    let capacityError: CapacityCheckExceeded | null = null;
-    await prisma.$transaction(async (tx) => {
-      // Capacity check for the extension window (booking.endDate → newEndDate).
-      // excludeBookingId prevents the booking from counting against itself
-      // (its current endDate equals the extension startDate, triggering the overlap predicate).
-      const extCapacity2 = await checkBoardingCapacity(
-        {
-          petIds: booking.bookingPets.map(bp => bp.pet.id),
-          startDate: booking.endDate ?? booking.startDate,
-          endDate: newEndDate,
-          excludeBookingId: id,
-        },
-        tx,
-      );
-      if (!extCapacity2.ok) {
-        capacityError = extCapacity2;
-        return; // abort the tx body — transaction will still commit (no throw needed here)
+    if (newEndDateStr || body.rejectExtension) {
+      if (booking.serviceType !== 'BOARDING') {
+        return NextResponse.json({ error: 'Extensions only apply to boarding stays' }, { status: 400 });
       }
 
-      if (booking.invoice) {
-        if (['PENDING', 'PARTIALLY_PAID', 'PAID'].includes(booking.invoice.status)) {
-          // Update pension InvoiceItems to reflect the new night count
-          const invoiceItems = await tx.invoiceItem.findMany({
-            where: { invoiceId: booking.invoice.id },
-            select: { id: true, description: true, unitPrice: true },
+      // Reject the flag-based extension request (no separate booking).
+      if (body.rejectExtension) {
+        try {
+          const result = await rejectExtensionRequest({
+            bookingId: id,
+            actorId: session.user.id,
           });
-          await Promise.all(
-            invoiceItems
-              .filter(item => {
-                const d = item.description.toLowerCase();
-                return (d.includes('pension') || d.includes('boarding')) && !d.includes('taxi') && Number(item.unitPrice) > 0;
-              })
-              .map(item => tx.invoiceItem.update({
-                where: { id: item.id },
-                data: { quantity: newNights, total: newNights * Number(item.unitPrice) },
-              }))
-          );
-
-          const newPaidAmount = Number(booking.invoice.paidAmount);
-          const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
-          await tx.invoice.update({
-            where: { id: booking.invoice.id },
-            data: {
-              amount: newTotal,
-              status: newStatus,
-              ...(newStatus !== 'PAID' && booking.invoice.status === 'PAID' ? { paidAt: null } : {}),
-            },
+          return NextResponse.json(result);
+        } catch (err) {
+          return mapBookingError(err, {
+            INVALID_TRANSITION: () => NextResponse.json({ error: 'No pending extension request' }, { status: 400 }),
+            ONLY_BOARDING: () => NextResponse.json({ error: 'Extensions only apply to boarding stays' }, { status: 400 }),
           });
-          if (booking.invoice.status === 'PAID' && newPaidAmount < newTotal) {
-            invoiceWarning = true; // remainder needs to be collected
-          }
         }
       }
 
-      await tx.booking.update({
-        where: { id: id },
-        data: {
-          endDate: newEndDate,
-          totalPrice: newTotal,
-          hasExtensionRequest: false,
-          extensionRequestedEndDate: null,
-          extensionRequestNote: null,
-          version: { increment: 1 },
-        },
-      });
-    }, { isolationLevel: 'Serializable' });
-
-    if (capacityError) {
-      const ce = capacityError as CapacityCheckExceeded;
-      return NextResponse.json({ error: 'CAPACITY_EXCEEDED', ...ce }, { status: 400 });
+      // Apply the extension (direct or flag approval).
+      try {
+        const result = await applyExtension({
+          booking,
+          newEndDateStr: newEndDateStr!,
+          forcePaidInvoice,
+          actorId: session.user.id,
+          isApproval: Boolean(body.approveExtension),
+        });
+        return NextResponse.json(result);
+      } catch (err) {
+        // Preserve the legacy human-readable validation messages.
+        if (err instanceof BookingError && err.code === 'INVALID_FIELDS') {
+          return NextResponse.json({ error: err.message }, { status: 400 });
+        }
+        return mapBookingError(err);
+      }
     }
+    // ── End extension handling ────────────────────────────────────────────────
 
-    if (booking.invoice) {
-      // Reallocate payments across the updated items (outside tx — has own locking)
-      const { allocatePayments } = await import('@/lib/payments');
-      await allocatePayments(booking.invoice.id);
-    }
-
-    const bookingRef = booking.id.slice(0, 8).toUpperCase();
-    const newEndDateDisplay = newEndDate.toLocaleDateString(booking.client.language === 'en' ? 'en-GB' : 'fr-MA');
-    const { createBookingExtendedNotification } = await import('@/lib/notifications');
-    await createBookingExtendedNotification(booking.clientId, bookingRef, newEndDateDisplay, booking.client.language ?? 'fr').catch(err => console.error(JSON.stringify({ level: 'error', service: 'notification', message: 'Failed to create notification', error: err instanceof Error ? err.message : String(err) })));
-
-    await logAction({
-      userId: session.user.id,
-      action: body.approveExtension ? 'EXTENSION_APPROVED' : 'EXTENSION_DIRECT',
-      entityType: 'Booking',
-      entityId: id,
-      details: { newEndDate: newEndDateStr, newTotal, invoiceWarning },
-    });
-
-    return NextResponse.json({ message: 'extended', newEndDate: newEndDateStr, newTotal, invoiceWarning });
-  }
-  // ── End extension handling ────────────────────────────────────────────────────
-
-  const newStatus = status as string | undefined;
-  // State-machine guard: refuse arbitrary jumps (e.g. COMPLETED → PENDING).
-  // Some transitions (NO_SHOW, WAITLIST → ...) already had bespoke checks
-  // above; this is the safety net for everything else. Self-transition is
-  // allowed (no-op). AT_PICKUP is accepted by the status enum but is not
-  // part of the canonical machine — let it through to preserve existing
-  // taxi flows that key off it.
-  if (newStatus && newStatus !== booking.status && newStatus !== 'AT_PICKUP') {
-    if (!isBookingStatus(booking.status) || !isBookingStatus(newStatus)) {
-      // Unknown legacy state — let it through to avoid lockout, but log.
-      console.warn(JSON.stringify({
-        level: 'warn',
-        service: 'booking',
-        message: 'state machine bypass: unknown status',
-        from: booking.status,
-        to: newStatus,
-        bookingId: id,
-      }));
-    } else if (!canTransition(booking.status as BookingStatus, newStatus as BookingStatus)) {
-      return NextResponse.json(
-        { error: 'INVALID_TRANSITION', from: booking.status, to: newStatus },
-        { status: 400 },
-      );
-    }
-  }
-
-  // Persist cancellationReason when admin rejects or cancels a booking
-  const cancellationReason = (status === 'REJECTED' || status === 'CANCELLED')
-    ? (typeof body.cancellationReason === 'string' ? body.cancellationReason.trim() : undefined)
-    : undefined;
-  const updated = await Sentry.startSpan(
-    { name: 'db.booking.update', op: 'db', attributes: { bookingId: id, newStatus: newStatus ?? '' } },
-    () => prisma.booking.update({
-      where: { id: id },
-      data: {
-        ...(status && { status }),
-        ...(notes !== undefined && { notes }),
-        ...(cancellationReason !== undefined && { cancellationReason }),
-        version: { increment: 1 },
-      },
-    }),
-  );
-
-  // NO_SHOW : annule la facture (si non payée) + réincrémente le stock des
-  // produits ajoutés (les pets ne sont pas venus, donc rien n'a été consommé).
-  // Statut définitif — la place est libérée. Si la facture est déjà PAID ou
-  // PARTIALLY_PAID, on NE l'annule PAS (encaissement réel à conserver dans le
-  // CA — un éventuel remboursement doit passer par un avoir séparé). On loggue
-  // un warning + un audit log dédié pour traçabilité comptable. Idempotent :
-  // si déjà CANCELLED, no-op.
-  if (status === 'NO_SHOW' && status !== booking.status) {
-    const inv = await prisma.invoice.findUnique({
-      where: { bookingId: id },
-      select: {
-        id: true,
-        status: true,
-        paidAmount: true,
-        items: { where: { productId: { not: null } }, select: { productId: true, quantity: true } },
-      },
-    });
-    if (inv && inv.status !== 'CANCELLED') {
-      const isPaidOrPartial = inv.status === 'PAID' || inv.status === 'PARTIALLY_PAID';
-
-      if (isPaidOrPartial) {
-        // Facture encaissée (totalement ou partiellement) — on la conserve
-        // intacte mais on restitue toujours le stock (pets pas venus).
+    // ── Status / notes change ─────────────────────────────────────────────────
+    const newStatus = status as string | undefined;
+    // State-machine guard: refuse arbitrary jumps. AT_PICKUP is accepted by the
+    // status enum but is not part of the canonical machine — let it through to
+    // preserve existing taxi flows that key off it.
+    if (newStatus && newStatus !== booking.status && newStatus !== 'AT_PICKUP') {
+      if (!isBookingStatus(booking.status) || !isBookingStatus(newStatus)) {
         console.warn(JSON.stringify({
           level: 'warn',
-          service: 'no-show',
-          message: 'invoice already paid, kept as-is',
-          invoiceId: inv.id,
-          paidAmount: Number(inv.paidAmount),
+          service: 'booking',
+          message: 'state machine bypass: unknown status',
+          from: booking.status,
+          to: newStatus,
           bookingId: id,
         }));
-        await logAction({
-          userId: session.user.id,
-          action: 'NO_SHOW_INVOICE_PAID_KEPT',
-          entityType: 'Invoice',
-          entityId: inv.id,
-          details: { paidAmount: Number(inv.paidAmount), bookingId: id, invoiceStatus: inv.status },
-        });
-        if (inv.items.length > 0) {
-          await prisma.$transaction(async (tx) => {
-            for (const it of inv.items) {
-              if (!it.productId) continue;
-              const product = await tx.product.findUnique({
-                where: { id: it.productId },
-                select: { available: true, stock: true },
-              });
-              if (!product) continue;
-              const newStock = product.stock + it.quantity;
-              await tx.product.update({
-                where: { id: it.productId },
-                data: {
-                  stock: { increment: it.quantity },
-                  ...(!product.available && newStock > 0 ? { available: true } : {}),
-                },
-              });
-            }
-          });
-        }
-      } else {
-        // Facture PENDING (impayée) — annulation + restauration du stock.
-        await prisma.$transaction(async (tx) => {
-          await tx.invoice.update({
-            where: { id: inv.id },
-            data: { status: 'CANCELLED' },
-          });
-          for (const it of inv.items) {
-            if (!it.productId) continue;
-            const product = await tx.product.findUnique({
-              where: { id: it.productId },
-              select: { available: true, stock: true },
-            });
-            if (!product) continue;
-            const newStock = product.stock + it.quantity;
-            await tx.product.update({
-              where: { id: it.productId },
-              data: {
-                stock: { increment: it.quantity },
-                ...(!product.available && newStock > 0 ? { available: true } : {}),
-              },
-            });
-          }
-        });
+      } else if (!canTransition(booking.status as BookingStatus, newStatus as BookingStatus)) {
+        return NextResponse.json(
+          { error: 'INVALID_TRANSITION', from: booking.status, to: newStatus },
+          { status: 400 },
+        );
       }
     }
-  }
 
-  // Send notifications on status change
-  if (status && status !== booking.status) {
-    const userLang = booking.client.language || 'fr';
-    const pets = booking.bookingPets.map(bp => bp.pet);
-    const petNames = pets.map(p => p.name).join(' et ');
-    const firstName = (booking.client.name ?? booking.client.email).split(' ')[0];
-    const bookingRef = booking.id.slice(0, 8).toUpperCase();
+    const cancellationReason = (status === 'REJECTED' || status === 'CANCELLED')
+      ? (typeof body.cancellationReason === 'string' ? body.cancellationReason.trim() : undefined)
+      : undefined;
 
-    if (status === 'CONFIRMED') {
-      const fmtLocale = userLang === 'fr' ? 'fr-MA' : 'en-GB';
-      const startDateFmt = booking.startDate.toLocaleDateString(fmtLocale);
-      const endDateFmt = booking.endDate ? booking.endDate.toLocaleDateString(fmtLocale) : '';
-      const dates = endDateFmt ? `${startDateFmt} – ${endDateFmt}` : startDateFmt;
-      await createBookingValidationNotification(booking.clientId, bookingRef, petNames, dates);
-      const { subject, html } = getEmailTemplate('booking_validated', {
-        clientName: booking.client.name ?? booking.client.email,
-        bookingRef,
-        service: booking.serviceType === 'BOARDING' ? (userLang === 'fr' ? 'Pension' : 'Boarding') : 'Pet Taxi',
-        petName: petNames,
-        startDate: startDateFmt,
-        endDate: endDateFmt,
-      }, userLang, pets);
-      sendEmailNow({ to: booking.client.email, subject, html })
+    const updated = await applyStatusUpdate({
+      bookingId: id,
+      status,
+      notes,
+      cancellationReason,
+    });
 
-      // SMS client confirmation — accord genre/pluriel (queued)
-      const dateRange = booking.serviceType === 'BOARDING' && booking.endDate
-        ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
-        : `le ${formatDateFR(booking.startDate)}`;
-      const venueLine = booking.serviceType === 'BOARDING'
-        ? `${petNames} ${petVerb(pets)} chez Dog Universe ${dateRange}. Nous ${pets.length > 1 ? 'les' : "l'"} attendons avec impatience !`
-        : `Transport prévu pour ${petNames} ${dateRange}.`;
-      sendSmsNow({ to: booking.client.phone, message: `Bonjour ${firstName} ! ${venueLine} — Dog Universe 🐾` });
-
-      // SMS admin — réservation confirmée (queued)
-      const confirmRangeAdmin = booking.serviceType === 'BOARDING' && booking.endDate
-        ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
-        : ` le ${formatDateFR(booking.startDate)}`;
-      sendSmsNow({ to: 'ADMIN', message: `✅ Résa confirmée : ${petNames} de ${booking.client.name}${confirmRangeAdmin}.` });
-
-      // For PET_TAXI: ensure a STANDALONE TaxiTrip exists
-      if (booking.serviceType === 'PET_TAXI') {
-        const existingTrip = await prisma.taxiTrip.findFirst({ where: { bookingId: id } });
-        if (!existingTrip) {
-          const dateStr = booking.startDate.toISOString().slice(0, 10);
-          const t = await prisma.taxiTrip.create({
-            data: {
-              bookingId: id,
-              tripType: 'STANDALONE',
-              status: 'PLANNED',
-              date: dateStr,
-              time: booking.arrivalTime ?? undefined,
-              taxiType: booking.taxiDetail?.taxiType ?? undefined,
-              // price removed: source of truth is TaxiDetail.price
-            },
-          });
-          await prisma.taxiStatusHistory.create({ data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: session.user.id } });
-        }
-      }
-
-      await logAction({
-        userId: session.user.id,
-        action: LOG_ACTIONS.BOOKING_CONFIRMED,
-        entityType: 'Booking',
-        entityId: id,
-        details: { from: booking.status, to: status },
-      });
-    } else if (status === 'REJECTED' || status === 'CANCELLED') {
-      // Si le booking annulé était sur WAITLIST, il n'a jamais consommé de
-      // place — pas la peine d'envoyer le SMS / email "annulation" ni de
-      // déclencher la promotion d'un autre WAITLIST. On log juste.
-      const wasActiveSlot = booking.status !== 'WAITLIST';
-
-      if (wasActiveSlot) {
-        await createBookingRefusalNotification(booking.clientId, bookingRef);
-        const { subject, html } = getEmailTemplate('booking_refused', {
-          clientName: booking.client.name ?? booking.client.email,
-          bookingRef,
-          petName: petNames,
-        }, userLang, pets);
-        sendEmailNow({ to: booking.client.email, subject, html })
-
-        // SMS client annulation + SMS admin alerte (queued) — localisé selon la langue du client
-        const refusedSmsMsg = userLang === 'en'
-          ? `Hello ${firstName}, your booking for ${petNames} has been cancelled. We remain available. — Dog Universe`
-          : `Bonjour ${firstName}, votre réservation pour ${petNames} a été annulée. Nous restons disponibles. — Dog Universe`;
-        sendSmsNow({ to: booking.client.phone, message: refusedSmsMsg })
-        const adminDateRange = booking.serviceType === 'BOARDING' && booking.endDate
-          ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
-          : ` le ${formatDateFR(booking.startDate)}`;
-        sendSmsNow({ to: 'ADMIN', message: `⚠️ Annulation : ${petNames} de ${booking.client.name}${adminDateRange}.` });
-      }
-
-      await logAction({
-        userId: session.user.id,
-        action: status === 'REJECTED' ? LOG_ACTIONS.BOOKING_REJECTED : LOG_ACTIONS.BOOKING_CANCELLED,
-        entityType: 'Booking',
-        entityId: id,
-        details: { from: booking.status, to: status, wasWaitlist: !wasActiveSlot },
-      });
-
-      // Une place se libère sur ces dates → promouvoir le 1er WAITLIST
-      // (createdAt ASC) qui chevauche la fenêtre. Non bloquant.
-      if (wasActiveSlot && booking.serviceType === 'BOARDING' && booking.endDate) {
-        promoteWaitlistedBooking({
-          startDate: booking.startDate,
-          endDate: booking.endDate,
-        }).catch(async (err) => log('error', 'admin-booking', 'waitlist promotion failed', { error: err instanceof Error ? err.message : String(err) }));
-      }
-    } else if (status === 'NO_SHOW') {
-      // Client absent sans préavis. Notification informative, pas d'email
-      // formel (l'admin contactera directement si nécessaire). Log dédié
-      // sous BOOKING_CANCELLED car NO_SHOW est sémantiquement une non-venue.
-      await createBookingNoShowNotification(booking.clientId, bookingRef, petNames);
-
-      sendSmsNow({ to: 'ADMIN', message: `🚫 No Show : ${petNames} de ${booking.client.name} (réf. ${bookingRef}).` });
-
-      await logAction({
-        userId: session.user.id,
-        action: LOG_ACTIONS.BOOKING_CANCELLED,
-        entityType: 'Booking',
-        entityId: id,
-        details: { from: booking.status, to: 'NO_SHOW' },
-      });
-
-      // NO_SHOW libère aussi la place — promouvoir le 1er WAITLIST.
-      if (booking.serviceType === 'BOARDING' && booking.endDate) {
-        promoteWaitlistedBooking({
-          startDate: booking.startDate,
-          endDate: booking.endDate,
-        }).catch(async (err) => log('error', 'admin-booking', 'waitlist promotion failed', { error: err instanceof Error ? err.message : String(err) }));
-      }
-    } else if (status === 'COMPLETED') {
-      const hasGrooming = booking.boardingDetail?.includeGrooming ?? false;
-      await createBookingCompletedNotification(
-        booking.clientId,
-        bookingRef,
-        petNames,
-        booking.serviceType as 'BOARDING' | 'PET_TAXI',
-        hasGrooming
-      );
-
-      // SMS client séjour terminé (queued)
-      sendSmsNow({ to: booking.client.phone, message: `Bonjour ${firstName} ! Le séjour de ${petNames} est terminé. Ce fut un plaisir de ${pets.length > 1 ? 'les' : "l'"} accueillir. À très bientôt ! — Dog Universe 🐾` });
-
-      // SMS admin — séjour terminé (queued)
-      sendSmsNow({ to: 'ADMIN', message: `✅ Départ : ${petNames} de ${booking.client.name} a quitté la pension.` });
-
-      await logAction({
-        userId: session.user.id,
-        action: LOG_ACTIONS.BOOKING_COMPLETED,
-        entityType: 'Booking',
-        entityId: id,
-        details: { from: booking.status, to: status },
-      });
-
-      // Recalculate loyalty grade on booking completion
-      try {
-        const { calculateSuggestedGrade } = await import('@/lib/loyalty');
-        const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
-        const [totalStays, totalPaid, currentGrade] = await Promise.all([
-          prisma.booking.count({ where: { clientId: booking.clientId, status: 'COMPLETED', deletedAt: null } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
-          prisma.invoice.aggregate({ where: { clientId: booking.clientId, status: 'PAID' }, _sum: { amount: true } }),
-          prisma.loyaltyGrade.findUnique({ where: { clientId: booking.clientId } }),
-        ]);
-        const suggestedGrade = calculateSuggestedGrade(totalStays, Number(totalPaid._sum.amount ?? 0));
-        if (!currentGrade?.isOverride && currentGrade?.grade !== suggestedGrade) {
-          await prisma.loyaltyGrade.upsert({
-            where: { clientId: booking.clientId },
-            update: { grade: suggestedGrade },
-            create: { clientId: booking.clientId, grade: suggestedGrade },
-          });
-          const { invalidateLoyaltyCache } = await import('@/lib/loyalty-server');
-          await invalidateLoyaltyCache(booking.clientId);
-          await createLoyaltyUpdateNotification(booking.clientId, suggestedGrade, booking.client.language || 'fr');
-        }
-      } catch { /* non-blocking */ }
-    } else if (status === 'IN_PROGRESS') {
-      await createBookingInProgressNotification(
-        booking.clientId,
-        bookingRef,
-        petNames,
-        booking.serviceType as 'BOARDING' | 'PET_TAXI'
-      );
-
-      // SMS client : animal arrivé — skip si livraison taxi STANDALONE déjà
-      // confirmée (le taxi-trip route a déjà envoyé son propre SMS d'arrivée).
-      const hasTaxiDelivered = await prisma.taxiTrip.findFirst({
-        where: {
-          bookingId: booking.id,
-          tripType: 'STANDALONE',
-          status: 'ARRIVED_AT_PENSION',
-        },
-        select: { id: true },
-      });
-      if (!hasTaxiDelivered) {
-        sendSmsNow({ to: booking.client.phone, message: `Bonjour ${firstName} ! ${petNames} ${petVerb(pets, 'present')} bien ${petArrived(pets)} et déjà ${petChouchoute(pets)}. Nous en prenons soin. — Dog Universe 🐾` });
-      }
-
-      // SMS admin — arrivée confirmée (queued)
-      sendSmsNow({ to: 'ADMIN', message: `🏠 Arrivée : ${petNames} de ${booking.client.name} est en pension.` });
-
-      await logAction({
-        userId: session.user.id,
-        action: 'BOOKING_IN_PROGRESS',
-        entityType: 'Booking',
-        entityId: id,
-        details: { from: booking.status, to: status },
+    // NO_SHOW: cancel invoice (if unpaid) + restock products. Idempotent.
+    if (status === 'NO_SHOW' && status !== booking.status) {
+      await handleNoShowInvoice({
+        bookingId: id,
+        actorId: session.user.id,
+        previousStatus: booking.status,
       });
     }
-  }
 
-  // Status transition may move the booking out of (or into) PENDING — bust
-  // the admin-counts cache so the sidebar badge reflects the new state.
-  revalidateTag('admin-counts');
+    // Send notifications + log on status change.
+    if (status && status !== booking.status) {
+      await runStatusSideEffects({
+        booking,
+        newStatus: status,
+        actorId: session.user.id,
+      });
+    }
 
-  return NextResponse.json(updated);
+    // Status transition may move the booking out of (or into) PENDING — bust
+    // the admin-counts cache so the sidebar badge reflects the new state.
+    revalidateTag('admin-counts');
+
+    return NextResponse.json(updated);
   },
 );
 
+// ────────────────────────────────────────────────────────────────────────────
+// DELETE /api/admin/bookings/[id]
+// ────────────────────────────────────────────────────────────────────────────
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
@@ -1056,4 +335,28 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   });
 
   return NextResponse.json({ message: 'deleted' });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Map a thrown `BookingError` (or other error) to a `NextResponse`. Caller can
+ * provide per-code overrides for branches that historically returned a custom
+ * shape (e.g. `{ error: <human message> }` vs the default `{ error: <code> }`).
+ */
+function mapBookingError(
+  err: unknown,
+  overrides: Partial<Record<string, (e: BookingError) => NextResponse>> = {},
+): NextResponse {
+  if (err instanceof BookingError) {
+    const override = overrides[err.code];
+    if (override) return override(err);
+    return NextResponse.json(
+      { error: err.code, ...(err.payload ?? {}) },
+      { status: err.status },
+    );
+  }
+  throw err;
 }
