@@ -64,8 +64,8 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
             style={{
               backgroundImage: 'url(/images/zellige-pattern.png)',
               backgroundRepeat: 'repeat',
-              backgroundSize: '180px 180px',
-              opacity: 0.04,
+              backgroundSize: '200px 200px',
+              opacity: 0.07,
             }}
           />
           <SessionWatcher loginPath={`/${locale}/auth/login`} />
