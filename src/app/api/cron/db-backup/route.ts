@@ -135,7 +135,7 @@ export async function GET(req: NextRequest) {
       // Heartbeat : rétention 30j en DB, cap à 20k pour garder le contexte récent.
       prisma.heartbeat.findMany({
         take: 20_000,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { timestamp: 'desc' },
       }),
       prisma.$queryRawUnsafe<unknown[]>(
         'SELECT * FROM "_app_migrations" ORDER BY "appliedAt" DESC LIMIT 1000',
