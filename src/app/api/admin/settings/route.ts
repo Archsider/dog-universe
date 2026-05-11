@@ -34,7 +34,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const rows = await prisma.setting?.findMany() ?? [];
+  const rows = await prisma.setting?.findMany({ take: 200 }) ?? [];
   const settings = { ...DEFAULT_SETTINGS };
   for (const row of rows) {
     settings[row.key] = row.value;

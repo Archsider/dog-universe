@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
         notes: true, createdAt: true, deletedAt: true,
       },
       orderBy: { createdAt: 'asc' },
+      take: 5000,
     }),
     prisma.booking.findMany({
       where: { clientId: targetUserId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest) {
         bookingPets: { select: { pet: { select: { name: true } } } },
       },
       orderBy: { startDate: 'desc' },
+      take: 5000,
     }),
     prisma.invoice.findMany({
       where: { clientId: targetUserId },
@@ -80,6 +82,7 @@ export async function GET(request: NextRequest) {
         serviceType: true, issuedAt: true, paidAt: true,
       },
       orderBy: { issuedAt: 'desc' },
+      take: 5000,
     }),
     prisma.loyaltyGrade.findUnique({
       where: { clientId: targetUserId },
@@ -92,6 +95,7 @@ export async function GET(request: NextRequest) {
         read: true, createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
+      take: 5000,
     }),
     prisma.clientContract.findUnique({
       where: { clientId: targetUserId },

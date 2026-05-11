@@ -74,6 +74,21 @@ export async function GET(req: NextRequest) {
       payments,
       products,
       contracts,
+      invoiceSequences,
+      loyaltyGrades,
+      loyaltyBenefitClaims,
+      notifications,
+      adminNotes,
+      actionLogs,
+      bookingItems,
+      bookingPets,
+      boardingDetails,
+      taxiDetails,
+      vaccinations,
+      reviews,
+      addonRequests,
+      heartbeats,
+      appMigrations,
     ] = await Promise.all([
       prisma.user.findMany({ take: 50_000 }),
       prisma.pet.findMany({ take: 50_000 }),
@@ -95,6 +110,36 @@ export async function GET(req: NextRequest) {
         },
         take: 50_000,
       }),
+      prisma.invoiceSequence.findMany({ take: 1_000 }),
+      prisma.loyaltyGrade.findMany({ take: 50_000 }),
+      prisma.loyaltyBenefitClaim.findMany({ take: 100_000 }),
+      // Notification : croissance non bornée — cap à 10k (entrées récentes
+      // suffisent à reconstruire le contexte récent ; le reste est journal historique).
+      prisma.notification.findMany({
+        take: 10_000,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.adminNote.findMany({ take: 50_000 }),
+      // ActionLog : journal, cap large mais pas illimité.
+      prisma.actionLog.findMany({
+        take: 50_000,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.bookingItem.findMany({ take: 200_000 }),
+      prisma.bookingPet.findMany({ take: 200_000 }),
+      prisma.boardingDetail.findMany({ take: 100_000 }),
+      prisma.taxiDetail.findMany({ take: 100_000 }),
+      prisma.vaccination.findMany({ take: 100_000 }),
+      prisma.review.findMany({ take: 50_000 }),
+      prisma.addonRequest.findMany({ take: 50_000 }),
+      // Heartbeat : rétention 30j en DB, cap à 20k pour garder le contexte récent.
+      prisma.heartbeat.findMany({
+        take: 20_000,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.$queryRawUnsafe<unknown[]>(
+        'SELECT * FROM "_app_migrations" ORDER BY "appliedAt" DESC LIMIT 1000',
+      ).catch(() => [] as unknown[]),
     ]);
 
     const dump = {
@@ -110,6 +155,21 @@ export async function GET(req: NextRequest) {
         Payment: payments,
         Product: products,
         ClientContract: contracts,
+        InvoiceSequence: invoiceSequences,
+        LoyaltyGrade: loyaltyGrades,
+        LoyaltyBenefitClaim: loyaltyBenefitClaims,
+        Notification: notifications,
+        AdminNote: adminNotes,
+        ActionLog: actionLogs,
+        BookingItem: bookingItems,
+        BookingPet: bookingPets,
+        BoardingDetail: boardingDetails,
+        TaxiDetail: taxiDetails,
+        Vaccination: vaccinations,
+        Review: reviews,
+        AddonRequest: addonRequests,
+        Heartbeat: heartbeats,
+        _app_migrations: appMigrations,
       },
     };
 

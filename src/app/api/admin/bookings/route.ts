@@ -19,6 +19,7 @@ import { revalidateTag } from 'next/cache';
 import { log, logger } from '@/lib/logger';
 import { taxiDescription } from '@/lib/invoice-descriptions';
 import { getPensionPriceNumber, getPricingSettings } from '@/lib/pricing';
+import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -416,6 +417,10 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
     });
 
     revalidateTag('admin-counts');
+
+    if (serviceType === 'BOARDING') {
+      await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+    }
 
     return NextResponse.json(
       { booking: { ...booking, bookingRef }, invoiceNumber },

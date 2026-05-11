@@ -68,6 +68,9 @@ export default async function AdminReservationsPage(props: PageProps) {
         bookingPets: { select: { pet: { select: { name: true } } } },
       },
       orderBy: { startDate: 'asc' },
+      // Kanban view: bornage de sécurité — 7 jours d'historique COMPLETED + actifs.
+      // Cap à 500 pour éviter une explosion mémoire si l'app tourne longtemps sans housekeeping.
+      take: 500,
     });
     const kanbanBookings: KanbanBooking[] = raw.map((b) => ({
       id: b.id,

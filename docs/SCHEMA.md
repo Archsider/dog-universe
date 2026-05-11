@@ -295,6 +295,7 @@
 | `unitPrice` | `Decimal` | `@db.Decimal(10, 2)` |  |
 | `total` | `Decimal` | `@db.Decimal(10, 2)` |  |
 | `category` | `ItemCategory` | default=`OTHER` |  |
+| `version` | `Int` | default=`0` | H9 — optimistic lock against concurrent product mutations |
 
 **Relations**
 
@@ -565,6 +566,7 @@
 | `isOverride` | `Boolean` | default=`false` |  |
 | `overrideBy` | `String?` | — |  |
 | `overrideAt` | `DateTime?` | — |  |
+| `version` | `Int` | default=`0` | H8 — optimistic lock (admin override vs auto-recompute race) |
 | `createdAt` | `DateTime` | default=`now(` |  |
 | `updatedAt` | `DateTime` | — |  |
 

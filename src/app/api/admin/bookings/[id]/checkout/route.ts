@@ -4,11 +4,15 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
 import { getPensionPrice, getPricingSettings } from '@/lib/pricing';
+import { isPaidExceedsCheckViolation, PAID_EXCEEDS_PAYLOAD } from '@/lib/billing-errors';
 import { withSpan, logServerError } from '@/lib/observability';
+import { invalidateAvailabilityCache } from '@/lib/availability-cache';
+import { differenceInCalendarDays } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 
 interface Params { params: Promise<{ id: string }> }
 
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
+const CASA_TZ = 'Africa/Casablanca';
 
 /**
  * Closes an open-ended booking ("Clôturer le séjour"):
@@ -61,9 +65,16 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'END_BEFORE_START' }, { status: 400 });
   }
 
-  // Real nights count = ceil((endDate - startDate) / day) — partial days count as 1.
-  const diffMs = endDate.getTime() - booking.startDate.getTime();
-  const realNights = Math.max(1, Math.ceil(diffMs / MS_PER_DAY));
+  // Nuits réelles = différence en jours calendaires Casablanca (jamais en
+  // arithmétique milliseconde — DST/changement d'heure légale + édge cases
+  // ramadan = drift d'une nuit). Minimum 1 nuit (séjour intraday compté 1).
+  const realNights = Math.max(
+    1,
+    differenceInCalendarDays(
+      toZonedTime(endDate, CASA_TZ),
+      toZonedTime(booking.startDate, CASA_TZ),
+    ),
+  );
 
   // Tarif pension via getPensionPrice() — source unique de vérité.
   const pricingSettings = await getPricingSettings();
@@ -139,6 +150,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     }),
     );
 
+    // Booking passes to COMPLETED + endDate locked → availability cache stale.
+    await invalidateAvailabilityCache(booking.startDate, endDate);
+
     return NextResponse.json({
       success: true,
       bookingId,
@@ -147,6 +161,10 @@ export async function POST(request: NextRequest, { params }: Params) {
       invoiceAmount: toNumber(newInvoiceAmount),
     });
   } catch (err) {
+    // H10 — paidAmount > new total after BOARDING items rewrite.
+    if (isPaidExceedsCheckViolation(err)) {
+      return NextResponse.json(PAID_EXCEEDS_PAYLOAD, { status: 409 });
+    }
     logServerError('booking-checkout', 'checkout failed', err, { bookingId });
     return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });
   }

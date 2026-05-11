@@ -7,6 +7,7 @@ import { revalidateTag } from 'next/cache';
 import { BookingError } from '@/lib/services/booking-errors';
 import { canTransition, isBookingStatus, type BookingStatus } from '@/lib/booking-state-machine';
 import { logger } from '@/lib/logger';
+import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 import {
   adminBookingPatchSchema,
   adminBookingParamsSchema,
@@ -155,6 +156,7 @@ export const PATCH = withSchema(
     if (body.approveExtension && booking.status === 'PENDING_EXTENSION') {
       try {
         const result = await approveExtensionMerge({ bookingId: id, actorId: session.user.id });
+        await invalidateAvailabilityCache(booking.startDate, booking.endDate);
         return NextResponse.json(result);
       } catch (err) {
         return mapBookingError(err);
@@ -165,6 +167,7 @@ export const PATCH = withSchema(
     if (body.rejectExtension && booking.status === 'PENDING_EXTENSION') {
       try {
         const result = await rejectExtensionMerge({ bookingId: id, actorId: session.user.id });
+        await invalidateAvailabilityCache(booking.startDate, booking.endDate);
         return NextResponse.json(result);
       } catch (err) {
         return mapBookingError(err);
@@ -185,6 +188,11 @@ export const PATCH = withSchema(
           forcePaidInvoice,
           actorId: session.user.id,
         });
+        // Invalider l'ancienne ET la nouvelle fenêtre (dates ont bougé).
+        if (booking.serviceType === 'BOARDING') {
+          await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+          await invalidateAvailabilityCache(new Date(newStartStr), new Date(newEndStr));
+        }
         return NextResponse.json(result);
       } catch (err) {
         // Preserve verbatim error messages for the legacy validation strings.
@@ -229,6 +237,8 @@ export const PATCH = withSchema(
           actorId: session.user.id,
           isApproval: Boolean(body.approveExtension),
         });
+        // L'extension étire endDate — invalider sur la plage la plus large.
+        await invalidateAvailabilityCache(booking.startDate, new Date(newEndDateStr!));
         return NextResponse.json(result);
       } catch (err) {
         // Preserve the legacy human-readable validation messages.
@@ -289,6 +299,12 @@ export const PATCH = withSchema(
     // the admin-counts cache so the sidebar badge reflects the new state.
     revalidateTag('admin-counts');
 
+    // Any status mutation may move the booking in or out of the active set
+    // counted by `availability:*`. Invalidate the cached month(s).
+    if (status && status !== booking.status && booking.serviceType === 'BOARDING') {
+      await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+    }
+
     return NextResponse.json(updated);
   },
 );
@@ -307,6 +323,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
     include: { invoice: { select: { id: true, status: true, invoiceNumber: true } } },
   });
+  // booking has scalar fields serviceType, startDate, endDate by default (no select used).
   if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   // Refuse to delete a booking whose invoice has already been paid — this would
@@ -319,6 +336,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   await prisma.booking.update({ where: { id }, data: { deletedAt: new Date() } });
+
+  if (booking.serviceType === 'BOARDING') {
+    await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+  }
 
   await logAction({
     userId: session.user.id,

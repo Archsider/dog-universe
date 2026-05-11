@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
   const unsigned = await prisma.user.findMany({
     where: { role: 'CLIENT', deletedAt: null, isWalkIn: false, contract: null }, // soft-delete: required — no global extension (Edge Runtime incompatible). Walk-in clients have no portal access — skip.
     select: { id: true, name: true, email: true, language: true, phone: true },
+    take: 500,
   });
 
   // Limite : 1 rappel max par client tous les 7 jours.
@@ -53,6 +54,7 @@ export async function GET(req: NextRequest) {
       createdAt: { gte: sevenDaysAgo },
     },
     select: { userId: true },
+    take: 1000,
   });
   const alreadyRemindedUserIds = new Set(recentReminders.map(n => n.userId));
 

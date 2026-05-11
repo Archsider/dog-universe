@@ -53,6 +53,7 @@ export async function GET(request: Request) {
       deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
     },
     select: { id: true },
+    take: 200,
   });
 
   if (users.length === 0) {
@@ -68,7 +69,7 @@ export async function GET(request: Request) {
       // Collect data needed before deletion
       const [bookingIds, contract] = await Promise.all([
         prisma.booking
-          .findMany({ where: { clientId: userId }, select: { id: true } })
+          .findMany({ where: { clientId: userId }, select: { id: true }, take: 5000 })
           .then((rows) => rows.map((r) => r.id)),
         prisma.clientContract.findUnique({
           where: { clientId: userId },
