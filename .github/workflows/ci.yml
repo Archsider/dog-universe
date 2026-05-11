@@ -144,3 +144,34 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 14
+
+  # E2E secrets required on main pushes. PRs (incl. forks) keep the graceful
+  # skip in `e2e`. This job fails fast when a push to main lacks any of the
+  # required Playwright secrets so the protected branch never deploys without
+  # E2E coverage. Configure in GitHub UI:
+  #   Settings → Branches → main → Required status checks → add `e2e-required`.
+  e2e-required:
+    name: E2E Secrets Required (main only)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      TEST_CLIENT_EMAIL: ${{ secrets.TEST_CLIENT_EMAIL }}
+      TEST_CLIENT_PASSWORD: ${{ secrets.TEST_CLIENT_PASSWORD }}
+      TEST_CLIENT_NAME: ${{ secrets.TEST_CLIENT_NAME }}
+      TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+      TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+    steps:
+      - name: Verify E2E secrets are configured
+        run: |
+          missing=()
+          for v in TEST_CLIENT_EMAIL TEST_CLIENT_PASSWORD TEST_CLIENT_NAME TEST_ADMIN_EMAIL TEST_ADMIN_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              missing+=("$v")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error title=E2E secrets missing on main::The following GitHub Actions secrets are required on push to main: ${missing[*]}. Configure them in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "All E2E secrets configured."
