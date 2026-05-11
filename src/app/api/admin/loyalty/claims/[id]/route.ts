@@ -30,7 +30,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // notification insert fails the claim status update rolls back too, so
   // the admin sees the error and can retry — no silent "approved without
   // ever telling the client" state.
-  const claim = await Sentry.startSpan(
+  let claim;
+  try {
+    claim = await Sentry.startSpan(
     { name: 'mutation.loyaltyClaim.review', op: 'db', attributes: { claimId: id, action } },
     () => prisma.$transaction(async (tx) => {
     const updated = await tx.loyaltyBenefitClaim.update({
@@ -41,8 +43,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         reviewedBy: session.user.id,
         reviewedAt: new Date(),
       },
-      include: { client: { select: { id: true, name: true, email: true, language: true } } },
+      include: { client: { select: { id: true, name: true, email: true, language: true, role: true } } },
     });
+
+    // L1 cross-role guard: ADMIN cannot review claims belonging to non-CLIENT
+    // users. SUPERADMIN passes through. Done inside the tx so the row update
+    // rolls back if the actor isn't allowed.
+    if (session.user.role === 'ADMIN' && updated.client.role !== 'CLIENT') {
+      throw new Error('FORBIDDEN_CROSS_ROLE');
+    }
 
     await tx.notification.create({
       data: {
@@ -63,6 +72,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return updated;
     }),
   );
+  } catch (err) {
+    // L1: surface cross-role rejection as 403 (transaction rolled back).
+    if (err instanceof Error && err.message === 'FORBIDDEN_CROSS_ROLE') {
+      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+    }
+    throw err;
+  }
 
   // Email is fire-and-forget post-commit — an SMTP outage must not roll back
   // a successfully approved claim.

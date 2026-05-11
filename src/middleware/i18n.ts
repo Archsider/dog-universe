@@ -23,7 +23,12 @@ function buildCsp(): { nonce: string; csp: string } {
     //   attributes in browsers that support the split (style-src-attr intentionally
     //   omitted — 'unsafe-inline' on that directive would bypass nonce protection)
     `style-src-elem 'self' 'nonce-${nonce}'`,
-    "style-src 'self' 'unsafe-inline'",
+    // C5: 'unsafe-inline' removed. Browsers without style-src-elem/-attr split
+    // (older Safari) fall back to style-src — nonce-based, no inline allowed.
+    `style-src 'self' 'nonce-${nonce}'`,
+    // Explicitly forbid inline style="…" attributes — 'unsafe-inline' on
+    // style-src-attr would otherwise be a bypass vector for nonce-based CSP.
+    "style-src-attr 'none'",
     // img-src ajoute les CDN tuiles cartographiques (Leaflet/OpenStreetMap)
     // pour le suivi GPS taxi.
     "img-src 'self' blob: data: https://*.supabase.co https://supabase.co https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com",
@@ -32,10 +37,14 @@ function buildCsp(): { nonce: string; csp: string } {
     // Upstash Redis is called server-side only (no browser fetch needed).
     // wss://*.supabase.co : Supabase Realtime pour le push temps-réel de la position GPS.
     // https://*.tile.openstreetmap.org : tuiles cartographiques Leaflet.
+    // https://*.sentry.io : Sentry tunnel + error reporting.
     isDev
-      ? "connect-src 'self' https://*.supabase.co https://supabase.co wss://*.supabase.co https://*.tile.openstreetmap.org ws://localhost:* http://localhost:*"
-      : "connect-src 'self' https://*.supabase.co https://supabase.co wss://*.supabase.co https://*.tile.openstreetmap.org",
+      ? "connect-src 'self' https://*.supabase.co https://supabase.co wss://*.supabase.co https://*.tile.openstreetmap.org https://*.sentry.io ws://localhost:* http://localhost:*"
+      : "connect-src 'self' https://*.supabase.co https://supabase.co wss://*.supabase.co https://*.tile.openstreetmap.org https://*.sentry.io",
     "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    'report-uri /api/csp-report',
   ].join('; ');
 
   return { nonce, csp };

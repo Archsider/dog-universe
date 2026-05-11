@@ -105,7 +105,7 @@ export async function POST(request: Request) {
   const where: Record<string, unknown> = { status: statusFilter };
   if (dateFilter) where.createdAt = { lt: dateFilter };
 
-  const bookings = await prisma.booking.findMany({ where, select: { id: true } });
+  const bookings = await prisma.booking.findMany({ where, select: { id: true }, take: 5000 });
   const bookingIds = bookings.map((b) => b.id);
 
   if (bookingIds.length === 0) {
@@ -123,6 +123,7 @@ export async function POST(request: Request) {
     const invoices = await tx.invoice.findMany({
       where: { bookingId: { in: bookingIds } },
       select: { id: true },
+      take: 5000,
     });
     const invoiceIds = invoices.map((i) => i.id);
 

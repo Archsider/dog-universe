@@ -27,6 +27,7 @@ import {
   formatDateFR, petVerb, petArrived, petChouchoute,
 } from '@/lib/sms';
 import { sendEmailNow, sendSmsNow } from '@/lib/notify-now';
+import { ServiceType } from './constants';
 
 type BookingForStatus = {
   id: string;
@@ -175,27 +176,27 @@ export async function runStatusSideEffects(args: RunStatusSideEffectsArgs) {
     const { subject, html } = getEmailTemplate('booking_validated', {
       clientName: booking.client.name ?? booking.client.email,
       bookingRef,
-      service: booking.serviceType === 'BOARDING' ? (userLang === 'fr' ? 'Pension' : 'Boarding') : 'Pet Taxi',
+      service: booking.serviceType === ServiceType.BOARDING ? (userLang === 'fr' ? 'Pension' : 'Boarding') : 'Pet Taxi',
       petName: petNames,
       startDate: startDateFmt,
       endDate: endDateFmt,
     }, userLang, pets);
     sendEmailNow({ to: booking.client.email, subject, html });
 
-    const dateRange = booking.serviceType === 'BOARDING' && booking.endDate
+    const dateRange = booking.serviceType === ServiceType.BOARDING && booking.endDate
       ? `du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
       : `le ${formatDateFR(booking.startDate)}`;
-    const venueLine = booking.serviceType === 'BOARDING'
+    const venueLine = booking.serviceType === ServiceType.BOARDING
       ? `${petNames} ${petVerb(pets)} chez Dog Universe ${dateRange}. Nous ${pets.length > 1 ? 'les' : "l'"} attendons avec impatience !`
       : `Transport prévu pour ${petNames} ${dateRange}.`;
     sendSmsNow({ to: booking.client.phone, message: `Bonjour ${firstName} ! ${venueLine} — Dog Universe 🐾` });
 
-    const confirmRangeAdmin = booking.serviceType === 'BOARDING' && booking.endDate
+    const confirmRangeAdmin = booking.serviceType === ServiceType.BOARDING && booking.endDate
       ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
       : ` le ${formatDateFR(booking.startDate)}`;
     sendSmsNow({ to: 'ADMIN', message: `✅ Résa confirmée : ${petNames} de ${booking.client.name}${confirmRangeAdmin}.` });
 
-    if (booking.serviceType === 'PET_TAXI') {
+    if (booking.serviceType === ServiceType.PET_TAXI) {
       const existingTrip = await prisma.taxiTrip.findFirst({ where: { bookingId: booking.id } });
       if (!existingTrip) {
         const dateStr = booking.startDate.toISOString().slice(0, 10);
@@ -236,7 +237,7 @@ export async function runStatusSideEffects(args: RunStatusSideEffectsArgs) {
         ? `Hello ${firstName}, your booking for ${petNames} has been cancelled. We remain available. — Dog Universe`
         : `Bonjour ${firstName}, votre réservation pour ${petNames} a été annulée. Nous restons disponibles. — Dog Universe`;
       sendSmsNow({ to: booking.client.phone, message: refusedSmsMsg });
-      const adminDateRange = booking.serviceType === 'BOARDING' && booking.endDate
+      const adminDateRange = booking.serviceType === ServiceType.BOARDING && booking.endDate
         ? ` du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}`
         : ` le ${formatDateFR(booking.startDate)}`;
       sendSmsNow({ to: 'ADMIN', message: `⚠️ Annulation : ${petNames} de ${booking.client.name}${adminDateRange}.` });
@@ -250,7 +251,7 @@ export async function runStatusSideEffects(args: RunStatusSideEffectsArgs) {
       details: { from: booking.status, to: newStatus, wasWaitlist: !wasActiveSlot },
     });
 
-    if (wasActiveSlot && booking.serviceType === 'BOARDING' && booking.endDate) {
+    if (wasActiveSlot && booking.serviceType === ServiceType.BOARDING && booking.endDate) {
       promoteWaitlistedBooking({
         startDate: booking.startDate,
         endDate: booking.endDate,
@@ -269,7 +270,7 @@ export async function runStatusSideEffects(args: RunStatusSideEffectsArgs) {
       details: { from: booking.status, to: 'NO_SHOW' },
     });
 
-    if (booking.serviceType === 'BOARDING' && booking.endDate) {
+    if (booking.serviceType === ServiceType.BOARDING && booking.endDate) {
       promoteWaitlistedBooking({
         startDate: booking.startDate,
         endDate: booking.endDate,

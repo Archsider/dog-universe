@@ -7,8 +7,11 @@ import {
   type HeartbeatRow,
 } from '@/lib/heartbeat';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+// 60s staleness is acceptable: heartbeats are written every 5 min by the
+// cron, so a public status page reading 60-second-old data still reflects
+// the last successful (or failed) ping. Dropping force-dynamic lets the
+// page be served from the edge cache and keeps load away from the DB.
+export const revalidate = 60;
 export const runtime = 'nodejs';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {

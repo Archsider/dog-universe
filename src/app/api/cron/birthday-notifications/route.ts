@@ -1,3 +1,4 @@
+import { parseMetadata } from '@/lib/notifications/metadata';
 import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
@@ -98,11 +99,12 @@ export async function GET(req: NextRequest) {
       createdAt: { gte: todayStart },
     },
     select: { userId: true, metadata: true },
+    take: 1000,
   });
   const alreadySentKeys = new Set<string>();
   for (const n of existingBirthdayNotifs) {
     try {
-      const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+      const meta = parseMetadata(n.metadata);
       if (typeof meta.petId === 'string') alreadySentKeys.add(`${n.userId}:${meta.petId}`);
     } catch { /* ignore malformed metadata */ }
   }

@@ -1,3 +1,4 @@
+import { parseMetadata } from '@/lib/notifications/metadata';
 import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -9,6 +10,7 @@ import { markCronRun } from '@/lib/observability';
 import { APP_URL } from '@/lib/config';
 import { formatMAD } from '@/lib/utils';
 import { toNumber } from '@/lib/decimal';
+import { getCasaStartOfDay } from '@/lib/timezone';
 import { log, logger } from '@/lib/logger';
 
 export const maxDuration = 60;
@@ -52,8 +54,10 @@ export async function GET(req: NextRequest) {
   await markCronRun('overdue-invoices');
 
   const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
+  // Today's window in Casablanca local time so J+30 / J+60 calendar arithmetic
+  // matches what a Moroccan operator expects (an UTC-anchored midnight would
+  // shift the overdue threshold by one hour).
+  const startOfToday = getCasaStartOfDay(now);
   const startOfTomorrow = new Date(startOfToday);
   startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 
@@ -101,7 +105,7 @@ export async function GET(req: NextRequest) {
     const alreadySent = new Set<string>();
     for (const n of existing) {
       try {
-        const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+        const meta = parseMetadata(n.metadata);
         if (typeof meta.invoiceId === 'string' && typeof meta.reminderKind === 'string') {
           alreadySent.add(`${meta.invoiceId}:${meta.reminderKind}`);
         }

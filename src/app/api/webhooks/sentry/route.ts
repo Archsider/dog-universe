@@ -57,9 +57,21 @@ interface SentryWebhookBody {
   installation?: { uuid?: string };
 }
 
-function verifySignature(rawBody: string, signature: string | null, secret: string): boolean {
-  if (!signature || !secret) return false;
-  const expected = createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
+// C6 hardening: signed payload includes timestamp to prevent replay attacks
+// even if signature leaks. Signed string = `<unix-seconds>.<rawBody>`.
+function verifySignature(
+  rawBody: string,
+  signature: string | null,
+  timestamp: string | null,
+  secret: string,
+): boolean {
+  if (!signature || !secret || !timestamp) return false;
+  // Hex regex sanity check BEFORE Buffer.from() — Buffer.from('zz', 'hex')
+  // silently returns an empty buffer, which would short-circuit timingSafeEqual
+  // length check oddly. Reject malformed signatures upfront.
+  if (!/^[0-9a-f]{64}$/i.test(signature)) return false;
+  const signed = `${timestamp}.${rawBody}`;
+  const expected = createHmac('sha256', secret).update(signed, 'utf8').digest('hex');
   if (expected.length !== signature.length) return false;
   try {
     return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(signature, 'hex'));
@@ -67,6 +79,11 @@ function verifySignature(rawBody: string, signature: string | null, secret: stri
     return false;
   }
 }
+
+// C6 whitelist — Sentry sends many resource kinds (installation lifecycle,
+// comments, etc). We only care about issue / event alerts.
+const ALLOWED_RESOURCES = new Set(['event_alert', 'issue']);
+const TIMESTAMP_WINDOW_SECONDS = 300; // 5 minutes
 
 function extractEventId(body: SentryWebhookBody): string | null {
   const ev = body.data?.event;
@@ -162,10 +179,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
 
+  // C6 #1 — resource filter: drop noisy lifecycle/comment notifications early.
+  const resource = request.headers.get('sentry-hook-resource');
+  if (resource && !ALLOWED_RESOURCES.has(resource)) {
+    return NextResponse.json({ skipped: true, reason: 'resource_filtered' }, { status: 200 });
+  }
+
+  // C6 #3 — timestamp window: reject replays older than 5 minutes.
+  const tsHeader = request.headers.get('sentry-hook-timestamp');
+  const tsNum = tsHeader ? Number(tsHeader) : NaN;
+  if (!tsHeader || !Number.isFinite(tsNum)) {
+    return NextResponse.json({ error: 'Invalid timestamp' }, { status: 401 });
+  }
+  const nowSec = Date.now() / 1000;
+  if (Math.abs(nowSec - tsNum) > TIMESTAMP_WINDOW_SECONDS) {
+    return NextResponse.json({ error: 'Timestamp out of window' }, { status: 401 });
+  }
+
   const rawBody = await request.text();
   const signature =
     request.headers.get('sentry-hook-signature') || request.headers.get('x-sentry-signature');
-  if (!verifySignature(rawBody, signature, secret)) {
+  // C6 #2 — hex regex enforced inside verifySignature.
+  if (!verifySignature(rawBody, signature, tsHeader, secret)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 

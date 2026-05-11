@@ -18,7 +18,7 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   // geolocation=(self) : autorise la geolocation API uniquement sur le domaine Dog Universe
   // (utilisé pour le tracking GPS chauffeur côté admin)
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self), interest-cohort=()' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self), payment=(), usb=(), interest-cohort=()' },
   {
     key: 'Strict-Transport-Security',
     value: 'max-age=63072000; includeSubDomains; preload',
@@ -26,28 +26,13 @@ const securityHeaders = [
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
   { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
   { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
-  // CSP is set dynamically in middleware (nonce-based) to remove 'unsafe-inline'
-  //
-  // Tier 2 hardening (2026-05-09) — strict CSP in Report-Only mode.
-  // Production runs ~2 weeks in observation: violations reported to
-  // /api/csp-report (logged + Sentry breadcrumb), no enforcement, no UI break.
-  // Once /api/csp-report shows zero legitimate violations, migrate the policy
-  // into the enforced header in src/middleware/i18n.ts. See docs/CSP_ROLLOUT.md.
-  {
-    key: 'Content-Security-Policy-Report-Only',
-    value: [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://*.sentry.io",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: https://*.supabase.co",
-      "font-src 'self' data:",
-      "connect-src 'self' https://*.supabase.co https://*.sentry.io https://*.upstash.io",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      'report-uri /api/csp-report',
-    ].join('; '),
-  },
+  // CSP is set dynamically (nonce-based, enforced) in src/middleware/i18n.ts.
+  // C5 hardening (2026-05-11):
+  //  - Removed 'unsafe-inline' from script-src and style-src
+  //  - Added style-src-attr 'none' to block inline style attributes
+  //  - Migrated from Content-Security-Policy-Report-Only to enforced policy
+  // No static CSP header here — multiple CSP headers intersect, which would
+  // void the nonce-based allowlist set by the middleware.
 ];
 
 /** @type {import('next').NextConfig} */

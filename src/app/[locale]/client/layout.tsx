@@ -57,18 +57,18 @@ export default async function ClientLayout({
             </div>
           </header>
 
-          {/* Page content — zellige Gemini transparent en overlay subtil 12% */}
+          {/* Page content — zellige discret en tile répété, opacity 4% */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in relative">
-            <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ opacity: 0.12 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/zellige-pattern.png"
-                alt=""
-                aria-hidden="true"
-                className="w-full h-full"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            </div>
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundImage: 'url(/images/zellige-pattern.png)',
+                backgroundRepeat: 'repeat',
+                backgroundSize: '180px 180px',
+                opacity: 0.04,
+              }}
+            />
             <SessionWatcher loginPath={`/${locale}/auth/login`} />
             <div className="relative z-10">{children}</div>
           </main>

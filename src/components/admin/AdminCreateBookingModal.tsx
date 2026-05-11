@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, X, Loader2, Calendar, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, X, Loader2, Calendar } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { formatMAD } from '@/lib/utils';
 import {
   PRICING_DEFAULTS,
   parsePricingSettings,
@@ -12,41 +11,14 @@ import {
   calcBoardingLines,
   calcTaxiLine,
   calcGroomingTotal,
-  type PetInfo,
-  type GroomingSize,
-  type TaxiType,
 } from '@/lib/pricing-client';
-import { logger } from '@/lib/logger';
-
-interface Pet extends PetInfo {
-  species: string;
-}
-
-interface Client {
-  id: string;
-  name: string;
-  email: string;
-}
-
-interface CustomLine {
-  description: string;
-  quantity: number;
-  unitPrice: number;
-}
-
-interface WalkInPet {
-  name: string;
-  species: 'DOG' | 'CAT';
-  dateOfBirth: string;
-}
-
-const WALK_IN = '__WALK_IN__';
-
-function todayMinusYears(years: number): string {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - years);
-  return d.toISOString().slice(0, 10);
-}
+import { WALK_IN, validateBookingForm, apiErrorMessage, type Pet, type Client } from './create-booking/lib';
+import { ClientPicker } from './create-booking/ClientPicker';
+import { ServiceSection } from './create-booking/ServiceSection';
+import { CustomLinesSection } from './create-booking/CustomLinesSection';
+import { BillingSummary } from './create-booking/BillingSummary';
+import { submitAdminBooking } from './create-booking/submit';
+import { useBookingFormState } from './create-booking/useBookingFormState';
 
 interface Props {
   locale: string;
@@ -55,16 +27,6 @@ interface Props {
   preselectedPets?: Pet[];
   clients?: Client[];
 }
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-const TAXI_TYPE_LABELS: { value: TaxiType; labelFr: string; labelEn: string; priceKey: keyof typeof PRICING_DEFAULTS }[] = [
-  { value: 'STANDARD', labelFr: 'Course standard', labelEn: 'Standard trip', priceKey: 'taxi_standard' },
-  { value: 'VET', labelFr: 'Transport vétérinaire', labelEn: 'Vet transport', priceKey: 'taxi_vet' },
-  { value: 'AIRPORT', labelFr: 'Navette aéroport', labelEn: 'Airport shuttle', priceKey: 'taxi_airport' },
-];
 
 export default function AdminCreateBookingModal({
   locale,
@@ -80,52 +42,23 @@ export default function AdminCreateBookingModal({
   const [loading, setLoading] = useState(false);
   const [pricing, setPricing] = useState<Record<string, number>>(PRICING_DEFAULTS);
 
-  // ── Client & pets ──────────────────────────────────────────────────────────
-  const [clientId, setClientId] = useState(preselectedClientId ?? '');
-  const [clientPets, setClientPets] = useState<Pet[]>(preselectedPets ?? []);
-  const [loadingPets, setLoadingPets] = useState(false);
-  const [selectedPetIds, setSelectedPetIds] = useState<string[]>([]);
-
-  // ── Walk-in (no portal account, created on-the-fly) ────────────────────────
-  const [walkInName, setWalkInName] = useState('');
-  const [walkInPhone, setWalkInPhone] = useState('');
-  const [walkInPets, setWalkInPets] = useState<WalkInPet[]>([
-    { name: '', species: 'DOG', dateOfBirth: todayMinusYears(3) },
-  ]);
+  const form = useBookingFormState({ preselectedClientId, preselectedPets });
+  const {
+    clientId, setClientId, clientPets, setClientPets, loadingPets, setLoadingPets,
+    selectedPetIds, setSelectedPetIds,
+    walkInName, setWalkInName, walkInPhone, setWalkInPhone, walkInPets, setWalkInPets,
+    serviceType, setServiceType,
+    startDate, setStartDate, endDate, setEndDate,
+    groomingEnabled, setGroomingEnabled, groomingSize, setGroomingSize,
+    taxiGoEnabled, setTaxiGoEnabled, taxiGoDate, setTaxiGoDate, taxiGoTime, setTaxiGoTime, taxiGoAddress, setTaxiGoAddress,
+    taxiReturnEnabled, setTaxiReturnEnabled, taxiReturnDate, setTaxiReturnDate, taxiReturnTime, setTaxiReturnTime, taxiReturnAddress, setTaxiReturnAddress,
+    taxiType, setTaxiType, taxiDate, setTaxiDate, taxiTime, setTaxiTime,
+    customLines, setCustomLines, showCustomLines, setShowCustomLines,
+    manualOverride, setManualOverride, manualTotal, setManualTotal,
+    notes, setNotes,
+    reset,
+  } = form;
   const isWalkIn = clientId === WALK_IN;
-
-  // ── Service type ───────────────────────────────────────────────────────────
-  const [serviceType, setServiceType] = useState<'BOARDING' | 'PET_TAXI'>('BOARDING');
-
-  // ── Boarding ───────────────────────────────────────────────────────────────
-  const [startDate, setStartDate] = useState(todayIso());
-  const [endDate, setEndDate] = useState('');
-  const [groomingEnabled, setGroomingEnabled] = useState(false);
-  const [groomingSize, setGroomingSize] = useState<GroomingSize>('SMALL');
-  const [taxiGoEnabled, setTaxiGoEnabled] = useState(false);
-  const [taxiGoDate, setTaxiGoDate] = useState('');
-  const [taxiGoTime, setTaxiGoTime] = useState('10:00');
-  const [taxiGoAddress, setTaxiGoAddress] = useState('');
-  const [taxiReturnEnabled, setTaxiReturnEnabled] = useState(false);
-  const [taxiReturnDate, setTaxiReturnDate] = useState('');
-  const [taxiReturnTime, setTaxiReturnTime] = useState('10:00');
-  const [taxiReturnAddress, setTaxiReturnAddress] = useState('');
-
-  // ── Pet Taxi ───────────────────────────────────────────────────────────────
-  const [taxiType, setTaxiType] = useState<TaxiType>('STANDARD');
-  const [taxiDate, setTaxiDate] = useState(todayIso());
-  const [taxiTime, setTaxiTime] = useState('10:00');
-
-  // ── Extra lines ────────────────────────────────────────────────────────────
-  const [customLines, setCustomLines] = useState<CustomLine[]>([]);
-  const [showCustomLines, setShowCustomLines] = useState(false);
-
-  // ── Total override ─────────────────────────────────────────────────────────
-  const [manualOverride, setManualOverride] = useState(false);
-  const [manualTotal, setManualTotal] = useState('');
-
-  // ── Notes ──────────────────────────────────────────────────────────────────
-  const [notes, setNotes] = useState('');
 
   // ── Load pricing settings once ─────────────────────────────────────────────
   useEffect(() => {
@@ -158,7 +91,6 @@ export default function AdminCreateBookingModal({
 
   const selectedPets = useMemo(() => {
     if (isWalkIn) {
-      // Pricing logic only needs id + name + species — synthesize from walk-in entries.
       return walkInPets
         .filter(p => p.name.trim().length > 0)
         .map((p, i) => ({ id: `walkin-${i}`, name: p.name.trim(), species: p.species }));
@@ -211,68 +143,17 @@ export default function AdminCreateBookingModal({
   const removeCustomLine = (i: number) =>
     setCustomLines(prev => prev.filter((_, idx) => idx !== i));
 
-  const updateCustomLine = (i: number, field: keyof CustomLine, value: string | number) =>
+  const updateCustomLine = (i: number, field: 'description' | 'quantity' | 'unitPrice', value: string | number) =>
     setCustomLines(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: value } : l));
-
-  const reset = () => {
-    if (!preselectedClientId) { setClientId(''); setClientPets([]); }
-    setSelectedPetIds([]);
-    setWalkInName('');
-    setWalkInPhone('');
-    setWalkInPets([{ name: '', species: 'DOG', dateOfBirth: todayMinusYears(3) }]);
-    setServiceType('BOARDING');
-    setStartDate(todayIso());
-    setEndDate('');
-    setGroomingEnabled(false);
-    setGroomingSize('SMALL');
-    setTaxiGoEnabled(false);
-    setTaxiGoDate('');
-    setTaxiGoTime('10:00');
-    setTaxiGoAddress('');
-    setTaxiReturnEnabled(false);
-    setTaxiReturnDate('');
-    setTaxiReturnTime('10:00');
-    setTaxiReturnAddress('');
-    setTaxiType('STANDARD');
-    setTaxiDate(todayIso());
-    setTaxiTime('10:00');
-    setCustomLines([]);
-    setShowCustomLines(false);
-    setManualOverride(false);
-    setManualTotal('');
-    setNotes('');
-  };
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!clientId) {
-      toast({ title: fr ? 'Sélectionnez un client' : 'Select a client', variant: 'destructive' });
-      return;
-    }
-    if (isWalkIn) {
-      if (!walkInName.trim()) {
-        toast({ title: fr ? 'Nom du client de passage requis' : 'Walk-in client name required', variant: 'destructive' });
-        return;
-      }
-      const validWalkInPets = walkInPets.filter(p => p.name.trim().length > 0 && p.dateOfBirth);
-      if (validWalkInPets.length === 0) {
-        toast({ title: fr ? 'Ajoutez au moins un animal (nom + date de naissance)' : 'Add at least one pet (name + date of birth)', variant: 'destructive' });
-        return;
-      }
-    } else if (selectedPetIds.length === 0) {
-      toast({ title: fr ? 'Sélectionnez au moins un animal' : 'Select at least one pet', variant: 'destructive' });
-      return;
-    }
-    if (!startDate) {
-      toast({ title: fr ? 'Date de début requise' : 'Start date required', variant: 'destructive' });
-      return;
-    }
-    if (serviceType === 'BOARDING' && !endDate) {
-      toast({ title: fr ? 'Date de fin requise pour la pension' : 'End date required for boarding', variant: 'destructive' });
-      return;
-    }
-    if (serviceType === 'BOARDING' && nights === 0) {
-      toast({ title: fr ? 'La durée du séjour doit être d\'au moins 1 nuit' : 'Stay must be at least 1 night', variant: 'destructive' });
+    const validationErr = validateBookingForm({
+      fr, isWalkIn, clientId, walkInName, walkInPets, selectedPetIds,
+      startDate, serviceType, endDate, nights,
+    });
+    if (validationErr) {
+      toast({ title: validationErr, variant: 'destructive' });
       return;
     }
 
@@ -284,146 +165,30 @@ export default function AdminCreateBookingModal({
 
     setLoading(true);
     try {
-      // Walk-in: create the User + pets first, then submit the booking with
-      // the resolved IDs. Two sequential POSTs so we get clean error messages
-      // if either step fails (vs. one fat endpoint that hides the failure mode).
-      let resolvedClientId = clientId;
-      let resolvedPetIds = selectedPetIds;
-      if (isWalkIn) {
-        const wiRes = await fetch('/api/admin/walkin-clients', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: walkInName.trim(), phone: walkInPhone.trim() || null }),
-        });
-        if (!wiRes.ok) {
-          throw new Error(fr ? 'Création client de passage échouée' : 'Walk-in client creation failed');
-        }
-        const wiClient = await wiRes.json() as { id: string };
-        resolvedClientId = wiClient.id;
-
-        const validWalkInPets = walkInPets.filter(p => p.name.trim().length > 0 && p.dateOfBirth);
-        const petsRes = await fetch(`/api/admin/clients/${resolvedClientId}/pets`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pets: validWalkInPets.map(p => ({
-              name: p.name.trim(),
-              species: p.species,
-              dateOfBirth: p.dateOfBirth,
-            })),
-          }),
-        });
-        if (!petsRes.ok) {
-          throw new Error(fr ? 'Création des animaux échouée' : 'Pet creation failed');
-        }
-        const petsPayload = await petsRes.json() as { pets: { id: string }[] };
-        resolvedPetIds = petsPayload.pets.map(p => p.id);
-      }
-
-      const body: Record<string, unknown> = {
-        clientId: resolvedClientId,
-        serviceType,
-        petIds: resolvedPetIds,
-        startDate: serviceType === 'PET_TAXI' ? taxiDate : startDate,
-        endDate: serviceType === 'BOARDING' ? endDate : null,
-        arrivalTime: serviceType === 'PET_TAXI' ? taxiTime : null,
-        notes: notes.trim() || null,
-        totalPrice: finalTotal,
-        source: 'MANUAL',
-      };
-
-      if (serviceType === 'BOARDING') {
-        Object.assign(body, {
-          includeGrooming: groomingEnabled,
-          groomingSize: groomingEnabled && dogs.length > 0 ? groomingSize : null,
-          groomingPrice: groomingTotal,
-          taxiGoEnabled,
-          taxiGoDate: taxiGoEnabled ? taxiGoDate : null,
-          taxiGoTime: taxiGoEnabled ? taxiGoTime : null,
-          taxiGoAddress: taxiGoEnabled ? taxiGoAddress.trim() : null,
-          taxiReturnEnabled,
-          taxiReturnDate: taxiReturnEnabled ? taxiReturnDate : null,
-          taxiReturnTime: taxiReturnEnabled ? taxiReturnTime : null,
-          taxiReturnAddress: taxiReturnEnabled ? taxiReturnAddress.trim() : null,
-          taxiAddonPrice: taxiAddonTotal,
-        });
-      } else {
-        body.taxiType = taxiType;
-      }
-
-      if (validCustomLines.length > 0) {
-        body.bookingItems = validCustomLines.map(l => ({
-          description: l.description.trim(),
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-          total: l.quantity * l.unitPrice,
-        }));
-      }
-
-      const res = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      const { invoiceCreated } = await submitAdminBooking({
+        fr, isWalkIn, clientId, selectedPetIds,
+        walkInName, walkInPhone, walkInPets,
+        serviceType, startDate, endDate, taxiDate, taxiTime, taxiType,
+        notes, finalTotal,
+        groomingEnabled, groomingSize, groomingTotal,
+        taxiGoEnabled, taxiGoDate, taxiGoTime, taxiGoAddress,
+        taxiReturnEnabled, taxiReturnDate, taxiReturnTime, taxiReturnAddress,
+        taxiAddonTotal,
+        dogsCount: dogs.length,
+        validCustomLines,
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? 'INTERNAL_ERROR');
-      }
-
-      // Step 4 (walk-in only): auto-create invoice — non-blocking, never fails the flow.
-      if (isWalkIn) {
-        let invoiceCreated = false;
-        try {
-          const bookingResult = await res.json().catch(() => ({})) as { id?: string };
-          const invRes = await fetch('/api/invoices', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              clientId: resolvedClientId,
-              serviceType,
-              issuedAt: serviceType === 'PET_TAXI' ? taxiDate : startDate,
-              ...(bookingResult.id ? { bookingId: bookingResult.id } : {}),
-              items: [{
-                description: serviceType === 'BOARDING' ? (fr ? 'Pension' : 'Boarding') : 'Pet Taxi',
-                quantity: 1,
-                unitPrice: finalTotal,
-                total: finalTotal,
-                category: serviceType === 'BOARDING' ? 'BOARDING' : 'PET_TAXI',
-              }],
-            }),
-          });
-          if (invRes.ok) {
-            invoiceCreated = true;
-          } else {
-            const invErr = await invRes.json().catch(() => ({}));
-            logger.error('walk-in-booking', 'Auto-invoice failed', { status: invRes.status, error: invErr });
-          }
-        } catch (err) {
-          logger.error('walk-in-booking', 'Auto-invoice threw', { error: err instanceof Error ? err.message : String(err) });
-        }
-        toast({
-          title: invoiceCreated
-            ? (fr ? 'Réservation + facture créées avec succès' : 'Booking + invoice created successfully')
-            : (fr ? 'Réservation créée' : 'Booking created'),
-          variant: 'success',
-        });
-      } else {
-        toast({ title: fr ? 'Réservation créée' : 'Booking created', variant: 'success' });
-      }
+      const successTitle = isWalkIn && invoiceCreated
+        ? (fr ? 'Réservation + facture créées avec succès' : 'Booking + invoice created successfully')
+        : (fr ? 'Réservation créée' : 'Booking created');
+      toast({ title: successTitle, variant: 'success' });
 
       setOpen(false);
       reset();
       router.refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'INTERNAL_ERROR';
-      const errorMessages: Record<string, string> = {
-        MISSING_CLIENT_ID: fr ? 'Client requis' : 'Client required',
-        INVALID_PETS: fr ? 'Animaux invalides' : 'Invalid pets',
-        SUNDAY_NOT_ALLOWED: fr ? 'Le taxi n\'est pas disponible le dimanche' : 'Taxi not available on Sundays',
-        INVALID_TIME_SLOT: fr ? 'Horaire taxi invalide (10h–17h)' : 'Invalid taxi time slot (10am–5pm)',
-      };
-      toast({ title: errorMessages[msg] ?? (fr ? 'Erreur inattendue' : 'Unexpected error'), variant: 'destructive' });
+      toast({ title: apiErrorMessage(msg, fr), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -444,7 +209,6 @@ export default function AdminCreateBookingModal({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
-            {/* ── Header ── */}
             <div className="sticky top-0 bg-white border-b border-gray-100 flex items-center justify-between px-6 py-4 z-10">
               <h2 className="text-lg font-serif font-bold text-charcoal">
                 {fr ? 'Nouvelle réservation (admin)' : 'New booking (admin)'}
@@ -455,557 +219,45 @@ export default function AdminCreateBookingModal({
             </div>
 
             <div className="px-6 py-5 space-y-6">
+              <ClientPicker
+                fr={fr}
+                preselectedClientId={preselectedClientId}
+                preselectedClientName={preselectedClientName}
+                clients={clients}
+                form={form}
+                togglePet={togglePet}
+              />
 
-              {/* ── Section 1 : Client & animaux ── */}
-              <section>
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-                  {fr ? 'Client & animaux' : 'Client & pets'}
-                </h3>
+              <ServiceSection
+                fr={fr}
+                pricing={pricing}
+                nights={nights}
+                selectedPets={selectedPets}
+                form={form}
+              />
 
-                {!preselectedClientId ? (
-                  <div className="mb-3">
-                    <label className="text-xs font-medium text-gray-500 block mb-1">Client *</label>
-                    <select
-                      value={clientId}
-                      onChange={e => setClientId(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-gold-400 bg-white"
-                    >
-                      <option value="">{fr ? '— Sélectionner un client —' : '— Select a client —'}</option>
-                      <option value={WALK_IN}>➕ {fr ? 'Nouveau client de passage' : 'New walk-in client'}</option>
-                      {clients.map(c => (
-                        <option key={c.id} value={c.id}>{c.name} ({c.email})</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="mb-3 bg-ivory-50 rounded-lg px-3 py-2 text-sm font-medium text-charcoal">
-                    {preselectedClientName}
-                  </div>
-                )}
+              <CustomLinesSection
+                fr={fr}
+                customLines={customLines}
+                validCount={validCustomLines.length}
+                showCustomLines={showCustomLines}
+                setShowCustomLines={setShowCustomLines}
+                addCustomLine={addCustomLine}
+                removeCustomLine={removeCustomLine}
+                updateCustomLine={updateCustomLine}
+              />
 
-                {isWalkIn && (
-                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-3">
-                    <p className="text-xs text-amber-700">
-                      {fr
-                        ? 'Client de passage — pas de portail, pas de fidélité, pas de notifications.'
-                        : 'Walk-in client — no portal access, no loyalty, no notifications.'}
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 block mb-1">{fr ? 'Nom *' : 'Name *'}</label>
-                        <input
-                          type="text"
-                          value={walkInName}
-                          onChange={e => setWalkInName(e.target.value)}
-                          placeholder={fr ? 'Nom du passager' : 'Walk-in name'}
-                          maxLength={100}
-                          className="w-full border border-amber-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-amber-400 bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 block mb-1">{fr ? 'Téléphone' : 'Phone'}</label>
-                        <input
-                          type="tel"
-                          value={walkInPhone}
-                          onChange={e => setWalkInPhone(e.target.value)}
-                          placeholder="+212..."
-                          maxLength={30}
-                          className="w-full border border-amber-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-amber-400 bg-white"
-                        />
-                      </div>
-                    </div>
+              <BillingSummary
+                fr={fr}
+                allLines={allLines}
+                computedTotal={computedTotal}
+                finalTotal={finalTotal}
+                manualOverride={manualOverride}
+                setManualOverride={setManualOverride}
+                manualTotal={manualTotal}
+                setManualTotal={setManualTotal}
+              />
 
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-medium text-gray-600">{fr ? 'Animaux *' : 'Pets *'}</label>
-                        <button
-                          type="button"
-                          onClick={() => setWalkInPets(prev => [...prev, { name: '', species: 'DOG', dateOfBirth: todayMinusYears(3) }])}
-                          className="text-xs text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1"
-                        >
-                          <Plus className="h-3 w-3" />{fr ? 'Ajouter' : 'Add'}
-                        </button>
-                      </div>
-                      <div className="space-y-2">
-                        {walkInPets.map((p, i) => (
-                          <div key={i} className="grid grid-cols-[1fr_90px_140px_28px] gap-2 items-center">
-                            <input
-                              type="text"
-                              value={p.name}
-                              onChange={e => setWalkInPets(prev => prev.map((q, idx) => idx === i ? { ...q, name: e.target.value } : q))}
-                              placeholder={fr ? 'Nom animal' : 'Pet name'}
-                              maxLength={60}
-                              className="border border-amber-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-amber-400 bg-white"
-                            />
-                            <select
-                              value={p.species}
-                              onChange={e => setWalkInPets(prev => prev.map((q, idx) => idx === i ? { ...q, species: e.target.value as 'DOG' | 'CAT' } : q))}
-                              className="border border-amber-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-amber-400 bg-white"
-                            >
-                              <option value="DOG">{fr ? 'Chien' : 'Dog'}</option>
-                              <option value="CAT">{fr ? 'Chat' : 'Cat'}</option>
-                            </select>
-                            <input
-                              type="date"
-                              value={p.dateOfBirth}
-                              onChange={e => setWalkInPets(prev => prev.map((q, idx) => idx === i ? { ...q, dateOfBirth: e.target.value } : q))}
-                              max={todayIso()}
-                              className="border border-amber-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-amber-400 bg-white"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setWalkInPets(prev => prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev)}
-                              disabled={walkInPets.length === 1}
-                              className="text-gray-400 hover:text-red-500 disabled:opacity-20 flex items-center justify-center"
-                              aria-label={fr ? 'Retirer' : 'Remove'}
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-gray-400 mt-1">
-                        {fr
-                          ? 'Date de naissance approximative acceptée (ex: 1er janvier de l\'année estimée).'
-                          : 'Approximate date of birth is fine (e.g. Jan 1 of the estimated year).'}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {clientId && !isWalkIn && (
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 block mb-1.5">
-                      {fr ? 'Animaux *' : 'Pets *'}
-                    </label>
-                    {loadingPets ? (
-                      <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />{fr ? 'Chargement…' : 'Loading…'}
-                      </div>
-                    ) : clientPets.length === 0 ? (
-                      <p className="text-sm text-gray-400 italic">{fr ? 'Aucun animal' : 'No pets'}</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {clientPets.map(pet => (
-                          <button
-                            key={pet.id}
-                            type="button"
-                            onClick={() => togglePet(pet.id)}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-                              selectedPetIds.includes(pet.id)
-                                ? 'bg-gold-50 border-gold-400 text-gold-700'
-                                : 'border-gray-200 text-gray-600 hover:border-gold-300'
-                            }`}
-                          >
-                            {pet.name}
-                            <span className="text-xs opacity-60 ml-1">
-                              ({pet.species === 'DOG' ? (fr ? 'Chien' : 'Dog') : (fr ? 'Chat' : 'Cat')})
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </section>
-
-              {/* ── Section 2 : Service principal ── */}
-              <section>
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-                  {fr ? 'Service principal' : 'Primary service'}
-                </h3>
-
-                {/* Toggle BOARDING / PET_TAXI */}
-                <div className="flex gap-2 mb-4">
-                  {(['BOARDING', 'PET_TAXI'] as const).map(st => (
-                    <button
-                      key={st}
-                      type="button"
-                      onClick={() => setServiceType(st)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${
-                        serviceType === st
-                          ? 'bg-charcoal text-white border-charcoal'
-                          : 'border-gray-200 text-gray-600 hover:border-gold-300'
-                      }`}
-                    >
-                      {st === 'BOARDING' ? (fr ? 'Pension' : 'Boarding') : (fr ? 'Taxi animalier' : 'Pet Taxi')}
-                    </button>
-                  ))}
-                </div>
-
-                {/* ── BOARDING config ── */}
-                {serviceType === 'BOARDING' && (
-                  <div className="space-y-4">
-                    {/* Dates */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 block mb-1">
-                          {fr ? 'Arrivée *' : 'Check-in *'}
-                        </label>
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={e => setStartDate(e.target.value)}
-                          className="w-full border border-gray-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-gold-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 block mb-1">
-                          {fr ? 'Départ *' : 'Check-out *'}
-                        </label>
-                        <input
-                          type="date"
-                          value={endDate}
-                          onChange={e => setEndDate(e.target.value)}
-                          min={startDate}
-                          className="w-full border border-gray-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-gold-400"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Nights badge */}
-                    {nights > 0 && (
-                      <p className="text-xs text-gold-600 font-medium">
-                        {nights} {fr ? 'nuit(s)' : 'night(s)'}
-                        {nights > 32 && (
-                          <span className="ml-2 text-amber-600">
-                            {fr ? '— tarif long séjour applicable' : '— long-stay rate applies'}
-                          </span>
-                        )}
-                      </p>
-                    )}
-
-                    {/* Toilettage */}
-                    <div className="rounded-xl border border-gray-100 p-3 space-y-2 bg-gray-50/50">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={groomingEnabled}
-                          onChange={e => setGroomingEnabled(e.target.checked)}
-                          className="w-4 h-4 rounded border-gray-300 text-gold-500"
-                        />
-                        <span className="text-sm font-medium text-charcoal">
-                          {fr ? 'Toilettage inclus' : 'Include grooming'}
-                        </span>
-                      </label>
-                      {groomingEnabled && selectedPets.filter(p => p.species === 'DOG').length > 0 && (
-                        <div className="flex gap-2 ml-6">
-                          {(['SMALL', 'LARGE'] as const).map(sz => (
-                            <button
-                              key={sz}
-                              type="button"
-                              onClick={() => setGroomingSize(sz)}
-                              className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
-                                groomingSize === sz
-                                  ? 'bg-gold-50 border-gold-400 text-gold-700'
-                                  : 'border-gray-200 text-gray-500 hover:border-gold-300'
-                              }`}
-                            >
-                              {sz === 'SMALL'
-                                ? `${fr ? 'Petit chien' : 'Small dog'} — ${formatMAD(pricing.grooming_small_dog)}`
-                                : `${fr ? 'Grand chien' : 'Large dog'} — ${formatMAD(pricing.grooming_large_dog)}`}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {groomingEnabled && selectedPets.filter(p => p.species === 'DOG').length === 0 && (
-                        <p className="text-xs text-amber-600 ml-6">
-                          {fr ? 'Le toilettage s\'applique uniquement aux chiens.' : 'Grooming applies to dogs only.'}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Taxi addon aller */}
-                    <div className="rounded-xl border border-gray-100 p-3 space-y-2 bg-gray-50/50">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={taxiGoEnabled}
-                          onChange={e => setTaxiGoEnabled(e.target.checked)}
-                          className="w-4 h-4 rounded border-gray-300 text-gold-500"
-                        />
-                        <span className="text-sm font-medium text-charcoal">
-                          {fr ? `Pet Taxi — Aller (${formatMAD(pricing.taxi_standard)})` : `Pet Taxi — Drop-off (${formatMAD(pricing.taxi_standard)})`}
-                        </span>
-                      </label>
-                      {taxiGoEnabled && (
-                        <div className="grid grid-cols-2 gap-2 ml-6">
-                          <input
-                            type="date"
-                            value={taxiGoDate}
-                            onChange={e => setTaxiGoDate(e.target.value)}
-                            placeholder={fr ? 'Date aller' : 'Drop-off date'}
-                            className="border border-gray-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-gold-400"
-                          />
-                          <input
-                            type="time"
-                            value={taxiGoTime}
-                            onChange={e => setTaxiGoTime(e.target.value)}
-                            min="10:00"
-                            max="17:00"
-                            className="border border-gray-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-gold-400"
-                          />
-                          <input
-                            type="text"
-                            value={taxiGoAddress}
-                            onChange={e => setTaxiGoAddress(e.target.value)}
-                            placeholder={fr ? 'Adresse de départ' : 'Pick-up address'}
-                            className="col-span-2 border border-gray-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-gold-400"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Taxi addon retour */}
-                    <div className="rounded-xl border border-gray-100 p-3 space-y-2 bg-gray-50/50">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={taxiReturnEnabled}
-                          onChange={e => setTaxiReturnEnabled(e.target.checked)}
-                          className="w-4 h-4 rounded border-gray-300 text-gold-500"
-                        />
-                        <span className="text-sm font-medium text-charcoal">
-                          {fr ? `Pet Taxi — Retour (${formatMAD(pricing.taxi_standard)})` : `Pet Taxi — Pick-up (${formatMAD(pricing.taxi_standard)})`}
-                        </span>
-                      </label>
-                      {taxiReturnEnabled && (
-                        <div className="grid grid-cols-2 gap-2 ml-6">
-                          <input
-                            type="date"
-                            value={taxiReturnDate}
-                            onChange={e => setTaxiReturnDate(e.target.value)}
-                            placeholder={fr ? 'Date retour' : 'Return date'}
-                            className="border border-gray-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-gold-400"
-                          />
-                          <input
-                            type="time"
-                            value={taxiReturnTime}
-                            onChange={e => setTaxiReturnTime(e.target.value)}
-                            min="10:00"
-                            max="17:00"
-                            className="border border-gray-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-gold-400"
-                          />
-                          <input
-                            type="text"
-                            value={taxiReturnAddress}
-                            onChange={e => setTaxiReturnAddress(e.target.value)}
-                            placeholder={fr ? 'Adresse de livraison' : 'Drop-off address'}
-                            className="col-span-2 border border-gray-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-gold-400"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── PET_TAXI config ── */}
-                {serviceType === 'PET_TAXI' && (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 block mb-1">
-                          {fr ? 'Date *' : 'Date *'}
-                        </label>
-                        <input
-                          type="date"
-                          value={taxiDate}
-                          onChange={e => setTaxiDate(e.target.value)}
-                          className="w-full border border-gray-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-gold-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 block mb-1">
-                          {fr ? 'Heure (10h–17h) *' : 'Time (10am–5pm) *'}
-                        </label>
-                        <input
-                          type="time"
-                          value={taxiTime}
-                          onChange={e => setTaxiTime(e.target.value)}
-                          min="10:00"
-                          max="17:00"
-                          className="w-full border border-gray-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-gold-400"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1.5">
-                        {fr ? 'Type de taxi' : 'Taxi type'}
-                      </label>
-                      <div className="flex flex-col gap-1.5">
-                        {TAXI_TYPE_LABELS.map(tt => (
-                          <button
-                            key={tt.value}
-                            type="button"
-                            onClick={() => setTaxiType(tt.value)}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-all ${
-                              taxiType === tt.value
-                                ? 'bg-gold-50 border-gold-400 text-gold-700 font-medium'
-                                : 'border-gray-200 text-gray-600 hover:border-gold-300'
-                            }`}
-                          >
-                            {fr ? tt.labelFr : tt.labelEn}
-                            {' '}— {formatMAD(pricing[tt.priceKey])}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </section>
-
-              {/* ── Section 3 : Lignes additionnelles ── */}
-              <section>
-                <button
-                  type="button"
-                  onClick={() => setShowCustomLines(v => !v)}
-                  className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 hover:text-charcoal transition-colors"
-                >
-                  {showCustomLines ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                  {fr ? 'Produits / services additionnels' : 'Extra products / services'}
-                  {validCustomLines.length > 0 && (
-                    <span className="ml-1 bg-gold-100 text-gold-700 text-xs rounded-full px-1.5 py-0.5">
-                      {validCustomLines.length}
-                    </span>
-                  )}
-                </button>
-
-                {showCustomLines && (
-                  <div className="space-y-2">
-                    {customLines.map((line, i) => (
-                      <div key={i} className="grid grid-cols-[1fr_60px_90px_32px] gap-2 items-center">
-                        <input
-                          type="text"
-                          value={line.description}
-                          onChange={e => updateCustomLine(i, 'description', e.target.value)}
-                          placeholder={fr ? 'Description…' : 'Description…'}
-                          className="border border-gray-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-gold-400"
-                        />
-                        <input
-                          type="number"
-                          min={1}
-                          value={line.quantity}
-                          onChange={e => updateCustomLine(i, 'quantity', parseInt(e.target.value) || 1)}
-                          className="border border-gray-200 rounded-lg text-xs px-2 py-1.5 text-center focus:outline-none focus:border-gold-400"
-                        />
-                        <input
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={line.unitPrice === 0 ? '' : line.unitPrice}
-                          onChange={e => updateCustomLine(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          placeholder="P.U. MAD"
-                          className="border border-gray-200 rounded-lg text-xs px-2 py-1.5 text-right focus:outline-none focus:border-gold-400"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeCustomLine(i)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={addCustomLine}
-                      className="flex items-center gap-1.5 text-xs text-gold-600 hover:text-gold-700 font-medium py-1"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      {fr ? 'Ajouter une ligne' : 'Add line'}
-                    </button>
-                  </div>
-                )}
-              </section>
-
-              {/* ── Section 4 : Récapitulatif ── */}
-              <section>
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-                  {fr ? 'Récapitulatif facturation' : 'Billing summary'}
-                </h3>
-
-                {allLines.length === 0 ? (
-                  <p className="text-xs text-gray-400 italic py-2">
-                    {fr ? 'Aucune ligne — renseignez les dates et animaux.' : 'No lines yet — fill in dates and pets.'}
-                  </p>
-                ) : (
-                  <div className="border border-ivory-200 rounded-xl overflow-hidden">
-                    {/* Header */}
-                    <div className="bg-ivory-50 px-3 py-2 grid grid-cols-[1fr_44px_80px_72px] gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                      <span>{fr ? 'Description' : 'Description'}</span>
-                      <span className="text-center">{fr ? 'Qté' : 'Qty'}</span>
-                      <span className="text-right">{fr ? 'P.U.' : 'Unit'}</span>
-                      <span className="text-right">Total</span>
-                    </div>
-                    {allLines.map((line, i) => (
-                      <div
-                        key={i}
-                        className="px-3 py-2 grid grid-cols-[1fr_44px_80px_72px] gap-2 border-t border-ivory-100 text-xs items-center"
-                      >
-                        <span className="text-charcoal">{line.description}</span>
-                        <span className="text-center text-gray-500">{line.quantity}</span>
-                        <span className="text-right text-gray-500">{formatMAD(line.unitPrice)}</span>
-                        <span className="text-right font-medium text-charcoal">{formatMAD(line.total)}</span>
-                      </div>
-                    ))}
-                    {/* Total */}
-                    <div className="px-3 py-2.5 border-t border-gold-200/60 bg-ivory-50 flex justify-between items-center">
-                      <span className="text-sm font-bold text-charcoal">
-                        {fr ? 'Total calculé' : 'Computed total'}
-                      </span>
-                      <span className="text-base font-bold text-gold-600">{formatMAD(computedTotal)}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Override toggle */}
-                <div className="mt-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={manualOverride}
-                      onChange={e => {
-                        setManualOverride(e.target.checked);
-                        if (e.target.checked) setManualTotal(String(computedTotal));
-                      }}
-                      className="w-4 h-4 rounded border-gray-300 text-amber-500"
-                    />
-                    <span className="text-sm text-gray-600">
-                      {fr ? 'Forcer le total manuellement' : 'Override total manually'}
-                    </span>
-                  </label>
-                  {manualOverride && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={manualTotal}
-                        onChange={e => setManualTotal(e.target.value)}
-                        className="flex-1 border border-amber-300 rounded-lg text-sm px-3 py-2 focus:outline-none focus:border-amber-500 bg-amber-50"
-                        placeholder="Montant MAD"
-                      />
-                      <span className="text-sm text-gray-500">MAD</span>
-                      <span className="text-xs text-amber-600">
-                        {fr ? `(calculé : ${formatMAD(computedTotal)})` : `(computed: ${formatMAD(computedTotal)})`}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Final total display */}
-                {allLines.length > 0 && (
-                  <div className="mt-3 flex justify-between items-center px-3 py-2.5 bg-charcoal text-white rounded-xl">
-                    <span className="text-sm font-semibold">
-                      {fr ? 'Total réservation' : 'Booking total'}
-                      {manualOverride && <span className="text-xs text-amber-300 ml-1.5">(override)</span>}
-                    </span>
-                    <span className="text-lg font-bold">{formatMAD(finalTotal)}</span>
-                  </div>
-                )}
-              </section>
-
-              {/* ── Notes ── */}
               <section>
                 <label className="text-xs font-medium text-gray-500 block mb-1.5">
                   {fr ? 'Notes internes (optionnel)' : 'Internal notes (optional)'}
@@ -1019,7 +271,6 @@ export default function AdminCreateBookingModal({
                 />
               </section>
 
-              {/* ── Info banner ── */}
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
                 {fr
                   ? 'La réservation sera créée au statut CONFIRMÉ — source MANUELLE (WhatsApp / téléphone / passage direct).'
@@ -1027,7 +278,6 @@ export default function AdminCreateBookingModal({
               </div>
             </div>
 
-            {/* ── Footer ── */}
             <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex gap-3">
               <button
                 onClick={() => setOpen(false)}

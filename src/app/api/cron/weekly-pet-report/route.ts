@@ -1,3 +1,4 @@
+import { parseMetadata } from '@/lib/notifications/metadata';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { log, logger } from '@/lib/logger';
@@ -87,7 +88,7 @@ export async function GET(request: Request) {
   const reportedMap = new Map<string, Set<string>>();
   for (const n of existingReports) {
     try {
-      const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+      const meta = parseMetadata(n.metadata);
       if (typeof meta.bookingId === 'string') {
         if (!reportedMap.has(n.userId)) reportedMap.set(n.userId, new Set());
         reportedMap.get(n.userId)!.add(meta.bookingId);

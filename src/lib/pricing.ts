@@ -2,6 +2,7 @@
 // Pure rule helpers live in `pricing-rules.ts` (no prisma dep, safe to bundle
 // in client components). This module adds `getPricingSettings()` which reads
 // the Setting table and merges with PRICING_DEFAULTS.
+import { cache } from 'react';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { cacheReadThrough, cacheDel } from '@/lib/cache';
@@ -80,20 +81,27 @@ export const GROOMING_PRICES = {
 
 export const TAXI_ADDON_PRICE = 150;
 
-export async function getPricingSettings(): Promise<PricingSettings> {
-  return cacheReadThrough(PRICING_CACHE_KEY, PRICING_CACHE_TTL, async () => {
-    try {
-      const rows = await prisma.setting.findMany();
-      const settings = { ...PRICING_DEFAULTS };
-      for (const row of rows) {
-        const key = row.key as keyof PricingSettings;
-        if (key in settings) {
-          settings[key] = parseFloat(row.value) || settings[key];
+// React `cache()` memoizes per-request when called from a Server Component
+// (within the same render tree the function executes at most once). In API
+// routes it is a no-op — each request starts a fresh cache scope — so the
+// existing Redis layer keeps doing its job. Stacking the two means a page
+// that hits pricing across N components only pays one DB/Redis round-trip.
+export const getPricingSettings = cache(
+  async (): Promise<PricingSettings> => {
+    return cacheReadThrough(PRICING_CACHE_KEY, PRICING_CACHE_TTL, async () => {
+      try {
+        const rows = await prisma.setting.findMany();
+        const settings = { ...PRICING_DEFAULTS };
+        for (const row of rows) {
+          const key = row.key as keyof PricingSettings;
+          if (key in settings) {
+            settings[key] = parseFloat(row.value) || settings[key];
+          }
         }
+        return settings;
+      } catch {
+        return { ...PRICING_DEFAULTS };
       }
-      return settings;
-    } catch {
-      return { ...PRICING_DEFAULTS };
-    }
-  });
-}
+    });
+  },
+);

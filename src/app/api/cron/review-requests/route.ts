@@ -1,3 +1,4 @@
+import { parseMetadata } from '@/lib/notifications/metadata';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { acquireCronLock } from '@/lib/cron-lock';
@@ -5,6 +6,7 @@ import { markCronRun } from '@/lib/observability';
 import { createNotification } from '@/lib/notifications';
 import { enqueueEmail } from '@/lib/queues';
 import { getEmailTemplate } from '@/lib/email';
+import { getCasaStartOfDay } from '@/lib/timezone';
 
 export const maxDuration = 60;
 
@@ -54,8 +56,8 @@ export async function GET(request: Request) {
   });
 
   // Déduplication : on ne veut pas envoyer deux fois si la notif existe déjà
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
+  // aujourd'hui — fenêtre alignée sur l'heure locale Casablanca.
+  const todayStart = getCasaStartOfDay(now);
   const existingNotifs = await prisma.notification.findMany({
     where: {
       type: 'REVIEW_REQUEST',
@@ -66,7 +68,7 @@ export async function GET(request: Request) {
   const alreadyNotifiedBookingIds = new Set<string>();
   for (const n of existingNotifs) {
     try {
-      const meta = JSON.parse(n.metadata ?? '{}') as Record<string, unknown>;
+      const meta = parseMetadata(n.metadata);
       if (typeof meta.bookingId === 'string') alreadyNotifiedBookingIds.add(meta.bookingId);
     } catch { /* ignore */ }
   }
