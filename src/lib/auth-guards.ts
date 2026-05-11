@@ -1,39 +1,5 @@
 import { NextResponse } from 'next/server';
-import type { Session } from 'next-auth';
 import { auth } from '../../auth';
-
-type Role = 'ADMIN' | 'SUPERADMIN' | 'CLIENT';
-
-/**
- * Garde uniforme rôle + auth pour les route handlers.
- *
- * Usage :
- * ```ts
- * const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
- * if ('error' in guard) return guard.error;
- * const { session } = guard;
- * ```
- *
- * Retourne soit `{ session }` (autorisé) soit `{ error: NextResponse }` à
- * renvoyer tel quel.
- */
-export async function requireRole(
-  roles: Role[],
-): Promise<{ session: Session } | { error: NextResponse }> {
-  const session = await auth();
-  if (!session?.user) {
-    return {
-      error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-    };
-  }
-  const role = (session.user as { role?: string }).role;
-  if (!role || !roles.includes(role as Role)) {
-    return {
-      error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
-    };
-  }
-  return { session };
-}
 
 /**
  * Server-side helper for /api/admin/* route handlers — returns a 403 response
