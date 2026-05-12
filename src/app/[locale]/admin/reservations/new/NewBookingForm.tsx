@@ -613,45 +613,43 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
         )}
       </section>
 
-      {/* ── Walk-in initial status (walk-in mode only) ── */}
-      {walkInMode && (
-        <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
-          <h2 className="text-lg font-semibold text-charcoal mb-1">{t.statusSection}</h2>
-          <p className="text-xs text-gray-500 mb-3">{t.statusHelp}</p>
-          <div className="grid sm:grid-cols-2 gap-2">
-            {(
-              [
-                { value: 'IN_PROGRESS', label: t.statusInProgress, color: 'border-green-400 bg-green-50' },
-                { value: 'CONFIRMED', label: t.statusConfirmed, color: 'border-blue-400 bg-blue-50' },
-                { value: 'COMPLETED', label: t.statusCompleted, color: 'border-gray-400 bg-gray-50' },
-                { value: 'PENDING', label: t.statusPending, color: 'border-amber-400 bg-amber-50', disabled: effectiveIsOpenEnded },
-              ] as { value: InitialStatus; label: string; color: string; disabled?: boolean }[]
-            ).map(({ value, label, color, disabled }) => (
-              <label
-                key={value}
-                className={`flex items-center gap-2 border rounded-lg p-3 cursor-pointer transition-colors ${initialStatus === value ? color : 'border-ivory-200'} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="initialStatus"
-                  value={value}
-                  checked={initialStatus === value}
-                  disabled={disabled}
-                  onChange={() => {
-                    setInitialStatus(value);
-                    if (value === 'COMPLETED') setIsOpenEnded(false);
-                  }}
-                  className="h-4 w-4"
-                />
-                <span className="text-sm">{label}</span>
-              </label>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* ── Initial status ── */}
+      <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
+        <h2 className="text-lg font-semibold text-charcoal mb-1">{t.statusSection}</h2>
+        <p className="text-xs text-gray-500 mb-3">{t.statusHelp}</p>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {(
+            [
+              { value: 'IN_PROGRESS', label: t.statusInProgress, color: 'border-green-400 bg-green-50' },
+              { value: 'CONFIRMED', label: t.statusConfirmed, color: 'border-blue-400 bg-blue-50' },
+              { value: 'COMPLETED', label: t.statusCompleted, color: 'border-gray-400 bg-gray-50' },
+              { value: 'PENDING', label: t.statusPending, color: 'border-amber-400 bg-amber-50', disabled: effectiveIsOpenEnded },
+            ] as { value: InitialStatus; label: string; color: string; disabled?: boolean }[]
+          ).map(({ value, label, color, disabled }) => (
+            <label
+              key={value}
+              className={`flex items-center gap-2 border rounded-lg p-3 cursor-pointer transition-colors ${initialStatus === value ? color : 'border-ivory-200'} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+            >
+              <input
+                type="radio"
+                name="initialStatus"
+                value={value}
+                checked={initialStatus === value}
+                disabled={disabled}
+                onChange={() => {
+                  setInitialStatus(value);
+                  if (value === 'COMPLETED') setIsOpenEnded(false);
+                }}
+                className="h-4 w-4"
+              />
+              <span className="text-sm">{label}</span>
+            </label>
+          ))}
+        </div>
+      </section>
 
       {/* ── Retroactive amount (COMPLETED only) ── */}
-      {walkInMode && initialStatus === 'COMPLETED' && (
+      {initialStatus === 'COMPLETED' && (
         <section className="bg-white rounded-xl border border-amber-200 p-5 shadow-card">
           <h2 className="text-lg font-semibold text-charcoal mb-1">{t.retroAmountSection}</h2>
           <p className="text-xs text-amber-700 mb-3">{t.retroAmountHelp}</p>
