@@ -23,9 +23,10 @@ type Props = {
   locale: string;
   monthlyRevenue: number;
   initialFilter?: Filter;
+  compact?: boolean;
 };
 
-export default function ReservationsList({ bookings, locale, monthlyRevenue, initialFilter = 'ALL' }: Props) {
+export default function ReservationsList({ bookings, locale, monthlyRevenue, initialFilter = 'ALL', compact = false }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [filter, setFilter] = useState<Filter>(initialFilter);
@@ -112,31 +113,35 @@ export default function ReservationsList({ bookings, locale, monthlyRevenue, ini
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-serif font-bold text-charcoal">{t.title}</h1>
-          <p className="text-sm text-charcoal/50 mt-0.5 capitalize">
-            {monthName} · {kpis.inProgress} {t.subActiveStays} · {kpis.walkInsOpen} {t.subWalkIns}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-white border border-ivory-200 text-charcoal rounded-lg hover:border-gold-300 transition-colors">
-            <Download className="h-3.5 w-3.5" />{t.export}
-          </button>
-          <Link href={`/${locale}/admin/reservations/new`}>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-gold-500 text-white rounded-lg hover:bg-gold-600 transition-colors">
-              <Plus className="h-3.5 w-3.5" />{t.create}
+      {!compact && (
+        <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-serif font-bold text-charcoal">{t.title}</h1>
+            <p className="text-sm text-charcoal/50 mt-0.5 capitalize">
+              {monthName} · {kpis.inProgress} {t.subActiveStays} · {kpis.walkInsOpen} {t.subWalkIns}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-white border border-ivory-200 text-charcoal rounded-lg hover:border-gold-300 transition-colors">
+              <Download className="h-3.5 w-3.5" />{t.export}
             </button>
-          </Link>
+            <Link href={`/${locale}/admin/reservations/new`}>
+              <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-gold-500 text-white rounded-lg hover:bg-gold-600 transition-colors">
+                <Plus className="h-3.5 w-3.5" />{t.create}
+              </button>
+            </Link>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <KpiCard label={t.inProgress} value={kpis.inProgress} active={filter === 'IN_PROGRESS'} onClick={() => setFilter(filter === 'IN_PROGRESS' ? 'ALL' : 'IN_PROGRESS')} accent="#3B6D11" accentBg="#EAF3DE" />
-        <KpiCard label={t.pending} value={kpis.pending} active={filter === 'PENDING'} onClick={() => setFilter(filter === 'PENDING' ? 'ALL' : 'PENDING')} accent="#854F0B" accentBg="#FAEEDA" />
-        <KpiCard label={t.walkInsOpen} value={kpis.walkInsOpen} active={filter === 'WALKIN'} onClick={() => setFilter(filter === 'WALKIN' ? 'ALL' : 'WALKIN')} accent="#3C3489" accentBg="#EEEDFE" />
-        <KpiCard label={t.revenueMonth} value={formatMAD(monthlyRevenue)} accent="#7A5A14" accentBg="#FBF5E0" isText />
-      </div>
+      {!compact && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <KpiCard label={t.inProgress} value={kpis.inProgress} active={filter === 'IN_PROGRESS'} onClick={() => setFilter(filter === 'IN_PROGRESS' ? 'ALL' : 'IN_PROGRESS')} accent="#3B6D11" accentBg="#EAF3DE" />
+          <KpiCard label={t.pending} value={kpis.pending} active={filter === 'PENDING'} onClick={() => setFilter(filter === 'PENDING' ? 'ALL' : 'PENDING')} accent="#854F0B" accentBg="#FAEEDA" />
+          <KpiCard label={t.walkInsOpen} value={kpis.walkInsOpen} active={filter === 'WALKIN'} onClick={() => setFilter(filter === 'WALKIN' ? 'ALL' : 'WALKIN')} accent="#3C3489" accentBg="#EEEDFE" />
+          <KpiCard label={t.revenueMonth} value={formatMAD(monthlyRevenue)} accent="#7A5A14" accentBg="#FBF5E0" isText />
+        </div>
+      )}
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
         <Pill active={filter === 'ALL'} onClick={() => setFilter('ALL')}>{t.all}</Pill>
