@@ -25,18 +25,19 @@ type Props = {
 
 type WalkInPet = { name: string; species: 'DOG' | 'CAT'; dateOfBirth: string; breed: string };
 
+type InitialStatus = 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED';
+
 const L = {
   fr: {
     clientSection: 'Client',
     selectClient: 'Sélectionner un client',
     search: 'Rechercher (nom ou email)',
-    walkInToggle: 'Nouveau client de passage (walk-in)',
+    walkInToggle: 'Walk-in (client non inscrit dans l\'app)',
     walkInName: 'Nom complet',
     walkInPhone: 'Téléphone',
     walkInEmail: 'Email (optionnel)',
     petsSection: 'Animaux',
     addPet: 'Ajouter un animal',
-    removePet: 'Retirer',
     petName: 'Nom',
     species: 'Espèce',
     dog: 'Chien',
@@ -50,6 +51,18 @@ const L = {
     startDate: 'Date d\'arrivée',
     endDate: 'Date de départ',
     arrivalTime: 'Heure',
+    openEndedToggle: 'Durée indéterminée (walk-in ouvert)',
+    openEndedNote: 'Le prix sera calculé automatiquement à la clôture selon le nombre réel de nuits.',
+    statusSection: 'Statut initial',
+    statusHelp: 'Dans quel état créer cette réservation ?',
+    statusPending: 'En attente',
+    statusConfirmed: 'Confirmée',
+    statusInProgress: 'En cours (chien déjà là)',
+    statusCompleted: 'Terminée (saisie rétroactive)',
+    retroAmountSection: 'Montant payé',
+    retroAmount: 'Montant (MAD)',
+    retroAmountHelp: 'Obligatoire pour une saisie rétroactive — génère une facture PAYÉE.',
+    taxiMismatchWarning: 'Le chien est marqué comme déjà arrivé. Le taxi aller doit être désactivé ou le statut passé à "Confirmée".',
     priceSection: 'Tarif',
     totalPrice: 'Prix total (MAD)',
     suggested: 'Suggéré',
@@ -60,11 +73,11 @@ const L = {
     submitting: 'Création…',
     cancel: 'Annuler',
     noPets: 'Ce client n\'a pas d\'animal enregistré.',
-    selectPets: 'Sélectionner les animaux',
     sundayInvalid: 'Le Pet Taxi n\'opère pas le dimanche.',
     timeInvalid: 'Le Pet Taxi opère entre 10h et 17h.',
     walkInPetsRequired: 'Ajoutez au moins un animal pour ce client.',
     petsRequired: 'Sélectionnez au moins un animal.',
+    retroAmountRequired: 'Le montant est obligatoire pour une saisie rétroactive.',
     error: 'Erreur',
     success: 'Réservation créée',
     capacity: 'La pension est complète pour ces dates',
@@ -73,13 +86,12 @@ const L = {
     clientSection: 'Client',
     selectClient: 'Select a client',
     search: 'Search (name or email)',
-    walkInToggle: 'Walk-in client (no portal)',
+    walkInToggle: 'Walk-in (client not registered in the app)',
     walkInName: 'Full name',
     walkInPhone: 'Phone',
     walkInEmail: 'Email (optional)',
     petsSection: 'Pets',
     addPet: 'Add a pet',
-    removePet: 'Remove',
     petName: 'Name',
     species: 'Species',
     dog: 'Dog',
@@ -93,6 +105,18 @@ const L = {
     startDate: 'Arrival date',
     endDate: 'Departure date',
     arrivalTime: 'Time',
+    openEndedToggle: 'Open-ended stay (return date unknown)',
+    openEndedNote: 'Price will be automatically calculated at checkout based on actual nights.',
+    statusSection: 'Initial status',
+    statusHelp: 'In what state should this booking be created?',
+    statusPending: 'Pending',
+    statusConfirmed: 'Confirmed',
+    statusInProgress: 'In progress (dog already here)',
+    statusCompleted: 'Completed (retroactive entry)',
+    retroAmountSection: 'Amount paid',
+    retroAmount: 'Amount (MAD)',
+    retroAmountHelp: 'Required for retroactive entries — generates a PAID invoice.',
+    taxiMismatchWarning: 'The dog is marked as already arrived. Disable taxi pickup or change status to "Confirmed".',
     priceSection: 'Price',
     totalPrice: 'Total price (MAD)',
     suggested: 'Suggested',
@@ -103,11 +127,11 @@ const L = {
     submitting: 'Creating…',
     cancel: 'Cancel',
     noPets: 'This client has no pet registered.',
-    selectPets: 'Select pets',
     sundayInvalid: 'Pet Taxi does not operate on Sundays.',
     timeInvalid: 'Pet Taxi operates between 10:00 and 17:00.',
     walkInPetsRequired: 'Add at least one pet for this client.',
     petsRequired: 'Select at least one pet.',
+    retroAmountRequired: 'Amount is required for a retroactive entry.',
     error: 'Error',
     success: 'Booking created',
     capacity: 'Boarding is full for these dates',
@@ -118,6 +142,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
   const router = useRouter();
   const t = (L as Record<string, typeof L.fr>)[locale] || L.fr;
 
+  // ── Client ────────────────────────────────────────────────────────────
   const [walkInMode, setWalkInMode] = useState(false);
   const [search, setSearch] = useState('');
   const [clientId, setClientId] = useState('');
@@ -126,14 +151,29 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
     { name: '', species: 'DOG', dateOfBirth: '', breed: '' },
   ]);
   const [selectedPetIds, setSelectedPetIds] = useState<string[]>([]);
+
+  // ── Service ───────────────────────────────────────────────────────────
   const [serviceType, setServiceType] = useState<'BOARDING' | 'PET_TAXI'>('BOARDING');
+
+  // ── Dates ─────────────────────────────────────────────────────────────
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [arrivalTime, setArrivalTime] = useState('10:00');
+  // isOpenEnded is a user-controlled toggle (NOT auto-forced for all walk-ins)
+  const [isOpenEnded, setIsOpenEnded] = useState(false);
+
+  // ── Walk-in initial status ────────────────────────────────────────────
+  const [initialStatus, setInitialStatus] = useState<InitialStatus>('IN_PROGRESS');
+  const [finalAmount, setFinalAmount] = useState('');
+
+  // ── Billing ───────────────────────────────────────────────────────────
   const [totalPrice, setTotalPrice] = useState<string>('0');
   const [createInvoice, setCreateInvoice] = useState(true);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // When COMPLETED is selected, open-ended is incompatible — force it off
+  const effectiveIsOpenEnded = isOpenEnded && initialStatus !== 'COMPLETED';
 
   const filteredClients = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -150,9 +190,6 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
 
   const selectedClient = clients.find((c) => c.id === clientId) || null;
 
-  // Suggested price uses calculateBoardingBreakdown / calculateTaxiPrice from
-  // pricing-rules (single source of truth, same engine as the client booking
-  // flow and admin extension recalculations).
   const suggestedPrice = useMemo(() => {
     if (serviceType === 'PET_TAXI') {
       return calculateTaxiPrice('STANDARD', pricing).total;
@@ -176,7 +213,6 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
     return calculateBoardingBreakdown(nights, pets, undefined, false, false, pricing).total;
   }, [serviceType, startDate, endDate, walkInMode, walkInPets, selectedPetIds, selectedClient, pricing]);
 
-  // Mirror calendar selection.
   const onCalendarRange = (s: string, e: string | null) => {
     setStartDate(s);
     if (e) setEndDate(e);
@@ -188,8 +224,6 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
     return (firstSelected?.species as 'DOG' | 'CAT') ?? 'DOG';
   }, [walkInMode, walkInPets, selectedClient, selectedPetIds]);
 
-  const isOpenEnded = walkInMode && serviceType === 'BOARDING';
-
   function validate(): string | null {
     if (walkInMode) {
       if (!walkIn.name.trim() || !walkIn.phone.trim()) return t.walkInName;
@@ -200,7 +234,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
       if (selectedPetIds.length === 0) return t.petsRequired;
     }
     if (!startDate) return t.startDate;
-    if (serviceType === 'BOARDING' && !endDate && !isOpenEnded) return t.endDate;
+    if (serviceType === 'BOARDING' && !endDate && !effectiveIsOpenEnded) return t.endDate;
     if (serviceType === 'PET_TAXI') {
       const d = new Date(startDate + 'T00:00:00');
       if (d.getDay() === 0) return t.sundayInvalid;
@@ -210,7 +244,10 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
         if (total < 10 * 60 || total > 17 * 60) return t.timeInvalid;
       }
     }
-    if (!isOpenEnded) {
+    if (initialStatus === 'COMPLETED') {
+      const amt = parseFloat(finalAmount);
+      if (isNaN(amt) || amt < 0) return t.retroAmountRequired;
+    } else if (!effectiveIsOpenEnded) {
       const price = parseFloat(totalPrice);
       if (isNaN(price) || price < 0) return t.totalPrice;
     }
@@ -229,12 +266,14 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
       const payload: Record<string, unknown> = {
         serviceType,
         startDate,
-        endDate: serviceType === 'BOARDING' && !isOpenEnded ? endDate : null,
+        endDate: serviceType === 'BOARDING' && !effectiveIsOpenEnded ? endDate || null : null,
         arrivalTime: serviceType === 'PET_TAXI' ? arrivalTime : null,
-        totalPrice: isOpenEnded ? 0 : parseFloat(totalPrice),
+        totalPrice: effectiveIsOpenEnded ? 0 : parseFloat(totalPrice),
         notes: notes.trim() || null,
         createInvoice,
-        isOpenEnded,
+        isOpenEnded: effectiveIsOpenEnded,
+        initialStatus,
+        finalAmount: initialStatus === 'COMPLETED' ? parseFloat(finalAmount) : null,
       };
       if (walkInMode) {
         payload.walkIn = {
@@ -291,7 +330,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Client section */}
+      {/* ── Client ── */}
       <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
         <h2 className="text-lg font-semibold text-charcoal mb-3">{t.clientSection}</h2>
         <label className="flex items-center gap-2 mb-4 cursor-pointer">
@@ -302,6 +341,10 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
               setWalkInMode(e.target.checked);
               setClientId('');
               setSelectedPetIds([]);
+              if (!e.target.checked) {
+                setInitialStatus('IN_PROGRESS');
+                setIsOpenEnded(false);
+              }
             }}
             className="h-4 w-4"
           />
@@ -375,7 +418,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
         )}
       </section>
 
-      {/* Pets */}
+      {/* ── Pets ── */}
       <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
         <h2 className="text-lg font-semibold text-charcoal mb-3">{t.petsSection}</h2>
         {walkInMode ? (
@@ -471,7 +514,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
         )}
       </section>
 
-      {/* Service */}
+      {/* ── Service ── */}
       <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
         <h2 className="text-lg font-semibold text-charcoal mb-3">{t.serviceSection}</h2>
         <div className="flex gap-3">
@@ -485,7 +528,10 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
                 name="serviceType"
                 value={s}
                 checked={serviceType === s}
-                onChange={() => setServiceType(s)}
+                onChange={() => {
+                  setServiceType(s);
+                  if (s === 'PET_TAXI') setIsOpenEnded(false);
+                }}
                 className="mr-2"
               />
               {s === 'BOARDING' ? t.boarding : t.taxi}
@@ -494,9 +540,26 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
         </div>
       </section>
 
-      {/* Dates */}
+      {/* ── Dates ── */}
       <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
         <h2 className="text-lg font-semibold text-charcoal mb-3">{t.datesSection}</h2>
+
+        {/* Open-ended toggle — only for BOARDING, and incompatible with COMPLETED */}
+        {serviceType === 'BOARDING' && walkInMode && (
+          <label
+            className={`flex items-center gap-2 mb-4 cursor-pointer ${initialStatus === 'COMPLETED' ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <input
+              type="checkbox"
+              checked={effectiveIsOpenEnded}
+              onChange={(e) => setIsOpenEnded(e.target.checked)}
+              disabled={initialStatus === 'COMPLETED'}
+              className="h-4 w-4"
+            />
+            <span className="text-sm text-charcoal">{t.openEndedToggle}</span>
+          </label>
+        )}
+
         <div className="grid sm:grid-cols-2 gap-3 mb-4">
           <div>
             <Label htmlFor="start">{t.startDate} *</Label>
@@ -510,14 +573,16 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
           </div>
           {serviceType === 'BOARDING' ? (
             <div>
-              <Label htmlFor="end">{t.endDate}{!walkInMode && ' *'}</Label>
+              <Label htmlFor="end">
+                {t.endDate}{!effectiveIsOpenEnded && ' *'}
+              </Label>
               <Input
                 id="end"
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                required={!walkInMode}
-                disabled={walkInMode}
+                required={!effectiveIsOpenEnded}
+                disabled={effectiveIsOpenEnded}
               />
             </div>
           ) : (
@@ -535,6 +600,12 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
           )}
         </div>
 
+        {effectiveIsOpenEnded && (
+          <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3">
+            {t.openEndedNote}
+          </p>
+        )}
+
         {serviceType === 'BOARDING' && (
           <AvailabilityCalendar
             species={calendarSpecies}
@@ -546,22 +617,83 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
         )}
       </section>
 
-      {/* Price */}
-      <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
-        <h2 className="text-lg font-semibold text-charcoal mb-3">{t.priceSection}</h2>
-        {isOpenEnded ? (
-          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-            <p className="font-semibold mb-0.5">
-              {locale === 'en' ? '⏳ Open-ended stay' : '⏳ Séjour à durée indéterminée'}
-            </p>
-            <p className="text-xs text-amber-700">
-              {locale === 'en'
-                ? 'The price will be automatically calculated at checkout based on the actual number of nights and the standard pension rate. No price entry needed now.'
-                : 'Le prix sera calculé automatiquement à la clôture, selon le nombre réel de nuits et le tarif pension en vigueur. Aucune saisie de prix requise maintenant.'}
-            </p>
+      {/* ── Walk-in initial status (walk-in mode only) ── */}
+      {walkInMode && (
+        <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
+          <h2 className="text-lg font-semibold text-charcoal mb-1">{t.statusSection}</h2>
+          <p className="text-xs text-gray-500 mb-3">{t.statusHelp}</p>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {(
+              [
+                { value: 'IN_PROGRESS', label: t.statusInProgress, color: 'border-green-400 bg-green-50' },
+                { value: 'CONFIRMED', label: t.statusConfirmed, color: 'border-blue-400 bg-blue-50' },
+                { value: 'COMPLETED', label: t.statusCompleted, color: 'border-gray-400 bg-gray-50' },
+                { value: 'PENDING', label: t.statusPending, color: 'border-amber-400 bg-amber-50', disabled: effectiveIsOpenEnded },
+              ] as { value: InitialStatus; label: string; color: string; disabled?: boolean }[]
+            ).map(({ value, label, color, disabled }) => (
+              <label
+                key={value}
+                className={`flex items-center gap-2 border rounded-lg p-3 cursor-pointer transition-colors ${initialStatus === value ? color : 'border-ivory-200'} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="initialStatus"
+                  value={value}
+                  checked={initialStatus === value}
+                  disabled={disabled}
+                  onChange={() => {
+                    setInitialStatus(value);
+                    if (value === 'COMPLETED') setIsOpenEnded(false);
+                  }}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm">{label}</span>
+              </label>
+            ))}
           </div>
-        ) : (
-          <>
+        </section>
+      )}
+
+      {/* ── Retroactive amount (COMPLETED only) ── */}
+      {walkInMode && initialStatus === 'COMPLETED' && (
+        <section className="bg-white rounded-xl border border-amber-200 p-5 shadow-card">
+          <h2 className="text-lg font-semibold text-charcoal mb-1">{t.retroAmountSection}</h2>
+          <p className="text-xs text-amber-700 mb-3">{t.retroAmountHelp}</p>
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <Label htmlFor="final-amount">{t.retroAmount} *</Label>
+              <Input
+                id="final-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={finalAmount}
+                onChange={(e) => setFinalAmount(e.target.value)}
+                required
+              />
+            </div>
+            {suggestedPrice > 0 && (
+              <button
+                type="button"
+                onClick={() => setFinalAmount(String(suggestedPrice))}
+                className="text-xs text-gold-600 hover:text-gold-700 underline pb-2"
+              >
+                {t.suggested}: {suggestedPrice} MAD
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ── Price (non-retroactive) ── */}
+      {initialStatus !== 'COMPLETED' && (
+        <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
+          <h2 className="text-lg font-semibold text-charcoal mb-3">{t.priceSection}</h2>
+          {effectiveIsOpenEnded ? (
+            <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-4 py-3">
+              {t.openEndedNote}
+            </p>
+          ) : (
             <div className="flex items-end gap-3">
               <div className="flex-1">
                 <Label htmlFor="price">{t.totalPrice} *</Label>
@@ -585,20 +717,22 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
                 </button>
               )}
             </div>
-          </>
-        )}
-        <label className="flex items-center gap-2 mt-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={createInvoice}
-            onChange={(e) => setCreateInvoice(e.target.checked)}
-            className="h-4 w-4"
-          />
-          <span className="text-sm">{t.createInvoice}</span>
-        </label>
-      </section>
+          )}
+          {initialStatus !== 'COMPLETED' && (
+            <label className="flex items-center gap-2 mt-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={createInvoice}
+                onChange={(e) => setCreateInvoice(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="text-sm">{t.createInvoice}</span>
+            </label>
+          )}
+        </section>
+      )}
 
-      {/* Notes */}
+      {/* ── Notes ── */}
       <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
         <h2 className="text-lg font-semibold text-charcoal mb-3">{t.notesSection}</h2>
         <Textarea
