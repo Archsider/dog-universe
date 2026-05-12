@@ -54,6 +54,7 @@ export interface BookingDetail {
   startDate: string;       // ISO
   endDate: string | null;  // ISO
   isOpenEnded: boolean;
+  isWalkIn: boolean;
   totalPrice: number;
   notes: string | null;
   cancellationReason: string | null;
