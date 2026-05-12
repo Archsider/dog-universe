@@ -23,6 +23,33 @@ import type { BookingDetail } from '@/types/booking-detail';
 // Client wrapper — dynamic({ ssr: false }) is illegal in Server Components (Next.js 15)
 import LazyBookingDetailPanel from './_components/LazyBookingDetailPanel';
 
+// Typed result for the SSR panel pre-fetch query — mirrors the include shape below.
+// Lets TypeScript catch field-name mismatches before they reach Vercel's build.
+type BookingForPanel = Prisma.BookingGetPayload<{
+  include: {
+    client: { select: { id: true; name: true; email: true; phone: true; isWalkIn: true } };
+    bookingPets: {
+      include: {
+        pet: {
+          select: {
+            id: true; name: true; species: true; breed: true; photoUrl: true;
+            gender: true; allergies: true; currentMedication: true;
+            behaviorWithDogs: true; behaviorWithCats: true; notes: true;
+          };
+        };
+      };
+    };
+    boardingDetail: true;
+    taxiDetail: { select: { pickupAddress: true; dropoffAddress: true; price: true } };
+    invoice: {
+      select: {
+        id: true; invoiceNumber: true; status: true;
+        amount: true; paidAmount: true; version: true;
+      };
+    };
+  };
+}>;
+
 interface PageProps {
   params: Promise<{ locale: string }>;
   searchParams: Promise<{
@@ -114,7 +141,7 @@ export default async function AdminReservationsPage(props: PageProps) {
   const pricing = await getPricingSettings();
   if (panelBookingId) {
     try {
-      const b = await prisma.booking.findFirst({
+      const b: BookingForPanel | null = await prisma.booking.findFirst({
         where: { id: panelBookingId, deletedAt: null },
         include: {
           client: { select: { id: true, name: true, email: true, phone: true, isWalkIn: true } },
@@ -132,7 +159,7 @@ export default async function AdminReservationsPage(props: PageProps) {
           startDate: b.startDate.toISOString(),
           endDate: b.endDate?.toISOString() ?? null,
           isOpenEnded: b.isOpenEnded,
-          isWalkIn: Boolean((b as Record<string, unknown>).isWalkIn) || b.client.isWalkIn,
+          isWalkIn: b.isWalkIn || b.client.isWalkIn,
           totalPrice: toNumber(b.totalPrice),
           notes: b.notes ?? null,
           cancellationReason: b.cancellationReason ?? null,
