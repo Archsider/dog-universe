@@ -624,6 +624,36 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 - Stepper visuel lecture seule : étapes passées ✓ / active surlignée / futures grisées
 - Le client ne peut **jamais** modifier le statut
 
+### Walk-in Admin — Création flexible (depuis 2026-05-12)
+
+`POST /api/admin/bookings` supporte 5 cas de walk-in réels :
+
+| Cas | isOpenEnded | initialStatus | Particularité |
+|---|---|---|---|
+| Classique | false | IN_PROGRESS | Dates connues, chien déjà là |
+| Durée ouverte | true | IN_PROGRESS | Date retour inconnue — clôture via CloseStayDialog |
+| Rétroactif | false | COMPLETED | Séjour passé — `finalAmount` obligatoire, facture PAID créée |
+| Taxi prise en charge | false | CONFIRMED | Pet Taxi — heure d'arrivée facultative |
+| Combo taxi+ouvert | true | IN_PROGRESS | Taxi + pension ouverte |
+
+**Champ DB :** `Booking.isWalkIn Boolean @default(false)` — distinct de `User.isWalkIn`.
+Mapping: `booking.isWalkIn || booking.client.isWalkIn` dans les composants et l'API detail.
+
+**Déduplication téléphonique :** si un client walk-in avec le même téléphone existe déjà (`User.isWalkIn=true, deletedAt=null`), on le réutilise sans créer de doublon.
+
+**Règles de validation cross-champs (Zod refinements) :**
+- `COMPLETED + endDate absent` → `END_DATE_REQUIRED_FOR_COMPLETED`
+- `isOpenEnded + initialStatus=PENDING` → `OPEN_ENDED_CANNOT_BE_PENDING`
+- `initialStatus=COMPLETED + finalAmount absent` → `FINAL_AMOUNT_REQUIRED`
+
+**Capacité :** les walk-ins ouverts (`isOpenEnded=true`) sont vérifiés sur une fenêtre `WALKIN_DEFAULT_WINDOW_DAYS = 30` jours (advisory — warning, pas blocage).
+
+**Clôture :** `CloseStayDialog` reste le point d'entrée unique pour COMPLETED depuis IN_PROGRESS.
+Ne jamais patcher `status=COMPLETED` manuellement sans recalcul prix.
+
+**Kanban :** badge "walk-in" gris sur les cartes + label "Walk-in ouvert" / "Open-ended stay" en italique amber à la place des dates.
+**InvoiceSection :** banner amber "Facture en attente de clôture" quand `!invoice && isOpenEnded`.
+
 ### Contraintes Pet Taxi (front + back)
 - **Dimanche interdit** : `isValidTaxiDate()` dans le formulaire client
 - **Horaires 10h-17h uniquement** : `isValidTaxiTime()` dans le formulaire client
@@ -664,6 +694,14 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "User_role_isWalkIn_idx" ON "User" ("role", "isWalkIn");
 ```
 Sans cet index, les pages admin font un full table scan sur `User` à chaque requête (filter `role='CLIENT' AND isWalkIn=false`).
+
+### ⚠️ Migration 20260512 — Booking.isWalkIn flag (2026-05-12)
+À exécuter sur Supabase SQL Editor (fichier `prisma/migrations/20260512_walkin_booking_flag/migration.sql`) :
+```sql
+ALTER TABLE "Booking" ADD COLUMN IF NOT EXISTS "isWalkIn" BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS "Booking_isWalkIn_idx" ON "Booking"("isWalkIn");
+```
+Rollback via `down.sql` disponible. Sans ce champ, `Booking.isWalkIn` reste `false` pour toutes les réservations existantes (pas bloquant — fallback sur `User.isWalkIn`).
 
 ### 🟡 Scalabilité DB — activer Supabase Transaction Pooler (PgBouncer)
 **Action** : dans Supabase Dashboard → Project Settings → Database → Connection Pooling, copier le **Transaction pooler URL** (port 6543) et l'ajouter comme `DATABASE_URL` sur Vercel (en gardant l'URL directe sur `DIRECT_URL` pour les migrations).
