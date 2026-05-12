@@ -14,21 +14,35 @@ import {
 // ── Inner renderers (no hooks, pure display) ──────────────────────────────
 
 export function BoardingCardInner({ b, locale }: { b: KanbanBooking; locale: string }) {
+  const fr = locale !== 'en';
   return (
     <>
       <div className="flex items-start justify-between gap-1 mb-2">
         <div>
-          <p className="text-sm font-semibold text-charcoal leading-tight">{b.pets}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-sm font-semibold text-charcoal leading-tight">{b.pets}</p>
+            {b.isWalkIn && (
+              <span className="text-[10px] uppercase tracking-wide bg-gray-100 text-gray-500 rounded px-1.5 py-0.5 font-medium">
+                walk-in
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-500 mt-0.5">{b.clientName}</p>
         </div>
         <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-gold-400 flex-shrink-0 mt-0.5" />
       </div>
       <div className="flex items-center gap-1 text-xs text-gray-400">
         <CalendarDays className="h-3 w-3 flex-shrink-0" />
-        <span>
-          {formatShortDate(b.startDate, locale)}
-          {b.endDate ? ` → ${formatShortDate(b.endDate, locale)}` : ''}
-        </span>
+        {b.isOpenEnded ? (
+          <span className="italic text-amber-600">
+            {fr ? 'Walk-in ouvert' : 'Open-ended stay'}
+          </span>
+        ) : (
+          <span>
+            {formatShortDate(b.startDate, locale)}
+            {b.endDate ? ` → ${formatShortDate(b.endDate, locale)}` : ''}
+          </span>
+        )}
       </div>
       <p className="text-[10px] font-mono text-gray-300 mt-2">{b.id.slice(0, 8)}</p>
     </>
