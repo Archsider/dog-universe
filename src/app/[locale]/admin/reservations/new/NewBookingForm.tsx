@@ -130,7 +130,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [arrivalTime, setArrivalTime] = useState('10:00');
-  const [totalPrice, setTotalPrice] = useState<string>('');
+  const [totalPrice, setTotalPrice] = useState<string>('0');
   const [createInvoice, setCreateInvoice] = useState(true);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -188,6 +188,8 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
     return (firstSelected?.species as 'DOG' | 'CAT') ?? 'DOG';
   }, [walkInMode, walkInPets, selectedClient, selectedPetIds]);
 
+  const isOpenEnded = walkInMode && serviceType === 'BOARDING';
+
   function validate(): string | null {
     if (walkInMode) {
       if (!walkIn.name.trim() || !walkIn.phone.trim()) return t.walkInName;
@@ -198,7 +200,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
       if (selectedPetIds.length === 0) return t.petsRequired;
     }
     if (!startDate) return t.startDate;
-    if (serviceType === 'BOARDING' && !endDate && !walkInMode) return t.endDate;
+    if (serviceType === 'BOARDING' && !endDate && !isOpenEnded) return t.endDate;
     if (serviceType === 'PET_TAXI') {
       const d = new Date(startDate + 'T00:00:00');
       if (d.getDay() === 0) return t.sundayInvalid;
@@ -208,8 +210,10 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
         if (total < 10 * 60 || total > 17 * 60) return t.timeInvalid;
       }
     }
-    const price = parseFloat(totalPrice);
-    if (isNaN(price) || price < 0) return t.totalPrice;
+    if (!isOpenEnded) {
+      const price = parseFloat(totalPrice);
+      if (isNaN(price) || price < 0) return t.totalPrice;
+    }
     return null;
   }
 
@@ -222,16 +226,15 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
     }
     setSubmitting(true);
     try {
-      const openEnded = walkInMode && serviceType === 'BOARDING';
       const payload: Record<string, unknown> = {
         serviceType,
         startDate,
-        endDate: serviceType === 'BOARDING' && !openEnded ? endDate : null,
+        endDate: serviceType === 'BOARDING' && !isOpenEnded ? endDate : null,
         arrivalTime: serviceType === 'PET_TAXI' ? arrivalTime : null,
-        totalPrice: parseFloat(totalPrice),
+        totalPrice: isOpenEnded ? 0 : parseFloat(totalPrice),
         notes: notes.trim() || null,
         createInvoice,
-        isOpenEnded: openEnded,
+        isOpenEnded,
       };
       if (walkInMode) {
         payload.walkIn = {
@@ -546,29 +549,44 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
       {/* Price */}
       <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
         <h2 className="text-lg font-semibold text-charcoal mb-3">{t.priceSection}</h2>
-        <div className="flex items-end gap-3">
-          <div className="flex-1">
-            <Label htmlFor="price">{t.totalPrice} *</Label>
-            <Input
-              id="price"
-              type="number"
-              min="0"
-              step="0.01"
-              value={totalPrice}
-              onChange={(e) => setTotalPrice(e.target.value)}
-              required
-            />
+        {isOpenEnded ? (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+            <p className="font-semibold mb-0.5">
+              {locale === 'en' ? '⏳ Open-ended stay' : '⏳ Séjour à durée indéterminée'}
+            </p>
+            <p className="text-xs text-amber-700">
+              {locale === 'en'
+                ? 'The price will be automatically calculated at checkout based on the actual number of nights and the standard pension rate. No price entry needed now.'
+                : 'Le prix sera calculé automatiquement à la clôture, selon le nombre réel de nuits et le tarif pension en vigueur. Aucune saisie de prix requise maintenant.'}
+            </p>
           </div>
-          {suggestedPrice > 0 && (
-            <button
-              type="button"
-              onClick={() => setTotalPrice(String(suggestedPrice))}
-              className="text-xs text-gold-600 hover:text-gold-700 underline pb-2"
-            >
-              {t.suggested}: {suggestedPrice} MAD
-            </button>
-          )}
-        </div>
+        ) : (
+          <>
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <Label htmlFor="price">{t.totalPrice} *</Label>
+                <Input
+                  id="price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={totalPrice}
+                  onChange={(e) => setTotalPrice(e.target.value)}
+                  required
+                />
+              </div>
+              {suggestedPrice > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTotalPrice(String(suggestedPrice))}
+                  className="text-xs text-gold-600 hover:text-gold-700 underline pb-2"
+                >
+                  {t.suggested}: {suggestedPrice} MAD
+                </button>
+              )}
+            </div>
+          </>
+        )}
         <label className="flex items-center gap-2 mt-3 cursor-pointer">
           <input
             type="checkbox"

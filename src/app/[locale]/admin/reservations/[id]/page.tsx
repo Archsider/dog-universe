@@ -5,7 +5,11 @@ import type { Decimal } from '@prisma/client/runtime/library';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { formatDate, getBookingStatusColor } from '@/lib/utils';
+import { formatDate, formatMAD, getBookingStatusColor } from '@/lib/utils';
+import { getPensionPrice, getPricingSettings } from '@/lib/pricing';
+import { differenceInCalendarDays } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
+import { toNumber } from '@/lib/decimal';
 import ReservationActions from './ReservationActions';
 import type { TaxiTripData } from '@/components/shared/TaxiTimeline';
 import DeleteBookingButton from './DeleteBookingButton';
@@ -25,7 +29,6 @@ import AddProductSection from './AddProductSection';
 import UpsellSuggestions from '@/components/shared/UpsellSuggestions';
 import CheckoutBookingButton from './CheckoutBookingButton';
 import BookingTaxiSection from './BookingTaxiSection';
-import { toNumber } from '@/lib/decimal';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -302,6 +305,32 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
         return Math.max(0, Math.floor((Date.now() - booking.startDate.getTime()) / (1000 * 60 * 60 * 24)));
       })();
 
+  // ── Live open-ended total (server-computed each render) ───────────────────
+  // Shown as a provisional banner on the booking detail page for walk-in stays
+  // that have no endDate yet. Uses the same pricing logic as the checkout route.
+  const CASA_TZ = 'Africa/Casablanca';
+  let liveOpenEnded: { nights: number; total: number; perPet: { name: string; price: number }[] } | null = null;
+  if (booking.isOpenEnded && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status)) {
+    try {
+      const pricingSettings = await getPricingSettings();
+      const liveNights = Math.max(
+        1,
+        differenceInCalendarDays(
+          toZonedTime(new Date(), CASA_TZ),
+          toZonedTime(booking.startDate, CASA_TZ),
+        ),
+      );
+      const dogsCount = booking.bookingPets.filter((bp) => bp.pet.species === 'DOG').length;
+      const perPet = booking.bookingPets.map((bp) => {
+        const unitPrice = getPensionPrice(bp.pet, dogsCount, liveNights, pricingSettings);
+        return { name: bp.pet.name, price: toNumber(unitPrice.times(liveNights)) };
+      });
+      liveOpenEnded = { nights: liveNights, total: perPet.reduce((s, p) => s + p.price, 0), perPet };
+    } catch {
+      // fail-open: banner hidden if pricing lookup fails
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
@@ -365,6 +394,37 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
         </div>
       )}
 
+      {/* Live open-ended banner — shown only for active walk-in stays without endDate */}
+      {liveOpenEnded && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-5 py-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-amber-900 flex items-center gap-2">
+                <span>⏳</span>
+                {locale === 'en' ? 'Open-ended stay in progress' : 'Séjour ouvert en cours'}
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                {locale === 'en'
+                  ? `Day ${liveOpenEnded.nights} — provisional total`
+                  : `Jour ${liveOpenEnded.nights} — total provisoire`}
+                {' '}
+                <span className="font-bold text-amber-900">{formatMAD(liveOpenEnded.total)}</span>
+              </p>
+              {liveOpenEnded.perPet.length > 1 && (
+                <p className="text-xs text-amber-600 mt-0.5">
+                  {liveOpenEnded.perPet.map((p) => `${p.name} : ${formatMAD(p.price)}`).join(' · ')}
+                </p>
+              )}
+            </div>
+            <p className="text-xs text-amber-600 italic">
+              {locale === 'en'
+                ? 'Price locked at checkout using actual nights × pension rate.'
+                : 'Prix figé à la clôture : nuits réelles × tarif pension.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Left */}
         <div className="space-y-4">
@@ -397,6 +457,8 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             locale={locale}
             label={l.invoice}
             noInvoiceLabel={l.noInvoice}
+            isOpenEnded={booking.isOpenEnded && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status)}
+            liveTotal={liveOpenEnded?.total}
           />
         </div>
 
