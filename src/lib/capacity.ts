@@ -32,6 +32,14 @@ const DEFAULT_LIMITS: CapacityLimits = {
 // of *intent*, not of a slot.
 const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'PENDING_EXTENSION'] as const;
 
+/**
+ * When a walk-in is created with an open-ended stay (no endDate), capacity is
+ * checked against this many days from startDate. Gives the admin a heads-up
+ * about potential over-booking without blocking the entry (open-ended bookings
+ * are excluded from the normal overlap count anyway, so this is advisory only).
+ */
+export const WALKIN_DEFAULT_WINDOW_DAYS = 30;
+
 async function readLimitsFromDb(client: PrismaClientLike): Promise<CapacityLimits> {
   return Sentry.startSpan(
     { name: 'capacity.getCapacityLimits', op: 'db' },
