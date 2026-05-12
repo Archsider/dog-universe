@@ -145,9 +145,14 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
     // ── Resolve clientId + petIds ────────────────────────────────────────
     let resolvedClientId: string;
     let resolvedPetIds: string[] = bodyPetIds ?? [];
-    const isWalkInBooking = !!walkIn;
+    // isWalkInClient = the user was created on-the-fly (no portal access).
+    // isWalkInBooking = broader flag stored on Booking.isWalkIn:
+    //   true whenever any "admin-managed / flexible" trait applies —
+    //   open-ended stay, retroactive COMPLETED, or on-the-fly client.
+    const isWalkInClient = !!walkIn;
+    const isWalkInBooking = isWalkInClient || !!isOpenEnded || initialStatus === 'COMPLETED';
 
-    if (walkIn) {
+    if (isWalkInClient) {
       if ((walkInPets?.length ?? 0) === 0) {
         return NextResponse.json({ error: 'WALKIN_PETS_REQUIRED' }, { status: 400 });
       }
@@ -310,7 +315,7 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
           totalPrice: initialStatus === 'COMPLETED' ? (finalAmount ?? totalPrice) : totalPrice,
           source: 'MANUAL',
           petIds: resolvedPetIds,
-          idempotencyKey: isWalkInBooking
+          idempotencyKey: isWalkInClient
             ? undefined
             : [resolvedClientId, new Date(startDate).toISOString(), endDate ? new Date(endDate).toISOString() : '', ...([...resolvedPetIds].sort())].join(':'),
           includeGrooming: false,
@@ -459,7 +464,8 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
     const petNames = booking.bookingPets.map((bp) => bp.pet.name).join(', ');
     // Skip confirmation notification for walk-in clients (no portal access)
     // and for retroactive COMPLETED entries (already done, no need to notify).
-    if (!isWalkInBooking && initialStatus !== 'COMPLETED') {
+    // Registered clients with open-ended stays still receive the notification.
+    if (!isWalkInClient && initialStatus !== 'COMPLETED') {
       await createBookingConfirmationNotification(
         resolvedClientId,
         bookingRef,
