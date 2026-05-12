@@ -132,6 +132,7 @@ export default async function AdminReservationsPage(props: PageProps) {
           startDate: b.startDate.toISOString(),
           endDate: b.endDate?.toISOString() ?? null,
           isOpenEnded: b.isOpenEnded,
+          isWalkIn: Boolean((b as Record<string, unknown>).isWalkIn) || b.client.isWalkIn,
           totalPrice: toNumber(b.totalPrice),
           notes: b.notes ?? null,
           cancellationReason: b.cancellationReason ?? null,
