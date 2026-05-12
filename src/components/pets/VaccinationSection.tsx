@@ -1,43 +1,17 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import {
-  Shield, Plus, Trash2, Calendar, Upload, ExternalLink,
-  FileText, File, Sparkles, CheckCircle, AlertCircle, Clock,
+  Shield, Plus, Calendar, Sparkles, CheckCircle, AlertCircle, Clock, Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import VaccinationFormModal from './VaccinationFormModal';
+import VaccinationDocumentList from './VaccinationDocumentList';
+import type { Vaccination, PetDocument, DraftForm, VaccinationLabels } from './vaccination-types';
 
-interface Vaccination {
-  id: string;
-  vaccineType: string;
-  date: Date | string | null;
-  nextDueDate?: Date | string | null;
-  comment: string | null;
-  status: string; // "CONFIRMED" | "DRAFT"
-  isAutoDetected: boolean;
-  sourceDocumentId?: string | null;
-  _extractionConfidence?: 'HIGH' | 'MEDIUM' | 'LOW' | null;
-  _extractionNote?: string | null;
-}
-
-interface PetDocument {
-  id: string;
-  name: string;
-  fileUrl: string;
-  fileType: string;
-  uploadedAt: Date | string;
-}
-
-interface DraftForm {
-  vaccineType: string;
-  date: string;
-  nextDueDate: string;
-  comment: string;
-}
+export { PROOF_PREFIX } from './constants';
 
 interface VaccinationSectionProps {
   petId: string;
@@ -46,10 +20,7 @@ interface VaccinationSectionProps {
   locale: string;
 }
 
-export { PROOF_PREFIX } from './constants';
-import { PROOF_PREFIX } from './constants';
-
-const T = {
+const T: Record<string, VaccinationLabels> = {
   fr: {
     title: 'Vaccinations',
     add: 'Ajouter',
@@ -64,19 +35,14 @@ const T = {
     typePlaceholder: 'Ex : Rage, CPHPL, Leptospirose…',
     commentPlaceholder: 'Dr. Benali, Clinique Vétérinaire Atlas…',
     nextDuePlaceholder: 'Date de rappel (optionnel)',
-
     emptyTitle: 'Aucune vaccination enregistrée',
     emptyHint: 'Ajoutez une vaccination manuellement ou déposez un justificatif ci-dessous.',
-
     proofReceivedTitle: 'Justificatif vaccinal reçu',
     proofReceivedHint: 'Analyse en cours pour créer une fiche de vaccination…',
     proofUnanalyzedHint: (n: number) =>
-      n === 1
-        ? '1 justificatif en attente d\'analyse'
-        : `${n} justificatifs en attente d\'analyse`,
+      n === 1 ? '1 justificatif en attente d\'analyse' : `${n} justificatifs en attente d\'analyse`,
     analyzeBtn: 'Analyser',
     analyzing: 'Analyse en cours…',
-
     draftBadge: 'À confirmer',
     draftDetectedBadge: 'Détecté automatiquement',
     draftTitle: 'Vaccination détectée — vérifiez et confirmez',
@@ -88,7 +54,6 @@ const T = {
     confidenceHigh: 'Données clairement lisibles',
     confidenceMedium: 'Données partiellement lisibles — vérifiez',
     confidenceLow: 'Données peu lisibles — complétez manuellement',
-
     proofTitle: 'Justificatifs de vaccination',
     proofSubtitle: 'Vignette · Carnet de vaccination · Passeport animal · Certificat',
     proofUpload: 'Ajouter un justificatif',
@@ -100,7 +65,6 @@ const T = {
     proofConfirmDelete: 'Supprimer ce justificatif ?',
     confirmDeleteVax: 'Supprimer cette vaccination ?',
     confirmDeleteDraft: 'Ignorer ce brouillon de vaccination ?',
-
     fieldRequired: 'Vaccin et date requis',
   },
   en: {
@@ -117,19 +81,14 @@ const T = {
     typePlaceholder: 'E.g: Rabies, DHPP, Leptospirosis…',
     commentPlaceholder: 'Dr. Smith, City Vet Clinic…',
     nextDuePlaceholder: 'Booster date (optional)',
-
     emptyTitle: 'No vaccinations recorded',
     emptyHint: 'Add a vaccination manually or upload a proof document below.',
-
     proofReceivedTitle: 'Vaccination proof received',
     proofReceivedHint: 'Analyzing document to create a vaccination record…',
     proofUnanalyzedHint: (n: number) =>
-      n === 1
-        ? '1 proof document awaiting analysis'
-        : `${n} proof documents awaiting analysis`,
+      n === 1 ? '1 proof document awaiting analysis' : `${n} proof documents awaiting analysis`,
     analyzeBtn: 'Analyze',
     analyzing: 'Analyzing…',
-
     draftBadge: 'Pending confirmation',
     draftDetectedBadge: 'Auto-detected',
     draftTitle: 'Vaccination detected — please review and confirm',
@@ -141,7 +100,6 @@ const T = {
     confidenceHigh: 'Data clearly readable',
     confidenceMedium: 'Data partially readable — please verify',
     confidenceLow: 'Data hard to read — please fill in manually',
-
     proofTitle: 'Vaccination proof',
     proofSubtitle: 'Sticker · Health booklet · Pet passport · Certificate',
     proofUpload: 'Add proof',
@@ -153,7 +111,6 @@ const T = {
     proofConfirmDelete: 'Delete this file?',
     confirmDeleteVax: 'Delete this vaccination?',
     confirmDeleteDraft: 'Ignore this vaccination draft?',
-
     fieldRequired: 'Vaccine name and date are required',
   },
 };
@@ -167,27 +124,20 @@ export default function VaccinationSection({
   const [vaccinations, setVaccinations] = useState<Vaccination[]>(initialVaccinations);
   const [proofDocs, setProofDocs] = useState<PetDocument[]>(initialDocuments);
   const [showDialog, setShowDialog] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ vaccineType: '', date: '', comment: '' });
-  const [proofUploading, setProofUploading] = useState(false);
   const [extractingDocIds, setExtractingDocIds] = useState<Set<string>>(new Set());
   const [draftForms, setDraftForms] = useState<Record<string, DraftForm>>({});
   const [confirmingIds, setConfirmingIds] = useState<Set<string>>(new Set());
-  const proofInputRef = useRef<HTMLInputElement>(null);
 
-  const labels = T[locale as keyof typeof T] || T.fr;
+  const labels = T[locale] ?? T.fr;
 
-  // ── Derived state ──────────────────────────────────────────────────────────
   const confirmedVax = vaccinations.filter(v => v.status === 'CONFIRMED');
   const draftVax = vaccinations.filter(v => v.status === 'DRAFT');
-  const analyzedDocIds = new Set(
+  const analyzedDocIds = new Set<string>(
     vaccinations.filter(v => v.sourceDocumentId).map(v => v.sourceDocumentId as string)
   );
   const proofDocsWithoutDraft = proofDocs.filter(d => !analyzedDocIds.has(d.id));
-
   const isEmpty = confirmedVax.length === 0 && draftVax.length === 0 && proofDocs.length === 0;
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
   const fmtDate = (val: Date | string | null | undefined) => {
     if (!val) return '—';
     return new Date(val).toLocaleDateString(locale === 'fr' ? 'fr-MA' : 'en-US', {
@@ -202,62 +152,6 @@ export default function VaccinationSection({
     return d.toISOString().split('T')[0];
   };
 
-  const displayName = (doc: PetDocument) =>
-    doc.name.startsWith(PROOF_PREFIX) ? doc.name.slice(PROOF_PREFIX.length) : doc.name;
-
-  // ── Manual add ─────────────────────────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (!form.vaccineType || !form.date) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/pets/${petId}/vaccinations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vaccineType: form.vaccineType, date: form.date, comment: form.comment || null }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
-      setVaccinations(prev => [...prev, { ...data, status: 'CONFIRMED', isAutoDetected: false }]);
-      setShowDialog(false);
-      setForm({ vaccineType: '', date: '', comment: '' });
-    } catch { /* silent */ } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Delete confirmed ────────────────────────────────────────────────────────
-  const handleDeleteVax = async (id: string) => {
-    if (!confirm(labels.confirmDeleteVax)) return;
-    try {
-      await fetch(`/api/pets/${petId}/vaccinations?vaccinationId=${id}`, { method: 'DELETE' });
-      setVaccinations(prev => prev.filter(v => v.id !== id));
-    } catch { /* silent */ }
-  };
-
-  // ── Upload proof ────────────────────────────────────────────────────────────
-  const handleProofUpload = async (file: File) => {
-    if (file.size > 10 * 1024 * 1024) return;
-    setProofUploading(true);
-    let doc: PetDocument | null = null;
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('name', `${PROOF_PREFIX}${file.name}`);
-      const res = await fetch(`/api/pets/${petId}/documents`, { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('Failed');
-      doc = await res.json();
-      setProofDocs(prev => [doc!, ...prev]);
-    } catch {
-      setProofUploading(false);
-      return;
-    }
-    setProofUploading(false);
-
-    // Auto-trigger extraction immediately after upload
-    if (doc) await triggerExtraction(doc.id);
-  };
-
-  // ── AI extraction ───────────────────────────────────────────────────────────
   const triggerExtraction = async (documentId: string) => {
     setExtractingDocIds(prev => new Set(prev).add(documentId));
     try {
@@ -268,12 +162,7 @@ export default function VaccinationSection({
       });
       if (!res.ok) throw new Error('Failed');
       const draft: Vaccination = await res.json();
-      setVaccinations(prev => {
-        // Avoid duplicates
-        if (prev.some(v => v.id === draft.id)) return prev;
-        return [...prev, draft];
-      });
-      // Initialize draft form with extracted values
+      setVaccinations(prev => prev.some(v => v.id === draft.id) ? prev : [...prev, draft]);
       setDraftForms(prev => ({
         ...prev,
         [draft.id]: {
@@ -283,15 +172,18 @@ export default function VaccinationSection({
           comment: draft.comment ?? '',
         },
       }));
-    } catch { /* extraction failed — proof doc still saved, user sees retry button */ }
-    setExtractingDocIds(prev => {
-      const next = new Set(prev);
-      next.delete(documentId);
-      return next;
-    });
+    } catch { /* proof doc still saved, user sees retry button */ }
+    setExtractingDocIds(prev => { const n = new Set(prev); n.delete(documentId); return n; });
   };
 
-  // ── Confirm draft ───────────────────────────────────────────────────────────
+  const handleDeleteVax = async (id: string) => {
+    if (!confirm(labels.confirmDeleteVax)) return;
+    try {
+      await fetch(`/api/pets/${petId}/vaccinations?vaccinationId=${id}`, { method: 'DELETE' });
+      setVaccinations(prev => prev.filter(v => v.id !== id));
+    } catch { /* silent */ }
+  };
+
   const handleConfirmDraft = async (draftId: string) => {
     const f = draftForms[draftId];
     if (!f?.vaccineType?.trim() || !f?.date) return;
@@ -317,7 +209,6 @@ export default function VaccinationSection({
     }
   };
 
-  // ── Dismiss draft ───────────────────────────────────────────────────────────
   const handleDismissDraft = async (draftId: string) => {
     if (!confirm(labels.confirmDeleteDraft)) return;
     try {
@@ -327,33 +218,18 @@ export default function VaccinationSection({
     } catch { /* silent */ }
   };
 
-  // ── Delete proof ────────────────────────────────────────────────────────────
-  const handleDeleteProof = async (docId: string) => {
-    if (!confirm(labels.proofConfirmDelete)) return;
-    try {
-      await fetch(`/api/pets/${petId}/documents?documentId=${docId}`, { method: 'DELETE' });
-      setProofDocs(prev => prev.filter(d => d.id !== docId));
-    } catch { /* silent */ }
-  };
-
-  const ProofIcon = ({ fileType }: { fileType: string }) => {
-    if (fileType === 'application/pdf') return <FileText className="h-5 w-5 text-red-400 flex-shrink-0" />;
-    return <File className="h-5 w-5 text-blue-400 flex-shrink-0" />;
-  };
-
   const confidenceLabel = (draft: Vaccination) => {
-    const conf = draft._extractionConfidence;
     if (!draft.isAutoDetected) return null;
+    const conf = draft._extractionConfidence;
     if (conf === 'HIGH') return { text: labels.confidenceHigh, color: 'text-green-600' };
     if (conf === 'MEDIUM') return { text: labels.confidenceMedium, color: 'text-amber-600' };
     return { text: labels.confidenceLow, color: 'text-orange-600' };
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Shield className="h-5 w-5 text-gold-500" />
@@ -373,7 +249,7 @@ export default function VaccinationSection({
         </Button>
       </div>
 
-      {/* ── Empty state ── */}
+      {/* Empty state */}
       {isEmpty && (
         <div className="text-center py-8 rounded-xl border border-dashed border-gray-200 bg-gray-50/50">
           <Shield className="h-10 w-10 mx-auto mb-3 text-gray-300" />
@@ -382,7 +258,7 @@ export default function VaccinationSection({
         </div>
       )}
 
-      {/* ── Proof-received banner (proof exists but no draft yet, or extraction in progress) ── */}
+      {/* Proof-received banner */}
       {!isEmpty && (extractingDocIds.size > 0 || proofDocsWithoutDraft.length > 0) && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
           <Sparkles className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -394,7 +270,6 @@ export default function VaccinationSection({
                 : labels.proofUnanalyzedHint(proofDocsWithoutDraft.length)}
             </p>
           </div>
-          {/* Retry buttons for unanalyzed proofs */}
           {extractingDocIds.size === 0 && proofDocsWithoutDraft.length > 0 && (
             <div className="flex flex-col gap-1 flex-shrink-0">
               {proofDocsWithoutDraft.map(doc => (
@@ -420,7 +295,7 @@ export default function VaccinationSection({
         </div>
       )}
 
-      {/* ── Draft vaccination cards ── */}
+      {/* Draft vaccination cards */}
       {draftVax.length > 0 && (
         <div className="space-y-3">
           {draftVax.map(draft => {
@@ -436,22 +311,17 @@ export default function VaccinationSection({
 
             return (
               <div key={draft.id} className="rounded-xl border border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 shadow-sm">
-                {/* Draft header */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="inline-flex items-center gap-1 text-xs font-semibold bg-amber-200 text-amber-900 rounded-full px-2 py-0.5">
-                      <Clock className="h-3 w-3" />
-                      {labels.draftBadge}
+                      <Clock className="h-3 w-3" />{labels.draftBadge}
                     </span>
                     {draft.isAutoDetected && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full px-2 py-0.5">
-                        <Sparkles className="h-3 w-3" />
-                        {labels.draftDetectedBadge}
+                        <Sparkles className="h-3 w-3" />{labels.draftDetectedBadge}
                       </span>
                     )}
-                    {conf && (
-                      <span className={`text-xs ${conf.color}`}>{conf.text}</span>
-                    )}
+                    {conf && <span className={`text-xs ${conf.color}`}>{conf.text}</span>}
                   </div>
                   <button
                     onClick={() => handleDismissDraft(draft.id)}
@@ -465,7 +335,6 @@ export default function VaccinationSection({
                   {draft.isAutoDetected ? labels.draftHint : labels.draftHintManual}
                 </p>
 
-                {/* Editable draft form */}
                 <div className="space-y-3">
                   <div className="grid sm:grid-cols-2 gap-3">
                     <div>
@@ -525,7 +394,7 @@ export default function VaccinationSection({
         </div>
       )}
 
-      {/* ── Confirmed vaccination entries ── */}
+      {/* Confirmed vaccination list */}
       {confirmedVax.length > 0 && (
         <div className="space-y-2">
           {confirmedVax
@@ -539,8 +408,7 @@ export default function VaccinationSection({
                     <p className="font-medium text-charcoal text-sm">{v.vaccineType}</p>
                     <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-gray-500 mt-0.5">
                       <span className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {fmtDate(v.date)}
+                        <Calendar className="h-3 w-3" />{fmtDate(v.date)}
                       </span>
                       {v.nextDueDate && (
                         <span className="flex items-center gap-1 text-blue-600">
@@ -564,133 +432,27 @@ export default function VaccinationSection({
         </div>
       )}
 
-      {/* ── Vaccination proof files ── */}
-      <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-        <div className="flex items-center justify-between mb-1">
-          <div>
-            <p className="font-semibold text-amber-900 text-sm">{labels.proofTitle}</p>
-            <p className="text-xs text-amber-700 mt-0.5">{labels.proofSubtitle}</p>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-amber-300 bg-white text-amber-800 hover:bg-amber-100 text-xs gap-1.5 flex-shrink-0"
-            disabled={proofUploading}
-            onClick={() => proofInputRef.current?.click()}
-          >
-            <Upload className="h-3.5 w-3.5" />
-            {proofUploading ? labels.proofUploading : labels.proofUpload}
-          </Button>
-          <input
-            ref={proofInputRef}
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
-            className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleProofUpload(f); e.target.value = ''; }}
-          />
-        </div>
+      {/* Proof documents */}
+      <VaccinationDocumentList
+        petId={petId}
+        proofDocs={proofDocs}
+        extractingDocIds={extractingDocIds}
+        analyzedDocIds={analyzedDocIds}
+        locale={locale}
+        labels={labels}
+        onDocAdded={doc => setProofDocs(prev => [doc, ...prev])}
+        onDocDeleted={docId => setProofDocs(prev => prev.filter(d => d.id !== docId))}
+        onTriggerExtraction={triggerExtraction}
+      />
 
-        <p className="text-xs text-amber-600 mb-3">{labels.proofHint}</p>
-
-        {proofDocs.length === 0 ? (
-          <p className="text-xs text-amber-700/60 italic">{labels.proofEmpty}</p>
-        ) : (
-          <div className="space-y-2 mt-2">
-            {proofDocs.map(doc => {
-              const isExtracting = extractingDocIds.has(doc.id);
-              const hasBeenAnalyzed = analyzedDocIds.has(doc.id);
-              return (
-                <div key={doc.id} className="flex items-center gap-2 bg-white rounded-lg border border-amber-100 px-3 py-2">
-                  {doc.fileType.startsWith('image/') ? (
-                    <img
-                      src={doc.fileUrl}
-                      alt={displayName(doc)}
-                      className="h-8 w-8 object-cover rounded flex-shrink-0"
-                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  ) : (
-                    <ProofIcon fileType={doc.fileType} />
-                  )}
-                  <span className="flex-1 min-w-0 text-xs font-medium text-charcoal truncate">
-                    {displayName(doc)}
-                  </span>
-                  {/* Analysis status badge */}
-                  {isExtracting && (
-                    <span className="text-xs text-amber-600 flex items-center gap-1 flex-shrink-0">
-                      <span className="inline-block w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                    </span>
-                  )}
-                  {!isExtracting && hasBeenAnalyzed && (
-                    <CheckCircle className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                  )}
-                  <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:block">
-                    {fmtDate(doc.uploadedAt)}
-                  </span>
-                  <a
-                    href={doc.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-amber-700 hover:text-amber-900 font-medium flex-shrink-0 px-1.5 py-1 rounded hover:bg-amber-100"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">{labels.proofView}</span>
-                  </a>
-                  <button
-                    onClick={() => handleDeleteProof(doc.id)}
-                    aria-label={locale === 'fr' ? 'Supprimer le justificatif' : 'Delete proof document'}
-                    className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-red-400"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ── Add vaccination dialog (manual) ── */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{labels.addTitle}</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label>{labels.vaccineType} *</Label>
-              <Input
-                value={form.vaccineType}
-                onChange={e => setForm(f => ({ ...f, vaccineType: e.target.value }))}
-                placeholder={labels.typePlaceholder}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>{labels.date} *</Label>
-              <Input
-                type="date"
-                value={form.date}
-                onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>{labels.comment}</Label>
-              <Textarea
-                value={form.comment}
-                onChange={e => setForm(f => ({ ...f, comment: e.target.value }))}
-                placeholder={labels.commentPlaceholder}
-                rows={2}
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>{labels.cancel}</Button>
-            <Button onClick={handleSubmit} disabled={loading || !form.vaccineType || !form.date}>
-              {loading ? labels.saving : labels.save}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Add vaccination modal */}
+      <VaccinationFormModal
+        open={showDialog}
+        onOpenChange={setShowDialog}
+        petId={petId}
+        labels={labels}
+        onAdded={v => setVaccinations(prev => [...prev, v])}
+      />
     </div>
   );
 }
