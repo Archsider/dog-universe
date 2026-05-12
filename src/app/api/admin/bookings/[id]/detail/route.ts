@@ -195,7 +195,7 @@ export async function GET(
 
     boarding: booking.boardingDetail
       ? {
-          groomingEnabled: booking.boardingDetail.groomingEnabled ?? false,
+          groomingEnabled: booking.boardingDetail.includeGrooming ?? false,
           groomingPrice: toNumber(booking.boardingDetail.groomingPrice) || null,
           taxiGoEnabled: booking.boardingDetail.taxiGoEnabled ?? false,
           taxiReturnEnabled: booking.boardingDetail.taxiReturnEnabled ?? false,

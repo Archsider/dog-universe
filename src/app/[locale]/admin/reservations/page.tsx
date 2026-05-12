@@ -143,7 +143,7 @@ export default async function AdminReservationsPage(props: PageProps) {
           pets: b.bookingPets.map((bp) => ({ id: bp.pet.id, name: bp.pet.name, species: bp.pet.species as 'DOG' | 'CAT', breed: bp.pet.breed ?? null, photoUrl: bp.pet.photoUrl ?? null, gender: bp.pet.gender ?? null, allergies: bp.pet.allergies ?? null, currentMedication: bp.pet.currentMedication ?? null, behaviorWithDogs: bp.pet.behaviorWithDogs ?? null, behaviorWithCats: bp.pet.behaviorWithCats ?? null, notes: bp.pet.notes ?? null })),
           invoice: b.invoice ? { id: b.invoice.id, invoiceNumber: b.invoice.invoiceNumber, status: b.invoice.status, amount: toNumber(b.invoice.amount), paidAmount: toNumber(b.invoice.paidAmount), version: b.invoice.version } : null,
           supplementaryInvoice: null,
-          boarding: b.boardingDetail ? { groomingEnabled: b.boardingDetail.groomingEnabled ?? false, groomingPrice: toNumber(b.boardingDetail.groomingPrice) || null, taxiGoEnabled: b.boardingDetail.taxiGoEnabled ?? false, taxiReturnEnabled: b.boardingDetail.taxiReturnEnabled ?? false, pricePerNight: toNumber(b.boardingDetail.pricePerNight) || null } : null,
+          boarding: b.boardingDetail ? { groomingEnabled: b.boardingDetail.includeGrooming ?? false, groomingPrice: toNumber(b.boardingDetail.groomingPrice) || null, taxiGoEnabled: b.boardingDetail.taxiGoEnabled ?? false, taxiReturnEnabled: b.boardingDetail.taxiReturnEnabled ?? false, pricePerNight: toNumber(b.boardingDetail.pricePerNight) || null } : null,
           taxi: b.taxiDetail ? { pickupAddress: b.taxiDetail.pickupAddress ?? null, dropoffAddress: b.taxiDetail.dropoffAddress ?? null, price: b.taxiDetail.price ? toNumber(b.taxiDetail.price) : null } : null,
           adminNotes: null,
           actionLog: [],
