@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   sendEmail: vi.fn(),
   sendSMS: vi.fn(),
   sendAdminSMS: vi.fn(),
+  isSmsDedup: vi.fn().mockResolvedValue(false),
+  recordSmsSent: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/email', () => ({
@@ -13,6 +15,11 @@ vi.mock('@/lib/email', () => ({
 vi.mock('@/lib/sms', () => ({
   sendSMS: mocks.sendSMS,
   sendAdminSMS: mocks.sendAdminSMS,
+}));
+
+vi.mock('@/lib/sms-dedup', () => ({
+  isSmsDedup: mocks.isSmsDedup,
+  recordSmsSent: mocks.recordSmsSent,
 }));
 
 import {
@@ -30,6 +37,8 @@ describe('notify-now', () => {
     mocks.sendEmail.mockReset();
     mocks.sendSMS.mockReset();
     mocks.sendAdminSMS.mockReset();
+    mocks.isSmsDedup.mockResolvedValue(false);
+    mocks.recordSmsSent.mockResolvedValue(undefined);
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 

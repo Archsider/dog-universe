@@ -74,6 +74,7 @@
       "diagnostics": "Diagnostics",
       "health": "System health",
       "guardian": "AI Guardian",
+      "backups": "DB Backups",
       "loyalty": "Loyalty Claims",
       "reviews": "Client Reviews",
       "logout": "Sign Out",

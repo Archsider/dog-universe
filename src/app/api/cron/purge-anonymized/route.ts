@@ -22,11 +22,21 @@ import { deleteFromPrivateStorage } from '@/lib/supabase';
 import { defineCron } from '@/lib/cron-runner';
 
 const THREE_YEARS_MS = 3 * 365 * 24 * 60 * 60 * 1000;
+const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 
 export const GET = defineCron({
   name: 'purge-anonymized',
   period: 'monthly',
   fn: async ({ logger }) => {
+    // Purge SmsLog rows older than 90 days (retention cap, independent of user data).
+    const smsLogCutoff = new Date(Date.now() - NINETY_DAYS_MS);
+    const { count: smsLogsDeleted } = await prisma.smsLog.deleteMany({
+      where: { sentAt: { lt: smsLogCutoff } },
+    }).catch((err) => {
+      logger.error('cron-purge', 'smsLog purge failed', { error: err instanceof Error ? err.message : String(err) });
+      return { count: 0 };
+    });
+
     const cutoff = new Date(Date.now() - THREE_YEARS_MS);
 
     const users = await prisma.user.findMany({
@@ -111,6 +121,7 @@ export const GET = defineCron({
     return {
       ok: errors.length === 0,
       purged,
+      smsLogsDeleted,
       errors: errors.length > 0 ? errors : undefined,
     };
   },

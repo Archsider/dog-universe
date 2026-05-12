@@ -15,10 +15,12 @@
  * Guarantees:
  *   - Returns synchronously (never await; the promise continues after return).
  *   - 3 attempts with backoff (0s, 1s, 3s).
+ *   - DB dedup (SmsLog) blocks duplicate SMS even if BullMQ replays.
  *   - Final failure logs a structured error; never throws to the caller.
  */
 import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
+import { isSmsDedup, recordSmsSent } from '@/lib/sms-dedup';
 import type { EmailJobData, SmsJobData } from '@/lib/queues/index';
 import { logger } from '@/lib/logger';
 
@@ -53,6 +55,17 @@ export async function sendSmsWithRetry(data: SmsJobData): Promise<void> {
     // Mirror sendSMS(null) behaviour: silent skip.
     return;
   }
+  const phone = data.to as string; // 'ADMIN' or real number
+
+  // DB-level dedup — survives Redis restarts. Fail-open on DB error.
+  const dup = await isSmsDedup(phone, data.message);
+  if (dup) {
+    logger.warn('notify-now', 'sms doublon bloqué', {
+      to: phone === 'ADMIN' ? 'ADMIN' : maskPhone(phone),
+    });
+    return;
+  }
+
   let lastErr: unknown;
   for (let i = 0; i < RETRY_DELAYS_MS.length; i++) {
     if (RETRY_DELAYS_MS[i] > 0) {
@@ -63,16 +76,15 @@ export async function sendSmsWithRetry(data: SmsJobData): Promise<void> {
         data.to === 'ADMIN'
           ? await sendAdminSMS(data.message)
           : await sendSMS(data.to, data.message);
-      if (ok) return;
+      if (ok) {
+        await recordSmsSent(phone, data.message);
+        return;
+      }
     } catch (err) {
       lastErr = err;
     }
   }
-  logger.error('notify-now', 'sms failed after 3 attempts', { to: data.to === 'ADMIN'
-          ? 'ADMIN'
-          : data.to
-            ? maskPhone(data.to)
-            : 'null', error: lastErr instanceof Error ? lastErr.message : String(lastErr) });
+  logger.error('notify-now', 'sms failed after 3 attempts', { to: phone === 'ADMIN' ? 'ADMIN' : maskPhone(phone), error: lastErr instanceof Error ? lastErr.message : String(lastErr) });
 }
 
 /**

@@ -1,9 +1,18 @@
 import * as Sentry from '@sentry/nextjs';
+import { createHash } from 'crypto';
 import { Queue, JobsOptions } from 'bullmq';
 import { getBullMQConnection, isBullMQConfigured } from '@/lib/redis-bullmq';
 import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
 import { logger } from '@/lib/logger';
+
+// Deterministic jobId based on phone + message content so BullMQ won't
+// re-enqueue the same SMS even if the caller omits an explicit jobId.
+function autoSmsJobId(data: SmsJobData): string {
+  const phone = data.to ?? 'null';
+  const hash = createHash('sha256').update(`${phone}\x00${data.message}`).digest('hex').slice(0, 16);
+  return `sms:${phone}:${hash}`;
+}
 
 /**
  * DLQ depth thresholds — shared between the health endpoint and the dlq-watch cron
@@ -130,13 +139,16 @@ export async function enqueueEmail(data: EmailJobData, jobId?: string): Promise<
 
 export async function enqueueSms(data: SmsJobData, jobId?: string): Promise<void> {
   const masked = data.to && data.to !== 'ADMIN' ? maskPhone(data.to) : (data.to ?? 'null');
+  // Use caller-supplied jobId or derive one from content — prevents BullMQ
+  // from re-enqueuing the same SMS when Redis flushes and the cron re-runs.
+  const resolvedJobId = jobId ?? autoSmsJobId(data);
   if (!isBullMQConfigured()) {
     const fn = data.to === 'ADMIN' ? sendAdminSMS(data.message) : sendSMS(data.to, data.message);
     await fn.catch((e) => logger.error('bullmq', 'sms direct send failed', { masked, error: e instanceof Error ? e.message : String(e) }));
     return;
   }
   try {
-    await getSmsQueue().add('send', data, jobId ? { ...SMS_JOB_OPTIONS, jobId } : SMS_JOB_OPTIONS);
+    await getSmsQueue().add('send', data, { ...SMS_JOB_OPTIONS, jobId: resolvedJobId });
   } catch (err) {
     Sentry.addBreadcrumb({
       category: 'redis',
