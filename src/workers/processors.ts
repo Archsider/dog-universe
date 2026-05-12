@@ -76,11 +76,20 @@ export async function processSmsJob(job: Job<SmsJobData>): Promise<void> {
     return;
   }
 
+  // NB : sendSMS/sendAdminSMS retournent false UNIQUEMENT pour des erreurs de
+  // config (phone/env manquants) — pas pour un échec d'envoi (ces cas-là throw,
+  // et BullMQ retry naturellement). On ne re-throw PAS sur !ok pour éviter
+  // un retry-storm qui spammerait le destinataire si sendSMS retournait false
+  // par erreur alors que le SMS a été délivré (cf. duplicate-SMS incident 2026-05-12).
   const ok = to === 'ADMIN'
     ? await sendAdminSMS(message)
     : await sendSMS(to, message);
   if (!ok) {
-    throw new Error(`SMS delivery failed for ${to === 'ADMIN' ? 'ADMIN' : 'recipient'}`);
+    logger.warn('worker', 'sms send returned false — not retrying (likely config issue)', {
+      to: to === 'ADMIN' ? 'ADMIN' : 'recipient',
+      jobId,
+    });
+    return;
   }
   await recordSmsSent(to, message);
 }

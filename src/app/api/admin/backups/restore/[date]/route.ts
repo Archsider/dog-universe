@@ -83,12 +83,16 @@ export async function POST(
     const restored: Record<string, number> = {};
     const errors: Record<string, string> = {};
 
+    type CreateManyDelegate = {
+      createMany: (args: { data: unknown[]; skipDuplicates?: boolean }) => Promise<{ count: number }>;
+    };
+    const prismaAny = prisma as unknown as Record<string, CreateManyDelegate>;
+
     for (const [prismaModel, tableName] of RESTORE_ORDER) {
       const rows = dump.tables[tableName];
       if (!rows?.length) continue;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await (prisma[prismaModel] as any).createMany({
+        const result = await prismaAny[prismaModel].createMany({
           data: rows,
           skipDuplicates: true,
         });
