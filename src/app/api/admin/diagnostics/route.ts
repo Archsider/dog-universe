@@ -33,14 +33,24 @@ async function safeQueueCounts<T = unknown>(getter: () => Queue<T>): Promise<Que
   }
 }
 
-async function lastSendIso(channel: 'email' | 'sms'): Promise<string | null> {
+async function lastSmsSentIso(): Promise<string | null> {
   try {
-    const row = await prisma.actionLog.findFirst({
-      where: { action: 'NOTIFICATION_SENT', entityType: channel },
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
+    const last = await prisma.smsLog.findFirst({
+      orderBy: { sentAt: 'desc' },
+      select: { sentAt: true },
     });
-    return row?.createdAt ? row.createdAt.toISOString() : null;
+    return last?.sentAt?.toISOString() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function lastEmailSentIso(): Promise<string | null> {
+  try {
+    if (!isBullMQConfigured()) return null;
+    const completed = await getEmailQueue().getCompleted(0, 0);
+    if (!completed.length || !completed[0].finishedOn) return null;
+    return new Date(completed[0].finishedOn).toISOString();
   } catch {
     return null;
   }
@@ -129,8 +139,8 @@ export async function GET() {
   // ── Worker last run + last successful sends (best-effort) ───────────────
   const [workerLastRun, lastEmail, lastSms] = await Promise.all([
     getWorkerLastRun().catch(() => null),
-    lastSendIso('email'),
-    lastSendIso('sms'),
+    lastEmailSentIso(),
+    lastSmsSentIso(),
   ]);
 
   return NextResponse.json({

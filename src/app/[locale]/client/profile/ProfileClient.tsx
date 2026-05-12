@@ -1,0 +1,358 @@
+'use client';
+
+import { useState } from 'react';
+import { User, Lock, Loader2, CheckCircle, AlertCircle, Eye, EyeOff, FileText, Download } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { getInitials } from '@/lib/utils';
+import RgpdSection from './RgpdSection';
+
+interface UserProfile {
+  id: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+}
+
+interface ContractInfo {
+  id: string;
+  signedAt: string;
+  downloadUrl: string | null;
+  expiresAt: string | null;
+  version: string;
+}
+
+interface Props {
+  initialProfile: UserProfile;
+  initialContract: ContractInfo | null;
+  locale: string;
+}
+
+export default function ProfileClient({ initialProfile, initialContract, locale }: Props) {
+  const [profile] = useState<UserProfile>(initialProfile);
+  const [saving, setSaving] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [showOld, setShowOld] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+
+  const [form, setForm] = useState({
+    firstName: initialProfile.firstName || '',
+    lastName: initialProfile.lastName || '',
+    phone: initialProfile.phone || '',
+  });
+  const [pwForm, setPwForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [contract, setContract] = useState<ContractInfo | null>(initialContract);
+  const [downloading, setDownloading] = useState(false);
+  const [contractError, setContractError] = useState('');
+
+  const labels = {
+    fr: {
+      title: 'Mon profil',
+      personalInfo: 'Informations personnelles',
+      firstName: 'Prénom',
+      lastName: 'Nom',
+      email: 'Email',
+      phone: 'Téléphone',
+      saveProfile: 'Enregistrer',
+      saving: 'Enregistrement...',
+      profileSaved: 'Profil mis à jour !',
+      changePassword: 'Changer le mot de passe',
+      oldPassword: 'Mot de passe actuel',
+      newPassword: 'Nouveau mot de passe',
+      confirmPassword: 'Confirmer le nouveau mot de passe',
+      savePassword: 'Mettre à jour',
+      passwordSaved: 'Mot de passe mis à jour !',
+      passwordMismatch: 'Les mots de passe ne correspondent pas',
+      passwordTooShort: 'Le mot de passe doit contenir au moins 8 caractères',
+      error: 'Une erreur est survenue',
+    },
+    en: {
+      title: 'My profile',
+      personalInfo: 'Personal information',
+      firstName: 'First name',
+      lastName: 'Last name',
+      email: 'Email',
+      phone: 'Phone',
+      saveProfile: 'Save',
+      saving: 'Saving...',
+      profileSaved: 'Profile updated!',
+      changePassword: 'Change password',
+      oldPassword: 'Current password',
+      newPassword: 'New password',
+      confirmPassword: 'Confirm new password',
+      savePassword: 'Update',
+      passwordSaved: 'Password updated!',
+      passwordMismatch: 'Passwords do not match',
+      passwordTooShort: 'Password must be at least 8 characters',
+      error: 'An error occurred',
+    },
+    ar: {
+      title: 'ملفي الشخصي',
+      personalInfo: 'المعلومات الشخصية',
+      firstName: 'الاسم الأول',
+      lastName: 'اسم العائلة',
+      email: 'البريد الإلكتروني',
+      phone: 'الهاتف',
+      saveProfile: 'حفظ',
+      saving: 'جارٍ الحفظ...',
+      profileSaved: 'تم تحديث الملف!',
+      changePassword: 'تغيير كلمة المرور',
+      oldPassword: 'كلمة المرور الحالية',
+      newPassword: 'كلمة المرور الجديدة',
+      confirmPassword: 'تأكيد كلمة المرور الجديدة',
+      savePassword: 'تحديث',
+      passwordSaved: 'تم تحديث كلمة المرور!',
+      passwordMismatch: 'كلمتا المرور غير متطابقتين',
+      passwordTooShort: 'يجب أن تحتوي كلمة المرور على 8 أحرف على الأقل',
+      error: 'حدث خطأ',
+    },
+  };
+
+  const l = labels[locale as keyof typeof labels] || labels.fr;
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setProfileError('');
+    setProfileSuccess(false);
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setProfileSuccess(true);
+      setTimeout(() => setProfileSuccess(false), 3000);
+    } catch {
+      setProfileError(l.error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDownloadContract = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!contract) return;
+    const buffer = 60_000;
+    const fresh = !!(
+      contract.downloadUrl &&
+      contract.expiresAt &&
+      new Date(contract.expiresAt).getTime() > Date.now() + buffer
+    );
+    if (fresh) return;
+
+    e.preventDefault();
+    if (downloading) return;
+    setDownloading(true);
+    setContractError('');
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+
+    try {
+      const res = await fetch(`/api/contracts/${contract.id}/signed-url`, {
+        signal: controller.signal,
+      });
+      if (res.status === 401) {
+        window.location.href = `/${locale}/auth/login?next=/${locale}/client/profile`;
+        return;
+      }
+      if (!res.ok) {
+        setContractError(
+          locale === 'fr'
+            ? 'Document temporairement indisponible — réessayez dans quelques minutes.'
+            : locale === 'ar'
+            ? 'الوثيقة غير متاحة مؤقتًا — أعد المحاولة خلال بضع دقائق.'
+            : 'Document temporarily unavailable — please retry in a few minutes.',
+        );
+        return;
+      }
+      const data = (await res.json()) as { url: string; expiresAt: string };
+      setContract({ ...contract, downloadUrl: data.url, expiresAt: data.expiresAt });
+      window.location.assign(data.url);
+    } catch {
+      setContractError(
+        locale === 'fr'
+          ? 'Document temporairement indisponible — réessayez dans quelques minutes.'
+          : locale === 'ar'
+          ? 'الوثيقة غير متاحة مؤقتًا — أعد المحاولة خلال بضع دقائق.'
+          : 'Document temporarily unavailable — please retry in a few minutes.',
+      );
+    } finally {
+      clearTimeout(timer);
+      setDownloading(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError('');
+    setPwSuccess(false);
+    if (pwForm.newPassword.length < 8) { setPwError(l.passwordTooShort); return; }
+    if (pwForm.newPassword !== pwForm.confirmPassword) { setPwError(l.passwordMismatch); return; }
+    setPwSaving(true);
+    try {
+      const res = await fetch('/api/profile/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldPassword: pwForm.oldPassword, newPassword: pwForm.newPassword }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
+      setPwSuccess(true);
+      setPwForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => setPwSuccess(false), 3000);
+    } catch (err: unknown) {
+      setPwError(err instanceof Error ? err.message : l.error);
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
+
+      <div className="flex items-center gap-4 bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+        <Avatar className="h-16 w-16">
+          <AvatarFallback className="bg-gold-100 text-gold-700 text-xl font-serif">
+            {getInitials(profile?.name || profile?.email || 'U')}
+          </AvatarFallback>
+        </Avatar>
+        <div>
+          <p className="font-semibold text-charcoal text-lg">{profile?.name}</p>
+          <p className="text-sm text-gray-500">{profile?.email}</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+        <div className="flex items-center gap-2 mb-4">
+          <User className="h-5 w-5 text-gold-500" />
+          <h2 className="font-semibold text-charcoal">{l.personalInfo}</h2>
+        </div>
+        <form onSubmit={handleSaveProfile} className="space-y-4">
+          {profileError && <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg"><AlertCircle className="h-4 w-4" />{profileError}</div>}
+          {profileSuccess && <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 p-3 rounded-lg"><CheckCircle className="h-4 w-4" />{l.profileSaved}</div>}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="firstName">{l.firstName}</Label>
+              <Input id="firstName" value={form.firstName} onChange={e => setForm(p => ({ ...p, firstName: e.target.value }))} className="mt-1" minLength={2} required />
+            </div>
+            <div>
+              <Label htmlFor="lastName">{l.lastName}</Label>
+              <Input id="lastName" value={form.lastName} onChange={e => setForm(p => ({ ...p, lastName: e.target.value }))} className="mt-1" minLength={2} required />
+            </div>
+          </div>
+          <div>
+            <Label>{l.email}</Label>
+            <Input value={profile?.email || ''} disabled className="mt-1 bg-ivory-50" />
+          </div>
+          <div>
+            <Label htmlFor="phone">{l.phone}</Label>
+            <Input id="phone" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} className="mt-1" placeholder="+212 6 00 00 00 00" />
+          </div>
+          <Button type="submit" disabled={saving}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {saving ? l.saving : l.saveProfile}
+          </Button>
+        </form>
+      </div>
+
+      {/* Contract section */}
+      <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+        <div className="flex items-center gap-2 mb-4">
+          <FileText className="h-5 w-5 text-gold-500" />
+          <h2 className="font-semibold text-charcoal">
+            {locale === 'fr' ? 'Contrat de pension' : locale === 'ar' ? 'عقد الإيداع' : 'Boarding contract'}
+          </h2>
+        </div>
+        {contract ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-green-800">
+                  {locale === 'fr' ? 'Contrat signé' : locale === 'ar' ? 'تم توقيع العقد' : 'Contract signed'}
+                </p>
+                <p className="text-xs text-green-600 mt-0.5">
+                  {locale === 'fr' ? 'Le' : locale === 'ar' ? 'بتاريخ' : 'On'}{' '}
+                  {new Date(contract.signedAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : locale === 'ar' ? 'ar-MA' : 'en-US', {
+                    year: 'numeric', month: 'long', day: 'numeric',
+                  })}
+                  {' — '}v{contract.version}
+                </p>
+              </div>
+              <a
+                href={contract.downloadUrl ?? '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleDownloadContract}
+                aria-busy={downloading}
+                aria-disabled={downloading}
+                className={`flex items-center gap-2 text-sm font-medium text-green-700 hover:text-green-900 underline ${downloading ? 'opacity-60 pointer-events-none' : ''}`}
+              >
+                {downloading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {locale === 'fr' ? 'Télécharger' : locale === 'ar' ? 'تحميل' : 'Download'}
+              </a>
+            </div>
+            {contractError && (
+              <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                <AlertCircle className="h-4 w-4" />
+                {contractError}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">
+            {locale === 'fr'
+              ? 'Aucun contrat signé. Vous serez invité à signer à votre prochaine connexion.'
+              : locale === 'ar'
+              ? 'لم يتم توقيع أي عقد بعد. ستتم دعوتك للتوقيع في تسجيل الدخول التالي.'
+              : 'No contract signed yet. You will be prompted to sign on your next login.'}
+          </p>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-6 shadow-card">
+        <div className="flex items-center gap-2 mb-4">
+          <Lock className="h-5 w-5 text-gold-500" />
+          <h2 className="font-semibold text-charcoal">{l.changePassword}</h2>
+        </div>
+        <form onSubmit={handleChangePassword} className="space-y-4">
+          {pwError && <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg"><AlertCircle className="h-4 w-4" />{pwError}</div>}
+          {pwSuccess && <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 p-3 rounded-lg"><CheckCircle className="h-4 w-4" />{l.passwordSaved}</div>}
+          <div className="relative">
+            <Label htmlFor="old-pw">{l.oldPassword}</Label>
+            <Input id="old-pw" type={showOld ? 'text' : 'password'} value={pwForm.oldPassword} onChange={e => setPwForm(p => ({ ...p, oldPassword: e.target.value }))} className="mt-1 pr-10" required />
+            <button type="button" aria-label={showOld ? (locale === 'fr' ? 'Masquer le mot de passe' : locale === 'ar' ? 'إخفاء كلمة المرور' : 'Hide password') : (locale === 'fr' ? 'Afficher le mot de passe' : locale === 'ar' ? 'إظهار كلمة المرور' : 'Show password')} className="absolute right-3 top-8 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-500 rounded" onClick={() => setShowOld(!showOld)}>{showOld ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+          </div>
+          <div className="relative">
+            <Label htmlFor="new-pw">{l.newPassword}</Label>
+            <Input id="new-pw" type={showNew ? 'text' : 'password'} value={pwForm.newPassword} onChange={e => setPwForm(p => ({ ...p, newPassword: e.target.value }))} className="mt-1 pr-10" required minLength={8} />
+            <button type="button" aria-label={showNew ? (locale === 'fr' ? 'Masquer le mot de passe' : locale === 'ar' ? 'إخفاء كلمة المرور' : 'Hide password') : (locale === 'fr' ? 'Afficher le mot de passe' : locale === 'ar' ? 'إظهار كلمة المرور' : 'Show password')} className="absolute right-3 top-8 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-500 rounded" onClick={() => setShowNew(!showNew)}>{showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+          </div>
+          <div>
+            <Label htmlFor="confirm-pw">{l.confirmPassword}</Label>
+            <Input id="confirm-pw" type="password" value={pwForm.confirmPassword} onChange={e => setPwForm(p => ({ ...p, confirmPassword: e.target.value }))} className="mt-1" required />
+          </div>
+          <Button type="submit" variant="outline" disabled={pwSaving}>
+            {pwSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {l.savePassword}
+          </Button>
+        </form>
+      </div>
+
+      <RgpdSection locale={locale} />
+    </div>
+  );
+}

@@ -21,6 +21,8 @@ interface BookingInvoiceSectionProps {
   locale: string;
   label: string;
   noInvoiceLabel: string;
+  isOpenEnded?: boolean;
+  liveTotal?: number;
 }
 
 export default function BookingInvoiceSection({
@@ -31,10 +33,20 @@ export default function BookingInvoiceSection({
   locale,
   label,
   noInvoiceLabel,
+  isOpenEnded,
+  liveTotal,
 }: BookingInvoiceSectionProps) {
+  const fr = locale !== 'en';
   return (
     <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card">
-      <h3 className="font-semibold text-charcoal mb-3 text-sm">{label}</h3>
+      <h3 className="font-semibold text-charcoal mb-3 text-sm flex items-center gap-2">
+        {label}
+        {isOpenEnded && invoice && (
+          <span className="text-xs font-normal bg-amber-100 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">
+            {fr ? 'Provisoire' : 'Provisional'}
+          </span>
+        )}
+      </h3>
 
       {invoice ? (
         <div className="space-y-3">
@@ -52,7 +64,14 @@ export default function BookingInvoiceSection({
           <div className="space-y-1 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Total</span>
-              <span className="font-bold text-charcoal">{formatMAD(invoice.amount)}</span>
+              <span className="font-bold text-charcoal">
+                {isOpenEnded && liveTotal != null
+                  ? formatMAD(liveTotal)
+                  : formatMAD(invoice.amount)}
+                {isOpenEnded && (
+                  <span className="ml-1 text-xs font-normal text-amber-600">({fr ? 'provisoire' : 'provisional'})</span>
+                )}
+              </span>
             </div>
             {toNumber(invoice.paidAmount) > 0 && (
               <div className="flex justify-between">

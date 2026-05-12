@@ -29,6 +29,7 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
   const lastDayStr = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
 
   const bookings = await prisma.booking.findMany({
+    take: 500,
     where: {
       deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
       status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },

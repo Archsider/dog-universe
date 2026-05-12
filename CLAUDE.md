@@ -138,6 +138,97 @@ claims: { benefitKey: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' }[]
 
 ---
 
+## /ADMIN/RESERVATIONS — ARCHITECTURE PAR HORIZONS (depuis 2026-05-12)
+
+Refonte "outil de travail" type Mews/Toast — la page n'est plus une liste
+plate, mais un workspace à 4 horizons temporels.
+
+### URL
+`?view=today|upcoming|in-progress|history` — défaut `today`.
+Toggle Liste/Board déplacé en `?display=list|board` (s'applique aux tabs
+upcoming/in-progress/history). La tab Today n'a pas de Board (elle est
+task-oriented).
+
+### Layout commun
+- `PageHeader` — titre + sous-titre dynamique ("Mardi 12 mai · N animaux
+  présents") + bouton "Nouvelle réservation"
+- `TabBar` — 4 horizons avec badges count
+- Toggle display visible sur les tabs upcoming/in-progress/history
+
+### Tab `today` (default)
+Rendue par `TodayClient.tsx` (orchestrateur client unique, modale +
+mutations partagés sans prop drilling).
+1. **Rangée 4 KPI cards cliquables** — Arrivées · Départs · Présents · À
+   valider (amber si > 0). Scroll smooth vers la section + highlight 2s.
+2. **Arrivées aujourd'hui** — `CONFIRMED`, `startDate=today`. Tri par
+   `arrivalTime` croissant. Bouton "Check-in" → PATCH status=IN_PROGRESS.
+3. **Départs aujourd'hui** — `IN_PROGRESS`, `endDate=today`. Bouton
+   "Clôturer" → ouvre `<CloseStayDialog>`.
+4. **Dans la pension** — `IN_PROGRESS`, chevauchant aujourd'hui, hors
+   départs. Limité à 5 + bouton "Voir les N autres". Badges contextuels
+   (Départ demain rouge / Dans N j amber / Walk-in J+N gris).
+5. **En attente de validation** — `PENDING`, tri `createdAt` ASC.
+   Boutons inline Refuser (modal raison min 10 chars) / Valider.
+6. **À venir cette semaine** — résumé compact 1 ligne, cliquable → tab
+   `upcoming`.
+
+### Tab `upcoming`
+`PENDING + CONFIRMED` avec `startDate > today`. Réutilise
+`ReservationsList` (même UI/filtres internes), tri `startDate` ASC.
+
+### Tab `in-progress`
+`IN_PROGRESS` uniquement, tri `endDate` ASC. Réutilise `ReservationsList`.
+Bouton "Clôturer" disponible via la fiche (le `CloseStayDialog` reste
+le point d'entrée canonique).
+
+### Tab `history`
+Statuts terminaux : `COMPLETED | CANCELLED | REJECTED | NO_SHOW`.
+- Filtres URL-syncs : `from`, `to`, `status`, `type` (gérés par
+  `HistoryFilters.tsx`)
+- Presets rapides : Mois en cours · Mois dernier · Trimestre · Année
+- Stats sticky en haut : nombre · CA · taux annulation
+- Lien CSV : `/api/admin/invoices/export?from=…&to=…`
+- Tri par défaut : `endDate` DESC
+
+### Composant clé `<CloseStayDialog>`
+`src/app/[locale]/admin/reservations/_components/CloseStayDialog.tsx` —
+modale réutilisable.
+- Props : `booking { id, clientName, pets, startDate, endDate?,
+  isOpenEnded, totalPrice }`, `pricing: PricingSettings`, `locale`
+- Si `isOpenEnded` : champ `endDate` éditable → recalcul live `nights ×
+  getPensionPriceNumber()` par animal
+- Si normal : `endDate` readonly + `totalPrice` figé
+- À confirmation : POST `/api/admin/bookings/[id]/checkout` (route
+  existante, inchangée)
+- Utilisée depuis : Today/Départs + Today via boutons inline. La fiche
+  réservation continue à utiliser le `CheckoutBookingButton` legacy
+  (wrap la même API).
+
+### Helpers serveur
+`src/app/[locale]/admin/reservations/_lib/today-queries.ts` :
+- `loadTodaySnapshot(now?)` — renvoie `{ kpis, arrivals, departures,
+  currentStays, pending, upcomingWeek }` en 5 queries parallèles
+- `withLiveTotal()` enrichit chaque booking open-ended d'un `liveTotal`
+  et `liveNights` (via `getPensionPrice()` + `differenceInCalendarDays`
+  en TZ Casablanca)
+
+### API polling
+`GET /api/admin/bookings/today` — ADMIN/SUPERADMIN.
+- `revalidate = 30` (Next.js fetch cache 30 s)
+- Renvoie le même `TodaySnapshot` que le SSR initial
+- Prévu pour un poller client (60 s) — pas encore branché dans
+  `TodayClient` (à activer si besoin via `useEffect` + `setInterval`)
+
+### Règles à respecter
+- **Ne pas filtrer manuellement** par statut/type dans une nouvelle
+  vue : passer par les tabs.
+- **`CloseStayDialog` est l'unique point d'entrée** côté UI pour
+  COMPLETED depuis IN_PROGRESS sur une pension. Ne jamais bricoler un
+  PATCH `status=COMPLETED` manuel sans recalcul prix (sinon walk-in
+  ouvert reste à 0 MAD).
+- **`getPensionPriceNumber()` est l'unique source de tarif pension**
+  côté front (pure, sans Prisma, safe en client component).
+
 ## UPLOAD DE FICHIERS
 
 **Règle absolue : ne jamais écrire en filesystem en production.**
@@ -510,12 +601,27 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ## ACTIONS MANUELLES EN ATTENTE
 
-### ⚠️ Migrations 20260510 à appliquer manuellement (2026-05-10)
-Le runner `db-migrate.mjs` ne les a pas jouées au build sur la prod actuelle.
-À exécuter dans Supabase SQL Editor **dans l'ordre** :
-1. `prisma/migrations/20260510_product_upsell/migration.sql` — colonnes `targetSpecies`/`targetAge`/`imageUrl`/`weight`/`supplier` sur `Product` + CHECK + index.
-2. `prisma/migrations/20260510_seed_products_upsell/migration.sql` — seed ~85 produits Ultra Premium + Canvit (idempotent).
-Vérifier après : `SELECT COUNT(*) FROM "Product" WHERE supplier IN ('Ultra Premium', 'Canvit');` → doit retourner ~85.
+### ⚠️ Migration 20260512 — User(role, isWalkIn) index (2026-05-12)
+À exécuter sur Supabase SQL Editor :
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "User_role_isWalkIn_idx" ON "User" ("role", "isWalkIn");
+```
+Sans cet index, les pages admin font un full table scan sur `User` à chaque requête (filter `role='CLIENT' AND isWalkIn=false`).
+
+### 🟡 Scalabilité DB — activer Supabase Transaction Pooler (PgBouncer)
+**Action** : dans Supabase Dashboard → Project Settings → Database → Connection Pooling, copier le **Transaction pooler URL** (port 6543) et l'ajouter comme `DATABASE_URL` sur Vercel (en gardant l'URL directe sur `DIRECT_URL` pour les migrations).
+**Pourquoi** : Vercel serverless = jusqu'à 100 instances concurrentes, chacune ouvrant une connexion Postgres. PgBouncer mutualise les connexions et lève le mur des ~500 req/s.
+**Schema.prisma** : déjà OK (`directUrl` et `url` séparés).
+
+### 🟡 Gaps de consistency restants (non bloquants)
+- **Auth guards dupliqués** : 32 routes admin utilisent encore le pattern `if (!session?.user || session.user.role !== ...)` au lieu de `requireRole(['ADMIN', 'SUPERADMIN'])` (`src/lib/auth-guards.ts`). Migration manuelle recommandée — chaque route doit être testée individuellement.
+- **`notDeleted()` non utilisé** : 99 occurrences de `deletedAt: null` inline. Helper existe dans `src/lib/prisma-soft.ts` mais pas adopté.
+- **`withSpan` / `withSchema` non uniformes** : certains crons et routes POST n'ont pas l'instrumentation/validation centralisée.
+- **God-file** : `VaccinationSection.tsx` 696L à splitter en 3 (ViewSection, FormModal, DocumentList).
+
+### ✅ Migrations 20260510 exécutées (2026-05-12)
+- `prisma/migrations/20260510_product_upsell/migration.sql` — colonnes `targetSpecies`/`targetAge`/`imageUrl`/`weight`/`supplier` sur `Product` + CHECK + index. ✅
+- `prisma/migrations/20260510_seed_products_upsell/migration.sql` — seed ~85 produits Ultra Premium + Canvit. ✅
 
 ### ✅ Toutes les migrations Supabase exécutées (2026-05-01)
 - `ALTER TABLE "User"/"Pet" ADD COLUMN deletedAt` — soft-delete opérationnel
@@ -912,6 +1018,87 @@ Voir section UPTIME SELF-MONITORING.
 L'historique complet des sessions de travail et décisions techniques (sécurité, perf, architecture) est consigné dans [HISTORY.md](./HISTORY.md).
 
 **Décision-clé toujours active : Soft-delete via filtres explicites `deletedAt: null`**
+
+---
+
+## 🚨 URGENCES — état au 2026-05-12 (dernier commit `53c6278`)
+
+### ✅ RÉSOLU dans commit `53c6278` (à vérifier sur Vercel)
+
+1. **Build Vercel rouge** — erreur exacte :
+   ```
+   ./src/app/api/admin/backups/restore/[date]/route.ts
+   90:9  Error: Definition for rule '@typescript-eslint/no-explicit-any' was not found.
+   ```
+   Le commentaire `eslint-disable @typescript-eslint/no-explicit-any` référençait une règle non définie dans l'eslint config du projet. Fix : remplacé le cast `as any` par un cast typé via `Record<string, CreateManyDelegate>` — plus de `any`, plus de disable, plus d'erreur.
+
+2. **3 SMS dupliqués "Luigi vient demain" en production** — cause confirmée :
+   - `src/lib/queues/index.ts` : SMS queue = 3 attempts × 5min exponential backoff
+   - Mon commit `d6efcf9` avait ajouté `if (!ok) throw` dans `processSmsJob`
+   - `sendSMS` retourne `false` UNIQUEMENT pour config manquante (pas pour échec d'envoi — ça throw)
+   - Donc si `sendSMS` retourne false mais le SMS a été délivré → throw → BullMQ retry × 3 → 3 SMS au destinataire
+   - Fix : remplacé `throw` par `logger.warn + return` dans `src/workers/processors.ts`
+
+### ⚠️ À vérifier dans la prochaine session
+
+1. **Le build Vercel passe-t-il maintenant ?** Le push `53c6278` doit avoir trigger un nouveau build. Si toujours rouge, récupérer le nouveau message d'erreur.
+
+2. **Pourquoi le `reminders` cron a-t-il envoyé 3 SMS pour Luigi ?** Même avec le fix de `processSmsJob`, il faut comprendre comment 3 jobs SMS ont été enqueués pour le même booking. Hypothèses :
+   - Le cron Vercel a tourné 3× dans la journée et `acquireCronLock` (Redis) a failli ? À vérifier dans logs Vercel.
+   - La dédup `createNotification` (cron `reminders` : check `Notification.findMany` STAY_REMINDER created today) a-t-elle marché ? Inspecter la table `Notification` pour voir s'il y a 1 ou 3 STAY_REMINDER pour ce booking aujourd'hui.
+   - **Plus probable** : c'est mon throw qui a causé les 3 envois (Vercel a redéployé `d6efcf9` aujourd'hui, puis le cron a tourné une fois, throw, retry × 2 = 3 SMS). Si c'est ça, c'est résolu par `53c6278`.
+
+3. **Migration `20260512_sms_log` sur Supabase** : à vérifier impérativement :
+   ```sql
+   SELECT COUNT(*) FROM "SmsLog";  -- doit retourner un nombre, pas une erreur
+   SELECT indexname FROM pg_indexes WHERE tablename = 'SmsLog';
+   -- doit contenir SmsLog_phone_contentHash_key
+   ```
+   Si manquante, exécuter `prisma/migrations/20260512_sms_log/migration.sql`. Sans ce table+index, `recordSmsSent` upsert fail silencieusement → SmsLog vide → `isSmsDedup` retourne false → dédup DB inopérante.
+
+### Warnings non bloquants (peuvent rester)
+- `<img>` au lieu de `<Image />` next/image dans `animals/[id]/edit`, `client/pets/[id]/edit`, `client/pets/new` — warnings ESLint, pas erreurs. À traiter plus tard (faible priorité).
+
+### 3. ✅ Fixes faits dans cette session (commit list depuis main)
+
+| Commit | Sujet |
+|---|---|
+| `1ab6880` | docs(claude): mark 20260510 migrations as done |
+| `f5afef2` | perf: DB indexes (User role+isWalkIn), streaming RSC dashboard, bundle, loading skeletons |
+| `99898fa` | fix: backup trigger URL operator precedence + markCronRun TTL 7d→90d |
+| `ed14553` | refactor(vaccination): split 696L → 3 fichiers focused |
+| `d6efcf9` | fix(health+queues): SMS/email activity tracking + processSmsJob (**BUGGÉ — voir §1**) + monthly cron anomaly + backup restore |
+
+### 4. ⚠️ Actions manuelles Supabase encore en attente
+
+- **Migration `20260512_user_role_walkin_index`** : `CREATE INDEX CONCURRENTLY "User_role_isWalkIn_idx" ON "User" ("role", "isWalkIn");` (déjà mentionnée plus haut dans ce fichier)
+- **Migration `20260512_sms_log`** : à vérifier (cf §1) — c'est probablement la racine du problème dédup SMS
+- **PgBouncer/Transaction Pooler** : non configuré (Settings → Database → Connection Pooling, switch `DATABASE_URL` Vercel port 6543)
+
+### 5. 🔧 Travail livré cette session — détails techniques
+
+- **Bug fix backup trigger** : opérateur de précédence `A ?? B ? C : D` interprété comme `(A ?? B) ? C : D`. Parenthèses ajoutées dans `src/app/api/admin/backups/trigger/route.ts`.
+- **Bug fix `markCronRun` TTL** : passé de 7d à 90d (`src/lib/observability.ts`) pour que les crons mensuels (`purge-anonymized`) gardent leur clé Redis entre runs.
+- **Split `VaccinationSection.tsx`** (696L → 290L) :
+  - `src/components/pets/vaccination-types.ts` (interfaces)
+  - `src/components/pets/VaccinationFormModal.tsx` (~80L, dialog ajout)
+  - `src/components/pets/VaccinationDocumentList.tsx` (~160L, justificatifs)
+  - `VaccinationSection.tsx` reste l'orchestrateur (state + draft cards + confirmed list)
+- **Perf dashboard** : `capacitySettings` déplacé dans le `Promise.all` (-100ms waterfall), check-in/out extrait en `<Suspense>` async server component `DashboardCheckInOut.tsx`, `.find()` remplacé par Map O(1) dans `DashboardLowerSections.tsx`.
+- **16 `loading.tsx`** créés pour admin segments (board, calendar, contracts, diagnostics, driver, feature-flags, invoices, logs, notifications, products, profile, queues, revenue-summary, settings, users, backups, dashboard).
+- **`client/profile/page.tsx`** : converti en Server Component + `ProfileClient.tsx` split (élimine spinner d'hydratation).
+- **Restore backup** : `src/app/api/admin/backups/restore/[date]/route.ts` (POST, SUPERADMIN, `createMany({ skipDuplicates: true })` dans l'ordre FK) + bouton "Restaurer" amber dans `BackupsClient.tsx`. **Le build sera rouge tant que §2.1 n'est pas corrigé**.
+- **Diagnostics `lastSendIso` rewrite** : la fonction cherchait `ActionLog.entityType: 'email'/'sms'` — valeurs jamais écrites. Remplacée par `lastSmsSentIso()` (lit `SmsLog`) et `lastEmailSentIso()` (lit BullMQ `getCompleted(0,0)`).
+- **Health anomaly count** : `NEVER_ANOMALY_MAX_DAYS = 9` — les crons mensuels avec `maxAge > 9j` ne comptent plus en anomalie quand "Jamais", affichés en amber au lieu de rouge (`isNeverAnomaly` flag).
+- **Upsell/Croquettes module** : confirmé déployé (DB migrations 20260510 OK, `UpsellSuggestions` wiré dans `admin/reservations/[id]` et `client/bookings/[id]`).
+
+### 6. Plan d'action recommandé pour la prochaine session (ordre)
+
+1. **D'abord** : récupérer le log d'erreur Vercel exact pour pin-pointer le build error
+2. Revert ou patcher `processSmsJob` throw (§1.1) — **CRITIQUE production**
+3. Fixer le typage du restore (§2.1) pour repasser au vert
+4. Vérifier migration SmsLog sur Supabase (§1.2)
+5. Investiguer pourquoi `reminders` cron a envoyé 3× malgré `acquireCronLock` (§1.3)
 
 ---
 

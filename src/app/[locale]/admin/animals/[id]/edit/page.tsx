@@ -212,6 +212,7 @@ export default function AdminEditPetPage() {
             <div className="flex items-center gap-4">
               <div className="w-20 h-20 rounded-full bg-gold-50 border-2 border-dashed border-gold-200 flex items-center justify-center overflow-hidden flex-shrink-0">
                 {photoPreview
+                  // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={photoPreview} alt="preview" className="w-20 h-20 object-cover" />
                   : <PawPrint className="h-8 w-8 text-gold-300" />}
               </div>
