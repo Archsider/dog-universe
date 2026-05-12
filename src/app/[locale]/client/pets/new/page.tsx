@@ -128,6 +128,7 @@ export default function NewPetPage() {
             <div className="mt-2 flex items-center gap-4">
               <div className="h-20 w-20 rounded-full bg-gold-50 border-2 border-gold-200 flex items-center justify-center overflow-hidden flex-shrink-0">
                 {photoPreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={photoPreview} alt="Preview" className="h-20 w-20 rounded-full object-cover" />
                 ) : (
                   <PawPrint className="h-8 w-8 text-gold-300" />
