@@ -510,6 +510,24 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ## ACTIONS MANUELLES EN ATTENTE
 
+### ⚠️ Migration 20260512 — User(role, isWalkIn) index (2026-05-12)
+À exécuter sur Supabase SQL Editor :
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "User_role_isWalkIn_idx" ON "User" ("role", "isWalkIn");
+```
+Sans cet index, les pages admin font un full table scan sur `User` à chaque requête (filter `role='CLIENT' AND isWalkIn=false`).
+
+### 🟡 Scalabilité DB — activer Supabase Transaction Pooler (PgBouncer)
+**Action** : dans Supabase Dashboard → Project Settings → Database → Connection Pooling, copier le **Transaction pooler URL** (port 6543) et l'ajouter comme `DATABASE_URL` sur Vercel (en gardant l'URL directe sur `DIRECT_URL` pour les migrations).
+**Pourquoi** : Vercel serverless = jusqu'à 100 instances concurrentes, chacune ouvrant une connexion Postgres. PgBouncer mutualise les connexions et lève le mur des ~500 req/s.
+**Schema.prisma** : déjà OK (`directUrl` et `url` séparés).
+
+### 🟡 Gaps de consistency restants (non bloquants)
+- **Auth guards dupliqués** : 32 routes admin utilisent encore le pattern `if (!session?.user || session.user.role !== ...)` au lieu de `requireRole(['ADMIN', 'SUPERADMIN'])` (`src/lib/auth-guards.ts`). Migration manuelle recommandée — chaque route doit être testée individuellement.
+- **`notDeleted()` non utilisé** : 99 occurrences de `deletedAt: null` inline. Helper existe dans `src/lib/prisma-soft.ts` mais pas adopté.
+- **`withSpan` / `withSchema` non uniformes** : certains crons et routes POST n'ont pas l'instrumentation/validation centralisée.
+- **God-file** : `VaccinationSection.tsx` 696L à splitter en 3 (ViewSection, FormModal, DocumentList).
+
 ### ✅ Migrations 20260510 exécutées (2026-05-12)
 - `prisma/migrations/20260510_product_upsell/migration.sql` — colonnes `targetSpecies`/`targetAge`/`imageUrl`/`weight`/`supplier` sur `Product` + CHECK + index. ✅
 - `prisma/migrations/20260510_seed_products_upsell/migration.sql` — seed ~85 produits Ultra Premium + Canvit. ✅

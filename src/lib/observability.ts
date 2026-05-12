@@ -64,14 +64,18 @@ export function logServerError(
 }
 
 /**
- * Record the timestamp of the last successful cron run. Stored 7 days in
+ * Record the timestamp of the last successful cron run. Stored 90 days in
  * Redis under `cron:last_run:{name}`. Fail-open : if Redis is down the
  * value won't be set and `/admin/health` will display "unknown" — but the
  * cron still completes normally.
+ *
+ * TTL must exceed the longest cron period (monthly = 30d) with margin.
+ * Previously 7d → caused `purge-anonymized` (monthly) to always show
+ * "JAMAIS" on /admin/health because the key expired between runs.
  */
 export async function markCronRun(name: string): Promise<void> {
   try {
-    await cacheSet(`cron:last_run:${name}`, new Date().toISOString(), 7 * 24 * 3600);
+    await cacheSet(`cron:last_run:${name}`, new Date().toISOString(), 90 * 24 * 3600);
   } catch {
     // ignore
   }
