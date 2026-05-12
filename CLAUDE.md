@@ -138,6 +138,63 @@ claims: { benefitKey: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' }[]
 
 ---
 
+## /ADMIN/RESERVATIONS — SLIDE-OVER PANEL (depuis 2026-05-12)
+
+Panneau de détail "classe mondiale" 720px desktop / 100vw mobile, déclenché par `?booking=<id>` dans l'URL.
+
+### Architecture
+- **URL state** : `router.replace(?booking=id)` — bookmarkable, pas de `useState`
+- **Lazy-loading** : `next/dynamic({ ssr: false })` — panel jamais rendu côté serveur
+- **SSR pre-fetch** : si `?booking=` dans l'URL initiale, `PanelWrapper` (Server Component) fetch la `BookingDetail` et passe `initialData` au panel
+- **Adjacent pre-fetch** : panel fetch les IDs adjacents en background pour navigation instantanée ↑/↓
+- **Focus trap** : `useFocusTrap` — Tab/Shift+Tab cyclent dans le panel
+- **Body scroll lock** : `document.body.style.overflow = 'hidden'` pendant que le panel est ouvert
+
+### Fichiers clés
+```
+src/types/booking-detail.ts                      — types sérialisables (pas d'imports Prisma)
+src/app/api/admin/bookings/[id]/detail/route.ts  — GET endpoint (ADMIN/SUPERADMIN)
+src/app/[locale]/admin/reservations/
+  _hooks/
+    useBookingNavigation.ts    — prev/next/index depuis orderedIds (pure useMemo)
+    usePanelKeyboard.ts        — Esc/↑K/↓J/E/? avec garde focus INPUT/TEXTAREA
+    useDebouncedSave.ts        — 800ms debounce + idle→saving→saved→idle
+    useFocusTrap.ts            — Tab/Shift+Tab cycling dans containerRef
+  _components/
+    BookingDetailPanel.tsx     — orchestrateur principal (lazy-loaded)
+    BookingDetailHeader.tsx    — sticky header : close + prev/next + ref link
+    BookingDetailContent.tsx   — 5 sections + footer actions + CloseStayDialog
+    BookingSection.tsx         — section collapsible (état dans localStorage)
+    InlineEditField.tsx        — textarea transparent → visible on focus + auto-save
+    BookingActions.tsx         — CTA contextuel par status/serviceType
+    KeyboardHints.tsx          — overlay des raccourcis (? trigger)
+    PanelSkeleton.tsx          — skeleton animate-pulse pendant le fetch
+    sections/
+      OverviewSection.tsx      — status pill + grille 2 colonnes
+      PetsSection.tsx          — cards pet avec alertes allergie/médicaments
+      InvoiceSection.tsx       — facture principale + supplémentaire + live total
+      HistorySection.tsx       — timeline verticale des actions
+      NotesSection.tsx         — notes éditable inline + dernier message admin
+```
+
+### Raccourcis clavier
+| Touche | Action |
+|---|---|
+| `Esc` | Fermer le panel |
+| `↑` / `K` | Réservation précédente |
+| `↓` / `J` | Réservation suivante |
+| `E` | Focus sur le champ notes |
+| `?` | Afficher les raccourcis |
+
+### Règles à respecter
+- **Ne jamais utiliser `router.push` pour le panel** — toujours `router.replace` (évite l'historique de navigation)
+- **`BookingSection` id doit être stable** — le localStorage key est `panel-sections:{id}`
+- **`InlineEditField` PATCH target** : `PATCH /api/admin/bookings/[id]` avec body `{ notes: string }`
+- **`CloseStayDialog` est le seul point d'entrée** pour COMPLETED depuis IN_PROGRESS — ne jamais patcher `status=COMPLETED` directement
+- **`orderedIds`** — fourni par `PanelWrapper` server component depuis le même `where`/`orderBy` que la vue active
+
+---
+
 ## /ADMIN/RESERVATIONS — ARCHITECTURE PAR HORIZONS (depuis 2026-05-12)
 
 Refonte "outil de travail" type Mews/Toast — la page n'est plus une liste
