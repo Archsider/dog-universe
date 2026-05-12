@@ -1,6 +1,7 @@
 // /admin/reservations — tabbed workspace (depuis 2026-05-12).
 // Tabs: today (default) · upcoming · in-progress · history. URL: ?view=…
-// ?booking=<id> opens the side panel without leaving the list.
+// Side panel disabled (2026-05-13) — rows now navigate to /admin/reservations/[id].
+// LazyBookingDetailPanel kept on disk for future re-enable; not rendered here.
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -19,36 +20,6 @@ import TabBar, { type ViewTab } from './_components/TabBar';
 import TodayClient from './_components/TodayClient';
 import HistoryFilters from './_components/HistoryFilters';
 import { loadTodaySnapshot, dayRangeUTC } from './_lib/today-queries';
-import type { BookingDetail } from '@/types/booking-detail';
-// Client wrapper — dynamic({ ssr: false }) is illegal in Server Components (Next.js 15)
-import LazyBookingDetailPanel from './_components/LazyBookingDetailPanel';
-
-// Typed result for the SSR panel pre-fetch query — mirrors the include shape below.
-// Lets TypeScript catch field-name mismatches before they reach Vercel's build.
-type BookingForPanel = Prisma.BookingGetPayload<{
-  include: {
-    client: { select: { id: true; name: true; email: true; phone: true; isWalkIn: true } };
-    bookingPets: {
-      include: {
-        pet: {
-          select: {
-            id: true; name: true; species: true; breed: true; photoUrl: true;
-            gender: true; allergies: true; currentMedication: true;
-            behaviorWithDogs: true; behaviorWithCats: true; notes: true;
-          };
-        };
-      };
-    };
-    boardingDetail: true;
-    taxiDetail: { select: { pickupAddress: true; dropoffAddress: true; price: true } };
-    invoice: {
-      select: {
-        id: true; invoiceNumber: true; status: true;
-        amount: true; paidAmount: true; version: true;
-      };
-    };
-  };
-}>;
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -61,7 +32,6 @@ interface PageProps {
     f?: string;
     from?: string;
     to?: string;
-    booking?: string;
   }>;
 }
 
@@ -82,7 +52,6 @@ export default async function AdminReservationsPage(props: PageProps) {
   const view = parseView(searchParams.view);
   const fr = locale !== 'en';
   const display = searchParams.display === 'board' ? 'board' : 'list';
-  const panelBookingId = searchParams.booking ?? null;
 
   // ── Header counts for tab badges (cheap, runs always) ────────────────────
   const now = new Date();
@@ -113,15 +82,16 @@ export default async function AdminReservationsPage(props: PageProps) {
     inProgress: inProgressCount,
   };
 
-  // Pet count for the subtitle (cheap aggregate)
-  const presentPets = await prisma.bookingPet.count({
+  // Subtitle counts BOOKINGS in progress today (single source of truth shared
+  // with the Today KPI "Présents"). Matches `loadTodaySnapshot` currentStays
+  // + departures filter: IN_PROGRESS, started by today, ending after today
+  // (open-ended included via OR endDate=null).
+  const presentBookings = await prisma.booking.count({
     where: {
-      booking: {
-        deletedAt: null,
-        status: 'IN_PROGRESS',
-        startDate: { lte: todayEnd },
-        OR: [{ endDate: null }, { endDate: { gte: todayStart } }],
-      },
+      deletedAt: null,
+      status: 'IN_PROGRESS',
+      startDate: { lte: todayEnd },
+      OR: [{ endDate: null }, { endDate: { gte: todayStart } }],
     },
   });
 
@@ -131,55 +101,11 @@ export default async function AdminReservationsPage(props: PageProps) {
       day: '2-digit',
       month: 'long',
     });
-    const petsLabel = fr ? `${presentPets} animaux présents` : `${presentPets} animals on site`;
-    return `${dateLabel} · ${petsLabel}`;
+    const presentLabel = fr
+      ? `${presentBookings} séjour${presentBookings > 1 ? 's' : ''} en cours`
+      : `${presentBookings} stay${presentBookings > 1 ? 's' : ''} in progress`;
+    return `${dateLabel} · ${presentLabel}`;
   })();
-
-  // Pre-fetch panel data server-side when ?booking= is in the initial URL
-  // (subsequent navigations are client-side via the fetch in BookingDetailPanel)
-  let panelInitialData: BookingDetail | null = null;
-  const pricing = await getPricingSettings();
-  if (panelBookingId) {
-    try {
-      const b: BookingForPanel | null = await prisma.booking.findFirst({
-        where: { id: panelBookingId, deletedAt: null },
-        include: {
-          client: { select: { id: true, name: true, email: true, phone: true, isWalkIn: true } },
-          bookingPets: { include: { pet: { select: { id: true, name: true, species: true, breed: true, photoUrl: true, gender: true, allergies: true, currentMedication: true, behaviorWithDogs: true, behaviorWithCats: true, notes: true } } } },
-          boardingDetail: true,
-          taxiDetail: { select: { pickupAddress: true, dropoffAddress: true, price: true } },
-          invoice: { select: { id: true, invoiceNumber: true, status: true, amount: true, paidAmount: true, version: true } },
-        },
-      });
-      if (b) {
-        panelInitialData = {
-          id: b.id,
-          status: b.status as BookingDetail['status'],
-          serviceType: b.serviceType as BookingDetail['serviceType'],
-          startDate: b.startDate.toISOString(),
-          endDate: b.endDate?.toISOString() ?? null,
-          isOpenEnded: b.isOpenEnded,
-          isWalkIn: b.isWalkIn || b.client.isWalkIn,
-          totalPrice: toNumber(b.totalPrice),
-          notes: b.notes ?? null,
-          cancellationReason: b.cancellationReason ?? null,
-          arrivalTime: b.arrivalTime ?? null,
-          version: b.version,
-          createdAt: b.createdAt.toISOString(),
-          client: { id: b.client.id, name: b.client.name ?? null, email: b.client.email, phone: b.client.phone ?? null, isWalkIn: b.client.isWalkIn },
-          pets: b.bookingPets.map((bp) => ({ id: bp.pet.id, name: bp.pet.name, species: bp.pet.species as 'DOG' | 'CAT', breed: bp.pet.breed ?? null, photoUrl: bp.pet.photoUrl ?? null, gender: bp.pet.gender ?? null, allergies: bp.pet.allergies ?? null, currentMedication: bp.pet.currentMedication ?? null, behaviorWithDogs: bp.pet.behaviorWithDogs ?? null, behaviorWithCats: bp.pet.behaviorWithCats ?? null, notes: bp.pet.notes ?? null })),
-          invoice: b.invoice ? { id: b.invoice.id, invoiceNumber: b.invoice.invoiceNumber, status: b.invoice.status, amount: toNumber(b.invoice.amount), paidAmount: toNumber(b.invoice.paidAmount), version: b.invoice.version } : null,
-          supplementaryInvoice: null,
-          boarding: b.boardingDetail ? { groomingEnabled: b.boardingDetail.includeGrooming ?? false, groomingPrice: toNumber(b.boardingDetail.groomingPrice) || null, taxiGoEnabled: b.boardingDetail.taxiGoEnabled ?? false, taxiReturnEnabled: b.boardingDetail.taxiReturnEnabled ?? false, pricePerNight: toNumber(b.boardingDetail.pricePerNight) || null } : null,
-          taxi: b.taxiDetail ? { pickupAddress: b.taxiDetail.pickupAddress ?? null, dropoffAddress: b.taxiDetail.dropoffAddress ?? null, price: b.taxiDetail.price ? toNumber(b.taxiDetail.price) : null } : null,
-          adminNotes: null,
-          actionLog: [],
-          liveTotal: null,
-          liveNights: null,
-        };
-      }
-    } catch { /* non-blocking — panel will fetch client-side */ }
-  }
 
   return (
     <div>
@@ -223,18 +149,6 @@ export default async function AdminReservationsPage(props: PageProps) {
           searchParams={searchParams}
         />
       )}
-
-      {/* Booking detail side panel — lazy-loaded, URL-driven via ?booking= */}
-      <PanelWrapper
-        locale={locale}
-        pricing={pricing}
-        panelBookingId={panelBookingId}
-        panelInitialData={panelInitialData}
-        view={view}
-        todayEnd={todayEnd}
-        weekEnd={weekEnd}
-        searchParams={searchParams}
-      />
     </div>
   );
 }
@@ -491,6 +405,7 @@ async function HistoryView({
           locale={locale}
           monthlyRevenue={revenue}
           initialFilter="ALL"
+          compact
         />
       )}
     </>
@@ -506,70 +421,3 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ─── Panel wrapper (server — fetches orderedIds for navigation) ──────────────
-async function PanelWrapper({
-  locale,
-  pricing,
-  panelBookingId,
-  panelInitialData,
-  view,
-  todayEnd,
-  weekEnd,
-  searchParams,
-}: {
-  locale: string;
-  pricing: import('@/lib/pricing-rules').PricingSettings;
-  panelBookingId: string | null;
-  panelInitialData: BookingDetail | null;
-  view: ViewTab;
-  todayEnd: Date;
-  weekEnd: Date;
-  searchParams: { from?: string; to?: string; status?: string; type?: string };
-}) {
-  // Build the same where clause that the list uses — to get orderedIds for ↑↓ nav
-  let where: Prisma.BookingWhereInput;
-  let orderBy: Prisma.BookingOrderByWithRelationInput[];
-
-  if (view === 'upcoming') {
-    where = { deletedAt: null, status: { in: ['PENDING', 'CONFIRMED'] as BookingStatus[] }, startDate: { gt: todayEnd } };
-    orderBy = [{ startDate: 'asc' }];
-  } else if (view === 'in-progress') {
-    where = { deletedAt: null, status: 'IN_PROGRESS' };
-    orderBy = [{ endDate: 'asc' }];
-  } else if (view === 'history') {
-    const defaultFrom = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-    const defaultTo = format(endOfMonth(new Date()), 'yyyy-MM-dd');
-    const from = searchParams.from || defaultFrom;
-    const to = searchParams.to || defaultTo;
-    const fromDate = new Date(`${from}T00:00:00.000Z`);
-    const toDate = new Date(`${to}T23:59:59.999Z`);
-    const terminalStatuses: BookingStatus[] = ['COMPLETED', 'CANCELLED', 'REJECTED', 'NO_SHOW'];
-    const statusWhere: Prisma.BookingWhereInput =
-      searchParams.status && (terminalStatuses as string[]).includes(searchParams.status)
-        ? { status: searchParams.status as BookingStatus }
-        : { status: { in: terminalStatuses } };
-    where = { deletedAt: null, ...statusWhere, OR: [{ endDate: { gte: fromDate, lte: toDate } }, { endDate: null, startDate: { gte: fromDate, lte: toDate } }] };
-    orderBy = [{ endDate: 'desc' }, { startDate: 'desc' }];
-  } else {
-    // Today view — ordered by arrivalTime for check-ins
-    where = { deletedAt: null, status: { in: ['CONFIRMED', 'IN_PROGRESS', 'PENDING'] as BookingStatus[] } };
-    orderBy = [{ startDate: 'asc' }];
-  }
-
-  const ids = await prisma.booking.findMany({
-    where,
-    orderBy,
-    select: { id: true },
-    take: 500,
-  });
-  const orderedIds = ids.map((b) => b.id);
-
-  return (
-    <LazyBookingDetailPanel
-      orderedIds={orderedIds}
-      locale={locale}
-      pricing={pricing}
-      initialData={panelInitialData}
-    />
-  );
-}
