@@ -718,17 +718,15 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
               )}
             </div>
           )}
-          {initialStatus !== 'COMPLETED' && (
-            <label className="flex items-center gap-2 mt-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={createInvoice}
-                onChange={(e) => setCreateInvoice(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <span className="text-sm">{t.createInvoice}</span>
-            </label>
-          )}
+          <label className="flex items-center gap-2 mt-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={createInvoice}
+              onChange={(e) => setCreateInvoice(e.target.checked)}
+              className="h-4 w-4"
+            />
+            <span className="text-sm">{t.createInvoice}</span>
+          </label>
         </section>
       )}
 
