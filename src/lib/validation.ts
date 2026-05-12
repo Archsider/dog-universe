@@ -173,13 +173,27 @@ export const bookingCreateSchema = z.object({
 // anniversaires automatiques + grade fidélité dépendant de l'âge). Les anciens
 // walk-in DOB-vides étaient une faille de validation et ont créé un bruit
 // statistique sur la pyramide des âges des chiens en pension.
+// Walk-in admin path: DOB is OPTIONAL because admins rarely have the info at
+// check-in (client de passage). The route handler defensively maps falsy DOB
+// to NULL in the Pet row. The strict "DOB required" rule still applies to the
+// client-facing forms (CLAUDE.md: dateOfBirth obligatoire côté client/admin
+// pet management — walk-in is the documented exception).
 const adminWalkInPetSchema = z.object({
   name: z.string().min(1).max(100),
   species: z.enum(['DOG', 'CAT']),
-  dateOfBirth: z.string().min(1).max(40).refine(v => {
-    const d = new Date(v);
-    return !isNaN(d.getTime()) && d <= new Date();
-  }, 'invalid or future date of birth'),
+  dateOfBirth: z
+    .string()
+    .max(40)
+    .optional()
+    .nullable()
+    .refine(
+      v => {
+        if (!v) return true;
+        const d = new Date(v);
+        return !isNaN(d.getTime()) && d <= new Date();
+      },
+      'invalid or future date of birth',
+    ),
   breed: z.string().max(100).optional().nullable(),
 });
 
