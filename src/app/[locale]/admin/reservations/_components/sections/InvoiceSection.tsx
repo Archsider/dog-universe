@@ -98,6 +98,20 @@ export default function InvoiceSection({
   const fr = locale !== 'en';
 
   if (!invoice) {
+    if (isOpenEnded) {
+      return (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+          <p className="font-semibold mb-0.5">
+            {fr ? '⏳ Facture en attente de clôture' : '⏳ Invoice pending closure'}
+          </p>
+          <p className="text-xs text-amber-700">
+            {fr
+              ? 'La facture sera générée automatiquement lors de la clôture du séjour.'
+              : 'The invoice will be generated automatically when the stay is closed.'}
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="text-center py-4">
         <p className="text-sm text-gray-400 mb-3">{fr ? 'Aucune facture associée' : 'No invoice yet'}</p>

@@ -8,6 +8,8 @@ export interface KanbanBooking {
   status: string;
   startDate: string;
   endDate: string | null;
+  isOpenEnded: boolean;
+  isWalkIn: boolean;
   arrivalTime: string | null;
   notes: string | null;
   clientName: string;
