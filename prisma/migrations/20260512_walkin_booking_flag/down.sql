@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS "Booking_isWalkIn_idx";
+ALTER TABLE "Booking" DROP COLUMN IF EXISTS "isWalkIn";

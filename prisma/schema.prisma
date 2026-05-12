@@ -162,6 +162,7 @@ model Booking {
   startDate   DateTime
   endDate     DateTime?
   isOpenEnded Boolean  @default(false) // séjour à durée indéterminée — endDate fixé au checkout
+  isWalkIn    Boolean  @default(false) // saisie admin walk-in — indépendant de User.isWalkIn (client peut rejoindre le portail plus tard)
   arrivalTime String?
   notes              String?
   cancellationReason String?
@@ -200,6 +201,7 @@ model Booking {
   @@index([deletedAt])
   @@index([status, startDate]) // Hot path : cron reminders + capacity overlap
   @@index([status, endDate])   // Hot path : cron reminders end + capacity overlap
+  @@index([isWalkIn])          // Walk-in filter on Today view + billing exclusions
 }
 
 model BookingPet {
