@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Database, Download, RefreshCw, Play, AlertTriangle, CheckCircle2, Loader2, HardDrive } from 'lucide-react';
+import { Database, Download, RefreshCw, Play, AlertTriangle, CheckCircle2, Loader2, HardDrive, UploadCloud } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface Backup {
@@ -29,6 +29,7 @@ export default function BackupsClient({ locale }: { locale: string }) {
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [downloadingDate, setDownloadingDate] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchBackups = useCallback(async () => {
@@ -108,6 +109,43 @@ export default function BackupsClient({ locale }: { locale: string }) {
       });
     } finally {
       setDownloadingDate(null);
+    }
+  };
+
+  const restoreBackup = async (date: string) => {
+    const confirmed = window.confirm(
+      isFr
+        ? `Restaurer la sauvegarde du ${date} ?\n\nCette opération est additive : les enregistrements existants ne seront pas écrasés. Seules les données manquantes seront réinsérées.`
+        : `Restore backup from ${date}?\n\nThis is additive only: existing records will NOT be overwritten. Only missing data will be re-inserted.`
+    );
+    if (!confirmed) return;
+    setRestoring(date);
+    try {
+      const res = await fetch(`/api/admin/backups/restore/${date}`, { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) {
+        toast({
+          title: isFr ? 'Échec restauration' : 'Restore failed',
+          description: json.error ?? `HTTP ${res.status}`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: isFr ? 'Restauration terminée' : 'Restore complete',
+          description: isFr
+            ? `${json.totalRestored} enregistrement(s) restauré(s).${json.errors ? ' Certaines tables ont échoué.' : ''}`
+            : `${json.totalRestored} record(s) restored.${json.errors ? ' Some tables failed.' : ''}`,
+          variant: json.errors ? 'destructive' : 'default',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: isFr ? 'Erreur réseau' : 'Network error',
+        description: err instanceof Error ? err.message : String(err),
+        variant: 'destructive',
+      });
+    } finally {
+      setRestoring(null);
     }
   };
 
@@ -234,14 +272,25 @@ export default function BackupsClient({ locale }: { locale: string }) {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => void downloadBackup(b.date)}
-                          disabled={isDownloading}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-ivory-200 bg-white hover:bg-ivory-50 text-xs text-charcoal disabled:opacity-50"
-                        >
-                          {isDownloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                          {isFr ? 'Télécharger' : 'Download'}
-                        </button>
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            onClick={() => void downloadBackup(b.date)}
+                            disabled={isDownloading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-ivory-200 bg-white hover:bg-ivory-50 text-xs text-charcoal disabled:opacity-50"
+                          >
+                            {isDownloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                            {isFr ? 'Télécharger' : 'Download'}
+                          </button>
+                          <button
+                            onClick={() => void restoreBackup(b.date)}
+                            disabled={restoring === b.date}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-xs text-amber-800 disabled:opacity-50"
+                            title={isFr ? 'Restaurer (additif, ne remplace pas les données existantes)' : 'Restore (additive, does not overwrite existing data)'}
+                          >
+                            {restoring === b.date ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
+                            {isFr ? 'Restaurer' : 'Restore'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

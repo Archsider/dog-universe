@@ -100,7 +100,15 @@ export default function HealthClient({
     status: cronStatus(c.name, c.lastRun),
   }));
 
-  const overdueCount = cronStatuses.filter((c) => c.status === 'overdue' || c.status === 'never').length;
+  const NEVER_ANOMALY_MAX_DAYS = 9; // Only flag 'never' for daily/weekly crons
+  const overdueCount = cronStatuses.filter((c) => {
+    if (c.status === 'overdue') return true;
+    if (c.status === 'never') {
+      const maxAge = CRON_MAX_AGE_MS[c.name] ?? 36 * 3_600_000;
+      return maxAge <= NEVER_ANOMALY_MAX_DAYS * 24 * 3_600_000;
+    }
+    return false;
+  }).length;
   const totalAnomalies =
     data.invariants.reduce((s, i) => s + i.count, 0) +
     (data.dlqCount ?? 0) +
@@ -268,18 +276,21 @@ export default function HealthClient({
           {cronStatuses.map((c) => {
             const isOverdue = c.status === 'overdue';
             const isNever = c.status === 'never';
+            const maxAgeDays = (CRON_MAX_AGE_MS[c.name] ?? 36 * 3_600_000) / (24 * 3_600_000);
+            const isNeverAnomaly = isNever && maxAgeDays <= 9;
             return (
               <div
                 key={c.name}
                 className={`flex items-center justify-between rounded-lg border p-3 ${
-                  isNever ? 'border-red-200 bg-red-50'
+                  isNeverAnomaly ? 'border-red-200 bg-red-50'
+                  : isNever ? 'border-amber-200 bg-amber-50'
                   : isOverdue ? 'border-amber-200 bg-amber-50'
                   : 'border-gray-200 bg-white'
                 }`}
               >
                 <div className="flex items-center gap-2">
                   {isNever || isOverdue ? (
-                    <ShieldAlert className={`h-3.5 w-3.5 ${isNever ? 'text-red-500' : 'text-amber-500'}`} />
+                    <ShieldAlert className={`h-3.5 w-3.5 ${isNeverAnomaly ? 'text-red-500' : 'text-amber-500'}`} />
                   ) : (
                     <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
                   )}
@@ -290,12 +301,12 @@ export default function HealthClient({
                     </span>
                   )}
                   {isNever && (
-                    <span className="text-[10px] font-semibold text-red-700 bg-red-100 px-1 rounded">
+                    <span className={`text-[10px] font-semibold px-1 rounded ${isNeverAnomaly ? 'text-red-700 bg-red-100' : 'text-amber-700 bg-amber-100'}`}>
                       {isFr ? 'JAMAIS' : 'NEVER'}
                     </span>
                   )}
                 </div>
-                <span className={`flex items-center gap-1 text-xs ${isNever ? 'text-red-600' : isOverdue ? 'text-amber-700' : 'text-gray-500'}`}>
+                <span className={`flex items-center gap-1 text-xs ${isNeverAnomaly ? 'text-red-600' : isNever ? 'text-amber-700' : isOverdue ? 'text-amber-700' : 'text-gray-500'}`}>
                   <Clock className="h-3 w-3" />
                   {relativeTime(c.lastRun, isFr)}
                 </span>

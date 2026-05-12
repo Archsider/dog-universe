@@ -76,10 +76,11 @@ export async function processSmsJob(job: Job<SmsJobData>): Promise<void> {
     return;
   }
 
-  if (to === 'ADMIN') {
-    await sendAdminSMS(message);
-  } else {
-    await sendSMS(to, message);
+  const ok = to === 'ADMIN'
+    ? await sendAdminSMS(message)
+    : await sendSMS(to, message);
+  if (!ok) {
+    throw new Error(`SMS delivery failed for ${to === 'ADMIN' ? 'ADMIN' : 'recipient'}`);
   }
   await recordSmsSent(to, message);
 }
