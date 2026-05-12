@@ -876,6 +876,43 @@ Lien footer dans `AdminSidebar` pointant vers `/status`. Voir `docs/UPTIME.md`.
 
 ---
 
+## SAUVEGARDE & RESTAURATION (depuis 2026-05-12)
+
+Backup quotidien JSON compressé exporté vers Supabase Storage privé. Rétention 30 jours.
+
+### Cron `db-backup` (`/api/cron/db-backup`, 03h00 UTC)
+- Lit les tables critiques via Prisma (`take` cappé pour éviter OOM Lambda) : `User`, `Pet`, `Booking`, `Invoice`, `InvoiceItem`, `Payment`, `Product`, `ClientContract` (métadonnées uniquement — jamais les binaires PDF)
+- Sérialise en JSON, compresse avec gzip level 9, upload dans le bucket `uploads-private` sous `backups/YYYY-MM-DD.json.gz`
+- Rotation automatique : supprime les fichiers > 30 jours en fin de cron
+- Limites Lambda : `maxDuration = 300s` — suffisant pour < 50 k Users / 100 k Bookings
+
+### API admin (SUPERADMIN uniquement)
+| Route | Méthode | Rôle |
+|---|---|---|
+| `/api/admin/backups` | GET | Liste les fichiers du bucket (tri desc par date) |
+| `/api/admin/backups/trigger` | POST | Backup à la demande (appelle le cron en interne) |
+| `/api/admin/backups/download/[date]` | GET | URL signée Supabase 15 min pour téléchargement |
+
+### Page `/admin/backups` (SUPERADMIN)
+- Tableau des sauvegardes disponibles : date, taille, statut Disponible
+- Bouton "Sauvegarder maintenant" — utile avant une migration ou un déploiement risqué
+- Bouton "Télécharger" par ligne — ouvre l'URL signée dans un nouvel onglet (download natif navigateur)
+- Message d'information sur les tables couvertes et la procédure de restauration
+
+### Restauration
+Voir `docs/BACKUP_RESTORE.md` pour la procédure complète. En résumé :
+1. Télécharger le dump depuis `/admin/backups`
+2. Décompresser : `gunzip backup.json.gz`
+3. Exécuter le script de restauration (Node.js) qui parse le JSON et insère via Prisma
+4. Les valeurs `Decimal` et `Date` sont sérialisées en string — le script de restore les reconvertit
+
+### Décisions
+- **JSON via Prisma plutôt que `pg_dump`** : Vercel Lambda n'a pas de binaire `pg_dump`. JSON est suffisant pour la récupération de données — pas de restauration de schéma (le schéma est dans les migrations Prisma).
+- **Bucket privé** : les sauvegardes contiennent des PII (emails, téléphones) — elles doivent rester dans `uploads-private`, jamais dans `uploads` public.
+- **URL signée 15 min** : durée courte pour limiter la fenêtre d'exposition si l'URL fuite.
+
+---
+
 ## ROLLBACK MIGRATIONS (depuis 2026-05-11, PR #20 + #24)
 
 Prisma `migrate` ne supporte pas le rollback. Convention maison :

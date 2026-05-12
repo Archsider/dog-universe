@@ -58,10 +58,9 @@
 - `withFallback<T>(fn, fallback, ms)` — pour les reads non-critiques (dégradé > crash)
 - Fail-safe : le timeout ne cancelle pas la Promise sous-jacente (impossible sur Prisma), juste rejette l'appelant
 
-**SmsLog migration (⚠️ EN ATTENTE Supabase) :**
-- `prisma/migrations/20260512_sms_log/migration.sql` écrite et testée
-- Supabase MCP inaccessible lors de la session — à appliquer manuellement dans SQL Editor
-- Le `/admin/health` fail-open si la table est absente (retourne `null`, pas 500)
+**SmsLog migration (✅ appliquée manuellement) :**
+- `prisma/migrations/20260512_sms_log/migration.sql` appliquée dans Supabase SQL Editor
+- Section SMS dans `/admin/health` opérationnelle (compteur 24h + dernier envoi)
 
 **Décisions techniques :**
 - `CRON_MAX_AGE_MS` côté client (pas en DB) : les intervalles sont fixes dans `vercel.json`, pas de config dynamique nécessaire
