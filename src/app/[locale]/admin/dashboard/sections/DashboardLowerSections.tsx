@@ -33,12 +33,16 @@ export default async function DashboardLowerSections({ locale, labels }: Props) 
     select: { id: true, name: true, email: true },
   });
 
-  const topClients = top5Revenue.map((r) => ({
-    id: r.clientId,
-    name: top5Users.find((u) => u.id === r.clientId)?.name ?? r.clientId,
-    email: top5Users.find((u) => u.id === r.clientId)?.email ?? '',
-    totalRevenue: Number(r._sum.paidAmount ?? 0),
-  }));
+  const userMap = new Map(top5Users.map((u) => [u.id, u]));
+  const topClients = top5Revenue.map((r) => {
+    const user = userMap.get(r.clientId);
+    return {
+      id: r.clientId,
+      name: user?.name ?? r.clientId,
+      email: user?.email ?? '',
+      totalRevenue: Number(r._sum.paidAmount ?? 0),
+    };
+  });
 
   return (
     <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card mt-6">
