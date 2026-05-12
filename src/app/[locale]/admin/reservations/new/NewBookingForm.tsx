@@ -341,10 +341,6 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
               setWalkInMode(e.target.checked);
               setClientId('');
               setSelectedPetIds([]);
-              if (!e.target.checked) {
-                setInitialStatus('IN_PROGRESS');
-                setIsOpenEnded(false);
-              }
             }}
             className="h-4 w-4"
           />
@@ -544,8 +540,8 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
       <section className="bg-white rounded-xl border border-ivory-200 p-5 shadow-card">
         <h2 className="text-lg font-semibold text-charcoal mb-3">{t.datesSection}</h2>
 
-        {/* Open-ended toggle — only for BOARDING, and incompatible with COMPLETED */}
-        {serviceType === 'BOARDING' && walkInMode && (
+        {/* Open-ended toggle — only for BOARDING, incompatible with COMPLETED */}
+        {serviceType === 'BOARDING' && (
           <label
             className={`flex items-center gap-2 mb-4 cursor-pointer ${initialStatus === 'COMPLETED' ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
