@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { LayoutList, LayoutGrid, Plus } from 'lucide-react';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
 
-import { Prisma } from '@prisma/client';
+import { Prisma, type BookingStatus } from '@prisma/client';
 import { ReservationsKanban, type KanbanBooking } from './ReservationsKanban';
 import ReservationsList, { type ReservationRow } from './ReservationsList';
 import { toNumber } from '@/lib/decimal';
@@ -70,7 +70,7 @@ export default async function AdminReservationsPage(props: PageProps) {
     prisma.booking.count({
       where: {
         deletedAt: null,
-        status: { in: ['PENDING', 'CONFIRMED'] },
+        status: { in: ['PENDING', 'CONFIRMED'] as BookingStatus[] },
         startDate: { gt: todayEnd, lte: weekEnd },
       },
     }),
@@ -122,7 +122,7 @@ export default async function AdminReservationsPage(props: PageProps) {
           display={display}
           where={{
             deletedAt: null,
-            status: { in: ['PENDING', 'CONFIRMED'] },
+            status: { in: ['PENDING', 'CONFIRMED'] as BookingStatus[] },
             startDate: { gt: todayEnd },
           }}
           orderBy={[{ startDate: 'asc' }]}
@@ -345,16 +345,17 @@ async function HistoryView({
   const fromDate = new Date(`${from}T00:00:00.000Z`);
   const toDate = new Date(`${to}T23:59:59.999Z`);
 
-  const terminalStatuses = ['COMPLETED', 'CANCELLED', 'REJECTED', 'NO_SHOW'];
-  const statusWhere = statusFilter && terminalStatuses.includes(statusFilter)
-    ? { status: statusFilter }
-    : { status: { in: terminalStatuses } };
+  const terminalStatuses: BookingStatus[] = ['COMPLETED', 'CANCELLED', 'REJECTED', 'NO_SHOW'];
+  const statusWhere: Prisma.BookingWhereInput =
+    statusFilter && (terminalStatuses as string[]).includes(statusFilter)
+      ? { status: statusFilter as BookingStatus }
+      : { status: { in: terminalStatuses } };
 
-  const typeWhere: Record<string, unknown> = {};
+  const typeWhere: Prisma.BookingWhereInput = {};
   if (typeFilter === 'BOARDING' || typeFilter === 'PET_TAXI') typeWhere.serviceType = typeFilter;
   if (typeFilter === 'WALKIN') typeWhere.client = { isWalkIn: true };
 
-  const where = {
+  const where: Prisma.BookingWhereInput = {
     deletedAt: null,
     ...statusWhere,
     ...typeWhere,
