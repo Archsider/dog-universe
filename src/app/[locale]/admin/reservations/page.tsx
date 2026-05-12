@@ -5,7 +5,6 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { LayoutList, LayoutGrid, Plus } from 'lucide-react';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
 
@@ -21,12 +20,8 @@ import TodayClient from './_components/TodayClient';
 import HistoryFilters from './_components/HistoryFilters';
 import { loadTodaySnapshot, dayRangeUTC } from './_lib/today-queries';
 import type { BookingDetail } from '@/types/booking-detail';
-
-// Lazy-load the panel — ssr:false to avoid hydration mismatch and keep initial bundle lean
-const BookingDetailPanel = dynamic(
-  () => import('./_components/BookingDetailPanel'),
-  { ssr: false },
-);
+// Client wrapper — dynamic({ ssr: false }) is illegal in Server Components (Next.js 15)
+import LazyBookingDetailPanel from './_components/LazyBookingDetailPanel';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -542,7 +537,7 @@ async function PanelWrapper({
   const orderedIds = ids.map((b) => b.id);
 
   return (
-    <BookingDetailPanel
+    <LazyBookingDetailPanel
       orderedIds={orderedIds}
       locale={locale}
       pricing={pricing}
