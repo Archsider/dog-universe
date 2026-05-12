@@ -138,6 +138,97 @@ claims: { benefitKey: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' }[]
 
 ---
 
+## /ADMIN/RESERVATIONS — ARCHITECTURE PAR HORIZONS (depuis 2026-05-12)
+
+Refonte "outil de travail" type Mews/Toast — la page n'est plus une liste
+plate, mais un workspace à 4 horizons temporels.
+
+### URL
+`?view=today|upcoming|in-progress|history` — défaut `today`.
+Toggle Liste/Board déplacé en `?display=list|board` (s'applique aux tabs
+upcoming/in-progress/history). La tab Today n'a pas de Board (elle est
+task-oriented).
+
+### Layout commun
+- `PageHeader` — titre + sous-titre dynamique ("Mardi 12 mai · N animaux
+  présents") + bouton "Nouvelle réservation"
+- `TabBar` — 4 horizons avec badges count
+- Toggle display visible sur les tabs upcoming/in-progress/history
+
+### Tab `today` (default)
+Rendue par `TodayClient.tsx` (orchestrateur client unique, modale +
+mutations partagés sans prop drilling).
+1. **Rangée 4 KPI cards cliquables** — Arrivées · Départs · Présents · À
+   valider (amber si > 0). Scroll smooth vers la section + highlight 2s.
+2. **Arrivées aujourd'hui** — `CONFIRMED`, `startDate=today`. Tri par
+   `arrivalTime` croissant. Bouton "Check-in" → PATCH status=IN_PROGRESS.
+3. **Départs aujourd'hui** — `IN_PROGRESS`, `endDate=today`. Bouton
+   "Clôturer" → ouvre `<CloseStayDialog>`.
+4. **Dans la pension** — `IN_PROGRESS`, chevauchant aujourd'hui, hors
+   départs. Limité à 5 + bouton "Voir les N autres". Badges contextuels
+   (Départ demain rouge / Dans N j amber / Walk-in J+N gris).
+5. **En attente de validation** — `PENDING`, tri `createdAt` ASC.
+   Boutons inline Refuser (modal raison min 10 chars) / Valider.
+6. **À venir cette semaine** — résumé compact 1 ligne, cliquable → tab
+   `upcoming`.
+
+### Tab `upcoming`
+`PENDING + CONFIRMED` avec `startDate > today`. Réutilise
+`ReservationsList` (même UI/filtres internes), tri `startDate` ASC.
+
+### Tab `in-progress`
+`IN_PROGRESS` uniquement, tri `endDate` ASC. Réutilise `ReservationsList`.
+Bouton "Clôturer" disponible via la fiche (le `CloseStayDialog` reste
+le point d'entrée canonique).
+
+### Tab `history`
+Statuts terminaux : `COMPLETED | CANCELLED | REJECTED | NO_SHOW`.
+- Filtres URL-syncs : `from`, `to`, `status`, `type` (gérés par
+  `HistoryFilters.tsx`)
+- Presets rapides : Mois en cours · Mois dernier · Trimestre · Année
+- Stats sticky en haut : nombre · CA · taux annulation
+- Lien CSV : `/api/admin/invoices/export?from=…&to=…`
+- Tri par défaut : `endDate` DESC
+
+### Composant clé `<CloseStayDialog>`
+`src/app/[locale]/admin/reservations/_components/CloseStayDialog.tsx` —
+modale réutilisable.
+- Props : `booking { id, clientName, pets, startDate, endDate?,
+  isOpenEnded, totalPrice }`, `pricing: PricingSettings`, `locale`
+- Si `isOpenEnded` : champ `endDate` éditable → recalcul live `nights ×
+  getPensionPriceNumber()` par animal
+- Si normal : `endDate` readonly + `totalPrice` figé
+- À confirmation : POST `/api/admin/bookings/[id]/checkout` (route
+  existante, inchangée)
+- Utilisée depuis : Today/Départs + Today via boutons inline. La fiche
+  réservation continue à utiliser le `CheckoutBookingButton` legacy
+  (wrap la même API).
+
+### Helpers serveur
+`src/app/[locale]/admin/reservations/_lib/today-queries.ts` :
+- `loadTodaySnapshot(now?)` — renvoie `{ kpis, arrivals, departures,
+  currentStays, pending, upcomingWeek }` en 5 queries parallèles
+- `withLiveTotal()` enrichit chaque booking open-ended d'un `liveTotal`
+  et `liveNights` (via `getPensionPrice()` + `differenceInCalendarDays`
+  en TZ Casablanca)
+
+### API polling
+`GET /api/admin/bookings/today` — ADMIN/SUPERADMIN.
+- `revalidate = 30` (Next.js fetch cache 30 s)
+- Renvoie le même `TodaySnapshot` que le SSR initial
+- Prévu pour un poller client (60 s) — pas encore branché dans
+  `TodayClient` (à activer si besoin via `useEffect` + `setInterval`)
+
+### Règles à respecter
+- **Ne pas filtrer manuellement** par statut/type dans une nouvelle
+  vue : passer par les tabs.
+- **`CloseStayDialog` est l'unique point d'entrée** côté UI pour
+  COMPLETED depuis IN_PROGRESS sur une pension. Ne jamais bricoler un
+  PATCH `status=COMPLETED` manuel sans recalcul prix (sinon walk-in
+  ouvert reste à 0 MAD).
+- **`getPensionPriceNumber()` est l'unique source de tarif pension**
+  côté front (pure, sans Prisma, safe en client component).
+
 ## UPLOAD DE FICHIERS
 
 **Règle absolue : ne jamais écrire en filesystem en production.**
