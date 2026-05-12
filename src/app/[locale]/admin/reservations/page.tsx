@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { LayoutList, LayoutGrid, Plus } from 'lucide-react';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
 
+import { Prisma } from '@prisma/client';
 import { ReservationsKanban, type KanbanBooking } from './ReservationsKanban';
 import ReservationsList, { type ReservationRow } from './ReservationsList';
 import { toNumber } from '@/lib/decimal';
@@ -125,7 +126,7 @@ export default async function AdminReservationsPage(props: PageProps) {
             startDate: { gt: todayEnd },
           }}
           orderBy={[{ startDate: 'asc' }]}
-          initialFilter={(searchParams.f as never) ?? 'ALL'}
+          initialFilter='ALL'
           locale_={locale}
         />
       )}
@@ -135,7 +136,7 @@ export default async function AdminReservationsPage(props: PageProps) {
           display={display}
           where={{ deletedAt: null, status: 'IN_PROGRESS' }}
           orderBy={[{ endDate: 'asc' }]}
-          initialFilter={(searchParams.f as never) ?? 'ALL'}
+          initialFilter='ALL'
           locale_={locale}
         />
       )}
@@ -201,7 +202,7 @@ async function TodayView({ locale }: { locale: string }) {
 }
 
 // ─── List view (upcoming / in-progress) ─────────────────────────────────────
-type WhereInput = Parameters<typeof prisma.booking.findMany>[0] extends { where?: infer W } ? W : never;
+type WhereInput = Prisma.BookingWhereInput;
 
 async function ListView({
   display,
@@ -213,7 +214,7 @@ async function ListView({
   locale: string;
   display: 'list' | 'board';
   where: WhereInput;
-  orderBy: { startDate?: 'asc' | 'desc'; endDate?: 'asc' | 'desc' }[];
+  orderBy: Prisma.BookingOrderByWithRelationInput[];
   initialFilter: 'ALL' | 'IN_PROGRESS' | 'CONFIRMED' | 'PENDING' | 'WALKIN' | 'CANCELLED' | 'NO_SHOW' | 'BOARDING' | 'PET_TAXI';
   locale_: string;
 }) {
@@ -245,7 +246,7 @@ async function ListView({
 
 async function BoardView({ where, locale }: { where: WhereInput; locale: string }) {
   const raw = await prisma.booking.findMany({
-    where: where as never,
+    where,
     select: {
       id: true, version: true, serviceType: true, status: true,
       startDate: true, endDate: true, arrivalTime: true, notes: true,
@@ -273,10 +274,10 @@ async function BoardView({ where, locale }: { where: WhereInput; locale: string 
 
 async function fetchListBookings(
   where: WhereInput,
-  orderBy: { startDate?: 'asc' | 'desc'; endDate?: 'asc' | 'desc' }[],
+  orderBy: Prisma.BookingOrderByWithRelationInput[],
 ): Promise<ReservationRow[]> {
   const raw = await prisma.booking.findMany({
-    where: where as never,
+    where,
     select: {
       id: true, status: true, serviceType: true,
       startDate: true, endDate: true, isOpenEnded: true, totalPrice: true,
@@ -287,7 +288,7 @@ async function fetchListBookings(
       taxiTrips: { select: { tripType: true } },
       invoice: { select: { amount: true } },
     },
-    orderBy: orderBy as never,
+    orderBy,
     take: 500,
   });
   return raw.map((b) => {
@@ -364,9 +365,9 @@ async function HistoryView({
   };
 
   const [bookings, stats] = await Promise.all([
-    fetchListBookings(where as never, [{ endDate: 'desc' }, { startDate: 'desc' }]),
+    fetchListBookings(where, [{ endDate: 'desc' }, { startDate: 'desc' }]),
     prisma.booking.aggregate({
-      where: where as never,
+      where,
       _count: { _all: true },
     }),
   ]);
@@ -391,7 +392,7 @@ async function HistoryView({
         <Stat label={fr ? 'Taux annulation' : 'Cancel rate'} value={`${cancelRate}%`} />
       </div>
       {display === 'board' ? (
-        <BoardView where={where as never} locale={locale} />
+        <BoardView where={where} locale={locale} />
       ) : (
         <ReservationsList
           bookings={bookings}
