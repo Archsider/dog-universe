@@ -510,13 +510,8 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ## ACTIONS MANUELLES EN ATTENTE
 
-### ⚠️ Migration 20260512_sms_log à appliquer manuellement (2026-05-12)
-Le `/admin/health` utilise `prisma.smsLog` (compteur + dernier envoi). Sans la table, la section SMS affiche "indisponible" — pas de crash.
-À exécuter dans Supabase SQL Editor :
-```sql
--- contenu de prisma/migrations/20260512_sms_log/migration.sql
-```
-Vérifier après : `SELECT COUNT(*) FROM "SmsLog";` → doit retourner 0 (table vide, normal au départ).
+### ✅ Migration 20260512_sms_log appliquée (2026-05-12)
+Table `SmsLog` créée en production. Le `/admin/health` affiche désormais le compteur SMS 24h et le dernier envoi.
 
 ### ⚠️ Migrations 20260510 à appliquer manuellement (2026-05-10)
 Le runner `db-migrate.mjs` ne les a pas jouées au build sur la prod actuelle.
@@ -593,7 +588,7 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | Backup UI admin | LIVRÉ (2026-05-12) | Page `/admin/backups` (SUPERADMIN) : liste les dumps du bucket privé, bouton "Sauvegarder maintenant" (appelle le cron `db-backup` à la demande), téléchargement via URL signée 15 min. API : `GET /api/admin/backups`, `POST /api/admin/backups/trigger`, `GET /api/admin/backups/download/[date]`. |
 | Guardian UI trop statique | RÉSOLU (2026-05-12) | Stats strip (total, sévérité ≥4, issues GitHub, non classifiés). Chips de filtrage cliquables avec compteurs. Auto-refresh 60s + bouton manuel + "actualisé il y a Xs". `GET /api/admin/guardian` pour le refresh côté client. Labels classification traduits fr/en. |
 | Health page sans détection retard | RÉSOLU (2026-05-12) | Chaque cron a une tolérance configurée dans `CRON_MAX_AGE_MS` (daily→36h, heartbeat→10min, weekly→9j). Badges OVERDUE/NEVER visibles. Bande de 4 KPIs. Lien vers `/admin/guardian`. Prop `isFr` passée depuis le Server Component. |
-| SmsLog table manquante en prod | **⚠️ EN ATTENTE** | Migration `20260512_sms_log` à appliquer sur Supabase (voir ACTIONS MANUELLES). Sans elle, section SMS dans `/admin/health` affiche null — pas de crash. |
+| SmsLog table manquante en prod | RÉSOLU (2026-05-12) | Migration `20260512_sms_log` appliquée manuellement sur Supabase. Section SMS dans `/admin/health` opérationnelle. |
 
 ---
 
