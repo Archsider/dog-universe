@@ -510,12 +510,9 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ## ACTIONS MANUELLES EN ATTENTE
 
-### ⚠️ Migrations 20260510 à appliquer manuellement (2026-05-10)
-Le runner `db-migrate.mjs` ne les a pas jouées au build sur la prod actuelle.
-À exécuter dans Supabase SQL Editor **dans l'ordre** :
-1. `prisma/migrations/20260510_product_upsell/migration.sql` — colonnes `targetSpecies`/`targetAge`/`imageUrl`/`weight`/`supplier` sur `Product` + CHECK + index.
-2. `prisma/migrations/20260510_seed_products_upsell/migration.sql` — seed ~85 produits Ultra Premium + Canvit (idempotent).
-Vérifier après : `SELECT COUNT(*) FROM "Product" WHERE supplier IN ('Ultra Premium', 'Canvit');` → doit retourner ~85.
+### ✅ Migrations 20260510 exécutées (2026-05-12)
+- `prisma/migrations/20260510_product_upsell/migration.sql` — colonnes `targetSpecies`/`targetAge`/`imageUrl`/`weight`/`supplier` sur `Product` + CHECK + index. ✅
+- `prisma/migrations/20260510_seed_products_upsell/migration.sql` — seed ~85 produits Ultra Premium + Canvit. ✅
 
 ### ✅ Toutes les migrations Supabase exécutées (2026-05-01)
 - `ALTER TABLE "User"/"Pet" ADD COLUMN deletedAt` — soft-delete opérationnel
