@@ -510,6 +510,14 @@ Compteurs chargés dans `src/app/[locale]/admin/layout.tsx` via `Promise.all`.
 
 ## ACTIONS MANUELLES EN ATTENTE
 
+### ⚠️ Migration 20260512_sms_log à appliquer manuellement (2026-05-12)
+Le `/admin/health` utilise `prisma.smsLog` (compteur + dernier envoi). Sans la table, la section SMS affiche "indisponible" — pas de crash.
+À exécuter dans Supabase SQL Editor :
+```sql
+-- contenu de prisma/migrations/20260512_sms_log/migration.sql
+```
+Vérifier après : `SELECT COUNT(*) FROM "SmsLog";` → doit retourner 0 (table vide, normal au départ).
+
 ### ⚠️ Migrations 20260510 à appliquer manuellement (2026-05-10)
 Le runner `db-migrate.mjs` ne les a pas jouées au build sur la prod actuelle.
 À exécuter dans Supabase SQL Editor **dans l'ordre** :
@@ -581,6 +589,11 @@ Sans secrets : les 3 specs skippent gracieusement via `test.skip()` dans `before
 | CI rollback-check fail sur DB vide | RÉSOLU (2026-05-11, PR #28) | Bootstrap two-pass : applique toutes les migrations < CUTOFF pour avoir un état complet, puis boucle up→down sur les récentes. Insère aussi dans `_app_migrations` pour cohérence avec `db-rollback.mjs`. |
 | Sentry noise + crash SSR booking detail | RÉSOLU (2026-05-11, PR #29) | Filtre Sentry pour AbortError, ResizeObserver, "Failed to fetch" (fetch annulé par navigation, pas un bug). Hardening `client/bookings/[id]` : `filter(bp => bp.pet)` avant map (pet soft-deleté → `bp.pet null` faisait crasher), `bp.pet.name?.[0] ?? '?'`. |
 | CSP report endpoint flood | RÉSOLU (2026-05-11, PR #30) | `/api/csp-report` générait ~10K events "error" / jour Vercel. `console.warn` au lieu de `console.error` (Vercel classe par méthode console, pas par payload). Rate-limit Upstash 30 req/min/IP, fail-open. |
+| Outage prod ENUMs Prisma | RÉSOLU (2026-05-12) | Migration `20260512_enums_booking_payment` committée mais jamais appliquée sur Supabase → P2032 en prod. Fix : DDL ENUM appliqué directement dans Supabase SQL Editor (drop CHECK constraint `Invoice_paid_lte_amount`, DROP DEFAULT avant ALTER TYPE, ADD VALUE hors transaction via DO blocks, drop types snake_case). Re-promotion du bon déploiement Vercel (`dpl_9mAd7T3fLTbnG7q6KGbyLZxH4jR3`). |
+| Backup UI admin | LIVRÉ (2026-05-12) | Page `/admin/backups` (SUPERADMIN) : liste les dumps du bucket privé, bouton "Sauvegarder maintenant" (appelle le cron `db-backup` à la demande), téléchargement via URL signée 15 min. API : `GET /api/admin/backups`, `POST /api/admin/backups/trigger`, `GET /api/admin/backups/download/[date]`. |
+| Guardian UI trop statique | RÉSOLU (2026-05-12) | Stats strip (total, sévérité ≥4, issues GitHub, non classifiés). Chips de filtrage cliquables avec compteurs. Auto-refresh 60s + bouton manuel + "actualisé il y a Xs". `GET /api/admin/guardian` pour le refresh côté client. Labels classification traduits fr/en. |
+| Health page sans détection retard | RÉSOLU (2026-05-12) | Chaque cron a une tolérance configurée dans `CRON_MAX_AGE_MS` (daily→36h, heartbeat→10min, weekly→9j). Badges OVERDUE/NEVER visibles. Bande de 4 KPIs. Lien vers `/admin/guardian`. Prop `isFr` passée depuis le Server Component. |
+| SmsLog table manquante en prod | **⚠️ EN ATTENTE** | Migration `20260512_sms_log` à appliquer sur Supabase (voir ACTIONS MANUELLES). Sans elle, section SMS dans `/admin/health` affiche null — pas de crash. |
 
 ---
 

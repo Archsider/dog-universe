@@ -7,6 +7,69 @@
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### 2026-05-12 — Outage prod ENUMs + opérations (backup UI, Guardian, Health)
+
+**Contexte :** La migration `20260512_enums_booking_payment` avait été committée et déployée sur Vercel sans avoir été appliquée sur Supabase. Résultat : P2032 en prod dès que le nouveau Prisma client (ENUMs) essayait de lire les colonnes encore en `TEXT`.
+
+#### Récupération outage (résolu)
+
+**Root cause :** Prisma 5 auto-crée les types ENUM PascalCase (`BookingStatus`, `BookingServiceType`, `InvoiceStatus`) au démarrage, mais pas `PaymentMethod`. La migration attendait des types snake_case inexistants côté app. Les types PascalCase existaient (créés par Prisma) mais sans valeurs.
+
+**Séquence d'erreurs rencontrées et fixes :**
+1. `42804: default for column "status" cannot be cast automatically to type booking_status` → DROP DEFAULT avant ALTER TYPE, SET DEFAULT après avec cast explicite.
+2. `42883: operator does not exist: invoice_status = text` (CHECK CONSTRAINT `Invoice_paid_lte_amount`) → DROP CONSTRAINT avant ALTER, recreate avec `'CANCELLED'::"InvoiceStatus"`.
+3. `42710: type "BookingStatus" already exists` → ne pas tenter de RENAME, migrer les colonnes de snake_case → PascalCase existant directement.
+4. `22P02: invalid input value for enum "BookingStatus": "PENDING"` → les types PascalCase étaient vides, ADD VALUE IF NOT EXISTS via DO blocks (ADD VALUE ne peut pas être dans une transaction).
+5. `type "PaymentMethod" does not exist` → CREATE TYPE "PaymentMethod" avec EXCEPTION WHEN duplicate_object.
+
+**SQL final appliqué :** idempotent, DO blocks individuels pour ADD VALUE, check `udt_name` avant chaque ALTER pour skip si déjà migré, DROP des types snake_case en fin. Voir session pour le SQL complet.
+
+**Re-promotion Vercel :** deployment `dpl_9mAd7T3fLTbnG7q6KGbyLZxH4jR3` (commit `e94608c`, SMS fix, Prisma ENUM-aware) promu en production. Confirmation utilisateur : "non tout fonctionne".
+
+**Règle apprise :** toute migration DDL sur Prisma ENUMs doit être appliquée sur Supabase **avant** le déploiement Vercel correspondant. La CI migration-check ne suffit pas (elle tourne sur postgres:16-alpine, pas sur la prod Supabase).
+
+#### Features livrées (commit `cc16186`)
+
+**Backup & Restore UI (`/admin/backups`) :**
+- Le cron `db-backup` (03h00 UTC) existait mais sans UI. Ajout de :
+  - `GET /api/admin/backups` — liste les fichiers du bucket privé `backups/`
+  - `POST /api/admin/backups/trigger` — backup à la demande (appelle le cron en interne)
+  - `GET /api/admin/backups/download/[date]` — URL signée Supabase 15 min
+  - Page `/admin/backups` (SUPERADMIN) : tableau avec date, taille, statut + boutons Télécharger et Sauvegarder maintenant
+- Lien "Sauvegardes DB" ajouté dans la sidebar SUPERADMIN (icône `Database`)
+- Clés i18n ajoutées en fr/en/ar
+
+**AI Guardian — améliorations UX :**
+- Stats strip en haut : total évènements, sévérité ≥4, issues GitHub ouvertes, non classifiés
+- Chips de filtrage cliquables par classification avec compteurs (click filtre, double-click reset)
+- Auto-refresh 60s + bouton manuel + label "actualisé il y a Xs"
+- `GET /api/admin/guardian` ajouté pour le refresh côté client (remplace le chargement statique server-only)
+- Labels de classification traduits fr/en, icônes par action (GitBranch, BellRing, VolumeX)
+
+**Health page — détection de retard réelle :**
+- `CRON_MAX_AGE_MS` : chaque cron a une tolérance = 1.5× son intervalle (daily→36h, heartbeat→10min, weekly→9j, hourly→3h, monthly→40j)
+- Badges **OVERDUE** (amber) et **NEVER** (rouge) sur chaque cron dépassant sa tolérance
+- Bande de 4 KPIs : invariants DB · jobs DLQ · crons en retard · SMS 24h
+- Prop `isFr` passée depuis le Server Component (page était hardcodée fr)
+- Lien "Voir le Gardien IA →" depuis la section Sentry
+
+**Safeguard `with-timeout.ts` :**
+- `withTimeout<T>(promise, ms, operation)` — race contre un timer, `TimeoutError` subclass distincte des erreurs métier
+- `withFallback<T>(fn, fallback, ms)` — pour les reads non-critiques (dégradé > crash)
+- Fail-safe : le timeout ne cancelle pas la Promise sous-jacente (impossible sur Prisma), juste rejette l'appelant
+
+**SmsLog migration (⚠️ EN ATTENTE Supabase) :**
+- `prisma/migrations/20260512_sms_log/migration.sql` écrite et testée
+- Supabase MCP inaccessible lors de la session — à appliquer manuellement dans SQL Editor
+- Le `/admin/health` fail-open si la table est absente (retourne `null`, pas 500)
+
+**Décisions techniques :**
+- `CRON_MAX_AGE_MS` côté client (pas en DB) : les intervalles sont fixes dans `vercel.json`, pas de config dynamique nécessaire
+- Guardian refresh via API plutôt que `router.refresh()` : évite un full Server Component re-render pour juste 30 rows
+- `withFallback` fail-open systématique : cohérent avec le pattern établi (Redis down → skip, jamais crash)
+
+---
+
 ### 2026-05-11 — Sprint « 9.5 → 10/10 » : 11 PRs (#20 → #30)
 
 Session intensive de durcissement opérationnel post-MVP. 11 PRs mergées sur `main` couvrant la chaîne migrations, l'observabilité, la résilience, le triage automatique des erreurs, les feature flags et l'uptime monitoring.
