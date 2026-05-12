@@ -216,6 +216,11 @@ export const adminBookingCreateSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
   createInvoice: z.boolean().optional().default(true),
   isOpenEnded: z.boolean().optional().default(false),
+  // Walk-in initial status: admin picks the entry point for the booking.
+  // Defaults to IN_PROGRESS (chien déjà là — cas le plus courant).
+  initialStatus: z.enum(['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED']).optional().default('IN_PROGRESS'),
+  // Required when initialStatus === 'COMPLETED' (retroactive entry with known amount).
+  finalAmount: z.number().min(0).max(1_000_000).optional().nullable(),
 }).refine(
   d => !!d.clientId || !!d.walkIn,
   { message: 'clientId or walkIn required' },
@@ -228,6 +233,15 @@ export const adminBookingCreateSchema = z.object({
     return end >= start;
   },
   { message: 'INVALID_DATE_RANGE', path: ['endDate'] },
+).refine(
+  d => !(d.initialStatus === 'COMPLETED' && !d.endDate),
+  { message: 'END_DATE_REQUIRED_FOR_COMPLETED', path: ['endDate'] },
+).refine(
+  d => !(d.isOpenEnded && d.initialStatus === 'PENDING'),
+  { message: 'OPEN_ENDED_CANNOT_BE_PENDING', path: ['initialStatus'] },
+).refine(
+  d => !(d.initialStatus === 'COMPLETED' && (d.finalAmount === undefined || d.finalAmount === null)),
+  { message: 'FINAL_AMOUNT_REQUIRED', path: ['finalAmount'] },
 );
 
 // Demande d'extension client — body simple

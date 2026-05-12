@@ -5,7 +5,6 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { LayoutList, LayoutGrid, Plus } from 'lucide-react';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
 
@@ -21,12 +20,35 @@ import TodayClient from './_components/TodayClient';
 import HistoryFilters from './_components/HistoryFilters';
 import { loadTodaySnapshot, dayRangeUTC } from './_lib/today-queries';
 import type { BookingDetail } from '@/types/booking-detail';
+// Client wrapper — dynamic({ ssr: false }) is illegal in Server Components (Next.js 15)
+import LazyBookingDetailPanel from './_components/LazyBookingDetailPanel';
 
-// Lazy-load the panel — ssr:false to avoid hydration mismatch and keep initial bundle lean
-const BookingDetailPanel = dynamic(
-  () => import('./_components/BookingDetailPanel'),
-  { ssr: false },
-);
+// Typed result for the SSR panel pre-fetch query — mirrors the include shape below.
+// Lets TypeScript catch field-name mismatches before they reach Vercel's build.
+type BookingForPanel = Prisma.BookingGetPayload<{
+  include: {
+    client: { select: { id: true; name: true; email: true; phone: true; isWalkIn: true } };
+    bookingPets: {
+      include: {
+        pet: {
+          select: {
+            id: true; name: true; species: true; breed: true; photoUrl: true;
+            gender: true; allergies: true; currentMedication: true;
+            behaviorWithDogs: true; behaviorWithCats: true; notes: true;
+          };
+        };
+      };
+    };
+    boardingDetail: true;
+    taxiDetail: { select: { pickupAddress: true; dropoffAddress: true; price: true } };
+    invoice: {
+      select: {
+        id: true; invoiceNumber: true; status: true;
+        amount: true; paidAmount: true; version: true;
+      };
+    };
+  };
+}>;
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -119,7 +141,7 @@ export default async function AdminReservationsPage(props: PageProps) {
   const pricing = await getPricingSettings();
   if (panelBookingId) {
     try {
-      const b = await prisma.booking.findFirst({
+      const b: BookingForPanel | null = await prisma.booking.findFirst({
         where: { id: panelBookingId, deletedAt: null },
         include: {
           client: { select: { id: true, name: true, email: true, phone: true, isWalkIn: true } },
@@ -137,6 +159,7 @@ export default async function AdminReservationsPage(props: PageProps) {
           startDate: b.startDate.toISOString(),
           endDate: b.endDate?.toISOString() ?? null,
           isOpenEnded: b.isOpenEnded,
+          isWalkIn: b.isWalkIn || b.client.isWalkIn,
           totalPrice: toNumber(b.totalPrice),
           notes: b.notes ?? null,
           cancellationReason: b.cancellationReason ?? null,
@@ -147,7 +170,7 @@ export default async function AdminReservationsPage(props: PageProps) {
           pets: b.bookingPets.map((bp) => ({ id: bp.pet.id, name: bp.pet.name, species: bp.pet.species as 'DOG' | 'CAT', breed: bp.pet.breed ?? null, photoUrl: bp.pet.photoUrl ?? null, gender: bp.pet.gender ?? null, allergies: bp.pet.allergies ?? null, currentMedication: bp.pet.currentMedication ?? null, behaviorWithDogs: bp.pet.behaviorWithDogs ?? null, behaviorWithCats: bp.pet.behaviorWithCats ?? null, notes: bp.pet.notes ?? null })),
           invoice: b.invoice ? { id: b.invoice.id, invoiceNumber: b.invoice.invoiceNumber, status: b.invoice.status, amount: toNumber(b.invoice.amount), paidAmount: toNumber(b.invoice.paidAmount), version: b.invoice.version } : null,
           supplementaryInvoice: null,
-          boarding: b.boardingDetail ? { groomingEnabled: b.boardingDetail.groomingEnabled ?? false, groomingPrice: toNumber(b.boardingDetail.groomingPrice) || null, taxiGoEnabled: b.boardingDetail.taxiGoEnabled ?? false, taxiReturnEnabled: b.boardingDetail.taxiReturnEnabled ?? false, pricePerNight: toNumber(b.boardingDetail.pricePerNight) || null } : null,
+          boarding: b.boardingDetail ? { groomingEnabled: b.boardingDetail.includeGrooming ?? false, groomingPrice: toNumber(b.boardingDetail.groomingPrice) || null, taxiGoEnabled: b.boardingDetail.taxiGoEnabled ?? false, taxiReturnEnabled: b.boardingDetail.taxiReturnEnabled ?? false, pricePerNight: toNumber(b.boardingDetail.pricePerNight) || null } : null,
           taxi: b.taxiDetail ? { pickupAddress: b.taxiDetail.pickupAddress ?? null, dropoffAddress: b.taxiDetail.dropoffAddress ?? null, price: b.taxiDetail.price ? toNumber(b.taxiDetail.price) : null } : null,
           adminNotes: null,
           actionLog: [],
@@ -314,8 +337,9 @@ async function BoardView({ where, locale }: { where: WhereInput; locale: string 
     where,
     select: {
       id: true, version: true, serviceType: true, status: true,
-      startDate: true, endDate: true, arrivalTime: true, notes: true,
-      client: { select: { id: true, name: true, email: true } },
+      startDate: true, endDate: true, isOpenEnded: true, isWalkIn: true,
+      arrivalTime: true, notes: true,
+      client: { select: { id: true, name: true, email: true, isWalkIn: true } },
       bookingPets: { select: { pet: { select: { name: true } } } },
     },
     orderBy: { startDate: 'asc' },
@@ -328,6 +352,8 @@ async function BoardView({ where, locale }: { where: WhereInput; locale: string 
     status: b.status,
     startDate: b.startDate.toISOString(),
     endDate: b.endDate?.toISOString() ?? null,
+    isOpenEnded: b.isOpenEnded,
+    isWalkIn: b.isWalkIn || b.client.isWalkIn,
     arrivalTime: b.arrivalTime ?? null,
     notes: b.notes ?? null,
     clientName: b.client.name ?? b.client.email,
@@ -539,7 +565,7 @@ async function PanelWrapper({
   const orderedIds = ids.map((b) => b.id);
 
   return (
-    <BookingDetailPanel
+    <LazyBookingDetailPanel
       orderedIds={orderedIds}
       locale={locale}
       pricing={pricing}
