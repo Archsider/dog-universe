@@ -140,6 +140,8 @@ export async function GET(
     startDate: booking.startDate.toISOString(),
     endDate: booking.endDate?.toISOString() ?? null,
     isOpenEnded: booking.isOpenEnded,
+    // booking.isWalkIn added in migration 20260512 — Prisma client regenerated on Vercel build
+    isWalkIn: Boolean((booking as Record<string, unknown>).isWalkIn) || booking.client.isWalkIn,
     totalPrice: toNumber(booking.totalPrice),
     notes: booking.notes ?? null,
     cancellationReason: booking.cancellationReason ?? null,
