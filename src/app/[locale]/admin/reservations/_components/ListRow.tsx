@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { formatMAD } from '@/lib/utils';
 import {
   colorFromName,
@@ -22,10 +23,20 @@ export function Row({
   locale: string;
   t: ListTranslations;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const isWalkInRow = isOpenEndedRow(b);
   const initials = initialsFrom(b.client.firstName, b.client.lastName);
   const avatarColor = colorFromName(`${b.client.firstName} ${b.client.lastName}`);
   const totalAmount = b.invoiceAmount ?? b.totalPrice;
+
+  function openPanel(e: React.MouseEvent) {
+    e.stopPropagation();
+    const next = new URLSearchParams(searchParams.toString());
+    next.set('booking', b.id);
+    router.replace(`${pathname}?${next.toString()}`);
+  }
 
   // Status pill (overrides DB status when row is "in-progress" or "walk-in open")
   let statusKey: keyof typeof t.statusLabel = b.status as keyof typeof t.statusLabel;
@@ -77,8 +88,9 @@ export function Row({
 
   return (
     <tr
-      className="border-t hover:bg-[var(--color-background-secondary,#FAF7F0)] transition-colors"
+      className="border-t hover:bg-[var(--color-background-secondary,#FAF7F0)] transition-colors cursor-pointer"
       style={{ borderTop: '0.5px solid var(--color-border-tertiary, rgba(0,0,0,0.06))', background: rowBg }}
+      onClick={openPanel}
     >
       <td className="px-4 py-3 align-middle">
         <div
@@ -158,9 +170,9 @@ export function Row({
         )}
       </td>
       <td className="px-3 py-3 align-middle">
-        <Link href={`/${locale}/admin/reservations/${b.id}`} aria-label="open">
+        <button type="button" onClick={openPanel} aria-label="open panel" className="p-0.5">
           <ChevronRight className="h-4 w-4 text-gray-400 hover:text-gold-500" />
-        </Link>
+        </button>
       </td>
     </tr>
   );

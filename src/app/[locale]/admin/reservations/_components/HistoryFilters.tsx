@@ -49,9 +49,11 @@ export default function HistoryFilters({ locale, rangeFrom, rangeTo, status, typ
   ];
   const statusChips: { id: string; label: string }[] = [
     { id: '', label: fr ? 'Tous' : 'All' },
+    { id: 'PENDING', label: fr ? 'En attente' : 'Pending' },
+    { id: 'CONFIRMED', label: fr ? 'Confirmée' : 'Confirmed' },
+    { id: 'IN_PROGRESS', label: fr ? 'En cours' : 'In progress' },
     { id: 'COMPLETED', label: fr ? 'Terminée' : 'Completed' },
     { id: 'CANCELLED', label: fr ? 'Annulée' : 'Cancelled' },
-    { id: 'REJECTED', label: fr ? 'Refusée' : 'Rejected' },
     { id: 'NO_SHOW', label: 'No-show' },
   ];
 
