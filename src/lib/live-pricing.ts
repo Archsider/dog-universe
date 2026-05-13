@@ -29,11 +29,13 @@ export type LiveAddons = {
 
 export type LiveTotalResult = {
   nights: number;
-  /** Pension + add-ons. */
+  /** Pension + add-ons + booking items (unbilled). */
   total: number;
   /** Pension only — useful when callers want to display add-ons separately. */
   pensionTotal: number;
   addonTotal: number;
+  /** Sum of unbilled BookingItem.total — products, extras, discounts. */
+  itemsTotal: number;
 };
 
 export function liveNightsSince(startDate: Date, now: Date = new Date()): number {
@@ -48,6 +50,8 @@ export function computeLiveTotal(
     startDate: Date;
     pets: LivePet[];
     addons?: LiveAddons;
+    /** Sum of BookingItem.total for unbilled items (invoiceItemId IS NULL). */
+    unbilledItemsTotal?: number;
   },
   pricing: PricingSettings,
   now: Date = new Date(),
@@ -70,10 +74,13 @@ export function computeLiveTotal(
     }
   }
 
+  const itemsTotal = input.unbilledItemsTotal ?? 0;
+
   return {
     nights,
     pensionTotal,
     addonTotal,
-    total: pensionTotal + addonTotal,
+    itemsTotal,
+    total: pensionTotal + addonTotal + itemsTotal,
   };
 }
