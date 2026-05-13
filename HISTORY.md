@@ -7,6 +7,27 @@
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### 2026-05-13 — PR #46 (panel disable) + PR #47 (walk-in form decoupling)
+
+**PR #46 — Désactivation du side panel `/admin/reservations`** (3 commits, mergée) :
+- Les rangées du tableau et les cartes Kanban naviguent désormais vers `/admin/reservations/[id]` (page full) plutôt que d'ouvrir le panel `?booking=`.
+- `PanelWrapper` server component supprimé ; `openPanel` retiré de `ListRow`.
+- `ReservationsList` reçoit un prop `compact?: boolean` qui masque le header + 4 KpiCards quand embarqué dans `HistoryView` (fix doublon visuel).
+- Compteur "présents" unifié sur `prisma.booking.count` (séjours IN_PROGRESS), au lieu de `bookingPet.count` (animaux). Subtitle header + KPI card cohérents.
+- **Fichiers panel conservés sur disque** pour réactivation future propre.
+
+**PR #47 — Découplage Walk-in client / Durée indéterminée / Statut initial** (6 commits, mergée) :
+- Les 3 contrôles deviennent indépendants → 6 combinaisons supportées (inscrit × walk-in × open-ended × IN_PROGRESS/COMPLETED).
+- Dérivation côté API : `isWalkInClient = !!walkIn` (drives notifications + idempotency), `isWalkInBooking = isWalkInClient || isOpenEnded || COMPLETED` (drives `Booking.isWalkIn` DB).
+- Nouveau refinement Zod `WALKIN_OPENENDED_WITH_COMPLETED` placé en premier (combinaison incohérente).
+- Garde-fou form : `effectiveIsOpenEnded = isOpenEnded && initialStatus !== 'COMPLETED'`.
+- 11 tests dans `src/lib/__tests__/walkin-validation.test.ts` (6 success + 4 erreurs + dup E4 inscribed).
+- 4 fichiers de test orphelins du panel (importaient `@testing-library/react` non installé) supprimés pour débloquer CI.
+
+**Décision-clé** : NE PAS modifier `prisma/schema.prisma` pour cette PR — la sémantique "walk-in booking" se dérive depuis les flags existants (`isOpenEnded`, `initialStatus`, présence d'un `walkIn` client) sans nouvelle colonne.
+
+---
+
 ### 2026-05-11 — Sprint « 9.5 → 10/10 » : 11 PRs (#20 → #30)
 
 Session intensive de durcissement opérationnel post-MVP. 11 PRs mergées sur `main` couvrant la chaîne migrations, l'observabilité, la résilience, le triage automatique des erreurs, les feature flags et l'uptime monitoring.
