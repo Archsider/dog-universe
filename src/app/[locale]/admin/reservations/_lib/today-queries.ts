@@ -2,11 +2,10 @@
 // Pure data-loading layer — no rendering, no auth (caller handles that).
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
-import { getPensionPrice, getPricingSettings, type PricingSettings } from '@/lib/pricing';
-import { differenceInCalendarDays } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { getPricingSettings, type PricingSettings } from '@/lib/pricing';
+import { computeLiveTotal, CASA_TZ } from '@/lib/live-pricing';
 
-export const CASA_TZ = 'Africa/Casablanca';
+export { CASA_TZ };
 
 export type TodayPet = { id: string; name: string; species: 'DOG' | 'CAT' };
 export type TodayClient = { id: string; name: string; phone: string | null; isWalkIn: boolean };
@@ -108,19 +107,12 @@ function mapBooking(b: RawBooking): TodayBooking {
 
 function withLiveTotal(b: TodayBooking, pricing: PricingSettings, now: Date): TodayBooking {
   if (!b.isOpenEnded) return b;
-  const liveNights = Math.max(
-    1,
-    differenceInCalendarDays(
-      toZonedTime(now, CASA_TZ),
-      toZonedTime(new Date(b.startDate), CASA_TZ),
-    ),
+  const { nights, total } = computeLiveTotal(
+    { startDate: new Date(b.startDate), pets: b.pets },
+    pricing,
+    now,
   );
-  const dogsCount = b.pets.filter((p) => p.species === 'DOG').length;
-  const liveTotal = b.pets.reduce((acc, p) => {
-    const unit = getPensionPrice({ species: p.species }, dogsCount, liveNights, pricing);
-    return acc + toNumber(unit.times(liveNights));
-  }, 0);
-  return { ...b, liveNights, liveTotal };
+  return { ...b, liveNights: nights, liveTotal: total };
 }
 
 export async function loadTodaySnapshot(now: Date = new Date()): Promise<TodaySnapshot> {
