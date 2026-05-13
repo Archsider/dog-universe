@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { auth } from '../../../../../../../auth';
 import { logServerError } from '@/lib/observability';
+import { getBackupBucket, BACKUP_PREFIX } from '@/lib/db-backup';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,7 @@ export async function GET(
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const bucket = process.env.SUPABASE_PRIVATE_STORAGE_BUCKET ?? 'uploads-private';
+  const bucket = getBackupBucket();
 
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.json({ error: 'Storage not configured' }, { status: 503 });
@@ -35,7 +36,7 @@ export async function GET(
   try {
     const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
 
-    const key = `backups/${date}.json.gz`;
+    const key = `${BACKUP_PREFIX}${date}.json.gz`;
     const { data, error } = await supabase.storage
       .from(bucket)
       .createSignedUrl(key, 15 * 60); // 15 minutes

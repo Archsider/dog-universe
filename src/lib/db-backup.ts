@@ -24,6 +24,16 @@ import { logger } from '@/lib/logger';
 export const BACKUP_PREFIX = 'backups/';
 const RETENTION_DAYS = 30;
 
+/**
+ * Single source of truth for the backup bucket name. Every backup-related
+ * route (cron, trigger, list, download, restore) MUST import this rather
+ * than reading the env var directly — so swapping the bucket only requires
+ * updating `env.SUPABASE_BACKUPS_BUCKET` (or this re-export) in one place.
+ */
+export function getBackupBucket(): string {
+  return env.SUPABASE_BACKUPS_BUCKET;
+}
+
 export interface BackupRunResult {
   key: string;
   bytes: number;
@@ -62,7 +72,7 @@ export async function runDbBackup(options: { rotate?: boolean } = {}): Promise<B
   const rotate = options.rotate !== false;
   const startedAt = Date.now();
   const supabase = getSupabaseClient();
-  const bucket = env.SUPABASE_PRIVATE_STORAGE_BUCKET;
+  const bucket = getBackupBucket();
 
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const objectKey = `${BACKUP_PREFIX}${today}.json.gz`;
@@ -233,7 +243,7 @@ export interface BackupListItem {
 
 export async function listBackups(limit = 90): Promise<BackupListItem[]> {
   const supabase = getSupabaseClient();
-  const bucket = env.SUPABASE_PRIVATE_STORAGE_BUCKET;
+  const bucket = getBackupBucket();
   const { data: files, error } = await supabase.storage
     .from(bucket)
     .list(BACKUP_PREFIX.replace(/\/$/, ''), { limit, sortBy: { column: 'name', order: 'desc' } });

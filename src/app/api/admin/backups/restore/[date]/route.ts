@@ -20,11 +20,10 @@ import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { env } from '@/lib/env';
 import { logServerError } from '@/lib/observability';
+import { getBackupBucket, BACKUP_PREFIX } from '@/lib/db-backup';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
-
-const BACKUP_PREFIX = 'backups/';
 
 // Tables in FK dependency order (parents before children).
 const RESTORE_ORDER = [
@@ -127,7 +126,7 @@ export async function POST(
 
   const supabaseUrl = env.SUPABASE_URL;
   const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY;
-  const bucket = env.SUPABASE_PRIVATE_STORAGE_BUCKET;
+  const bucket = getBackupBucket();
 
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.json({ error: 'Storage not configured' }, { status: 503 });

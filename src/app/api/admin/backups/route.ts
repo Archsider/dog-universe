@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { env } from '@/lib/env';
 import { logServerError } from '@/lib/observability';
-import { listBackups, BackupError } from '@/lib/db-backup';
+import { listBackups, BackupError, getBackupBucket } from '@/lib/db-backup';
 import { getLastBackupSuccess, getLastBackupError } from '@/lib/backup-health';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,7 @@ export async function GET() {
       backups: [],
       diagnostics: {
         storageConfigured: false,
-        bucket: env.SUPABASE_PRIVATE_STORAGE_BUCKET,
+        bucket: getBackupBucket(),
         lastSuccess,
         lastError,
         message:
@@ -44,7 +44,7 @@ export async function GET() {
       backups,
       diagnostics: {
         storageConfigured: true,
-        bucket: env.SUPABASE_PRIVATE_STORAGE_BUCKET,
+        bucket: getBackupBucket(),
         lastSuccess,
         lastError,
         count: backups.length,
@@ -59,7 +59,7 @@ export async function GET() {
       backups: [],
       diagnostics: {
         storageConfigured: true,
-        bucket: env.SUPABASE_PRIVATE_STORAGE_BUCKET,
+        bucket: getBackupBucket(),
         lastSuccess,
         lastError,
         listError: err instanceof Error ? err.message : String(err),
