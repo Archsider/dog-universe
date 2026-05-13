@@ -16,6 +16,7 @@ import { formatMAD } from '@/lib/utils';
 import { calculateSuggestedGrade } from '@/lib/loyalty';
 import { toNumber, type DecimalLike } from '@/lib/decimal';
 import { withSpan } from '@/lib/observability';
+import { notDeleted } from '@/lib/prisma-soft';
 
 // ---------------------------------------------------------------------------
 // Item sort priority:
@@ -178,7 +179,7 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
           _sum: { amount: true },
         });
         const completedStays = await tx.booking.count({
-          where: { clientId: invoice.clientId, status: 'COMPLETED', deletedAt: null },
+          where: notDeleted({ clientId: invoice.clientId, status: 'COMPLETED' }),
         });
 
         const totalStays = completedStays + (client.historicalStays ?? 0);

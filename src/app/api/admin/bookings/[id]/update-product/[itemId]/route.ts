@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
 import { isPaidExceedsCheckViolation, PAID_EXCEEDS_PAYLOAD } from '@/lib/billing-errors';
 import { logger } from '@/lib/logger';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface Params { params: Promise<{ id: string; itemId: string }> }
 
@@ -32,7 +33,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     : null;
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     select: { invoice: { select: { id: true } } },
   });
   if (!booking) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
@@ -53,7 +54,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       // H9 — Booking.version guard (only when caller opted in).
       if (expectedBookingVersion !== null) {
         const bumped = await tx.booking.updateMany({
-          where: { id: bookingId, version: expectedBookingVersion, deletedAt: null },
+          where: notDeleted({ id: bookingId, version: expectedBookingVersion }),
           data: { version: { increment: 1 } },
         });
         if (bumped.count === 0) {

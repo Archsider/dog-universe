@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { profileUpdateSchema, formatZodError } from '@/lib/validation';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const user = await prisma.user.findFirst({
-    where: { id: session.user.id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id: session.user.id }),
     select: { id: true, name: true, firstName: true, lastName: true, email: true, phone: true },
   });
 

@@ -9,6 +9,7 @@ import { withSpan, logServerError } from '@/lib/observability';
 import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 import { differenceInCalendarDays } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     include: {
       boardingDetail: true,
       bookingPets: { include: { pet: { select: { id: true, name: true, species: true } } } },

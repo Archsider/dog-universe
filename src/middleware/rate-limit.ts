@@ -3,6 +3,7 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { checkFallback } from '@/middleware/lru-rate-limit';
 
 // Rate limiting is only active when Upstash env vars are set (production).
 // In development (no vars), all requests pass through.
@@ -241,9 +242,38 @@ export function getDynamicLimitBucket(path: string): DynamicBucket | null {
 const ADMIN_MUTATION_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
 
 /**
+ * In-memory LRU enforcement — invoked when Upstash returns a malformed
+ * payload OR throws. Returns the same shape as the Upstash path so the
+ * caller doesn't need to special-case the fallback.
+ */
+function enforceFallback(
+  bucket: string,
+  bucketKey: string,
+): { ok: true } | { ok: false; response: NextResponse } {
+  const fb = checkFallback(bucket, bucketKey);
+  if (fb.success) return { ok: true };
+  return {
+    ok: false,
+    response: NextResponse.json(
+      { error: 'Too many requests. Please try again later.' },
+      {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': String(fb.limit),
+          'X-RateLimit-Remaining': String(fb.remaining),
+          'X-RateLimit-Reset': String(fb.reset),
+          'Retry-After': String(Math.max(1, Math.ceil((fb.reset - Date.now()) / 1000))),
+          'X-RateLimit-Source': 'lru-fallback',
+        },
+      },
+    ),
+  };
+}
+
+/**
  * Run the rate-limit check for a request. Returns a 429 response when the
- * bucket is exhausted or Upstash is unavailable (fail-closed). Returns
- * `{ ok: true }` when the request should proceed.
+ * bucket is exhausted. If Upstash is unreachable, falls back to an in-memory
+ * LRU limiter (per-Lambda) — see `lru-rate-limit.ts` for trade-offs.
  *
  * `resolveUserId` is invoked lazily — only when we're actually going to
  * rate-limit — so non-rate-limited routes pay no auth() cost.
@@ -290,21 +320,19 @@ export async function checkRateLimit(
 
   if (!limitKey || !methodAllowed) return { ok: true };
 
-  try {
-    // Prefer per-user limit when authenticated: rotating IPs (VPN, mobile
-    // network) shouldn't let a logged-in client/admin bypass the bucket.
-    // Fall back to IP for anonymous traffic. We only call auth() when
-    // we're actually going to rate-limit, so non-rate-limited routes
-    // pay no auth() cost.
-    let bucketKey = ip;
-    if (opts.resolveUserId) {
-      try {
-        const userId = await opts.resolveUserId();
-        if (userId) bucketKey = `u:${userId}`;
-      } catch {
-        // auth() failure → keep IP key (fail-safe, never block on it)
-      }
+  // Resolve bucketKey OUTSIDE the try so the catch block can reuse it for
+  // the LRU fallback. Prefer per-user limit when authenticated.
+  let bucketKey = ip;
+  if (opts.resolveUserId) {
+    try {
+      const userId = await opts.resolveUserId();
+      if (userId) bucketKey = `u:${userId}`;
+    } catch {
+      // auth() failure → keep IP key (fail-safe, never block on it)
     }
+  }
+
+  try {
     const result = await limiter[limitKey].limit(bucketKey);
 
     // Validate the response shape — a malformed payload from Upstash should
@@ -316,14 +344,8 @@ export async function checkRateLimit(
       typeof result.remaining !== 'number' ||
       typeof result.reset !== 'number'
     ) {
-      logger.error('rate-limit', 'malformed response, fail-closed', { result });
-      return {
-        ok: false,
-        response: NextResponse.json(
-          { error: 'SERVICE_UNAVAILABLE' },
-          { status: 429, headers: { 'Retry-After': '60' } },
-        ),
-      };
+      logger.error('rate-limit', 'malformed response, falling back to LRU', { result });
+      return enforceFallback(limitKey, bucketKey);
     }
 
     const { success, limit, remaining, reset } = result;
@@ -346,15 +368,17 @@ export async function checkRateLimit(
       };
     }
   } catch (err) {
-    // Upstash unreachable / timeout / unexpected error → fail-closed.
-    logger.error('rate-limit', 'check failed, fail-closed', { error: err instanceof Error ? err.message : String(err) });
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { error: 'SERVICE_UNAVAILABLE' },
-        { status: 429, headers: { 'Retry-After': '60' } },
-      ),
-    };
+    // Upstash unreachable / timeout / unexpected error → in-memory LRU
+    // fallback. Defense-in-depth (audit S-M2): a transient Upstash spike
+    // would otherwise force every request into "fail-closed" 429 mode for
+    // the duration of the outage. The LRU layer is per-Lambda-instance so
+    // it's not as tight as Redis, but bounds the blast radius of a real
+    // attacker AND keeps legitimate users moving.
+    logger.warn('rate-limit', 'Upstash unreachable, falling back to LRU', {
+      error: err instanceof Error ? err.message : String(err),
+      bucket: limitKey,
+    });
+    return enforceFallback(limitKey, bucketKey);
   }
 
   return { ok: true };

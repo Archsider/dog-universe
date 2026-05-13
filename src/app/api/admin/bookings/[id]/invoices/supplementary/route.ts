@@ -16,6 +16,7 @@ import { auth } from '../../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -49,7 +50,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     select: {
       id: true, clientId: true, startDate: true,
       invoice: { select: { id: true, status: true } },

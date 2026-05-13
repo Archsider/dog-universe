@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { generateSecret, generate, verify } from 'otplib';
 import qrcode from 'qrcode';
 import { prisma } from './prisma';
@@ -9,6 +10,26 @@ export { generateSecret as generateTotpSecret };
 // user. otplib accepts ±1 step (30s) drift by default, so 90s comfortably
 // covers the entire acceptance window.
 const REPLAY_WINDOW_MS = 90_000;
+
+// SHA-256 the token before storing it in `lastTotpToken`. Defense-in-depth
+// against a DB leak: a plaintext 6-digit token in the column would let an
+// attacker replay the code within the 30-90s acceptance window. Hashing
+// preserves the replay-detection capability (same input → same hash) while
+// removing the raw token from at-rest storage. (audit S-M1)
+//
+// Migration: legacy rows still hold plaintext 6-digit tokens. The compare
+// below tolerates both — if the stored value matches the hash OR the raw
+// token, we treat it as a replay. After every legitimate login, the new
+// hashed value overwrites the legacy plaintext.
+function hashTotpToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function isReplayMatch(stored: string, candidate: string): boolean {
+  if (!stored) return false;
+  if (stored === candidate) return true; // legacy plaintext row
+  return stored === hashTotpToken(candidate);
+}
 
 export function getTotpUri(secret: string, email: string): string {
   const label = encodeURIComponent(`Dog Universe:${email}`);
@@ -47,11 +68,13 @@ export async function verifyTotpForUser(
 ): Promise<TotpVerifyResult> {
   if (!user.totpSecret) return { ok: false, reason: 'NO_SECRET' };
 
-  // Replay guard: same token, used within REPLAY_WINDOW_MS for THIS user.
+  // Replay guard: same token used within REPLAY_WINDOW_MS for THIS user.
+  // Compare both as hash and as plaintext (legacy rows) — see hashTotpToken.
   if (
-    user.lastTotpToken === token &&
+    user.lastTotpToken &&
     user.lastTotpUsedAt &&
-    Date.now() - user.lastTotpUsedAt.getTime() < REPLAY_WINDOW_MS
+    Date.now() - user.lastTotpUsedAt.getTime() < REPLAY_WINDOW_MS &&
+    isReplayMatch(user.lastTotpToken, token)
   ) {
     return { ok: false, reason: 'REPLAY' };
   }
@@ -80,9 +103,10 @@ export async function verifyTotpForUser(
 }
 
 export async function persistTotpUse(userId: string, token: string): Promise<void> {
+  // Store the hash, not the raw token. See hashTotpToken() for rationale.
   await prisma.user.update({
     where: { id: userId },
-    data: { lastTotpToken: token, lastTotpUsedAt: new Date() },
+    data: { lastTotpToken: hashTotpToken(token), lastTotpUsedAt: new Date() },
   });
 }
 

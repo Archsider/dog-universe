@@ -12,7 +12,12 @@ export const authConfig: NextAuthConfig = {
   providers: [], // Credentials provider is added in auth.ts (it needs Prisma + bcrypt)
   session: {
     strategy: 'jwt',
-    maxAge: 24 * 60 * 60, // 1 day
+    // 12h — narrowed from 24h (audit S-M4). Combined with `tokenVersion`
+    // bumping on password change, this caps the window of a stolen JWT
+    // cookie at 12h max instead of 24h. The `jwt()` callback in auth.ts
+    // refreshes role/totpPending from DB on every JWT update, so role
+    // revocation propagates faster too.
+    maxAge: 12 * 60 * 60,
   },
   callbacks: {
     // session() only reads the JWT — Edge-safe.

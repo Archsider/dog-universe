@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { BookingError } from './booking-errors';
 import { taxiDescription } from '@/lib/invoice-descriptions';
+import { notDeleted } from '@/lib/prisma-soft';
 
 // ────────────────────────────────────────────────────────────────────────────
 // patchBoardingDetail
@@ -43,7 +44,7 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
   const { bookingId, patch, actorId } = args;
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     include: {
       bookingPets: { include: { pet: true } },
       invoice: true,
@@ -281,7 +282,7 @@ export async function addBookingItems(args: AddBookingItemsArgs) {
   const { bookingId, rawItems, actorId } = args;
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     include: { invoice: true },
   });
   if (!booking) throw new BookingError('NOT_FOUND');
@@ -420,7 +421,7 @@ export async function rejectExtensionRequest(args: RejectExtensionRequestArgs) {
   const { bookingId, actorId } = args;
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     select: { id: true, clientId: true, hasExtensionRequest: true, serviceType: true },
   });
   if (!booking) throw new BookingError('NOT_FOUND');

@@ -3,6 +3,7 @@ import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { calculateBoardingBreakdown, getPricingSettings } from '@/lib/pricing';
+import { notDeleted } from '@/lib/prisma-soft';
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
 
   const [bookingA, bookingB] = await Promise.all([
     prisma.booking.findFirst({
-      where: { id: targetBookingId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ id: targetBookingId }),
       include: {
         invoice: true,
         boardingDetail: true,
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
       },
     }),
     prisma.booking.findFirst({
-      where: { id: sourceBookingId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ id: sourceBookingId }),
       include: {
         invoice: true,
         boardingDetail: true,

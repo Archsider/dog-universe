@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
   const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') ?? '50')), 100);
 
-  const where: Record<string, unknown> = { deletedAt: null }; // soft-delete: required — no global extension (Edge Runtime incompatible)
+  const where: Record<string, unknown> = { deletedAt: null };
 
   if (search) {
     where.OR = [
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'INVALID_GENDER' }, { status: 400 });
   }
 
-  const owner = await prisma.user.findFirst({ where: { id: ownerId, role: 'CLIENT', deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+  const owner = await prisma.user.findFirst({ where: notDeleted({ id: ownerId, role: 'CLIENT' }) });
   if (!owner) return NextResponse.json({ error: 'Owner not found' }, { status: 404 });
 
   const pet = await prisma.pet.create({

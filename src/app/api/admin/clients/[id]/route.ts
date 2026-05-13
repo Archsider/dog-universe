@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { calculateSuggestedGrade } from '@/lib/loyalty';
 import { invalidateLoyaltyCache } from '@/lib/loyalty-server';
+import { notDeleted } from '@/lib/prisma-soft';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -16,10 +17,10 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
 
   const client = await prisma.user.findFirst({
-    where: { id, role: 'CLIENT', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id, role: 'CLIENT' }),
     include: {
       pets: {
-        where: { deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        where: notDeleted(),
         select: {
           id: true, ownerId: true, name: true, species: true, breed: true,
           dateOfBirth: true, gender: true, photoUrl: true, weight: true,
@@ -79,7 +80,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   // Privilege escalation guard: this endpoint may only mutate CLIENT users.
   // Without this, an ADMIN could PATCH a SUPERADMIN's email/phone/name.
-  const target = await prisma.user.findFirst({ where: { id, deletedAt: null }, select: { role: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+  const target = await prisma.user.findFirst({ where: notDeleted({ id }), select: { role: true } });
   if (!target || target.role !== 'CLIENT') {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
@@ -118,7 +119,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
     }
-    const existing = await prisma.user.findFirst({ where: { email, NOT: { id }, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+    const existing = await prisma.user.findFirst({ where: { email, NOT: { id }, deletedAt: null } });
     if (existing) return NextResponse.json({ error: 'EMAIL_TAKEN' }, { status: 409 });
     updateData.email = email;
   }
@@ -151,10 +152,10 @@ export async function PATCH(request: Request, { params }: Params) {
   if (recalculateLoyalty) {
     const currentGrade = await prisma.loyaltyGrade.findUnique({ where: { clientId: id } });
     if (!currentGrade?.isOverride) {
-      const user = await prisma.user.findFirst({ where: { id, deletedAt: null }, select: { historicalStays: true, historicalSpendMAD: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+      const user = await prisma.user.findFirst({ where: notDeleted({ id }), select: { historicalStays: true, historicalSpendMAD: true } });
       const [totalPaid, completedStays] = await Promise.all([
         prisma.invoice.aggregate({ where: { clientId: id, status: 'PAID' }, _sum: { amount: true } }),
-        prisma.booking.count({ where: { clientId: id, status: 'COMPLETED', deletedAt: null } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
+        prisma.booking.count({ where: notDeleted({ clientId: id, status: 'COMPLETED' }) }),
       ]);
       const totalStays = completedStays + (user?.historicalStays ?? 0);
       const totalRevenue = Number(totalPaid._sum.amount ?? 0) + Number(user?.historicalSpendMAD ?? 0);
@@ -180,7 +181,7 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const client = await prisma.user.findFirst({ where: { id, role: 'CLIENT', deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+  const client = await prisma.user.findFirst({ where: notDeleted({ id, role: 'CLIENT' }) });
   if (!client) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const now = new Date();
@@ -188,13 +189,13 @@ export async function DELETE(_req: Request, { params }: Params) {
   await prisma.$transaction(async (tx) => {
     // Soft-delete all active pets (preserve history of past bookings)
     await tx.pet.updateMany({
-      where: { ownerId: id, deletedAt: null },
+      where: notDeleted({ ownerId: id }),
       data: { deletedAt: now },
     });
 
     // Soft-delete all active bookings
     await tx.booking.updateMany({
-      where: { clientId: id, deletedAt: null },
+      where: notDeleted({ clientId: id }),
       data: { deletedAt: now },
     });
 

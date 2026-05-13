@@ -9,6 +9,7 @@ import { formatMAD } from '@/lib/utils';
 import { allocatePayments } from '@/lib/payments';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
 import { withSpan, logServerError } from '@/lib/observability';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -146,7 +147,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const client = await prisma.user.findFirst({ where: { id: clientId, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+    const client = await prisma.user.findFirst({ where: notDeleted({ id: clientId }) });
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
     // Generate invoice number atomiquement via la table InvoiceSequence.

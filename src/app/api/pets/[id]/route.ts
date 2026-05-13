@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { petUpdateSchema, formatZodError } from '@/lib/validation';
 import { logger } from '@/lib/logger';
+import { notDeleted } from '@/lib/prisma-soft';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -14,7 +15,7 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
 
   const pet = await prisma.pet.findFirst({
-    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id }),
     select: {
       id: true, ownerId: true, name: true, species: true, breed: true,
       dateOfBirth: true, gender: true, photoUrl: true,
@@ -63,7 +64,7 @@ export async function PATCH(_req: Request, { params }: Params) {
 
   const { id } = await params;
 
-  const pet = await prisma.pet.findFirst({ where: { id, deletedAt: null }, select: { id: true, ownerId: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+  const pet = await prisma.pet.findFirst({ where: notDeleted({ id }), select: { id: true, ownerId: true } });
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && pet.ownerId !== session.user.id) {

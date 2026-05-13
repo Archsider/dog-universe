@@ -22,6 +22,7 @@ import {
   handleNoShowInvoice,
   runStatusSideEffects,
 } from '@/lib/services/booking-admin';
+import { notDeleted } from '@/lib/prisma-soft';
 
 // ────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/bookings/[id]
@@ -34,7 +35,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id: id }),
     include: {
       client: { select: { id: true, name: true, email: true, phone: true } },
       bookingPets: { include: { pet: true } },
@@ -71,7 +72,7 @@ export const PATCH = withSchema(
     const forcePaidInvoice = Boolean(body.forcePaidInvoice);
 
     const booking = await prisma.booking.findFirst({
-      where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ id: id }),
       include: {
         client: true,
         bookingPets: { include: { pet: true } },
@@ -319,7 +320,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id: id }),
     include: { invoice: { select: { id: true, status: true, invoiceNumber: true } } },
   });
   // booking has scalar fields serviceType, startDate, endDate by default (no select used).

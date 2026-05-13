@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getPricingSettings } from '@/lib/pricing';
 import { NewBookingForm } from './NewBookingForm';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -17,14 +18,14 @@ export default async function AdminNewReservationPage({ params }: PageProps) {
 
   const [clientsRaw, pricing] = await Promise.all([
     prisma.user.findMany({
-      where: { role: 'CLIENT', deletedAt: null },
+      where: notDeleted({ role: 'CLIENT' }),
       select: {
         id: true,
         name: true,
         email: true,
         phone: true,
         pets: {
-          where: { deletedAt: null },
+          where: notDeleted(),
           select: { id: true, name: true, species: true, dateOfBirth: true },
           orderBy: { name: 'asc' },
         },

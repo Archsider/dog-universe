@@ -18,6 +18,7 @@ import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { log, logger } from '@/lib/logger';
+import { notDeleted } from '@/lib/prisma-soft';
 
 const BLOCKING_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'AT_PICKUP', 'PENDING_EXTENSION'] as const;
 
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
   const activeBooking = await prisma.booking.findFirst({
     where: {
       clientId: targetUserId,
-      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      deletedAt: null,
       status: { in: [...BLOCKING_STATUSES] },
     },
     select: { id: true, status: true, startDate: true },
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     // Soft-delete pets (already-archived stay archived)
     await tx.pet.updateMany({
-      where: { ownerId: targetUserId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ ownerId: targetUserId }),
       data: { deletedAt: now },
     });
 

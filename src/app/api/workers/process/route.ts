@@ -24,6 +24,7 @@ import { prisma } from '@/lib/prisma';
 import { getLastHeartbeat, tryClaimAlertSlot } from '@/lib/taxi-heartbeat';
 import { notifyAdminsTaxiHeartbeatLost, createNotification } from '@/lib/notifications';
 import { markWorkerRun, getQueueLastEnqueueMs, getQueueLastFullCheckMs, markQueueFullCheck } from '@/lib/cache';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export const maxDuration = 60;
 
@@ -60,7 +61,7 @@ async function alertDlqJob(params: {
     if (acquired !== 'OK') return; // Another worker already alerted this hour.
 
     const superadmins = await prisma.user.findMany({
-      where: { role: 'SUPERADMIN', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ role: 'SUPERADMIN' }),
       select: { id: true },
     });
 
@@ -108,7 +109,7 @@ async function checkTaxiHeartbeats(): Promise<{ scanned: number; alerted: number
   let alerted = 0;
   try {
     const bookings = await prisma.booking.findMany({
-      where: { serviceType: 'PET_TAXI', status: 'IN_PROGRESS', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ serviceType: 'PET_TAXI', status: 'IN_PROGRESS' }),
       select: {
         id: true,
         client: { select: { name: true, email: true } },

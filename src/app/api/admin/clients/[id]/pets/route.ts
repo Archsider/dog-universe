@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface PetInput {
   name: string;
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Verify the target is an actual CLIENT (not another admin / soft-deleted).
   const client = await prisma.user.findFirst({
-    where: { id: clientId, role: 'CLIENT', deletedAt: null },
+    where: notDeleted({ id: clientId, role: 'CLIENT' }),
     select: { id: true },
   });
   if (!client) {

@@ -29,6 +29,7 @@ import {
 } from '@/lib/sms';
 import { sendEmailNow, sendSmsNow } from '@/lib/notify-now';
 import { ServiceType } from './constants';
+import { notDeleted } from '@/lib/prisma-soft';
 
 type BookingForStatus = {
   id: string;
@@ -302,7 +303,7 @@ export async function runStatusSideEffects(args: RunStatusSideEffectsArgs) {
       const { calculateSuggestedGrade } = await import('@/lib/loyalty');
       const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
       const [totalStays, totalPaid, currentGrade] = await Promise.all([
-        prisma.booking.count({ where: { clientId: booking.clientId, status: 'COMPLETED', deletedAt: null } }),
+        prisma.booking.count({ where: notDeleted({ clientId: booking.clientId, status: 'COMPLETED' }) }),
         prisma.invoice.aggregate({ where: { clientId: booking.clientId, status: 'PAID' }, _sum: { amount: true } }),
         prisma.loyaltyGrade.findUnique({ where: { clientId: booking.clientId } }),
       ]);

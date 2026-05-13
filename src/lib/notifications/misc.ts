@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { NOTIFICATION_MESSAGES } from '@/lib/notification-messages';
 import { createNotification, createAdminNotifications } from './core';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function createInvoiceNotification(
   userId: string,
@@ -22,7 +23,7 @@ export async function createInvoicePaidNotification(
 
   try {
     const client = await prisma.user.findFirst({
-      where: { id: userId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ id: userId }),
       select: { name: true, email: true, language: true },
     });
     if (client) {
@@ -98,7 +99,7 @@ export async function notifyAdminsNewClient(
   // Send email to all admin emails (non-blocking)
   try {
     const admins = await prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null },
       select: { email: true, language: true },
     });
     const { getEmailTemplate: getTemplate } = await import('@/lib/email');

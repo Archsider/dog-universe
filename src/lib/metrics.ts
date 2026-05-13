@@ -8,6 +8,7 @@ import {
 } from '@/lib/accounting';
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
 import { cacheReadThrough } from '@/lib/cache';
+import { notDeleted } from '@/lib/prisma-soft';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -398,7 +399,7 @@ export async function currentBoarders(): Promise<{
   const boardingFilter = {
     serviceType: 'BOARDING' as const,
     status: BookingStatus.IN_PROGRESS,
-    deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    deletedAt: null,
   };
   const [cat, dog] = await Promise.all([
     prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingFilter } }),
@@ -408,7 +409,7 @@ export async function currentBoarders(): Promise<{
 }
 
 export async function pendingBookingsCount(): Promise<number> {
-  return prisma.booking.count({ where: { status: 'PENDING', deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+  return prisma.booking.count({ where: notDeleted({ status: 'PENDING' }) });
 }
 
 // excludeWalkIn is required — callers must be explicit about walk-in filtering.
