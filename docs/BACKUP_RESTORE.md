@@ -8,18 +8,52 @@ restore from a dump.
 Vercel Lambda has no `pg_dump` binary, so we cannot run a true PostgreSQL
 dump from our serverless cron. Instead, the cron at
 [`src/app/api/cron/db-backup/route.ts`](../src/app/api/cron/db-backup/route.ts)
-exports the critical tables via Prisma to a single gzipped JSON file and
-uploads it to Supabase private storage.
+calls `runDbBackup()` from [`src/lib/db-backup.ts`](../src/lib/db-backup.ts),
+which exports the critical tables via Prisma to a single gzipped JSON file
+and uploads it to a dedicated Supabase private bucket.
 
-| Property      | Value                                            |
-|---------------|--------------------------------------------------|
-| Schedule      | Daily, **03:00 UTC** (vercel.json)               |
-| Auth          | `x-cron-secret` header / `Authorization: Bearer` |
-| Bucket        | `uploads-private` (env `SUPABASE_PRIVATE_STORAGE_BUCKET`) |
-| Object key    | `backups/YYYY-MM-DD.json.gz`                     |
-| Compression   | gzip level 9 (`node:zlib`)                       |
-| Retention     | 30 days (older dumps deleted on each run)        |
-| Idempotency   | Redis lock `cron:db-backup:YYYY-MM-DD`           |
+| Property      | Value                                              |
+|---------------|----------------------------------------------------|
+| Schedule      | Daily, **03:00 UTC** (vercel.json)                 |
+| Auth          | `x-cron-secret` header / `Authorization: Bearer`   |
+| Bucket        | `db-backups` (env `SUPABASE_BACKUPS_BUCKET`)       |
+| Object key    | `backups/YYYY-MM-DD.json.gz`                       |
+| Content-Type  | `application/octet-stream`                         |
+| Compression   | gzip level 9 (`node:zlib`)                         |
+| Retention     | 30 days (older dumps deleted on each run)          |
+| Idempotency   | Redis lock `cron:db-backup:YYYY-MM-DD` (cron only) |
+
+> The `db-backups` bucket is **separate** from `uploads-private` (used by
+> contracts + documents). Backups need no MIME whitelist, contracts do —
+> keeping them apart avoids loosening the contracts bucket. The `db-backups`
+> bucket has no MIME restriction and no public RLS policy.
+
+## Manual trigger vs cron
+
+| Caller                                  | Bypasses cron lock? | Notes                                  |
+|-----------------------------------------|---------------------|----------------------------------------|
+| `/api/cron/db-backup` (Vercel daily)    | No                  | Daily lock prevents double runs        |
+| `POST /api/admin/backups/trigger`       | **Yes**             | SUPERADMIN-initiated, always re-runs   |
+
+The trigger calls `runDbBackup()` directly (no `defineCron` wrapper). Without
+this bypass, every manual click after 03:00 UTC silently returned
+`{ skipped: true }` because the daily lock had been claimed. Upload
+`upsert: true` so today's file is simply overwritten.
+
+## Health telemetry
+
+Every attempt (cron OR trigger) writes its outcome to Upstash Redis with a
+90-day TTL via [`src/lib/backup-health.ts`](../src/lib/backup-health.ts):
+
+| Key            | Payload                                           |
+|----------------|---------------------------------------------------|
+| `bk:last:ok`   | `{ at, key, bytes }` of the last successful run   |
+| `bk:last:err`  | `{ at, code, error }` of the last failed run      |
+
+`GET /api/admin/backups` surfaces these in `diagnostics.lastSuccess` /
+`diagnostics.lastError` so the UI can display a meaningful status banner
+(`healthy` / `stale` / `failing` / `misconfigured`) without scraping
+Vercel logs.
 
 ## Tables exported
 
@@ -40,7 +74,7 @@ recoverable from the source-of-truth tables.
 | `ClientContract`  | 50 000  | Metadata only — PDF lives in Storage         |
 
 If a table grows past its cap, bump the cap in
-`src/app/api/cron/db-backup/route.ts` and re-deploy.
+[`src/lib/db-backup.ts`](../src/lib/db-backup.ts) and re-deploy.
 
 ## File format
 
@@ -69,6 +103,25 @@ Notes:
 - `DateTime` columns are ISO-8601 strings.
 - Restore scripts must coerce these back when re-inserting via Prisma.
 
+## In-app restore (additive)
+
+`/admin/backups` (SUPERADMIN) ships an additive restore. Behavior:
+
+- Tries `createMany({ skipDuplicates: true })` per table in FK order.
+- On batch failure, falls back to per-row insert and classifies each row
+  as `inserted` / `skipped` (P2002 unique violation = already exists) /
+  `failed` (FK violation, type mismatch, etc.).
+- Returns a per-table breakdown rendered in a result modal.
+- Optional **dry-run** (eye icon) hits `?dryRun=1` and returns the row
+  counts that *would* be processed without writing.
+
+The endpoint is `POST /api/admin/backups/restore/[date]` (and
+`?dryRun=1` for the preview). It reads from the `db-backups` bucket and
+never overwrites existing rows — it only fills in what's missing.
+
+For destructive restores (truncate-and-replace into a fresh DB), use
+the script-based drill below against staging.
+
 ## Manual restore drill
 
 > **Goal:** practise restoring a single day's dump into a *staging* DB.
@@ -77,14 +130,18 @@ Notes:
 
 ### 1. Download the dump
 
-Generate a signed URL from Supabase (15 min TTL) and `curl` it:
+In-app: `/admin/backups` (SUPERADMIN) → click the **Download** button on
+the chosen card. The page hits `GET /api/admin/backups/download/[date]`
+which returns a 15-minute signed URL.
+
+By script (against the dedicated `db-backups` bucket):
 
 ```ts
 import { createClient } from '@supabase/supabase-js';
 
 const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const { data } = await sb.storage
-  .from('uploads-private')
+  .from(process.env.SUPABASE_BACKUPS_BUCKET ?? 'db-backups')
   .createSignedUrl('backups/2026-05-09.json.gz', 900);
 console.log(data?.signedUrl);
 ```

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
+import { notDeleted } from '@/lib/prisma-soft';
 
 /**
  * GET /api/admin/clients/search?q=...
@@ -21,8 +22,9 @@ export async function GET(request: NextRequest) {
 
   const q = (request.nextUrl.searchParams.get('q') ?? '').trim();
 
-  // soft-delete: required — no global extension (Edge Runtime incompatible)
-  const baseWhere = { role: 'CLIENT' as const, deletedAt: null };
+  // notDeleted() injects `deletedAt: null` — soft-delete pattern enforced
+  // explicitly because Prisma extensions don't work under Edge Runtime.
+  const baseWhere = notDeleted({ role: 'CLIENT' as const });
 
   // Le select inclut firstName/lastName/role pour permettre l'affichage
   // « Prénom Nom » côté composant (avec fallback `name` legacy → email).

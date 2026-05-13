@@ -11,6 +11,23 @@ import { getDlqQueue } from '@/lib/queues';
 
 export const dynamic = 'force-dynamic';
 
+function getDbPoolStatus(): { pooled: boolean; via: 'port' | 'pgbouncer-flag' | 'unknown'; warning: string | null } {
+  // Heuristic: a Supabase Transaction Pooler URL points at port 6543 OR
+  // explicitly carries `pgbouncer=true`. Surface this in /admin/health so
+  // the SUPERADMIN can confirm at a glance that the pool is in front of
+  // every Lambda — without it, scale ceiling is ~500 connections.
+  const url = process.env.DATABASE_URL ?? '';
+  if (url.includes(':6543')) return { pooled: true, via: 'port', warning: null };
+  if (url.includes('pgbouncer=true')) return { pooled: true, via: 'pgbouncer-flag', warning: null };
+  return {
+    pooled: false,
+    via: 'unknown',
+    warning:
+      'DATABASE_URL is not on the Supabase Transaction Pooler. ' +
+      'Switch to port 6543 — see docs/PGBOUNCER.md.',
+  };
+}
+
 async function getSmsStats() {
   try {
     const since24h = new Date(Date.now() - 24 * 3_600_000);
@@ -56,6 +73,7 @@ export async function GET() {
       cronRuns,
       dlqCount,
       smsStats,
+      dbPool: getDbPoolStatus(),
       sentry: { available: !!process.env.SENTRY_DSN, note: 'open issues not queried via SaaS API' },
       generatedAt: new Date().toISOString(),
     });

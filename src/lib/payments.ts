@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
 import { calculateSuggestedGrade } from '@/lib/loyalty';
 import { toNumber, type DecimalLike } from '@/lib/decimal';
+import { withSpan } from '@/lib/observability';
 
 // ---------------------------------------------------------------------------
 // Item sort priority:
@@ -111,6 +112,9 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
   let notifyPaid: NotifyPaidIntent | null = null;
   let notifyGrade: NotifyGradeIntent | null = null;
 
+  // Span the full allocation tx so production can see latency + grade
+  // recompute paths. Attributes intentionally low-cardinality.
+  await withSpan('service.payment.allocate', { invoiceId }, async () => {
   await prisma.$transaction(async (tx) => {
     // Pessimistic lock: serialize concurrent allocatePayments calls for the same invoice
     await tx.$executeRaw`SELECT id FROM "Invoice" WHERE id = ${invoiceId} FOR UPDATE`;
@@ -245,4 +249,5 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
       formatMAD(p.amount)
     );
   }
+  }); // close withSpan
 }

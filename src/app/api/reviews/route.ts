@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { withSchema } from '@/lib/with-schema';
+import { notDeleted } from '@/lib/prisma-soft';
 
 const reviewSchema = z.object({
   bookingId: z.string().min(1),
@@ -12,34 +14,32 @@ const reviewSchema = z.object({
 /**
  * POST /api/reviews
  * Client soumet un avis pour une réservation COMPLETED.
+ *
+ * Validation déléguée à `withSchema` — le wrapper renvoie 400 INVALID_JSON
+ * sur body non-JSON et 400 VALIDATION_ERROR sur Zod fail (avec `details`
+ * uniquement hors prod). Le handler ne traite que les invariants métier
+ * (auth, ownership, état du booking, unicité).
  */
-export async function POST(request: NextRequest) {
+export const POST = withSchema({ body: reviewSchema }, async (_request, { body }) => {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (session.user.role !== 'CLIENT') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'INVALID_BODY' }, { status: 400 });
+  if (session.user.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const parsed = reviewSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'VALIDATION_ERROR', details: parsed.error.flatten() }, { status: 400 });
-  }
+  const { bookingId, rating, comment } = body;
 
-  const { bookingId, rating, comment } = parsed.data;
-
-  // Vérifie que la réservation appartient au client et est COMPLETED
+  // Le booking doit appartenir au client courant et ne pas être soft-deleted.
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, clientId: session.user.id, deletedAt: null }, // soft-delete: required
+    where: notDeleted({ id: bookingId, clientId: session.user.id }),
   });
   if (!booking) return NextResponse.json({ error: 'BOOKING_NOT_FOUND' }, { status: 404 });
-  if (booking.status !== 'COMPLETED') return NextResponse.json({ error: 'BOOKING_NOT_COMPLETED' }, { status: 400 });
+  if (booking.status !== 'COMPLETED') {
+    return NextResponse.json({ error: 'BOOKING_NOT_COMPLETED' }, { status: 400 });
+  }
 
-  // Vérifie qu'il n'existe pas déjà un avis (unicité garantie par @unique)
+  // Unicité garantie par @unique(bookingId) — on intercepte ici pour renvoyer
+  // un 409 propre plutôt que laisser remonter un P2002 brut.
   const existing = await prisma.review.findUnique({ where: { bookingId } });
   if (existing) return NextResponse.json({ error: 'REVIEW_ALREADY_EXISTS' }, { status: 409 });
 
@@ -53,4 +53,4 @@ export async function POST(request: NextRequest) {
   });
 
   return NextResponse.json({ review }, { status: 201 });
-}
+});

@@ -20,6 +20,7 @@ import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacit
 import { getDayOfWeekMaroc, getHourMaroc, getMinuteMaroc } from '@/lib/timezone';
 import { BookingError } from './booking-errors';
 import { logger } from '@/lib/logger';
+import { withSpan } from '@/lib/observability';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Pet Taxi slot validation
@@ -165,7 +166,18 @@ export interface CreateBookingTxArgs {
  * The payload includes { species, available, requested, limit }.
  */
 export async function createBookingTx(args: CreateBookingTxArgs) {
-  return prisma.$transaction(
+  // Wrap the whole Serializable transaction in a Sentry span so production
+  // can see latency + retries + the capacity-vs-write conflict path. Span
+  // attributes are intentionally low-cardinality (no PII).
+  return withSpan(
+    'service.booking.createTx',
+    {
+      serviceType: args.serviceType,
+      petCount: args.petIds.length,
+      hasIdempotencyKey: !!args.idempotencyKey,
+    },
+    () =>
+  prisma.$transaction(
     async (tx) => {
       // ── Idempotency dedup: if the same booking was already created, return it ──
       if (args.idempotencyKey) {
@@ -285,6 +297,7 @@ export async function createBookingTx(args: CreateBookingTxArgs) {
       return booking;
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 },
+  ),
   );
 }
 
