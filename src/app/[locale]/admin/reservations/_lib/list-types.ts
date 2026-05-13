@@ -9,6 +9,12 @@ export type ReservationRow = {
   endDate: string | null;  // ISO
   isOpenEnded: boolean;
   totalPrice: number;
+  /**
+   * Provisional total for open-ended bookings (status IN_PROGRESS, endDate null).
+   * Computed from Setting tariffs × nights elapsed; null otherwise.
+   * Display priority: invoiceAmount → liveTotal → totalPrice.
+   */
+  liveTotal: number | null;
   invoiceAmount: number | null;
   client: {
     id: string;

@@ -27,7 +27,9 @@ export function Row({
   const isWalkInRow = isOpenEndedRow(b);
   const initials = initialsFrom(b.client.firstName, b.client.lastName);
   const avatarColor = colorFromName(`${b.client.firstName} ${b.client.lastName}`);
-  const totalAmount = b.invoiceAmount ?? b.totalPrice;
+  // Display priority: invoiceAmount → live provisional → stored totalPrice.
+  // Live is set only for active open-ended boarding stays (see fetchListBookings).
+  const totalAmount = b.invoiceAmount ?? b.liveTotal ?? b.totalPrice;
 
   function openDetail(e: React.MouseEvent) {
     e.stopPropagation();
