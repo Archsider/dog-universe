@@ -14,7 +14,10 @@ function isAdmin(role?: string) {
 const patchSchema = z.object({
   // Optimistic locking — caller MUST send the version they read.
   version: z.number().int().min(0),
-  name: z.string().min(2).max(200).optional(),
+  // All other fields are partial updates: optional, and intentionally permissive
+  // (min(1) on name) so PATCH /products/[id] never rejects a routing-only call
+  // before the 404 / VERSION_CONFLICT checks can run.
+  name: z.string().min(1).max(200).optional(),
   brand: z.string().max(100).nullable().optional(),
   reference: z.string().max(100).nullable().optional(),
   category: z.string().max(100).nullable().optional(),
