@@ -298,6 +298,8 @@
 |---|---|---|---|
 | `id` | `String` | PK · default=`cuid(` |  |
 | `bookingId` | `String` | — |  |
+| `productId` | `String?` | — | optional link to Product catalogue (decrement stock on add/restore on delete) |
+| `invoiceItemId` | `String?` | — | set once the line has been billed (main or supplementary invoice) |
 | `description` | `String` | — |  |
 | `quantity` | `Int` | default=`1` |  |
 | `unitPrice` | `Decimal` | `@db.Decimal(10, 2)` |  |
@@ -308,9 +310,13 @@
 **Relations**
 
 - `booking` → `Booking`
+- `product` → `Product?`
+- `invoiceItem` → `InvoiceItem?`
 
 **Indexes :**
 - `([bookingId])`
+- `([productId])`
+- `([invoiceItemId])`
 
 ---
 
@@ -496,6 +502,7 @@
 | `status` | `String` | default=`"PENDING"` | "PENDING" | "PARTIAL" | "PAID" |
 | `category` | `ItemCategory` | default=`OTHER` |  |
 | `productId` | `String?` | — |  |
+| `bookingItems` | `BookingItem[]` | — | BookingItem rows billed into this InvoiceItem (supplementary flow) |
 
 **Relations**
 
@@ -828,6 +835,7 @@
 | `createdAt` | `DateTime` | default=`now(` |  |
 | `updatedAt` | `DateTime` | — |  |
 | `invoiceItems` | `InvoiceItem[]` | — |  |
+| `bookingItems` | `BookingItem[]` | — |  |
 
 **Indexes :**
 - `([available])`
@@ -1001,3 +1009,5 @@
 - `PRODUCT`
 - `OTHER`
 - `DISCOUNT`
+- `EXTRA_SERVICE`
+- `MISC_FEE`

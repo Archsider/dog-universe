@@ -26,6 +26,7 @@ import BookingPetsSection from './BookingPetsSection';
 import BookingInvoiceSection from './BookingInvoiceSection';
 import BookingServiceSection from './BookingServiceSection';
 import AddProductSection from './AddProductSection';
+import ProductsExtrasSection from './ProductsExtrasSection';
 import UpsellSuggestions from '@/components/shared/UpsellSuggestions';
 import CheckoutBookingButton from './CheckoutBookingButton';
 import BookingTaxiSection from './BookingTaxiSection';
@@ -568,6 +569,26 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
               a known endDate (walk-in flag OR endDate=null are treated identically). */}
           {isBoarding && (booking.isOpenEnded || booking.endDate == null) && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
             <CheckoutBookingButton bookingId={booking.id} locale={locale} />
+          )}
+
+          {/* Produits & Extras — BookingItem-based staging (works before invoice). */}
+          {!isPendingExtension && (
+            <ProductsExtrasSection
+              bookingId={booking.id}
+              hasInvoice={!!booking.invoice}
+              locale={locale}
+              initialItems={booking.bookingItems.map((i) => ({
+                id: i.id,
+                productId: i.productId ?? null,
+                invoiceItemId: i.invoiceItemId ?? null,
+                description: i.description,
+                quantity: i.quantity,
+                unitPrice: Number(i.unitPrice),
+                total: Number(i.total),
+                category: i.category as never,
+                version: i.version,
+              }))}
+            />
           )}
 
           {/* Suggestions upsell smart — détection auto espèce + âge */}
