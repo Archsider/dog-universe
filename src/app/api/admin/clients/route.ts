@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { decodeCursor, encodeCursor, parseLimit } from '@/lib/pagination';
 import { toNumber } from '@/lib/decimal';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400 });
   }
 
-  const where: Record<string, unknown> = { role: 'CLIENT', deletedAt: null }; // soft-delete: required — no global extension (Edge Runtime incompatible)
+  const where: Record<string, unknown> = { role: 'CLIENT', deletedAt: null };
 
   if (search) {
     where.OR = [
@@ -50,10 +51,10 @@ export async function GET(request: Request) {
   const items = await prisma.user.findMany({
     where,
     include: {
-      pets: { where: { deletedAt: null }, select: { id: true, name: true } }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      pets: { where: notDeleted(), select: { id: true, name: true } },
       loyaltyGrade: true,
       _count: {
-        select: { bookings: { where: { status: 'COMPLETED', deletedAt: null } } },
+        select: { bookings: { where: notDeleted({ status: 'COMPLETED' }) } },
       },
       bookings: {
         where: { status: 'COMPLETED' },
@@ -126,7 +127,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'WEAK_PASSWORD' }, { status: 400 });
   }
 
-  const existing = await prisma.user.findFirst({ where: { email, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+  const existing = await prisma.user.findFirst({ where: notDeleted({ email }) });
   if (existing) {
     return NextResponse.json({ error: 'EMAIL_TAKEN' }, { status: 409 });
   }

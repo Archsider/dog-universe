@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { createAdminMessageNotification } from '@/lib/notifications';
 import { getEmailTemplate } from '@/lib/email';
 import { sendEmailNow } from '@/lib/notify-now';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const messageEn = typeof rawEn === 'string' ? rawEn.slice(0, 5000) : rawEn;
 
   const booking = await prisma.booking.findFirst({
-    where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id: id }),
     include: {
       client: { select: { id: true, name: true, email: true, language: true } },
     },

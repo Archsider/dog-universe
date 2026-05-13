@@ -10,6 +10,7 @@ import { PawPrint, Calendar, FileText, History, CheckCircle, AlertCircle } from 
 import { formatDateShort, formatMAD } from '@/lib/utils';
 import { RebookButton } from '@/components/client/RebookButton';
 import { waLink } from '@/lib/whatsapp';
+import { notDeleted } from '@/lib/prisma-soft';
 
 type Params = { locale: string };
 
@@ -22,14 +23,14 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
   const [pets, upcomingBookings, recentInvoices, loyaltyGrade, myClaims] = await Promise.all([
     prisma.pet.findMany({
-      where: { ownerId: session.user.id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ ownerId: session.user.id }),
       select: { id: true, name: true, species: true, breed: true, photoUrl: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.booking.findMany({
       where: {
         clientId: session.user.id,
-        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        deletedAt: null,
         status: { in: ['PENDING', 'CONFIRMED'] },
         startDate: { gte: new Date() },
       },
@@ -56,10 +57,10 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
   ]);
 
   const [totalStays, totalSpent, lastBooking, waSetting] = await Promise.all([
-    prisma.booking.count({ where: { clientId: session.user.id, status: 'COMPLETED', deletedAt: null } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
+    prisma.booking.count({ where: notDeleted({ clientId: session.user.id, status: 'COMPLETED' }) }),
     prisma.invoice.aggregate({ where: { clientId: session.user.id, status: 'PAID' }, _sum: { amount: true } }),
     prisma.booking.findFirst({
-      where: { clientId: session.user.id, status: 'COMPLETED', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ clientId: session.user.id, status: 'COMPLETED' }),
       orderBy: { endDate: 'desc' },
       select: {
         id: true,

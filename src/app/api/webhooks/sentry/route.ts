@@ -27,6 +27,7 @@ import { classifyEvent, unclassifiedResult, type ClassifierInput } from '@/lib/g
 import { openOrReuseIssue } from '@/lib/guardian/github';
 import { createNotification } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export const maxDuration = 30;
 
@@ -66,9 +67,11 @@ function verifySignature(
   secret: string,
 ): boolean {
   if (!signature || !secret || !timestamp) return false;
-  // Hex regex sanity check BEFORE Buffer.from() — Buffer.from('zz', 'hex')
-  // silently returns an empty buffer, which would short-circuit timingSafeEqual
-  // length check oddly. Reject malformed signatures upfront.
+  // Length check FIRST (cheaper, deterministic), then hex regex. Order
+  // matters: a 100-char hex string would pass `[0-9a-f]+` if the {64}
+  // quantifier ever loosened. The length guard is the deterministic
+  // catch-all. Defense-in-depth (audit S-M3).
+  if (signature.length !== 64) return false;
   if (!/^[0-9a-f]{64}$/i.test(signature)) return false;
   const signed = `${timestamp}.${rawBody}`;
   const expected = createHmac('sha256', secret).update(signed, 'utf8').digest('hex');
@@ -154,7 +157,7 @@ function buildIssueBody(
 
 async function notifySuperadmins(title: string, message: string, metadata: Record<string, string>): Promise<void> {
   const supers = await prisma.user.findMany({
-    where: { role: 'SUPERADMIN', deletedAt: null },
+    where: notDeleted({ role: 'SUPERADMIN' }),
     select: { id: true },
   });
   await Promise.all(

@@ -15,6 +15,7 @@ import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { consumeExportSlot } from '@/lib/rgpd';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
       take: 5000,
     }),
     prisma.booking.findMany({
-      where: { clientId: targetUserId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ clientId: targetUserId }),
       select: {
         id: true, serviceType: true, status: true,
         startDate: true, endDate: true, arrivalTime: true,

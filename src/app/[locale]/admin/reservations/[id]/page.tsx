@@ -30,6 +30,7 @@ import ProductsExtrasSection from './ProductsExtrasSection';
 import UpsellSuggestions from '@/components/shared/UpsellSuggestions';
 import CheckoutBookingButton from './CheckoutBookingButton';
 import BookingTaxiSection from './BookingTaxiSection';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -39,7 +40,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id }),
     include: {
       client: { select: { id: true, name: true, email: true, phone: true } },
       bookingPets: { include: { pet: true } },
@@ -114,12 +115,12 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
       orderBy: { createdAt: 'desc' },
     }),
     prisma.booking.findFirst({
-      where: { extensionForBookingId: id, status: 'PENDING_EXTENSION', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ extensionForBookingId: id, status: 'PENDING_EXTENSION' }),
       select: { id: true, startDate: true, endDate: true, totalPrice: true },
     }),
     booking.extensionForBookingId
       ? prisma.booking.findFirst({
-          where: { id: booking.extensionForBookingId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+          where: notDeleted({ id: booking.extensionForBookingId }),
           select: { id: true, startDate: true, endDate: true, totalPrice: true, status: true },
         })
       : Promise.resolve(null),
@@ -131,7 +132,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             serviceType: 'BOARDING',
             status: { notIn: ['CANCELLED', 'REJECTED'] },
             endDate: beforeWindow,
-            deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+            deletedAt: null,
           },
           include: { bookingPets: { include: { pet: true } } },
           orderBy: { startDate: 'desc' },
@@ -145,7 +146,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             serviceType: 'BOARDING',
             status: { notIn: ['CANCELLED', 'REJECTED'] },
             startDate: afterWindow,
-            deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+            deletedAt: null,
           },
           include: { bookingPets: { include: { pet: true } } },
           orderBy: { startDate: 'asc' },

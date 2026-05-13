@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { sendSMS, formatMAD } from '@/lib/sms';
 import { logAction } from '@/lib/log';
 import { withSchema } from '@/lib/with-schema';
+import { notDeleted } from '@/lib/prisma-soft';
 
 type SmsType = 'INCOMPLETE_FILE' | 'MISSING_VACCINES' | 'CONTRACT_REMINDER' | 'INVOICE_AVAILABLE';
 
@@ -28,7 +29,7 @@ export const POST = withSchema(
     const { type, note, invoiceId } = body;
 
     const client = await prisma.user.findFirst({
-      where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ id }),
       select: { name: true, phone: true, isWalkIn: true, role: true },
     });
 
@@ -59,7 +60,7 @@ export const POST = withSchema(
     if (smsType === 'INCOMPLETE_FILE') {
       // Récupère le premier animal du client pour personnaliser le message
       const pet = await prisma.pet.findFirst({
-        where: { ownerId: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        where: notDeleted({ ownerId: id }),
         select: { name: true },
         orderBy: { createdAt: 'asc' },
       });

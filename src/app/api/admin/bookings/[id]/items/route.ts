@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { toNumber } from '@/lib/decimal';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -61,7 +62,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     select: { id: true },
   });
   if (!booking) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     select: { id: true },
   });
   if (!booking) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { generateContractPDF } from '@/lib/contract-pdf';
 import { uploadBufferPrivate, createSignedUrl } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   const client = await prisma.user.findFirst({
-    where: { id: clientId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id: clientId }),
     select: { name: true, email: true, isWalkIn: true },
   });
   if (!client) {

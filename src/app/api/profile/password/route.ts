@@ -3,6 +3,7 @@ import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { passwordChangeSchema, formatZodError } from '@/lib/validation';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
   const { oldPassword, newPassword } = parsed.data;
 
   const user = await prisma.user.findFirst({
-    where: { id: session.user.id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id: session.user.id }),
     select: { id: true, passwordHash: true },
   });
 

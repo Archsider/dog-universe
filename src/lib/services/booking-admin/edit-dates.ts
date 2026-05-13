@@ -11,12 +11,13 @@ import { logAction } from '@/lib/log';
 import { BookingError } from '../booking-errors';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { ServiceType } from './constants';
+import { notDeleted } from '@/lib/prisma-soft';
 
 type Booking = NonNullable<Awaited<ReturnType<typeof loadBooking>>>;
 
 async function loadBooking(bookingId: string) {
   return prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     include: {
       bookingPets: { include: { pet: true } },
       boardingDetail: true,

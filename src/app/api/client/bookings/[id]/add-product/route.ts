@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
 import { resolveItemCategory } from '@/lib/billing';
 import { logger } from '@/lib/logger';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   // Verify booking belongs to this client and is in a state that allows product orders
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, clientId: session.user.id, deletedAt: null },
+    where: notDeleted({ id: bookingId, clientId: session.user.id }),
     select: {
       id: true,
       status: true,

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice } from '@/lib/pricing';
+import { notDeleted } from '@/lib/prisma-soft';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -14,7 +15,7 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id }),
     include: {
       bookingPets: { include: { pet: { select: { id: true, name: true, species: true } } } },
       boardingDetail: true,

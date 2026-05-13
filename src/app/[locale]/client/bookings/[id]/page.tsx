@@ -20,6 +20,7 @@ import BookingStayPhotosCard from './_components/BookingStayPhotosCard';
 import BookingMessagesCard from './_components/BookingMessagesCard';
 import BookingRebookCard from './_components/BookingRebookCard';
 import RescheduleBanner from './_components/RescheduleBanner';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -29,7 +30,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
   if (!session?.user) redirect(`/${locale}/auth/login`);
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id }),
     include: {
       bookingPets: { include: { pet: true } },
       boardingDetail: true,

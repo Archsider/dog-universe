@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
 import { getPricingSettings, type PricingSettings } from '@/lib/pricing';
 import { computeLiveTotal, CASA_TZ } from '@/lib/live-pricing';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export { CASA_TZ };
 
@@ -166,7 +167,7 @@ export async function loadTodaySnapshot(now: Date = new Date()): Promise<TodaySn
     }),
     // Pending: oldest first (manual review queue)
     prisma.booking.findMany({
-      where: { deletedAt: null, status: 'PENDING' },
+      where: notDeleted({ status: 'PENDING' }),
       select: BOOKING_SELECT,
       orderBy: { createdAt: 'asc' },
       take: 100,

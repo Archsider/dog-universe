@@ -15,14 +15,12 @@
 //   Prisma extensions reliably (see RISQUES CONNUS in CLAUDE.md). The
 //   manual `deletedAt: null` pattern is intentional and supported.
 
-// We type the input as a loose record + an optional deletedAt field. The
-// Prisma where-input on User/Pet/Booking always allows extra keys, so a
-// strict structural type would fight every call site. We trust the caller
-// to pass a real Prisma where clause — the helper's only job is to inject
-// `deletedAt: null` when it's not already specified.
-type WithSoftDelete = Record<string, unknown> & {
-  deletedAt?: unknown;
-};
+// We intentionally avoid a structural constraint (`T extends Record<...>`)
+// because that pollutes literal-type inference: a call like
+// `notDeleted({ status: 'CONFIRMED' })` would widen `'CONFIRMED'` to
+// `string` and fail Prisma's enum-typed `where`. Using a plain unconstrained
+// generic preserves the exact input shape, and the intersection with
+// `{ deletedAt: null }` adds the field without re-widening.
 
 /**
  * Composes a `where` clause that includes `deletedAt: null` while
@@ -34,13 +32,14 @@ type WithSoftDelete = Record<string, unknown> & {
  *   prisma.user.findMany({ where: notDeleted({ role: 'CLIENT' }) })
  *   prisma.pet.findFirst({ where: notDeleted({ id: petId }) })
  *   prisma.booking.count({ where: notDeleted({ status: 'PENDING' }) })
- *
- * Generic on T so the inferred return type matches the call site's
- * Prisma where-input.
  */
-export function notDeleted<T extends WithSoftDelete>(where?: T): T {
-  if (!where) return { deletedAt: null } as T;
-  if ('deletedAt' in where && where.deletedAt !== undefined) return where;
+export function notDeleted(): { deletedAt: null };
+export function notDeleted<const T extends object>(where: T): T & { deletedAt: null };
+export function notDeleted<const T extends object>(where?: T): T & { deletedAt: null } {
+  if (!where) return { deletedAt: null } as T & { deletedAt: null };
+  if ('deletedAt' in where && (where as { deletedAt?: unknown }).deletedAt !== undefined) {
+    return where as T & { deletedAt: null };
+  }
   return { ...where, deletedAt: null };
 }
 
@@ -48,8 +47,12 @@ export function notDeleted<T extends WithSoftDelete>(where?: T): T {
  * Inverse helper — returns the `where` clause for **only** soft-deleted
  * rows (the "trash" view). Used by recovery flows in `/admin/users`.
  */
-export function onlyDeleted<T extends WithSoftDelete>(where?: T): T {
-  if (!where) return { deletedAt: { not: null } } as T;
-  if ('deletedAt' in where && where.deletedAt !== undefined) return where;
+export function onlyDeleted(): { deletedAt: { not: null } };
+export function onlyDeleted<const T extends object>(where: T): T & { deletedAt: { not: null } };
+export function onlyDeleted<const T extends object>(where?: T): T & { deletedAt: { not: null } } {
+  if (!where) return { deletedAt: { not: null } } as T & { deletedAt: { not: null } };
+  if ('deletedAt' in where && (where as { deletedAt?: unknown }).deletedAt !== undefined) {
+    return where as T & { deletedAt: { not: null } };
+  }
   return { ...where, deletedAt: { not: null } };
 }
