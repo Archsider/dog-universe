@@ -1,14 +1,16 @@
 // GET /api/admin/backups — SUPERADMIN only.
-// Lists backup files from the private Supabase bucket under backups/ prefix.
-// Returns metadata: date, size, key — no content (download is a separate endpoint).
+//
+// Returns the recent backup files PLUS structured diagnostics so the UI can
+// display a meaningful status banner: storage configured? last success when?
+// last error when? Removes the "is anything actually running?" guesswork.
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { auth } from '../../../../../auth';
+import { env } from '@/lib/env';
 import { logServerError } from '@/lib/observability';
+import { listBackups, BackupError } from '@/lib/db-backup';
+import { getLastBackupSuccess, getLastBackupError } from '@/lib/backup-health';
 
 export const dynamic = 'force-dynamic';
-
-const BACKUP_PREFIX = 'backups/';
 
 export async function GET() {
   const session = await auth();
@@ -16,38 +18,52 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const bucket = process.env.SUPABASE_PRIVATE_STORAGE_BUCKET ?? 'uploads-private';
+  const storageConfigured = Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
+  const [lastSuccess, lastError] = await Promise.all([
+    getLastBackupSuccess(),
+    getLastBackupError(),
+  ]);
 
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: 'Storage not configured' }, { status: 503 });
+  if (!storageConfigured) {
+    return NextResponse.json({
+      backups: [],
+      diagnostics: {
+        storageConfigured: false,
+        bucket: env.SUPABASE_PRIVATE_STORAGE_BUCKET,
+        lastSuccess,
+        lastError,
+        message:
+          'Supabase storage credentials missing. Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in Vercel env.',
+      },
+    });
   }
 
   try {
-    const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
-
-    const { data: files, error } = await supabase.storage
-      .from(bucket)
-      .list(BACKUP_PREFIX.replace(/\/$/, ''), { limit: 90, sortBy: { column: 'name', order: 'desc' } });
-
-    if (error) {
-      logServerError('admin-backups', 'list failed', error);
-      return NextResponse.json({ error: 'Storage error' }, { status: 500 });
-    }
-
-    const backups = (files ?? [])
-      .filter((f) => /^\d{4}-\d{2}-\d{2}\.json\.gz$/.test(f.name))
-      .map((f) => ({
-        date: f.name.slice(0, 10),
-        key: `${BACKUP_PREFIX}${f.name}`,
-        bytes: f.metadata?.size ?? null,
-        createdAt: f.created_at ?? null,
-      }));
-
-    return NextResponse.json({ backups });
+    const backups = await listBackups();
+    return NextResponse.json({
+      backups,
+      diagnostics: {
+        storageConfigured: true,
+        bucket: env.SUPABASE_PRIVATE_STORAGE_BUCKET,
+        lastSuccess,
+        lastError,
+        count: backups.length,
+      },
+    });
   } catch (err) {
+    if (err instanceof BackupError && err.code === 'NOT_CONFIGURED') {
+      return NextResponse.json({ error: 'Storage not configured' }, { status: 503 });
+    }
     logServerError('admin-backups', 'list error', err);
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    return NextResponse.json({
+      backups: [],
+      diagnostics: {
+        storageConfigured: true,
+        bucket: env.SUPABASE_PRIVATE_STORAGE_BUCKET,
+        lastSuccess,
+        lastError,
+        listError: err instanceof Error ? err.message : String(err),
+      },
+    });
   }
 }
