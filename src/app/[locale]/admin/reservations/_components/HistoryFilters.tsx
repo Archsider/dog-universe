@@ -12,9 +12,10 @@ type Props = {
   rangeTo: string;
   status: string;
   type: string;
+  noInvoice: boolean;
 };
 
-export default function HistoryFilters({ locale, rangeFrom, rangeTo, status, type }: Props) {
+export default function HistoryFilters({ locale, rangeFrom, rangeTo, status, type, noInvoice }: Props) {
   const fr = locale !== 'en';
   const router = useRouter();
   const pathname = usePathname();
@@ -120,6 +121,18 @@ export default function HistoryFilters({ locale, rangeFrom, rangeTo, status, typ
             {c.label}
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        <span className="text-xs font-medium text-gray-500 mr-1 self-center">{fr ? 'Autre :' : 'Other:'}</span>
+        <button
+          type="button"
+          onClick={() => push({ noInvoice: noInvoice ? undefined : '1' })}
+          className={`text-xs px-2.5 py-1 rounded-full ${noInvoice ? 'bg-amber-500 text-white' : 'bg-ivory-100 hover:bg-ivory-200 text-gray-700'}`}
+          aria-pressed={noInvoice}
+        >
+          {fr ? 'Sans facture' : 'Without invoice'}
+        </button>
       </div>
     </div>
   );
