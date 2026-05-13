@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { createSignedUrl } from '@/lib/supabase';
 import { vaccinationExtractSchema, formatZodError } from '@/lib/validation';
 import { logger } from '@/lib/logger';
+import { notDeleted } from '@/lib/prisma-soft';
 
 // Validates the JSON Claude returns. Strict mode rejects unknown keys —
 // defends against prototype pollution / unexpected field injection. All
@@ -188,7 +189,7 @@ export async function POST(request: Request, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  const pet = await prisma.pet.findFirst({ where: { id, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+  const pet = await prisma.pet.findFirst({ where: notDeleted({ id }) });
 
   if (!pet) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN') && pet.ownerId !== session.user.id) {

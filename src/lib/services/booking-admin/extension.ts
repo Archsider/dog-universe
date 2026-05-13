@@ -18,12 +18,13 @@ import { BookingError } from '../booking-errors';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { logger } from '@/lib/logger';
 import { ServiceType } from './constants';
+import { notDeleted } from '@/lib/prisma-soft';
 
 type BookingWithDetails = Awaited<ReturnType<typeof loadBookingWithDetails>>;
 
 async function loadBookingWithDetails(bookingId: string) {
   return prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     include: {
       client: true,
       bookingPets: { include: { pet: true } },
@@ -56,7 +57,7 @@ export async function approveExtensionMerge(args: ApproveExtensionMergeArgs) {
   }
 
   const originalBooking = await prisma.booking.findFirst({
-    where: { id: booking.extensionForBookingId, deletedAt: null },
+    where: notDeleted({ id: booking.extensionForBookingId }),
     include: { invoice: true, bookingPets: { include: { pet: true } }, boardingDetail: true, client: true },
   });
 

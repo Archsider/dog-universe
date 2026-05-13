@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { deleteFromPrivateStorage } from '@/lib/supabase';
 import { logAction } from '@/lib/log';
 import { logger } from '@/lib/logger';
+import { notDeleted } from '@/lib/prisma-soft';
 
 // POST /api/admin/contracts/reset
 // Body: { clientEmail: string }
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
   }
 
   const client = await prisma.user.findFirst({
-    where: { email: clientEmail, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ email: clientEmail }),
     select: { id: true, role: true },
   });
 

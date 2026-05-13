@@ -4,13 +4,14 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { petCreateSchema, formatZodError } from '@/lib/validation';
 import { logger } from '@/lib/logger';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const pets = await prisma.pet.findMany({
-    where: { ownerId: session.user.id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ ownerId: session.user.id }),
     select: {
       id: true, ownerId: true, name: true, species: true, breed: true,
       dateOfBirth: true, gender: true, photoUrl: true,

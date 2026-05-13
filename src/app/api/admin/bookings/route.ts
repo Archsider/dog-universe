@@ -21,6 +21,7 @@ import { taxiDescription } from '@/lib/invoice-descriptions';
 import { getPensionPriceNumber, getPricingSettings } from '@/lib/pricing';
 import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 import { WALKIN_DEFAULT_WINDOW_DAYS } from '@/lib/capacity';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -161,7 +162,7 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
       // to avoid creating duplicates when the same client returns.
       const phoneNormalized = walkIn.phone.trim();
       const existingByPhone = await prisma.user.findFirst({
-        where: { phone: phoneNormalized, isWalkIn: true, deletedAt: null },
+        where: notDeleted({ phone: phoneNormalized, isWalkIn: true }),
         select: { id: true },
       });
 
@@ -193,7 +194,7 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
 
         if (walkIn.email) {
           const emailTaken = await prisma.user.findFirst({
-            where: { email: placeholderEmail, deletedAt: null },
+            where: notDeleted({ email: placeholderEmail }),
             select: { id: true },
           });
           if (emailTaken) {
@@ -252,7 +253,7 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
       }
       const [client, pets] = await Promise.all([
         prisma.user.findFirst({
-          where: { id: resolvedClientId, role: 'CLIENT', deletedAt: null },
+          where: notDeleted({ id: resolvedClientId, role: 'CLIENT' }),
           select: { id: true },
         }),
         prisma.pet.findMany({

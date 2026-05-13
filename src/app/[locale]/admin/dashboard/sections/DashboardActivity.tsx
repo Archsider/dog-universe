@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import { cashByMonth } from '@/lib/metrics';
 import RevenueChartWrapper from '../RevenueChartWrapper';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface Props {
   locale: string;
@@ -31,7 +32,7 @@ export default async function DashboardActivity({ locale, labels, statusLabels }
 
   const [recentBookings, lastYearMonthly, currentYearMonthly] = await Promise.all([
     prisma.booking.findMany({
-      where: { deletedAt: null },
+      where: notDeleted(),
       select: {
         id: true,
         status: true,

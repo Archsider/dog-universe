@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { notDeleted } from '@/lib/prisma-soft';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -23,8 +24,8 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 // (MIDDLEWARE_INVOCATION_FAILED in production).
 //
 // Soft-delete is handled explicitly at every Pet/Booking call site:
-//   prisma.booking.findFirst({ where: { id, deletedAt: null }, ... })
-//   prisma.pet.findMany({ where: { ..., deletedAt: null } })
+//   prisma.booking.findFirst({ where: notDeleted({ id }), ... })
+//   prisma.pet.findMany({ where: notDeleted({ ... }) })
 //
 // Keep using this pattern in new code. A future Node-only soft-delete wrapper
 // can be added in `src/lib/prismaSoft.ts` (imported only from API routes, never

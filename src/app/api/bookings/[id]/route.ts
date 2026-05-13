@@ -7,6 +7,7 @@ import { bookingClientCancelSchema, bookingClientRescheduleSchema, formatZodErro
 import { createNotification } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
 import { invalidateAvailabilityCache } from '@/lib/availability-cache';
+import { notDeleted } from '@/lib/prisma-soft';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -17,7 +18,7 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id }),
     include: {
       client: { select: { id: true, name: true, email: true, language: true } },
       bookingPets: { include: { pet: true } },
@@ -62,7 +63,7 @@ export async function PATCH(request: Request, { params }: Params) {
   const body = await request.json();
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id }),
     include: {
       client: true,
       bookingPets: { include: { pet: true } },
@@ -213,7 +214,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   try {
     const admins = await prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null },
       select: { id: true },
     });
     await Promise.all(

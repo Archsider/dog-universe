@@ -6,6 +6,7 @@ import { AdminNotificationBell } from '@/components/layout/AdminNotificationBell
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { SessionWatcher } from '@/components/shared/SessionWatcher';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 
 // Global counts (same value for every admin) — wrapped in unstable_cache
 // with a shared tag so any booking/claim mutation can invalidate via
@@ -15,7 +16,7 @@ import { prisma } from '@/lib/prisma';
 const getGlobalAdminCounts = unstable_cache(
   async () => {
     const [pendingCount, pendingClaimsCount] = await Promise.all([
-      prisma.booking.count({ where: { status: 'PENDING', deletedAt: null } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
+      prisma.booking.count({ where: notDeleted({ status: 'PENDING' }) }),
       prisma.loyaltyBenefitClaim.count({ where: { status: 'PENDING' } }),
     ]);
     return { pendingCount, pendingClaimsCount };

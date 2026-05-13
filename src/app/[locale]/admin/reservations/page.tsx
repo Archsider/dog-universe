@@ -21,6 +21,7 @@ import TabBar, { type ViewTab } from './_components/TabBar';
 import TodayClient from './_components/TodayClient';
 import HistoryFilters from './_components/HistoryFilters';
 import { loadTodaySnapshot, dayRangeUTC } from './_lib/today-queries';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -80,7 +81,7 @@ export default async function AdminReservationsPage(props: PageProps) {
         startDate: { gt: todayEnd, lte: weekEnd },
       },
     }),
-    prisma.booking.count({ where: { deletedAt: null, status: 'IN_PROGRESS' } }),
+    prisma.booking.count({ where: notDeleted({ status: 'IN_PROGRESS' }) }),
   ]);
 
   const badges = {

@@ -3,6 +3,7 @@ import { getDlqQueue, DLQ_ALERT_THRESHOLD } from '@/lib/queues/index';
 import { isBullMQConfigured } from '@/lib/redis-bullmq';
 import { createNotification } from '@/lib/notifications';
 import { defineCron } from '@/lib/cron-runner';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export const maxDuration = 30;
 
@@ -29,7 +30,7 @@ export const GET = defineCron({
 
     // DLQ depth exceeds threshold — notify all SUPERADMINs
     const superadmins = await prisma.user.findMany({
-      where: { role: 'SUPERADMIN', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ role: 'SUPERADMIN' }),
       select: { id: true },
     });
 

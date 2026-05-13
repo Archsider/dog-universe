@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { NOTIFICATION_MESSAGES } from '@/lib/notification-messages';
 import { createNotification, createAdminNotifications } from './core';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function createLoyaltyUpdateNotification(
   userId: string,
@@ -19,7 +20,7 @@ export async function createLoyaltyUpdateNotification(
 
   // Send email notification (non-blocking)
   try {
-    const client = await prisma.user.findFirst({ where: { id: userId, deletedAt: null }, select: { name: true, email: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+    const client = await prisma.user.findFirst({ where: notDeleted({ id: userId }), select: { name: true, email: true } });
     if (client) {
       const gradeLabel = locale === 'fr' ? gradeFr : gradeEn;
       const { subject, html } = getEmailTemplate('loyalty_update', { clientName: client.name, grade: gradeLabel }, locale);
@@ -50,7 +51,7 @@ export async function createLoyaltyClaimResultNotification(
   // Send email (non-blocking)
   try {
     const client = await prisma.user.findFirst({
-      where: { id: userId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ id: userId }),
       select: { name: true, email: true, language: true },
     });
     if (client) {

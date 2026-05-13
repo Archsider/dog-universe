@@ -6,6 +6,7 @@
  * + la persistance via `prisma.user.update` quand `persist: true`.
  */
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { createHash } from 'crypto';
 
 const mocks = vi.hoisted(() => ({
   prisma: { user: { update: vi.fn().mockResolvedValue(undefined) } },
@@ -82,10 +83,13 @@ describe('verifyTotpForUser — replay protection', () => {
     };
     const res = await verifyTotpForUser(user, '654321', { persist: true });
     expect(res.ok).toBe(true);
+    // Tokens are SHA-256-hashed at rest (audit S-M1). The stored value
+    // is the hex digest, not the raw 6-digit code.
+    const expectedHash = createHash('sha256').update('654321').digest('hex');
     expect(mocks.prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'u-persist' },
       data: expect.objectContaining({
-        lastTotpToken: '654321',
+        lastTotpToken: expectedHash,
         lastTotpUsedAt: expect.any(Date),
       }),
     });
@@ -101,6 +105,32 @@ describe('verifyTotpForUser — replay protection', () => {
     const res = await verifyTotpForUser(user, '654321');
     expect(res.ok).toBe(true);
     expect(mocks.prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects replay when stored value is the SHA-256 hash (post-migration row)', async () => {
+    const hash = createHash('sha256').update('111222').digest('hex');
+    const user = {
+      id: 'u-hashed',
+      totpSecret: 'enc::v1::ciphertext',
+      lastTotpToken: hash, // stored as hash after the S-M1 fix
+      lastTotpUsedAt: new Date(Date.now() - 30_000),
+    };
+    const res = await verifyTotpForUser(user, '111222');
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('REPLAY');
+  });
+
+  it('still rejects replay when stored value is legacy plaintext (pre-migration row)', async () => {
+    // Backwards-compat: a row written before S-M1 still matches.
+    const user = {
+      id: 'u-legacy',
+      totpSecret: 'enc::v1::ciphertext',
+      lastTotpToken: '777888', // legacy plaintext
+      lastTotpUsedAt: new Date(Date.now() - 30_000),
+    };
+    const res = await verifyTotpForUser(user, '777888');
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('REPLAY');
   });
 
   it('returns NO_SECRET when user has no TOTP enrolled', async () => {

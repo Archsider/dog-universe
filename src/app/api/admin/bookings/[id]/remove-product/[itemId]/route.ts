@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface Params { params: Promise<{ id: string; itemId: string }> }
 
@@ -12,7 +13,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     select: { invoice: { select: { id: true } } },
   });
   if (!booking) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });

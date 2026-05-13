@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { notifyAdminsExtensionRequest } from '@/lib/notifications';
 import { bookingExtensionRequestSchema, formatZodError } from '@/lib/validation';
 import { invalidateAvailabilityCache } from '@/lib/availability-cache';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { requestedEndDate, note } = parsed.data;
 
   const booking = await prisma.booking.findFirst({
-    where: { id: id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ id: id }),
     include: { bookingPets: { include: { pet: true } } },
   });
 
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const bookingRef = booking.id.slice(0, 8).toUpperCase();
   const petNames = booking.bookingPets.map(bp => bp.pet.name).join(', ');
-  const client = await prisma.user.findFirst({ where: { id: session.user.id, deletedAt: null }, select: { name: true } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+  const client = await prisma.user.findFirst({ where: notDeleted({ id: session.user.id }), select: { name: true } });
   const clientName = client?.name ?? session.user.email ?? 'Client';
   const dateDisplay = newEndDate.toLocaleDateString('fr-MA');
 

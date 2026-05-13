@@ -9,6 +9,7 @@ import { getPensionPriceNumber } from '@/lib/pricing-rules';
 import { differenceInCalendarDays } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import type { BookingDetail } from '@/types/booking-detail';
+import { notDeleted } from '@/lib/prisma-soft';
 
 const CASA_TZ = 'Africa/Casablanca';
 
@@ -27,7 +28,7 @@ export async function GET(
   const { id } = await params;
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: null },
+    where: notDeleted({ id }),
     include: {
       client: {
         select: { id: true, name: true, email: true, phone: true, isWalkIn: true },

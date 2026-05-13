@@ -8,6 +8,7 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { revalidateTag } from 'next/cache';
 import { withSchema } from '@/lib/with-schema';
+import { notDeleted } from '@/lib/prisma-soft';
 
 let ratelimit: Ratelimit | null = null;
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
@@ -79,7 +80,7 @@ export const POST = withSchema({ body: claimCreateSchema }, async (_req, { body 
   }
 
   // Notify admins (non-blocking)
-  prisma.user.findFirst({ where: { id: session.user.id, deletedAt: null }, select: { name: true, email: true } }) // soft-delete: required — no global extension (Edge Runtime incompatible)
+  prisma.user.findFirst({ where: notDeleted({ id: session.user.id }), select: { name: true, email: true } })
     .then((client) => notifyAdminsNewLoyaltyClaim(
       client?.name ?? client?.email ?? 'Client',
       benefit.labelFr,

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { GRADE_BENEFITS, Grade, getNextGradeInfo } from '@/lib/loyalty';
 import { CheckCircle2, XCircle, Clock, Star, Gift, Zap, TrendingUp } from 'lucide-react';
 import LoyaltyClaimButton from './LoyaltyClaimButton';
+import { notDeleted } from '@/lib/prisma-soft';
 
 type Params = { locale: string };
 
@@ -26,7 +27,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
       orderBy: { claimedAt: 'desc' },
     }),
     prisma.booking.count({
-      where: { clientId: session.user.id, status: 'COMPLETED', serviceType: 'BOARDING', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ clientId: session.user.id, status: 'COMPLETED', serviceType: 'BOARDING' }),
     }),
   ]);
 

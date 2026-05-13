@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { NOTIFICATION_MESSAGES } from '@/lib/notification-messages';
 import { createNotification, createAdminNotifications } from './core';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function createBookingConfirmationNotification(
   userId: string,
@@ -66,7 +67,7 @@ export async function createBookingCompletedNotification(
   // Send email (non-blocking)
   try {
     const client = await prisma.user.findFirst({
-      where: { id: userId, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ id: userId }),
       select: { name: true, email: true, language: true },
     });
     if (client) {
@@ -211,7 +212,7 @@ export async function promoteWaitlistedBooking(args: {
       await db.$transaction(
         async (tx) => {
           const fresh = await tx.booking.findFirst({
-            where: { id: candidate.id, status: 'WAITLIST', deletedAt: null },
+            where: notDeleted({ id: candidate.id, status: 'WAITLIST' }),
             select: {
               id: true,
               startDate: true,

@@ -8,6 +8,7 @@ import Image from 'next/image';
 import { formatDate, formatMAD } from '@/lib/utils';
 import CancelBookingButton from './CancelBookingButton';
 import ReviewButton from '@/components/client/ReviewButton';
+import { notDeleted } from '@/lib/prisma-soft';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -45,7 +46,7 @@ export default async function HistoryPage(props: PageProps) {
   const bookings = await prisma.booking.findMany({
     where: {
       clientId: session.user.id,
-      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      deletedAt: null,
       ...(statusFilter && {
       status: statusFilter === 'CANCELLED'
         ? { in: ['CANCELLED', 'REJECTED'] as const satisfies BookingStatus[] }
@@ -64,7 +65,7 @@ export default async function HistoryPage(props: PageProps) {
   });
 
   const allBookings = await prisma.booking.findMany({
-    where: { clientId: session.user.id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted({ clientId: session.user.id }),
     select: { status: true },
   });
   const counts: Record<string, number> = {};

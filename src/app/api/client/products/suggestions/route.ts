@@ -6,6 +6,7 @@ import {
   getMatchingProductsForPet,
   type Species,
 } from '@/lib/pet-profile';
+import { notDeleted } from '@/lib/prisma-soft';
 
 /**
  * GET /api/client/products/suggestions?bookingId=xxx
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
   if (!bookingId) return NextResponse.json({ error: 'MISSING_BOOKING_ID' }, { status: 400 });
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     select: {
       id: true,
       clientId: true,
