@@ -35,6 +35,12 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   SUPABASE_STORAGE_BUCKET: z.string().default('uploads'),
   SUPABASE_PRIVATE_STORAGE_BUCKET: z.string().default('uploads-private'),
+  // Dedicated bucket for DB backup dumps (`.json.gz`). Kept separate from
+  // SUPABASE_PRIVATE_STORAGE_BUCKET (contracts + documents) so we can:
+  //   - allow `application/octet-stream` / no MIME whitelist here without
+  //     loosening the contracts bucket;
+  //   - monitor and rotate dumps without scanning unrelated files.
+  SUPABASE_BACKUPS_BUCKET: z.string().default('db-backups'),
 
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
 
