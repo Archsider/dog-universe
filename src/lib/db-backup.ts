@@ -170,7 +170,10 @@ export async function runDbBackup(options: { rotate?: boolean } = {}): Promise<B
   const { error: uploadErr } = await supabase.storage
     .from(bucket)
     .upload(objectKey, gz, {
-      contentType: 'application/gzip',
+      // application/octet-stream because the private bucket's MIME whitelist
+      // does NOT include application/gzip (only pdf + images). The file
+      // extension `.json.gz` keeps the format obvious for downloads.
+      contentType: 'application/octet-stream',
       upsert: true,
     });
   if (uploadErr) {
