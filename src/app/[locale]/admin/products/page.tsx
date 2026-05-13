@@ -13,12 +13,17 @@ export default async function AdminProductsPage({ params }: Props) {
     redirect(`/${locale}/auth/login`);
   }
 
+  // Load both active and archived so the "Show archived" toggle is instant.
   const products = await prisma.product.findMany({
     orderBy: { name: 'asc' },
     take: 1000,
   });
 
-  const stockValue = products.reduce((sum, p) => sum + toNumber(p.price) * p.stock, 0);
+  // Stock value = only active products contribute (archived stock is conceptually gone).
+  const stockValue = products.reduce(
+    (sum, p) => sum + (p.isArchived ? 0 : toNumber(p.price) * p.stock),
+    0,
+  );
 
   return (
     <ProductsClient
@@ -29,9 +34,14 @@ export default async function AdminProductsPage({ params }: Props) {
         brand: p.brand,
         reference: p.reference,
         category: p.category,
+        description: p.description,
         price: toNumber(p.price),
+        costPrice: p.costPrice == null ? null : toNumber(p.costPrice),
         stock: p.stock,
+        lowStockThreshold: p.lowStockThreshold,
         available: p.available,
+        isArchived: p.isArchived,
+        version: p.version,
         targetSpecies: p.targetSpecies,
         targetAge: p.targetAge,
         supplier: p.supplier,
