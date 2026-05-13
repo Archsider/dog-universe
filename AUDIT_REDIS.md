@@ -1,6 +1,7 @@
 # AUDIT_REDIS.md — consommation Upstash Redis
 
-> Audit read-only, aucun code modifié. Daté du 2026-05-13.
+> Audit initial : 2026-05-13 (read-only).
+> Optimisations R1 + R2a + R4 appliquées : 2026-05-13 — voir §6.
 > Contexte : Upstash signale ~500K commandes/mois (cap free tier atteint).
 
 ---
@@ -205,3 +206,91 @@ Trade-offs acceptés :
 - **Cron-lock sur crons non-idempotents** : ex `db-backup`, `purge-anonymized`
 - **BullMQ DLQ** : tombstone manuel, low-volume
 - **Idempotency-Key sur POST /api/bookings** : protection double-booking
+
+---
+
+## 6. Optimisations appliquées (2026-05-13)
+
+PR `claude/redis-optimization` — 3 commits ciblés, zéro migration, zéro
+changement de schéma. Trade-offs documentés ci-dessous.
+
+### R1 — Worker cron `* * * * *` → `*/5 * * * *`
+- Fichier : `vercel.json` ligne 5
+- Commit : `perf(worker): cron from * * * * * to */5 * * * * (R1)`
+- Économie projetée : **~220-430 K cmds/mois**
+- Conséquence métier : latence batch (rappels, anniversaires, weekly
+  reports) passe de ≤ 1 min à ≤ 5 min. Le code transactionnel critique
+  (booking confirmations, validation, photos, messages, factures)
+  utilise `sendEmailNow` / `sendSmsNow` qui contournent la queue — la
+  latence visible côté utilisateur reste sub-second.
+
+### R2a — Suppression rate-limit Upstash sur 3 endpoints
+- Fichier : `src/middleware/rate-limit.ts`
+- Commit : `perf(ratelimit): remove Upstash on availability/health/taxi-tracking (R2a)`
+- Économie projetée : **~250 K cmds/mois**
+- Endpoints concernés :
+  - `/api/health` (était 60 / 1 min) — public uptime probe
+  - `/api/availability` (était 60 / 15 min) — déjà cache Redis 5 min
+  - `/api/taxi-tracking/*` (était 600 / 60 min) — polling viewer ≈ 360/h
+- Buckets supprimés (dead code retiré) : `health`, `availability`,
+  `taxiTracking`. Type `DynamicBucket` mis à jour.
+- **NE PAS confondre avec `taxiStream` (SSE)** qui reste rate-limité
+  60/h per-open. Le polling JSON est public et idempotent ; le SSE est
+  une connexion long-lived plus coûteuse.
+- Buckets critiques intacts (garde-fou test) : `auth`, `totp`,
+  `passwordReset`, `bookings`, `uploads`, `adminMutation`, `payment`,
+  `invoiceCreate`, `vaccinationExtract`, `productOrder`, `geocode`,
+  `rgpd`, `addonRequest`, `taxiStream`.
+
+### R4 — Flag `bullmq:lastEnqueue` pour skip getJobCounts
+- Fichiers :
+  - `src/lib/cache.ts` : 4 nouveaux helpers (`markQueueEnqueue`,
+    `getQueueLastEnqueueMs`, `markQueueFullCheck`,
+    `getQueueLastFullCheckMs`). Tous fail-open.
+  - `src/lib/queues/index.ts` : `markQueueEnqueue()` après chaque
+    `queue.add` réussi (jamais sur fallback direct).
+  - `src/app/api/workers/process/route.ts` : skip-check avant le bloc
+    `getJobCounts`.
+- Commit : `perf(worker): skip getJobCounts when no recent enqueue (R4)`
+- Économie projetée : **~130 K cmds/mois**
+- Algorithme :
+  1. À l'enqueue (succès BullMQ) → SET `bullmq:lastEnqueue = now()` EX 3600s
+  2. Au worker tick :
+     - GET `bullmq:lastEnqueue` (timestamp)
+     - GET `bullmq:lastFullCheck` (timestamp)
+     - COUNT `TaxiTrip.status = DRIVER_EN_ROUTE`
+     - Skip si `lastEnqueue > 10 min ago` ET `lastFullCheck < 1 h ago`
+       ET `activeTrips === 0`
+  3. Si pas de skip → `getJobCounts × 2` + `markQueueFullCheck()`
+- **Filet de sécurité** : la fenêtre force-check 1 h garantit qu'un job
+  resté en `active` après un crash worker est détecté au plus tard 1 h
+  plus tard — ≪ aux backoff BullMQ (1 min email, 5 min sms).
+
+### Total projeté
+**~580-810 K cmds/mois économisées** → consommation cible
+**~200-350 K /mois**, bien sous le cap free tier 500 K.
+
+### Mesure réelle
+À mesurer 24-72 h après le merge dans le Upstash dashboard. Tableau de
+suivi à compléter :
+
+| Date           | Cmds/jour observées | Cmds/mois projetées |
+|----------------|---------------------|---------------------|
+| Avant merge    | ~25-32 K            | 750-950 K           |
+| J+1 après merge | (à mesurer)         | (à projeter)        |
+| J+7 après merge | (à mesurer)         | (à projeter)        |
+
+### Tests garde-fous
+- `src/__tests__/middleware/rate-limit.test.ts` :
+  - R2a : 3 routes supprimées ne matchent plus de bucket
+  - R2a : 9 buckets critiques restent mappés (régression test)
+- `src/lib/__tests__/cache.test.ts` :
+  - R4 : 4 helpers avec TTL, fail-open, valeurs corrompues
+
+### Hors scope (non appliqué)
+- R3 (TTL notifCount 30s → 2min) — gain modeste, déféré
+- R5 (heartbeat 5min → 10min) — déféré, dépend de la confiance dans le
+  monitor externe
+- R6+ (consolidation buckets, suppression SUBSCRIBE taxi) — refactor
+  plus invasif, à reconsidérer si les R1+R2a+R4 ne suffisent pas
+
