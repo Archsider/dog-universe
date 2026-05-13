@@ -221,6 +221,7 @@ model BookingPet {
 model BookingItem {
   id          String       @id @default(cuid())
   bookingId   String
+  productId   String?      // optional link to Product catalogue (decrement stock on add/restore on delete)
   description String
   quantity    Int          @default(1)
   unitPrice   Decimal      @db.Decimal(10, 2)
@@ -228,9 +229,11 @@ model BookingItem {
   category    ItemCategory @default(OTHER)
   version     Int          @default(0) // H9 — optimistic lock against concurrent product mutations
 
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  booking Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([bookingId])
+  @@index([productId])
 }
 
 model BoardingDetail {
@@ -410,6 +413,8 @@ enum ItemCategory {
   PRODUCT
   OTHER
   DISCOUNT
+  EXTRA_SERVICE
+  MISC_FEE
 }
 
 model InvoiceItem {
@@ -670,6 +675,7 @@ model Product {
   updatedAt     DateTime @updatedAt
 
   invoiceItems InvoiceItem[]
+  bookingItems BookingItem[]
 
   @@index([available])
   @@index([isArchived])
