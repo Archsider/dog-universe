@@ -23,7 +23,7 @@ import { processEmailJob, processSmsJob } from '@/workers/processors';
 import { prisma } from '@/lib/prisma';
 import { getLastHeartbeat, tryClaimAlertSlot } from '@/lib/taxi-heartbeat';
 import { notifyAdminsTaxiHeartbeatLost, createNotification } from '@/lib/notifications';
-import { markWorkerRun } from '@/lib/cache';
+import { markWorkerRun, getQueueLastEnqueueMs, getQueueLastFullCheckMs, markQueueFullCheck } from '@/lib/cache';
 
 export const maxDuration = 60;
 
@@ -86,6 +86,18 @@ async function alertDlqJob(params: {
 
 const MAX_JOBS_PER_QUEUE = 10;
 const WORKER_TIMEOUT_MS  = 55_000;
+
+// R4: when the last successful enqueue is older than this window, the cron
+// can skip the BullMQ probe block (~10 Redis cmds) and return early. The
+// next enqueue resets the window via `markQueueEnqueue()` in src/lib/queues.
+const ENQUEUE_FRESHNESS_MS = 10 * 60 * 1000; // 10 min
+
+// R4 safety net: even on a perfectly idle app, force a full BullMQ probe
+// at least once per hour so stuck jobs (e.g. a job that got pushed before
+// `bullmq:lastEnqueue` TTL'd, then crashed mid-flight) can't pile up
+// undetected. 1 h ≪ BullMQ retry backoff windows, so stuck-job triage
+// stays well within SLA.
+const FORCE_FULL_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 h
 
 // Scans STANDALONE PET_TAXI bookings currently IN_PROGRESS and fires an alert
 // to admins for each one whose Redis heartbeat key has expired. Dedup latch
@@ -236,6 +248,33 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ skipped: 'queues', reason: 'UPSTASH_REDIS_HOST not configured', heartbeat: heartbeatResult });
   }
 
+  // R4 — skip BullMQ probes entirely when nothing has been enqueued recently.
+  // The two Redis GETs replace ~10 cmds of getJobCounts. Falls back to a full
+  // check at least once per hour so stuck jobs are never starved. Fail-open:
+  // null reads (Redis down / unset key) flow through to the normal path.
+  try {
+    const now = Date.now();
+    const [lastEnqueueMs, lastFullCheckMs, activeTripsForSkip] = await Promise.all([
+      getQueueLastEnqueueMs(),
+      getQueueLastFullCheckMs(),
+      prisma.taxiTrip.count({ where: { status: 'DRIVER_EN_ROUTE' } }),
+    ]);
+    const enqueueIsStale =
+      lastEnqueueMs === null || (now - lastEnqueueMs) > ENQUEUE_FRESHNESS_MS;
+    const fullCheckRecent =
+      lastFullCheckMs !== null && (now - lastFullCheckMs) < FORCE_FULL_CHECK_INTERVAL_MS;
+    if (enqueueIsStale && fullCheckRecent && activeTripsForSkip === 0) {
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: 'no recent enqueue (R4)',
+        heartbeat: heartbeatResult,
+      });
+    }
+  } catch (err) {
+    logger.error('workers-process', 'R4 skip check failed (proceeding with full run)', { error: err instanceof Error ? err.message : String(err) });
+  }
+
   // Early-exit : si rien à faire dans les queues ET aucune course taxi active,
   // on évite d'allouer Workers BullMQ (coût Lambda + connexions Redis). Fail-open :
   // toute erreur sur le check → comportement normal (on tente le run).
@@ -247,6 +286,9 @@ export async function GET(request: NextRequest) {
       smsQ.getJobCounts('waiting', 'active', 'delayed'),
       prisma.taxiTrip.count({ where: { status: 'DRIVER_EN_ROUTE' } }),
     ]);
+    // R4: record that we just performed a full BullMQ probe so the skip
+    // window in the next ticks can rely on this freshness signal.
+    void markQueueFullCheck();
     const emailPending = (emailCounts.waiting ?? 0) + (emailCounts.active ?? 0) + (emailCounts.delayed ?? 0);
     const smsPending   = (smsCounts.waiting ?? 0)   + (smsCounts.active ?? 0)   + (smsCounts.delayed ?? 0);
     if (emailPending === 0 && smsPending === 0 && activeTrips === 0) {

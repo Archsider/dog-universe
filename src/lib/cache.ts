@@ -162,6 +162,84 @@ export async function getWorkerLastRun(): Promise<string | null> {
   }
 }
 
+// ─── BullMQ enqueue freshness (R4) ─────────────────────────────────────────
+//
+// The `/api/workers/process` cron used to probe BullMQ on every tick
+// (getJobCounts × 2 queues + Postgres count) to decide whether to spin up
+// Workers, even on idle apps. We now stamp a single Redis key on every
+// successful enqueue and let the worker skip the BullMQ probes when no
+// enqueue has happened recently. The cron periodically forces a full
+// check anyway, so stuck jobs are never starved.
+//
+// Both helpers are fail-open: any error returns `null` from the getter,
+// which the worker interprets as "unknown → fall through to a full check".
+
+const QUEUE_LAST_ENQUEUE_KEY = 'bullmq:lastEnqueue';
+const QUEUE_LAST_FULL_CHECK_KEY = 'bullmq:lastFullCheck';
+
+/**
+ * Stamps `bullmq:lastEnqueue = now()` (TTL 1 h). Called from the BullMQ
+ * enqueue helpers after a successful `queue.add` — never on fallback direct
+ * send, since direct send doesn't touch BullMQ. Errors are swallowed.
+ */
+export async function markQueueEnqueue(): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  try {
+    await redis.set(QUEUE_LAST_ENQUEUE_KEY, String(Date.now()), { ex: 3600 });
+  } catch (err) {
+    breadcrumb('set', QUEUE_LAST_ENQUEUE_KEY, 'markQueueEnqueue failed, failing open');
+    logger.error('cache', 'markQueueEnqueue failed', { error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/** Reads `bullmq:lastEnqueue` as a millisecond epoch, or null if unset / unreadable. */
+export async function getQueueLastEnqueueMs(): Promise<number | null> {
+  const redis = getRedis();
+  if (!redis) return null;
+  try {
+    const val = await redis.get<string | number>(QUEUE_LAST_ENQUEUE_KEY);
+    if (val === null || val === undefined) return null;
+    const n = typeof val === 'number' ? val : Number(val);
+    return Number.isFinite(n) ? n : null;
+  } catch (err) {
+    breadcrumb('get', QUEUE_LAST_ENQUEUE_KEY, 'getQueueLastEnqueueMs failed, failing open');
+    logger.error('cache', 'getQueueLastEnqueueMs failed', { error: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
+
+/**
+ * Stamps `bullmq:lastFullCheck = now()` (TTL 2 h) so the worker can guarantee
+ * at least one full BullMQ probe per hour even on a perfectly idle app.
+ */
+export async function markQueueFullCheck(): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  try {
+    await redis.set(QUEUE_LAST_FULL_CHECK_KEY, String(Date.now()), { ex: 7200 });
+  } catch (err) {
+    breadcrumb('set', QUEUE_LAST_FULL_CHECK_KEY, 'markQueueFullCheck failed, failing open');
+    logger.error('cache', 'markQueueFullCheck failed', { error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/** Reads `bullmq:lastFullCheck` as a millisecond epoch, or null if unset / unreadable. */
+export async function getQueueLastFullCheckMs(): Promise<number | null> {
+  const redis = getRedis();
+  if (!redis) return null;
+  try {
+    const val = await redis.get<string | number>(QUEUE_LAST_FULL_CHECK_KEY);
+    if (val === null || val === undefined) return null;
+    const n = typeof val === 'number' ? val : Number(val);
+    return Number.isFinite(n) ? n : null;
+  } catch (err) {
+    breadcrumb('get', QUEUE_LAST_FULL_CHECK_KEY, 'getQueueLastFullCheckMs failed, failing open');
+    logger.error('cache', 'getQueueLastFullCheckMs failed', { error: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
+
 // ─── Health check ──────────────────────────────────────────────────────────
 
 /** Ping Redis with a write+read round-trip. Returns false if unconfigured or on error. */
