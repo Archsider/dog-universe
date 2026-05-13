@@ -4,8 +4,11 @@
 BEGIN;
 
 DROP INDEX IF EXISTS "BookingItem_productId_idx";
+DROP INDEX IF EXISTS "BookingItem_invoiceItemId_idx";
 
 ALTER TABLE "BookingItem" DROP CONSTRAINT IF EXISTS "BookingItem_productId_fkey";
+ALTER TABLE "BookingItem" DROP CONSTRAINT IF EXISTS "BookingItem_invoiceItemId_fkey";
 ALTER TABLE "BookingItem" DROP COLUMN IF EXISTS "productId";
+ALTER TABLE "BookingItem" DROP COLUMN IF EXISTS "invoiceItemId";
 
 COMMIT;

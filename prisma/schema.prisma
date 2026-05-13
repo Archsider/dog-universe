@@ -219,21 +219,24 @@ model BookingPet {
 
 // Extra billable lines added manually by admin at booking time (products, custom services)
 model BookingItem {
-  id          String       @id @default(cuid())
-  bookingId   String
-  productId   String?      // optional link to Product catalogue (decrement stock on add/restore on delete)
-  description String
-  quantity    Int          @default(1)
-  unitPrice   Decimal      @db.Decimal(10, 2)
-  total       Decimal      @db.Decimal(10, 2)
-  category    ItemCategory @default(OTHER)
-  version     Int          @default(0) // H9 — optimistic lock against concurrent product mutations
+  id            String       @id @default(cuid())
+  bookingId     String
+  productId     String?      // optional link to Product catalogue (decrement stock on add/restore on delete)
+  invoiceItemId String?      // set once the line has been billed (main or supplementary invoice)
+  description   String
+  quantity      Int          @default(1)
+  unitPrice     Decimal      @db.Decimal(10, 2)
+  total         Decimal      @db.Decimal(10, 2)
+  category      ItemCategory @default(OTHER)
+  version       Int          @default(0) // H9 — optimistic lock against concurrent product mutations
 
-  booking Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  booking     Booking      @relation(fields: [bookingId],     references: [id], onDelete: Cascade)
+  product     Product?     @relation(fields: [productId],     references: [id], onDelete: SetNull)
+  invoiceItem InvoiceItem? @relation(fields: [invoiceItemId], references: [id], onDelete: SetNull)
 
   @@index([bookingId])
   @@index([productId])
+  @@index([invoiceItemId])
 }
 
 model BoardingDetail {
@@ -432,8 +435,9 @@ model InvoiceItem {
   // (voir resolveItemCategory dans src/lib/accounting.ts).
   productId       String?
 
-  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product      Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  bookingItems BookingItem[] // BookingItem rows billed into this InvoiceItem (supplementary flow)
 
   @@index([invoiceId])
   @@index([category]) // billing par catégorie (CA Taxi, Boarding…)
