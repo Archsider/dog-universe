@@ -6,6 +6,7 @@ import {
   getMatchingProductsForPet,
   type Species,
 } from '@/lib/pet-profile';
+import { notDeleted } from '@/lib/prisma-soft';
 
 /**
  * GET /api/admin/products/suggestions?bookingId=xxx[&includeOutOfStock=1]
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
   const includeOutOfStock = request.nextUrl.searchParams.get('includeOutOfStock') === '1';
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     select: {
       id: true,
       bookingPets: {

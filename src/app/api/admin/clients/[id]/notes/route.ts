@@ -4,6 +4,7 @@ import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { withSchema } from '@/lib/with-schema';
+import { notDeleted } from '@/lib/prisma-soft';
 
 const paramsSchema = z.object({ id: z.string().min(1) });
 
@@ -29,7 +30,7 @@ export const POST = withSchema(
     const { content, entityType, entityId } = body;
 
     const client = await prisma.user.findFirst({
-      where: { id, role: 'CLIENT', deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted({ id, role: 'CLIENT' }),
       select: { id: true },
     });
     if (!client) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
@@ -38,7 +39,7 @@ export const POST = withSchema(
       if (!entityId) {
         return NextResponse.json({ error: 'MISSING_ENTITY_ID' }, { status: 400 });
       }
-      const pet = await prisma.pet.findFirst({ where: { id: entityId, ownerId: id, deletedAt: null } }); // soft-delete: required — no global extension (Edge Runtime incompatible)
+      const pet = await prisma.pet.findFirst({ where: notDeleted({ id: entityId, ownerId: id }) });
       if (!pet) {
         return NextResponse.json({ error: 'PET_NOT_FOUND' }, { status: 404 });
       }

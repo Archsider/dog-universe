@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 
 // ---------------------------------------------------------------------------
 // POST /api/admin/walkin-clients
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
       };
       // 1. Correspondance exacte sur le numéro normalisé (évite toute collision)
       const exactMatch = await prisma.user.findFirst({
-        where: { isWalkIn: true, phone: { endsWith: normalized }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        where: notDeleted({ isWalkIn: true, phone: { endsWith: normalized } }),
         select: safeWalkInSelect,
       });
       if (exactMatch) return NextResponse.json(exactMatch);
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
       const tail = normalized.slice(-8);
       if (normalized.length > 8) {
         const fuzzyMatch = await prisma.user.findFirst({
-          where: { isWalkIn: true, phone: { endsWith: tail }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+          where: notDeleted({ isWalkIn: true, phone: { endsWith: tail } }),
           select: safeWalkInSelect,
         });
         if (fuzzyMatch) return NextResponse.json(fuzzyMatch);

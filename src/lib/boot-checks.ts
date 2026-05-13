@@ -78,6 +78,26 @@ export function assertProductionEnv(): void {
     ) {
       warnings.push('DATABASE_URL should include sslmode=require');
     }
+    // PgBouncer drift guard — the prod stack runs through the Supabase
+    // Transaction Pooler (verified 2026-05-13: port 6543 + pgbouncer=true).
+    // This warning catches accidental regressions if someone later swaps
+    // DATABASE_URL back to the direct connection — the app keeps working
+    // but scale silently caps at ~500 connections. Read-only signal.
+    const directUrl = process.env.DIRECT_URL;
+    if (databaseUrl && databaseUrl !== directUrl) {
+      const looksPooled = databaseUrl.includes(':6543') || databaseUrl.includes('pgbouncer=true');
+      if (!looksPooled) {
+        warnings.push(
+          'DATABASE_URL drift: pool not detected (expected :6543 or pgbouncer=true). ' +
+            'See docs/PGBOUNCER.md.',
+        );
+      }
+    } else if (databaseUrl && !directUrl) {
+      warnings.push(
+        'DIRECT_URL is unset — Prisma migrations would run through the pool ' +
+          '(slow / unsafe).',
+      );
+    }
   }
 
   if (warnings.length > 0) {
