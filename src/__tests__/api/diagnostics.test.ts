@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getWorkerLastRun: vi.fn(),
   prisma: {
     actionLog: { findFirst: vi.fn() },
+    smsLog: { findFirst: vi.fn() },
   },
 }));
 
@@ -32,8 +33,11 @@ vi.mock('@/lib/prisma', () => ({ prisma: mocks.prisma }));
 
 import { GET } from '@/app/api/admin/diagnostics/route';
 
-function makeQueueOk(counts: Record<string, number>) {
-  return { getJobCounts: vi.fn().mockResolvedValue(counts) };
+function makeQueueOk(counts: Record<string, number>, completed: Array<{ finishedOn?: number }> = []) {
+  return {
+    getJobCounts: vi.fn().mockResolvedValue(counts),
+    getCompleted: vi.fn().mockResolvedValue(completed),
+  };
 }
 
 beforeEach(() => {
@@ -44,6 +48,7 @@ beforeEach(() => {
   mocks.getDlqQueue.mockReturnValue(makeQueueOk({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }));
   mocks.getWorkerLastRun.mockResolvedValue(new Date().toISOString());
   mocks.prisma.actionLog.findFirst.mockResolvedValue(null);
+  mocks.prisma.smsLog.findFirst.mockResolvedValue(null);
 });
 
 describe('GET /api/admin/diagnostics', () => {
@@ -130,10 +135,18 @@ describe('GET /api/admin/diagnostics', () => {
     expect(body.lastSuccessfulSends.sms).toBeNull();
   });
 
-  it('reports last send ISO string when ActionLog has entries', async () => {
+  it('reports last send ISO string when SmsLog + BullMQ have entries', async () => {
     mocks.auth.mockResolvedValueOnce({ user: { id: 'sa', role: 'SUPERADMIN' } });
     const fakeDate = new Date('2026-05-07T10:00:00Z');
-    mocks.prisma.actionLog.findFirst.mockResolvedValue({ createdAt: fakeDate });
+    // Email side: BullMQ getCompleted(0, 0) returns the latest finished job.
+    mocks.getEmailQueue.mockReturnValueOnce(
+      makeQueueOk(
+        { waiting: 1, active: 0, completed: 5, failed: 0, delayed: 0 },
+        [{ finishedOn: fakeDate.getTime() }],
+      ),
+    );
+    // SMS side: SmsLog.findFirst orderBy sentAt desc returns the latest row.
+    mocks.prisma.smsLog.findFirst.mockResolvedValue({ sentAt: fakeDate });
     const res = await GET();
     const body = await res.json();
     expect(body.lastSuccessfulSends.email).toBe(fakeDate.toISOString());
