@@ -344,25 +344,18 @@ Admin retire un `InvoiceItem` quand `paidAmount > newAmount` → trigger viole C
 ---
 
 ### H11. Backup incomplet — tables critiques absentes
-**Sévérité** : HIGH — restore catastrophique
-**Fichier** : `src/app/api/cron/db-backup/route.ts:68-98`
+**Statut** : ✅ **RÉSOLU 2026-05-13 (PR #54/#55/#56)**.
+- Toutes les tables critiques sont désormais incluses (~22 entités, voir `runDbBackup()` dans `src/lib/db-backup.ts`), y compris `InvoiceSequence`, `LoyaltyGrade`, `LoyaltyBenefitClaim`, `Notification` (cap 10k), `AdminNote`, `ActionLog`, `BookingItem`, `BookingPet`, `BoardingDetail`, `TaxiDetail`, `Vaccination`, `Review`, `AddonRequest`, `Heartbeat`, `_app_migrations`.
+- Bucket dédié `db-backups` (env `SUPABASE_BACKUPS_BUCKET`, sans whitelist MIME).
+- Trigger SUPERADMIN `/api/admin/backups/trigger` bypass le cron-lock (vrai bouton "Backup now").
+- Page `/admin/backups` avec status banner / KPI / restore additif + dry-run.
+- Telemetry Redis `bk:last:ok` / `bk:last:err` (TTL 90j) dans `src/lib/backup-health.ts`.
 
-**Tables manquantes dans le backup** :
-- `InvoiceSequence` → restore casse la numérotation factures (P2002 storm ou doublons réels)
-- `LoyaltyGrade`, `LoyaltyBenefitClaim`
-- `Notification`, `AdminNote`, `ActionLog` (audit trail perdu)
-- `BookingItem`, `BookingPet`, `BoardingDetail`, `TaxiDetail`
-- `Vaccination`, `Review`, `AddonRequest`, `Heartbeat`
-- `_app_migrations` (checksum drift detection cassée après restore)
+**Restant** :
+- Storage `pets/` + `stays/` + contrats : pas de copie cross-region (outage régional Supabase = perte totale).
+- PITR Supabase à activer en complément du dump applicatif (couvre les minutes/heures perdues entre 2 dumps).
 
-**Storage** : photos `pets/`, `stays/`, contrats — pas de copie cross-region. Outage régional Supabase = perte totale.
-
-**Fix** :
-1. Étendre `Promise.all` à toutes les tables
-2. Activer Point-In-Time Recovery Supabase comme primary
-3. Réplication storage vers bucket secondaire (Supabase second region ou S3)
-
-**Effort** : L (~4h).
+**Effort restant** : S (~1h pour activer PITR, M pour réplication storage cross-region).
 
 ---
 

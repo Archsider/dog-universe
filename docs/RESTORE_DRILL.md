@@ -122,11 +122,13 @@ staging peut rester en place entre les drills.
 
 ## TODO — Cron de backup
 
-Aujourd'hui le drill dépend de l'existence d'un dump dans `backups/`. À implémenter :
+Le pipeline de dump est en place — voir [`BACKUP_RESTORE.md`](./BACKUP_RESTORE.md).
 
-- `/api/cron/backup` daily 03h UTC
-- Lit chaque table prioritaire via `prisma.<model>.findMany()`
-- Sérialise en JSON
-- Upload vers `uploads-private` bucket key `backups/YYYY-MM-DD.json`
-- Retention : garde les 30 derniers + 1 par mois sur 12 mois
-- Lock Redis (idempotence cron)
+- Cron `/api/cron/db-backup` daily 03h UTC (lock Redis daily)
+- Trigger SUPERADMIN `/api/admin/backups/trigger` (bypass du lock)
+- Lecture des tables prioritaires via `runDbBackup()` (`src/lib/db-backup.ts`)
+- Upload vers le bucket dédié **`db-backups`** (env `SUPABASE_BACKUPS_BUCKET`),
+  key `backups/YYYY-MM-DD.json.gz`, content-type `application/octet-stream`
+- Rétention 30 jours (rotation à chaque run)
+- Telemetry health Redis (`bk:last:ok` / `bk:last:err`) consommée par
+  `/admin/backups`

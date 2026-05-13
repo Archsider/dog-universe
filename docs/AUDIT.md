@@ -61,7 +61,7 @@
 - PII exclus des prompts Anthropic (règle RGPD dans CLAUDE.md)
 
 ### Stockage sécurisé
-- 2 buckets Supabase : `uploads` (public, photos) / `uploads-private` (privé, contrats PDF)
+- 3 buckets Supabase : `uploads` (public, photos), `uploads-private` (privé, contrats PDF + documents), `db-backups` (privé, dumps DB `.json.gz` — sans whitelist MIME)
 - Contrats retournés via signed URL (1h max) — jamais exposés publiquement
 - Magic bytes MIME validation côté serveur (JPEG, PNG, WebP, GIF, PDF)
 

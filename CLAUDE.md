@@ -307,13 +307,16 @@ Sinon (dev local)
 - `deleteFromStorage(key)` — suppression du bucket public
 - `deleteFromPrivateStorage(key)` — suppression du bucket privé
 
-**Architecture deux buckets :**
+**Architecture trois buckets :**
 | Fichier | Bucket | Accès |
 |---|---|---|
 | `pets/` (photos animaux) | `uploads` (public) | `getPublicUrl()` |
 | `stays/` (photos séjour) | `uploads` (public) | `getPublicUrl()` |
-| `documents/` (documents clients) | `uploads-private` (privé) | `createSignedUrl()` |
+| `documents/` (documents clients) | `uploads-private` (privé, whitelist MIME pdf+images) | `createSignedUrl()` |
 | `contracts/` (contrats signés) | `uploads-private` (privé) | `createSignedUrl()` |
+| `backups/` (dumps DB `.json.gz`) | `db-backups` (privé, **pas de whitelist MIME**) | `createSignedUrl()` |
+
+**Pourquoi un bucket dédié pour les backups (2026-05-13)** : `uploads-private` a une whitelist MIME (pdf + images uniquement) qui rejetait les `.gz` avec `mime type application/gzip is not supported`. Bucket `db-backups` créé sans restriction MIME pour accueillir les dumps gzippés.
 
 **Migration requise** : `prisma/migrations/20260405_private_storage/migration.sql` — à exécuter sur Supabase :
 - Crée le bucket `uploads-private` (public=false)
@@ -325,6 +328,37 @@ Sinon (dev local)
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_STORAGE_BUCKET` (défaut : `"uploads"`)
 - `SUPABASE_PRIVATE_STORAGE_BUCKET` (défaut : `"uploads-private"`)
+- `SUPABASE_BACKUPS_BUCKET` (défaut : `"db-backups"`)
+
+---
+
+## SAUVEGARDES DB (depuis 2026-05-13, PR #54/#55/#56)
+
+### Architecture
+```
+src/lib/db-backup.ts       → runDbBackup() + listBackups() + getBackupBucket() + BACKUP_PREFIX
+src/lib/backup-health.ts   → markBackupAttempt() + getLastBackupSuccess/Error (Upstash, fail-open, TTL 90j)
+/api/cron/db-backup        → defineCron daily 03h UTC, lock Redis 'db-backup:YYYY-MM-DD'
+/api/admin/backups/trigger → POST SUPERADMIN, **bypass du lock** (appelle runDbBackup() direct)
+/api/admin/backups         → GET SUPERADMIN, retourne backups + diagnostics (lastSuccess/lastError/storageConfigured)
+/api/admin/backups/download/[date] → GET SUPERADMIN, signed URL 15 min
+/api/admin/backups/restore/[date]  → POST SUPERADMIN, additif + per-row fallback + ?dryRun=1
+/admin/backups (BackupsClient.tsx) → UI : status banner + KPI strip + card grid + AlertDialog modals
+```
+
+### Règles d'or
+- **Bucket dédié `db-backups`** (env `SUPABASE_BACKUPS_BUCKET`) — séparé de `uploads-private` (contrats) parce que la whitelist MIME des contrats rejetait les `.gz`. Le bucket `db-backups` n'a aucune restriction MIME.
+- **`getBackupBucket()` est l'unique source de vérité** pour le nom du bucket — toutes les routes backup l'importent. Pour rechanger : un seul endroit à toucher.
+- **Cron lock `daily` uniquement sur `/api/cron/db-backup`** — le trigger SUPERADMIN appelle `runDbBackup()` directement, sans `defineCron`. Sans ce bypass, tout clic après 03h UTC retournait silencieusement `{ skipped: true }`.
+- **Upload `upsert: true`** + **content-type `application/octet-stream`** (universel, accepté partout).
+- **Restore additif** : `createMany({ skipDuplicates: true })` puis fallback row-by-row si throw. Classification `inserted` / `skipped (P2002)` / `failed`. Les rows existants ne sont **jamais** écrasés.
+- **Telemetry Redis** : chaque tentative (cron OU trigger) stamp `bk:last:ok` ou `bk:last:err` (TTL 90j). Surface dans `GET /api/admin/backups`.
+- **Rétention 30 jours** dans `runDbBackup()` (rotation non-fatale : un échec de delete ne casse jamais le dump nouvellement uploadé).
+
+### Tables exportées (caps)
+User 50k, Pet 50k, Booking 100k, Invoice 100k, InvoiceItem 200k, Payment 100k, Product 5k, ClientContract 50k (metadata only — PDF dans Storage), InvoiceSequence 1k, LoyaltyGrade 50k, LoyaltyBenefitClaim 100k, Notification 10k (cap !), AdminNote 50k, ActionLog 50k, BookingItem 200k, BookingPet 200k, BoardingDetail 100k, TaxiDetail 100k, Vaccination 100k, Review 50k, AddonRequest 50k, Heartbeat 20k, `_app_migrations` 1k.
+
+Voir `docs/BACKUP_RESTORE.md` pour le drill manuel + script de restauration destructif (staging only).
 
 ---
 

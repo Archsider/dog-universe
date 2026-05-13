@@ -156,14 +156,15 @@ HAVING ABS(i.amount - COALESCE(SUM(ii.total), 0)) > 0.01;
 | Cause | Fix |
 |---|---|
 | `SUPABASE_SERVICE_ROLE_KEY` expirée | Régénérer dans Supabase Dashboard → Settings → API |
-| Bucket `uploads` ou `uploads-private` supprimé | Recréer manuellement (public=true / false) |
+| Bucket `uploads`, `uploads-private` ou `db-backups` supprimé | Recréer manuellement (public=true pour `uploads`, false pour les deux autres ; `db-backups` sans whitelist MIME) |
 | Quota storage dépassé | Upgrade plan Supabase |
 | Signed URL expirée (>1h) | Recharger la page — Next régénère côté serveur |
 
 ### Action immédiate
 1. Tester un upload via `/admin/clients` → ajouter document
-2. Si KO : `SELECT * FROM storage.buckets;` côté Supabase doit lister les 2 buckets
+2. Si KO : `SELECT * FROM storage.buckets;` côté Supabase doit lister `uploads`, `uploads-private` et `db-backups`
 3. RLS policy sur `uploads-private` : `SELECT * FROM storage.policies WHERE bucket_id='uploads-private';` doit contenir une policy `service_role only`
+4. Si l'upload backup échoue avec `mime type ... is not supported` : vérifier que le bucket `db-backups` n'a pas de whitelist MIME activée (Storage → bucket → Settings → Allowed MIME types doit être vide)
 
 ---
 
