@@ -714,6 +714,9 @@ Rollback via `down.sql` disponible. Sans ce champ, `Booking.isWalkIn` reste `fal
 - **`withSpan` / `withSchema` non uniformes** : certains crons et routes POST n'ont pas l'instrumentation/validation centralisée.
 - **God-file** : `VaccinationSection.tsx` 696L à splitter en 3 (ViewSection, FormModal, DocumentList).
 
+### 🔧 DETTE TECHNIQUE — Migration Rollback Check (CI rouge, non bloquant prod)
+La CI `migration-rollback-check.yml` échoue depuis `20260511_invoice_sequence` (PR antérieure). La migration crée une séquence Postgres qui dépend de la table `Invoice` ; lors du dry-run `up → down → up` sur DB vierge, la séquence ne peut pas être recréée dans l'ordre attendu. **N'affecte pas la prod** (la table Invoice existe en réel). À fixer dans une PR dédiée — soit en ajustant le `down.sql` de cette migration, soit en marquant la séquence comme dépendante de la table dans le bootstrap two-pass du workflow. Tous les autres rollback checks passent.
+
 ### ✅ Migrations 20260510 exécutées (2026-05-12)
 - `prisma/migrations/20260510_product_upsell/migration.sql` — colonnes `targetSpecies`/`targetAge`/`imageUrl`/`weight`/`supplier` sur `Product` + CHECK + index. ✅
 - `prisma/migrations/20260510_seed_products_upsell/migration.sql` — seed ~85 produits Ultra Premium + Canvit. ✅
