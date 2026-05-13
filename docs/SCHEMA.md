@@ -3,7 +3,7 @@
 > Généré automatiquement depuis `prisma/schema.prisma`. Ne pas éditer à la main.
 > Régénérer avec `node scripts/generate-schema-doc.mjs` (ou `npm run db:doc`).
 
-**34 modèles** · **1 enums** · 2026-05-11
+**35 modèles** · **5 enums** · 2026-05-13
 
 ## Sommaire
 
@@ -41,8 +41,13 @@
 - [GuardianEvent](#guardianevent)
 - [Heartbeat](#heartbeat)
 - [FeatureFlag](#featureflag)
+- [SmsLog](#smslog)
 
 ### Enums
+- [BookingStatus](#enum-bookingstatus)
+- [BookingServiceType](#enum-bookingservicetype)
+- [PaymentMethod](#enum-paymentmethod)
+- [InvoiceStatus](#enum-invoicestatus)
 - [ItemCategory](#enum-itemcategory)
 
 ---
@@ -93,6 +98,7 @@
 
 **Indexes :**
 - `([deletedAt])`
+- `([role, isWalkIn]) // Hot path: admin pages filter by role='CLIENT' AND isWalkIn=false`
 
 ---
 
@@ -214,11 +220,12 @@
 |---|---|---|---|
 | `id` | `String` | PK · default=`cuid(` |  |
 | `clientId` | `String` | — |  |
-| `serviceType` | `String` | — | "BOARDING" | "PET_TAXI" |
-| `status` | `String` | default=`"PENDING"` | "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "CANCELLED" | "REJECTED" | "COMPLETED" | "NO_SHOW" | "WAITLIST" | "PENDING_EXTENSION" |
+| `serviceType` | `BookingServiceType` | — | "BOARDING" | "PET_TAXI" |
+| `status` | `BookingStatus` | default=`PENDING` | "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "CANCELLED" | "REJECTED" | "COMPLETED" | "NO_SHOW" | "WAITLIST" | "PENDING_EXTENSION" |
 | `startDate` | `DateTime` | — |  |
 | `endDate` | `DateTime?` | — |  |
 | `isOpenEnded` | `Boolean` | default=`false` | séjour à durée indéterminée — endDate fixé au checkout |
+| `isWalkIn` | `Boolean` | default=`false` | saisie admin walk-in — indépendant de User.isWalkIn (client peut rejoindre le portail plus tard) |
 | `arrivalTime` | `String?` | — |  |
 | `notes` | `String?` | — |  |
 | `cancellationReason` | `String?` | — |  |
@@ -258,6 +265,7 @@
 - `([deletedAt])`
 - `([status, startDate]) // Hot path : cron reminders + capacity overlap`
 - `([status, endDate])   // Hot path : cron reminders end + capacity overlap`
+- `([isWalkIn])          // Walk-in filter on Today view + billing exclusions`
 
 ---
 
@@ -443,7 +451,7 @@
 | `invoiceNumber` | `String` | UNIQUE |  |
 | `amount` | `Decimal` | `@db.Decimal(10, 2)` |  |
 | `paidAmount` | `Decimal` | default=`0` · `@db.Decimal(10, 2)` | Calculé = SUM(payments.amount), mis à jour par allocatePayments() |
-| `status` | `String` | default=`"PENDING"` | "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED" |
+| `status` | `InvoiceStatus` | default=`PENDING` | "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED" |
 | `serviceType` | `String?` | — | "BOARDING" | "PET_TAXI" | "GROOMING" | "PRODUCT_SALE" | null (legacy) |
 | `pdfUrl` | `String?` | — |  |
 | `notes` | `String?` | — |  |
@@ -509,7 +517,7 @@
 | `id` | `String` | PK · default=`cuid(` |  |
 | `invoiceId` | `String` | — |  |
 | `amount` | `Decimal` | `@db.Decimal(10, 2)` |  |
-| `paymentMethod` | `String` | — | "CASH" | "CARD" | "CHECK" | "TRANSFER" |
+| `paymentMethod` | `PaymentMethod` | — | "CASH" | "CARD" | "CHECK" | "TRANSFER" |
 | `paymentDate` | `DateTime` | — |  |
 | `notes` | `String?` | — |  |
 | `createdAt` | `DateTime` | default=`now(` |  |
@@ -804,9 +812,14 @@
 | `brand` | `String?` | — |  |
 | `reference` | `String?` | — |  |
 | `category` | `String?` | — |  |
+| `description` | `String?` | — |  |
 | `price` | `Decimal` | `@db.Decimal(10, 2)` |  |
+| `costPrice` | `Decimal?` | `@db.Decimal(10, 2)` |  |
 | `stock` | `Int` | default=`0` |  |
+| `lowStockThreshold` | `Int?` | — |  |
 | `available` | `Boolean` | default=`true` |  |
+| `isArchived` | `Boolean` | default=`false` |  |
+| `version` | `Int` | default=`0` |  |
 | `targetSpecies` | `String` | default=`"BOTH"` | 'DOG' | 'CAT' | 'BOTH' |
 | `targetAge` | `String` | default=`"ALL"` | 'PUPPY' | 'JUNIOR' | 'ADULT' | 'SENIOR' | 'ALL' |
 | `imageUrl` | `String?` | — |  |
@@ -818,6 +831,7 @@
 
 **Indexes :**
 - `([available])`
+- `([isArchived])`
 - `([targetSpecies, targetAge, available], name: "Product_targeting_idx")`
 
 ---
@@ -924,7 +938,60 @@
 
 ---
 
+## SmsLog
+
+> never deliver the same SMS twice within the 24h dedup window.
+
+| Champ | Type | Attributs | Commentaire |
+|---|---|---|---|
+| `id` | `String` | PK · default=`cuid(` |  |
+| `phone` | `String` | — | phone number or 'ADMIN' |
+| `contentHash` | `String` | — | SHA-256(phone + '\x00' + message) |
+| `sentAt` | `DateTime` | default=`now(` |  |
+| `status` | `String` | default=`"SENT"` | SENT | FAILED | SKIPPED |
+| `bookingId` | `String?` | — |  |
+
+**Uniques composites :** `([phone, contentHash])`
+
+**Indexes :**
+- `([phone, sentAt])`
+- `([sentAt])`
+
+---
+
 ## Enums
+
+### enum BookingStatus
+
+- `PENDING`
+- `CONFIRMED`
+- `IN_PROGRESS`
+- `COMPLETED`
+- `CANCELLED`
+- `REJECTED`
+- `AT_PICKUP`
+- `NO_SHOW`
+- `WAITLIST`
+- `PENDING_EXTENSION`
+
+### enum BookingServiceType
+
+- `BOARDING`
+- `PET_TAXI`
+
+### enum PaymentMethod
+
+- `CASH`
+- `CARD`
+- `CHECK`
+- `TRANSFER`
+
+### enum InvoiceStatus
+
+- `PENDING`
+- `PAID`
+- `CANCELLED`
+- `PARTIALLY_PAID`
 
 ### enum ItemCategory
 
