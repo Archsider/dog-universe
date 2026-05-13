@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { formatMAD } from '@/lib/utils';
-import { Package, Plus, Pencil, Trash2, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { Package, Plus, Pencil, Archive, ArchiveRestore, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -10,9 +10,14 @@ interface Product {
   brand: string | null;
   reference: string | null;
   category: string | null;
+  description?: string | null;
   price: number;
+  costPrice?: number | null;
   stock: number;
+  lowStockThreshold?: number | null;
   available: boolean;
+  isArchived?: boolean;
+  version?: number;
   targetSpecies?: string;
   targetAge?: string;
   supplier?: string | null;
@@ -53,8 +58,19 @@ function StockBadge({ stock }: { stock: number }) {
 }
 
 const EMPTY_FORM = {
-  name: '', brand: '', reference: '', category: '', price: '', stock: '0', available: true,
+  name: '', brand: '', reference: '', category: '', description: '',
+  price: '', costPrice: '', stock: '0', lowStockThreshold: '', available: true,
   targetSpecies: 'BOTH', targetAge: 'ALL', supplier: '', weight: '', imageUrl: '',
+};
+
+const PRODUCT_CATEGORIES = ['FOOD', 'TOY', 'ACCESSORY', 'GROOMING', 'HEALTH', 'OTHER'] as const;
+const CATEGORY_LABEL_FR: Record<string, string> = {
+  FOOD: 'Nourriture', TOY: 'Jouet', ACCESSORY: 'Accessoire',
+  GROOMING: 'Toilettage', HEALTH: 'Santé', OTHER: 'Autre',
+};
+const CATEGORY_LABEL_EN: Record<string, string> = {
+  FOOD: 'Food', TOY: 'Toy', ACCESSORY: 'Accessory',
+  GROOMING: 'Grooming', HEALTH: 'Health', OTHER: 'Other',
 };
 
 export default function ProductsClient({ locale, initialProducts, stockValue }: ProductsClientProps) {
@@ -64,9 +80,6 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
   // Stock adjust modal
   const [adjustTarget, setAdjustTarget] = useState<Product | null>(null);
   const [adjustDelta, setAdjustDelta] = useState('');
@@ -76,16 +89,35 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
   const [filterSupplier, setFilterSupplier] = useState<string>('');
   const [filterSpecies, setFilterSpecies] = useState<string>('');
   const [filterCategory, setFilterCategory] = useState<string>('');
+  const [showArchived, setShowArchived] = useState<boolean>(false);
+  const [search, setSearch] = useState<string>('');
+  const [archiveBusy, setArchiveBusy] = useState<string | null>(null);
 
   const suppliersList = Array.from(new Set(products.map((p) => p.supplier).filter(Boolean))) as string[];
   const categoriesList = Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[];
 
   const filteredProducts = products.filter((p) => {
+    if (Boolean(p.isArchived) !== showArchived) return false;
     if (filterSupplier && p.supplier !== filterSupplier) return false;
     if (filterSpecies && p.targetSpecies !== filterSpecies) return false;
     if (filterCategory && p.category !== filterCategory) return false;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const match =
+        p.name.toLowerCase().includes(q) ||
+        (p.reference?.toLowerCase().includes(q) ?? false);
+      if (!match) return false;
+    }
     return true;
   });
+
+  function isLowStock(p: Product): boolean {
+    return (
+      p.lowStockThreshold != null &&
+      p.lowStockThreshold > 0 &&
+      p.stock <= p.lowStockThreshold
+    );
+  }
 
   const totalValue = filteredProducts.reduce((s, p) => s + p.price * p.stock, 0);
 
@@ -103,8 +135,11 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
       brand: p.brand ?? '',
       reference: p.reference ?? '',
       category: p.category ?? '',
+      description: p.description ?? '',
       price: String(p.price),
+      costPrice: p.costPrice != null ? String(p.costPrice) : '',
       stock: String(p.stock),
+      lowStockThreshold: p.lowStockThreshold != null ? String(p.lowStockThreshold) : '',
       available: p.available,
       targetSpecies: p.targetSpecies ?? 'BOTH',
       targetAge: p.targetAge ?? 'ALL',
@@ -126,13 +161,20 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
     }
     setSubmitting(true);
     setError(null);
-    const payload = {
+    const costPrice = form.costPrice.trim() ? parseFloat(form.costPrice) : null;
+    const lowStockThreshold = form.lowStockThreshold.trim()
+      ? parseInt(form.lowStockThreshold, 10)
+      : null;
+    const basePayload = {
       name: form.name.trim(),
       brand: form.brand.trim() || undefined,
       reference: form.reference.trim() || undefined,
       category: form.category.trim() || undefined,
+      description: form.description.trim() || undefined,
       price,
+      ...(costPrice !== null && !isNaN(costPrice) ? { costPrice } : {}),
       stock,
+      ...(lowStockThreshold !== null && !isNaN(lowStockThreshold) ? { lowStockThreshold } : {}),
       available: form.available,
       targetSpecies: form.targetSpecies,
       targetAge: form.targetAge,
@@ -145,16 +187,27 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
         const res = await fetch(`/api/admin/products/${editProduct.id}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...basePayload, version: editProduct.version ?? 0 }),
         });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'ERROR');
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data.error === 'VERSION_CONFLICT') {
+            setError(t(
+              'Ce produit a été modifié entre-temps. Recharge la page pour voir la dernière version.',
+              'This product was modified meanwhile. Reload the page to see the latest version.',
+              locale,
+            ));
+            return;
+          }
+          throw new Error(data.error ?? 'ERROR');
+        }
         const updated: Product = await res.json();
         setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       } else {
         const res = await fetch('/api/admin/products', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(basePayload),
         });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'ERROR');
         const created: Product = await res.json();
@@ -174,7 +227,7 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
     const res = await fetch(`/api/admin/products/${p.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ available: !p.available }),
+      body: JSON.stringify({ available: !p.available, version: p.version ?? 0 }),
     });
     if (!res.ok) {
       // revert
@@ -185,19 +238,24 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
     }
   }
 
-  async function deleteProduct(id: string) {
-    setDeleting(true);
-    const res = await fetch(`/api/admin/products/${id}`, { method: 'DELETE' });
-    if (res.status === 204) {
-      setProducts((prev) => prev.filter((p) => p.id !== id));
-      setDeleteConfirm(null);
-    } else {
-      const data = await res.json().catch(() => ({}));
-      if (data.error === 'PRODUCT_IN_USE') {
-        alert(t('Ce produit est utilisé dans des factures et ne peut pas être supprimé.', 'This product is used in invoices and cannot be deleted.', locale));
-      }
+  async function archiveProduct(p: Product) {
+    setArchiveBusy(p.id);
+    const res = await fetch(`/api/admin/products/${p.id}/archive`, { method: 'POST' });
+    if (res.ok) {
+      const updated: Product = await res.json();
+      setProducts((prev) => prev.map((x) => x.id === updated.id ? updated : x));
     }
-    setDeleting(false);
+    setArchiveBusy(null);
+  }
+
+  async function restoreProduct(p: Product) {
+    setArchiveBusy(p.id);
+    const res = await fetch(`/api/admin/products/${p.id}/restore`, { method: 'POST' });
+    if (res.ok) {
+      const updated: Product = await res.json();
+      setProducts((prev) => prev.map((x) => x.id === updated.id ? updated : x));
+    }
+    setArchiveBusy(null);
   }
 
   async function applyAdjust() {
@@ -209,7 +267,7 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
     const res = await fetch(`/api/admin/products/${adjustTarget.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ stock: newStock }),
+      body: JSON.stringify({ stock: newStock, version: adjustTarget.version ?? 0 }),
     });
     if (res.ok) {
       const updated: Product = await res.json();
@@ -271,6 +329,22 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
             {t('Réinitialiser', 'Reset', locale)}
           </button>
         )}
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t('Rechercher (nom, réf.)', 'Search (name, ref.)', locale)}
+          className="border border-ivory-200 rounded-lg px-2 py-1.5 bg-white flex-1 min-w-[180px]"
+        />
+        <label className="inline-flex items-center gap-2 ml-auto cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-xs text-gray-600">{t('Voir archivés', 'Show archived', locale)}</span>
+        </label>
       </div>
 
       {/* Table */}
@@ -299,9 +373,14 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
                 </tr>
               )}
               {filteredProducts.map((p) => (
-                <tr key={p.id} className="hover:bg-[#FAF6F0]/50 transition-colors">
+                <tr key={p.id} className={`transition-colors ${isLowStock(p) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#FAF6F0]/50'}`}>
                   <td className="px-4 py-3 font-medium text-charcoal">
                     {p.name}{p.weight && <span className="text-xs text-gray-400 ml-1">· {p.weight}</span>}
+                    {isLowStock(p) && (
+                      <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">
+                        <AlertTriangle className="h-3 w-3" /> {t('seuil', 'low', locale)}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-500">{p.supplier ?? p.brand ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{p.category ?? '—'}</td>
@@ -333,18 +412,32 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => openEdit(p)}
-                        className="p-1.5 rounded-md text-gray-400 hover:text-gold-600 hover:bg-gold-50 transition-colors"
+                        className="px-2 py-1 rounded-md text-xs font-medium text-gray-500 hover:text-gold-600 hover:bg-gold-50 transition-colors"
                         title={t('Modifier', 'Edit', locale)}
                       >
-                        <Pencil className="h-4 w-4" />
+                        {t('Modifier', 'Edit', locale)}
                       </button>
-                      <button
-                        onClick={() => setDeleteConfirm(p.id)}
-                        className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                        title={t('Supprimer', 'Delete', locale)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {p.isArchived ? (
+                        <button
+                          onClick={() => restoreProduct(p)}
+                          disabled={archiveBusy === p.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-emerald-600 hover:bg-emerald-50 disabled:opacity-50 transition-colors"
+                          title={t('Restaurer', 'Restore', locale)}
+                        >
+                          <ArchiveRestore className="h-3.5 w-3.5" />
+                          {t('Restaurer', 'Restore', locale)}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => archiveProduct(p)}
+                          disabled={archiveBusy === p.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-gray-500 hover:text-amber-700 hover:bg-amber-50 disabled:opacity-50 transition-colors"
+                          title={t('Archiver', 'Archive', locale)}
+                        >
+                          <Archive className="h-3.5 w-3.5" />
+                          {t('Archiver', 'Archive', locale)}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -394,15 +487,33 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">{t('Catégorie', 'Category', locale)}</label>
                 <input
+                  list="product-category-suggestions"
                   value={form.category}
                   onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                   placeholder={t('ex: Alimentation, Accessoires, Hygiène…', 'e.g. Food, Accessories, Hygiene…', locale)}
                   className="w-full border border-ivory-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gold-400"
                 />
+                <datalist id="product-category-suggestions">
+                  {PRODUCT_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {locale === 'en' ? CATEGORY_LABEL_EN[c] : CATEGORY_LABEL_FR[c]}
+                    </option>
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('Description', 'Description', locale)}</label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  rows={2}
+                  maxLength={500}
+                  className="w-full border border-ivory-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gold-400 resize-none"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('Prix (MAD) *', 'Price (MAD) *', locale)}</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('Prix de vente (MAD) *', 'Sale price (MAD) *', locale)}</label>
                   <input
                     type="number"
                     min={0}
@@ -414,6 +525,35 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t("Prix d'achat (MAD)", 'Cost price (MAD)', locale)}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={form.costPrice}
+                    onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
+                    className="w-full border border-ivory-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gold-400"
+                  />
+                </div>
+              </div>
+              {(() => {
+                const sale = parseFloat(form.price);
+                const cost = parseFloat(form.costPrice);
+                if (!isNaN(sale) && !isNaN(cost) && cost > 0 && sale > 0) {
+                  const margin = ((sale - cost) / sale) * 100;
+                  return (
+                    <div className="text-xs text-emerald-700 bg-emerald-50/60 rounded-md px-3 py-1.5">
+                      {t('Marge', 'Margin', locale)} :{' '}
+                      <span className="font-semibold">{margin.toFixed(1)}%</span>
+                      {' · '}
+                      {formatMAD(sale - cost)}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">{t('Stock *', 'Stock *', locale)}</label>
                   <input
                     type="number"
@@ -423,6 +563,18 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
                     onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
                     className="w-full border border-ivory-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gold-400"
                     required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t("Seuil d'alerte", 'Low-stock threshold', locale)}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={form.lowStockThreshold}
+                    onChange={(e) => setForm((f) => ({ ...f, lowStockThreshold: e.target.value }))}
+                    placeholder={t('vide = pas d\'alerte', 'empty = no alert', locale)}
+                    className="w-full border border-ivory-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gold-400"
                   />
                 </div>
               </div>
@@ -545,31 +697,6 @@ export default function ProductsClient({ locale, initialProducts, stockValue }: 
         </div>
       )}
 
-      {/* Delete confirm */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-6 space-y-4">
-            <h2 className="font-semibold text-charcoal">
-              {t('Confirmer la suppression', 'Confirm deletion', locale)}
-            </h2>
-            <p className="text-sm text-gray-500">
-              {t('Cette action est irréversible. Les produits liés à des factures ne peuvent pas être supprimés.', 'This action is irreversible. Products linked to invoices cannot be deleted.', locale)}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDeleteConfirm(null)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-                {t('Annuler', 'Cancel', locale)}
-              </button>
-              <button
-                onClick={() => deleteProduct(deleteConfirm)}
-                disabled={deleting}
-                className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg disabled:opacity-50"
-              >
-                {deleting ? '…' : t('Supprimer', 'Delete', locale)}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -652,9 +652,14 @@ model Product {
   brand         String?
   reference     String?
   category      String?
+  description   String?
   price         Decimal  @db.Decimal(10, 2)
+  costPrice     Decimal? @db.Decimal(10, 2)
   stock         Int      @default(0)
+  lowStockThreshold Int?
   available     Boolean  @default(true)
+  isArchived    Boolean  @default(false)
+  version       Int      @default(0)
   // Upsell targeting (20260510_product_upsell)
   targetSpecies String   @default("BOTH") // 'DOG' | 'CAT' | 'BOTH'
   targetAge     String   @default("ALL")  // 'PUPPY' | 'JUNIOR' | 'ADULT' | 'SENIOR' | 'ALL'
@@ -667,6 +672,7 @@ model Product {
   invoiceItems InvoiceItem[]
 
   @@index([available])
+  @@index([isArchived])
   @@index([targetSpecies, targetAge, available], name: "Product_targeting_idx")
 }
 
