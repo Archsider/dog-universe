@@ -3,7 +3,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, FileWarning, Receipt, Package, CalendarOff, MessageSquare } from 'lucide-react';
+import { Users, Calendar, TrendingUp, Clock, AlertCircle, Scissors, Car, Star, UserPlus, Package, CalendarOff, MessageSquare } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import {
@@ -17,8 +17,10 @@ import {
 import DashboardActivity from './sections/DashboardActivity';
 import DashboardCheckInOut from './sections/DashboardCheckInOut';
 import DashboardLowerSections from './sections/DashboardLowerSections';
+import DashboardKpiList, { type KpiListItem } from './sections/DashboardKpiList';
 import { SectionSkeleton } from './sections/SectionSkeleton';
 import { safeClientWhere } from '@/lib/queries/safe-where';
+import { toNumber } from '@/lib/decimal';
 
 // Cache ISR — revalidation toutes les 60 s. Les actions admin (PATCH bookings,
 // invoices) appellent revalidateTag('admin-counts') pour invalider en cas de
@@ -43,6 +45,18 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   const oneYearAgo = new Date(now);
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
+  // Shared filters for the unbilled-bookings & pending-invoices KPI lists.
+  const unbilledWhere = {
+    status: 'COMPLETED' as const,
+    invoice: null,
+    deletedAt: null,
+  };
+  const pendingInvoiceStatuses = ['PENDING', 'PARTIALLY_PAID'] as const;
+  const pendingInvoiceWhere = {
+    status: { in: [...pendingInvoiceStatuses] },
+    issuedAt: { gte: oneYearAgo },
+  };
+
   const [
     totalClients,
     pendingBookings,
@@ -52,8 +66,9 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     loyalClientsGroups,
     newClients,
     pendingInvoicesAgg,
-    bookingsWithoutInvoiceCount,
-    bookingsWithoutInvoiceFirst,
+    pendingInvoicesList,
+    unbilledBookingsCount,
+    unbilledBookingsList,
     thisMonthHistorical,
     lastMonthHistorical,
     thisBilled,
@@ -80,25 +95,47 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     prisma.invoice.aggregate({
       // Cap à 12 mois pour borner la lecture (un PENDING vieux d'un an n'a plus
       // de valeur indicateur — il devrait être en relance overdue).
-      where: { status: 'PENDING', issuedAt: { gte: oneYearAgo } },
-      _sum: { amount: true },
+      where: pendingInvoiceWhere,
+      _sum: { amount: true, paidAmount: true },
       _count: { id: true },
     }),
-    prisma.booking.count({
-      where: {
-        status: 'COMPLETED',
-        invoice: null,
-        deletedAt: null,
+    prisma.invoice.findMany({
+      where: pendingInvoiceWhere,
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      select: {
+        id: true,
+        amount: true,
+        paidAmount: true,
+        createdAt: true,
+        clientDisplayName: true,
+        client: { select: { firstName: true, lastName: true, name: true } },
+        booking: {
+          select: {
+            id: true,
+            bookingPets: {
+              select: { pet: { select: { name: true } } },
+              take: 3,
+            },
+          },
+        },
       },
     }),
-    prisma.booking.findFirst({
-      where: {
-        status: 'COMPLETED',
-        invoice: null,
-        deletedAt: null,
+    prisma.booking.count({ where: unbilledWhere }),
+    prisma.booking.findMany({
+      where: unbilledWhere,
+      orderBy: { endDate: 'desc' },
+      take: 3,
+      select: {
+        id: true,
+        endDate: true,
+        totalPrice: true,
+        client: { select: { firstName: true, lastName: true, name: true } },
+        bookingPets: {
+          select: { pet: { select: { name: true } } },
+          take: 3,
+        },
       },
-      select: { id: true },
-      orderBy: { startDate: 'desc' },
     }),
     prisma.monthlyRevenueSummary.findFirst({
       where: { year: thisMonthStart.getFullYear(), month: thisMonthStart.getMonth() + 1 },
@@ -163,11 +200,45 @@ export default async function AdminDashboardPage({ params }: PageProps) {
 
   // Graphe 12 mois et top clients : streamés via <Suspense> (DashboardActivity / DashboardLowerSections)
   const loyalClients = loyalClientsGroups.length;
-  const pendingInvoicesAmount = Number(pendingInvoicesAgg._sum.amount ?? 0);
+  const pendingInvoicesUnpaid =
+    toNumber(pendingInvoicesAgg._sum.amount ?? 0) - toNumber(pendingInvoicesAgg._sum.paidAmount ?? 0);
   const pendingInvoicesCount = pendingInvoicesAgg._count.id ?? 0;
-  const bookingsWithoutInvoiceHref = bookingsWithoutInvoiceCount === 1 && bookingsWithoutInvoiceFirst
-    ? `/${locale}/admin/reservations/${bookingsWithoutInvoiceFirst.id}`
-    : `/${locale}/admin/reservations?noInvoice=1`;
+
+  // ── KPI list item builders ──────────────────────────────────────────────
+  const fr = locale !== 'en';
+  const dateFmt = new Intl.DateTimeFormat(fr ? 'fr-MA' : 'en-GB', { day: '2-digit', month: 'short' });
+  type ClientLike = { firstName: string | null; lastName: string | null; name: string | null } | null;
+  function clientLabel(c: ClientLike, displayOverride?: string | null): string {
+    if (displayOverride && displayOverride.trim()) return displayOverride.trim();
+    if (!c) return fr ? 'Client' : 'Client';
+    const fl = `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim();
+    return fl || c.name || (fr ? 'Client' : 'Client');
+  }
+  function petsLabel(pets: { pet: { name: string } }[]): string {
+    if (pets.length === 0) return '—';
+    return pets.map(p => p.pet.name).join(', ');
+  }
+
+  const unbilledItems: KpiListItem[] = unbilledBookingsList.map((b) => ({
+    id: b.id,
+    href: `/${locale}/admin/reservations/${b.id}`,
+    primary: clientLabel(b.client),
+    secondary: petsLabel(b.bookingPets),
+    tertiary: b.endDate ? dateFmt.format(b.endDate) : undefined,
+    quaternary: formatMAD(b.totalPrice),
+  }));
+
+  const pendingInvoiceItems: KpiListItem[] = pendingInvoicesList.map((inv) => {
+    const balance = toNumber(inv.amount) - toNumber(inv.paidAmount);
+    return {
+      id: inv.id,
+      href: `/${locale}/admin/invoices/${inv.id}`,
+      primary: clientLabel(inv.client, inv.clientDisplayName),
+      secondary: inv.booking ? petsLabel(inv.booking.bookingPets) : undefined,
+      tertiary: dateFmt.format(inv.createdAt),
+      quaternary: formatMAD(balance),
+    };
+  });
 
   const labels = {
     fr: {
@@ -193,6 +264,9 @@ export default async function AdminDashboardPage({ params }: PageProps) {
       revenue: 'CA total',
       pendingInvoices: 'Factures en attente',
       noInvoice: 'Réserv. sans facture',
+      allInvoiced: 'Tout est facturé',
+      noPendingPayments: 'Aucun encaissement en attente',
+      viewAllShort: 'Voir tout',
       checkInsToday: "Arrivées aujourd'hui",
       checkOutsToday: "Départs aujourd'hui",
       noMovement: 'Aucun mouvement',
@@ -219,7 +293,10 @@ export default async function AdminDashboardPage({ params }: PageProps) {
       places: 'spots',
       revenue: 'Total revenue',
       pendingInvoices: 'Pending invoices',
-      noInvoice: 'Bookings w/o invoice',
+      noInvoice: 'Bookings without invoice',
+      allInvoiced: 'All invoiced',
+      noPendingPayments: 'No pending payments',
+      viewAllShort: 'View all',
       checkInsToday: 'Check-ins today',
       checkOutsToday: 'Check-outs today',
       noMovement: 'No movement',
@@ -408,37 +485,30 @@ export default async function AdminDashboardPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Row 2b — Finance alerts */}
-      {(pendingInvoicesCount > 0 || bookingsWithoutInvoiceCount > 0) && (
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          {pendingInvoicesCount > 0 && (
-            <Link href={`/${locale}/admin/billing?status=PENDING`}>
-              <div className="bg-white rounded-xl border border-orange-200/60 p-4 shadow-card hover:shadow-card-hover transition-shadow flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
-                  <Receipt className="h-5 w-5 text-orange-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-lg font-bold text-charcoal">{formatMAD(pendingInvoicesAmount)}</div>
-                  <div className="text-xs text-gray-500">{l.pendingInvoices} <span className="font-medium text-orange-600">({pendingInvoicesCount})</span></div>
-                </div>
-              </div>
-            </Link>
-          )}
-          {bookingsWithoutInvoiceCount > 0 && (
-            <Link href={bookingsWithoutInvoiceHref}>
-              <div className="bg-white rounded-xl border border-red-200/60 p-4 shadow-card hover:shadow-card-hover transition-shadow flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                  <FileWarning className="h-5 w-5 text-red-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-lg font-bold text-charcoal">{bookingsWithoutInvoiceCount}</div>
-                  <div className="text-xs text-gray-500">{l.noInvoice}</div>
-                </div>
-              </div>
-            </Link>
-          )}
-        </div>
-      )}
+      {/* Row 2b — Finance alerts: actionable mini-lists */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <DashboardKpiList
+          title={l.noInvoice}
+          count={unbilledBookingsCount}
+          items={unbilledItems}
+          viewAllHref={`/${locale}/admin/reservations?noInvoice=1`}
+          viewAllLabel={l.viewAllShort}
+          emptyMessage={l.allInvoiced}
+          severity={unbilledBookingsCount > 0 ? 'warning' : 'neutral'}
+          variant="unbilled"
+        />
+        <DashboardKpiList
+          title={l.pendingInvoices}
+          count={pendingInvoicesCount}
+          totalSummary={pendingInvoicesCount > 0 ? formatMAD(pendingInvoicesUnpaid) : undefined}
+          items={pendingInvoiceItems}
+          viewAllHref={`/${locale}/admin/billing?status=PENDING`}
+          viewAllLabel={l.viewAllShort}
+          emptyMessage={l.noPendingPayments}
+          severity={pendingInvoicesCount > 0 ? 'warning' : 'neutral'}
+          variant="pending-invoices"
+        />
+      </div>
 
       {/* Arrivées / Départs du jour — streamé via Suspense, indépendant des KPIs */}
       <Suspense fallback={<div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 animate-pulse"><div className="bg-white rounded-xl border border-gray-200 p-5 h-32" /><div className="bg-white rounded-xl border border-gray-200 p-5 h-32" /></div>}>
