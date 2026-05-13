@@ -1,4 +1,8 @@
-// Vercel Cron worker — runs every minute.
+// Vercel Cron worker — runs every 5 minutes (*/5 * * * * in vercel.json).
+// Transactional notifications (booking confirmations, validation, etc.) bypass
+// this drain entirely via sendEmailNow / sendSmsNow (src/lib/notify-now.ts) so
+// user-visible latency stays sub-second. This drain serves only deferred batch
+// work enqueued by daily/weekly crons (reminders, birthdays, weekly reports).
 // Creates short-lived BullMQ Workers for the email and SMS queues, processes up
 // to MAX_JOBS_PER_QUEUE jobs each, then closes them before Vercel's 60 s timeout.
 // The worker auto-picks up "waiting" and "delayed" jobs. The "drained" event fires
