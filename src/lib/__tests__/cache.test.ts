@@ -17,7 +17,18 @@ vi.mock('@upstash/redis', () => ({
 process.env.UPSTASH_REDIS_REST_URL = 'https://test.upstash.io';
 process.env.UPSTASH_REDIS_REST_TOKEN = 'test-token';
 
-import { cacheGet, cacheSet, cacheDel, cacheReadThrough, CacheKeys, CacheTTL } from '../cache';
+import {
+  cacheGet,
+  cacheSet,
+  cacheDel,
+  cacheReadThrough,
+  CacheKeys,
+  CacheTTL,
+  markQueueEnqueue,
+  getQueueLastEnqueueMs,
+  markQueueFullCheck,
+  getQueueLastFullCheckMs,
+} from '../cache';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -146,6 +157,80 @@ describe('CacheTTL', () => {
 
   it('notifCount is 30 seconds', () => {
     expect(CacheTTL.notifCount).toBe(30);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R4 — BullMQ enqueue freshness helpers
+// ---------------------------------------------------------------------------
+describe('R4 — markQueueEnqueue / getQueueLastEnqueueMs', () => {
+  it('markQueueEnqueue stamps bullmq:lastEnqueue with epoch ms and 1h TTL', async () => {
+    const before = Date.now();
+    await markQueueEnqueue();
+    expect(mockRedis.set).toHaveBeenCalledTimes(1);
+    const [key, value, opts] = mockRedis.set.mock.calls[0];
+    expect(key).toBe('bullmq:lastEnqueue');
+    expect(opts).toEqual({ ex: 3600 });
+    const n = Number(value);
+    expect(Number.isFinite(n)).toBe(true);
+    expect(n).toBeGreaterThanOrEqual(before);
+    expect(n).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('markQueueEnqueue swallows Redis errors — fail-open', async () => {
+    mockRedis.set.mockRejectedValueOnce(new Error('Redis down'));
+    await expect(markQueueEnqueue()).resolves.toBeUndefined();
+  });
+
+  it('getQueueLastEnqueueMs returns the stored epoch when present', async () => {
+    mockRedis.get.mockResolvedValueOnce('1715600000000');
+    expect(await getQueueLastEnqueueMs()).toBe(1715600000000);
+    expect(mockRedis.get).toHaveBeenCalledWith('bullmq:lastEnqueue');
+  });
+
+  it('getQueueLastEnqueueMs accepts numeric Redis return without parse', async () => {
+    mockRedis.get.mockResolvedValueOnce(1715600000000);
+    expect(await getQueueLastEnqueueMs()).toBe(1715600000000);
+  });
+
+  it('getQueueLastEnqueueMs returns null when unset', async () => {
+    mockRedis.get.mockResolvedValueOnce(null);
+    expect(await getQueueLastEnqueueMs()).toBeNull();
+  });
+
+  it('getQueueLastEnqueueMs returns null when value is corrupt (non-numeric)', async () => {
+    mockRedis.get.mockResolvedValueOnce('not-a-number');
+    expect(await getQueueLastEnqueueMs()).toBeNull();
+  });
+
+  it('getQueueLastEnqueueMs returns null on Redis error — fail-open', async () => {
+    mockRedis.get.mockRejectedValueOnce(new Error('Redis timeout'));
+    expect(await getQueueLastEnqueueMs()).toBeNull();
+  });
+});
+
+describe('R4 — markQueueFullCheck / getQueueLastFullCheckMs', () => {
+  it('markQueueFullCheck stamps bullmq:lastFullCheck with 2h TTL', async () => {
+    await markQueueFullCheck();
+    const [key, , opts] = mockRedis.set.mock.calls[0];
+    expect(key).toBe('bullmq:lastFullCheck');
+    expect(opts).toEqual({ ex: 7200 });
+  });
+
+  it('getQueueLastFullCheckMs returns the stored epoch when present', async () => {
+    mockRedis.get.mockResolvedValueOnce('1715600999999');
+    expect(await getQueueLastFullCheckMs()).toBe(1715600999999);
+    expect(mockRedis.get).toHaveBeenCalledWith('bullmq:lastFullCheck');
+  });
+
+  it('getQueueLastFullCheckMs returns null when unset', async () => {
+    mockRedis.get.mockResolvedValueOnce(null);
+    expect(await getQueueLastFullCheckMs()).toBeNull();
+  });
+
+  it('getQueueLastFullCheckMs returns null on Redis error — fail-open', async () => {
+    mockRedis.get.mockRejectedValueOnce(new Error('Redis down'));
+    expect(await getQueueLastFullCheckMs()).toBeNull();
   });
 });
 
