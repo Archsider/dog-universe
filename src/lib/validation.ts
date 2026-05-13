@@ -234,6 +234,9 @@ export const adminBookingCreateSchema = z.object({
   },
   { message: 'INVALID_DATE_RANGE', path: ['endDate'] },
 ).refine(
+  d => !(d.isOpenEnded && d.initialStatus === 'COMPLETED'),
+  { message: 'WALKIN_OPENENDED_WITH_COMPLETED', path: ['initialStatus'] },
+).refine(
   d => !(d.initialStatus === 'COMPLETED' && !d.endDate),
   { message: 'END_DATE_REQUIRED_FOR_COMPLETED', path: ['endDate'] },
 ).refine(
