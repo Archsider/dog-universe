@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/workers/process",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/reminders",

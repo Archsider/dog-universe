@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   RATE_LIMITED_ROUTES,
+  RATE_LIMITED_ROUTES_ANY_METHOD,
   getDynamicLimitBucket,
 } from '../../middleware/rate-limit';
 
@@ -61,6 +62,58 @@ describe('rate-limit route → bucket mapping', () => {
     });
     it('keeps /api/bookings on bookings bucket', () => {
       expect(RATE_LIMITED_ROUTES['/api/bookings']).toBe('bookings');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // R2a (2026-05-13) — three high-traffic public endpoints lose their Upstash
+  // bucket. They're still capped by Vercel/CDN; the goal is to stop ~250K
+  // Redis cmds/mois bled on rate-limit sliding-window writes.
+  //
+  // Crucially: the security-critical buckets (auth, totp, passwordReset,
+  // bookings, idempotency keys via the bookings route) MUST remain intact.
+  // -------------------------------------------------------------------------
+  describe('R2a — endpoints with rate-limit removed', () => {
+    it('/api/health is no longer rate-limited (was 60/min)', () => {
+      expect(RATE_LIMITED_ROUTES_ANY_METHOD['/api/health']).toBeUndefined();
+    });
+    it('/api/availability is no longer rate-limited (was 60/15 min)', () => {
+      expect(RATE_LIMITED_ROUTES_ANY_METHOD['/api/availability']).toBeUndefined();
+    });
+    it('/api/taxi-tracking/* no longer matches a dynamic bucket (was 600/h)', () => {
+      expect(getDynamicLimitBucket('/api/taxi-tracking/abc123/state')).toBeNull();
+      expect(getDynamicLimitBucket('/api/taxi-tracking/abc123/history')).toBeNull();
+    });
+  });
+
+  describe('R2a — security-critical buckets untouched (regression guard)', () => {
+    it('keeps auth bucket on /api/auth/signin', () => {
+      expect(RATE_LIMITED_ROUTES['/api/auth/signin']).toBe('auth');
+    });
+    it('keeps auth bucket on /api/auth/callback/credentials', () => {
+      expect(RATE_LIMITED_ROUTES['/api/auth/callback/credentials']).toBe('auth');
+    });
+    it('keeps auth bucket on /api/register', () => {
+      expect(RATE_LIMITED_ROUTES['/api/register']).toBe('auth');
+    });
+    it('keeps totp bucket on /api/auth/totp/setup', () => {
+      expect(RATE_LIMITED_ROUTES['/api/auth/totp/setup']).toBe('totp');
+    });
+    it('keeps totp bucket on /api/auth/totp/validate', () => {
+      expect(RATE_LIMITED_ROUTES['/api/auth/totp/validate']).toBe('totp');
+    });
+    it('keeps passwordReset bucket on /api/reset-password', () => {
+      expect(RATE_LIMITED_ROUTES['/api/reset-password']).toBe('passwordReset');
+    });
+    it('keeps bookings bucket on /api/bookings (anti double-booking)', () => {
+      expect(RATE_LIMITED_ROUTES['/api/bookings']).toBe('bookings');
+    });
+    it('keeps rgpd bucket on /api/user/export and /api/user/anonymize', () => {
+      expect(RATE_LIMITED_ROUTES_ANY_METHOD['/api/user/export']).toBe('rgpd');
+      expect(RATE_LIMITED_ROUTES_ANY_METHOD['/api/user/anonymize']).toBe('rgpd');
+    });
+    it('keeps taxiStream bucket on /api/taxi/{token}/stream (per-open, not polling)', () => {
+      expect(getDynamicLimitBucket('/api/taxi/tok_42/stream')).toBe('taxiStream');
     });
   });
 });

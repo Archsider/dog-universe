@@ -5,6 +5,7 @@ import { getBullMQConnection, isBullMQConfigured } from '@/lib/redis-bullmq';
 import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
 import { logger } from '@/lib/logger';
+import { markQueueEnqueue } from '@/lib/cache';
 
 // Deterministic jobId based on phone + message content so BullMQ won't
 // re-enqueue the same SMS even if the caller omits an explicit jobId.
@@ -125,6 +126,8 @@ export async function enqueueEmail(data: EmailJobData, jobId?: string): Promise<
   }
   try {
     await getEmailQueue().add('send', data, jobId ? { ...EMAIL_JOB_OPTIONS, jobId } : EMAIL_JOB_OPTIONS);
+    // R4: stamp last-enqueue so the worker cron can skip BullMQ probes on idle ticks.
+    void markQueueEnqueue();
   } catch (err) {
     Sentry.addBreadcrumb({
       category: 'redis',
@@ -149,6 +152,8 @@ export async function enqueueSms(data: SmsJobData, jobId?: string): Promise<void
   }
   try {
     await getSmsQueue().add('send', data, { ...SMS_JOB_OPTIONS, jobId: resolvedJobId });
+    // R4: stamp last-enqueue so the worker cron can skip BullMQ probes on idle ticks.
+    void markQueueEnqueue();
   } catch (err) {
     Sentry.addBreadcrumb({
       category: 'redis',

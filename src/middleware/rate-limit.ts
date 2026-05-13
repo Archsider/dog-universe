@@ -63,16 +63,6 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(60, '60 m'),
       prefix: 'rl:taxi-stream',
     }),
-    // Public taxi tracking JSON endpoint (/api/taxi-tracking/{token}/...): the
-    // tracking page polls this as a fallback when SSE is unavailable. 600/h
-    // (= 10/min) is generous for normal use (a polling client at 10 s = 360/h)
-    // and bounds Postgres exposure to brute-force token enumeration. IP-based
-    // bucket — viewers are unauthenticated.
-    taxiTracking: new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(600, '60 m'),
-      prefix: 'rl:taxi-tracking',
-    }),
     // RGPD ops (export + anonymize): 5 per hour per IP — these are expensive
     // (full DB read or transactional write) and abusable for DoS/scraping.
     rgpd: new Ratelimit({
@@ -87,21 +77,6 @@ function getRatelimiter() {
       redis,
       limiter: Ratelimit.slidingWindow(10, '60 m'),
       prefix: 'rl:addon-req',
-    }),
-    // Health endpoint: 60 per minute per IP — generous for monitoring probes,
-    // tight enough to prevent scraping the uptime signal as a side-channel.
-    health: new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(60, '1 m'),
-      prefix: 'rl:health',
-    }),
-    // Public availability calendar (DB scan + per-month projection) — 60
-    // per 15 min per IP. Cheap thanks to a 5-min Redis cache, but a tight
-    // bucket discourages scrapers harvesting boarding-occupancy patterns.
-    availability: new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(60, '15 m'),
-      prefix: 'rl:availability',
     }),
     // Tier 2 hardening (2026-05-09) — granular buckets for sensitive routes:
     //
@@ -182,7 +157,6 @@ type DynamicBucket =
   | 'passwordReset'
   | 'bookings'
   | 'taxiStream'
-  | 'taxiTracking'
   | 'addonRequest'
   | 'payment'
   | 'invoiceCreate'
@@ -191,11 +165,18 @@ type DynamicBucket =
   | 'geocode';
 
 // Routes rate-limited regardless of HTTP method (e.g. expensive GETs).
-export const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'health' | 'availability' | 'geocode'> = {
+//
+// 2026-05-13 (R2a): /api/health, /api/availability and /api/taxi-tracking
+// no longer carry an Upstash bucket. health is a public uptime probe
+// (must stay sub-100ms), availability is a read-only public calendar
+// already protected by a 5-min Redis cache, and taxi-tracking is polled
+// by an active viewer (one polling client = ~360 req/h, expected). All
+// three are best capped at the CDN / Vercel edge if needed; an Upstash
+// bucket on them was the single largest middleware consumer (~250K
+// cmds/mois per AUDIT_REDIS.md §4).
+export const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'geocode'> = {
   '/api/user/export': 'rgpd',          // GET — full DB read
   '/api/user/anonymize': 'rgpd',       // POST — transactional write
-  '/api/health': 'health',             // GET — uptime probe, 60/min per IP
-  '/api/availability': 'availability', // GET — public calendar, scrape-resistant
   '/api/geocode/reverse': 'geocode',   // GET — proxies Nominatim (1 req/s fair use)
 };
 
@@ -211,12 +192,9 @@ export function getDynamicLimitBucket(path: string): DynamicBucket | null {
   if (path.startsWith('/api/taxi/') && path.endsWith('/stream')) {
     return 'taxiStream';
   }
-  // /api/taxi-tracking/{token}/... — public JSON tracking endpoints (state +
-  // history). Unauthenticated, IP-bucketed. 600/h cap is plenty for a normal
-  // polling viewer (~360/h) and blocks token brute-force scans.
-  if (path.startsWith('/api/taxi-tracking/')) {
-    return 'taxiTracking';
-  }
+  // 2026-05-13 (R2a): /api/taxi-tracking/* no longer rate-limited via Upstash.
+  // Active polling viewer = ~360 req/h baseline; the bucket consumed ~5 cmds
+  // per call which dominated Redis usage during active rides.
   // /api/bookings/{id}/addon-request — client adds extra service to a booking
   if (path.startsWith('/api/bookings/') && path.endsWith('/addon-request')) {
     return 'addonRequest';
@@ -307,7 +285,6 @@ export async function checkRateLimit(
         : request.method === 'POST'
       : anyMethodKey ? true :
     dynamicKey === 'taxiStream' ? request.method === 'GET' :
-    dynamicKey === 'taxiTracking' ? request.method === 'GET' :
     dynamicKey ? request.method === 'POST' :
     true; // admin mutation
 
