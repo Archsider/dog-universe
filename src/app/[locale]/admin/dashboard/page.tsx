@@ -17,8 +17,10 @@ import {
 import DashboardActivity from './sections/DashboardActivity';
 import DashboardCheckInOut from './sections/DashboardCheckInOut';
 import DashboardLowerSections from './sections/DashboardLowerSections';
+import DashboardKpiList, { type KpiListItem } from './sections/DashboardKpiList';
 import { SectionSkeleton } from './sections/SectionSkeleton';
 import { safeClientWhere } from '@/lib/queries/safe-where';
+import { toNumber } from '@/lib/decimal';
 
 // Cache ISR — revalidation toutes les 60 s. Les actions admin (PATCH bookings,
 // invoices) appellent revalidateTag('admin-counts') pour invalider en cas de
@@ -43,6 +45,18 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   const oneYearAgo = new Date(now);
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
+  // Shared filters for the unbilled-bookings & pending-invoices KPI lists.
+  const unbilledWhere = {
+    status: 'COMPLETED' as const,
+    invoice: null,
+    deletedAt: null,
+  };
+  const pendingInvoiceStatuses = ['PENDING', 'PARTIALLY_PAID'] as const;
+  const pendingInvoiceWhere = {
+    status: { in: [...pendingInvoiceStatuses] },
+    issuedAt: { gte: oneYearAgo },
+  };
+
   const [
     totalClients,
     pendingBookings,
@@ -52,8 +66,9 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     loyalClientsGroups,
     newClients,
     pendingInvoicesAgg,
-    bookingsWithoutInvoiceCount,
-    bookingsWithoutInvoiceFirst,
+    pendingInvoicesList,
+    unbilledBookingsCount,
+    unbilledBookingsList,
     thisMonthHistorical,
     lastMonthHistorical,
     thisBilled,
@@ -80,25 +95,47 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     prisma.invoice.aggregate({
       // Cap à 12 mois pour borner la lecture (un PENDING vieux d'un an n'a plus
       // de valeur indicateur — il devrait être en relance overdue).
-      where: { status: 'PENDING', issuedAt: { gte: oneYearAgo } },
-      _sum: { amount: true },
+      where: pendingInvoiceWhere,
+      _sum: { amount: true, paidAmount: true },
       _count: { id: true },
     }),
-    prisma.booking.count({
-      where: {
-        status: 'COMPLETED',
-        invoice: null,
-        deletedAt: null,
+    prisma.invoice.findMany({
+      where: pendingInvoiceWhere,
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      select: {
+        id: true,
+        amount: true,
+        paidAmount: true,
+        createdAt: true,
+        clientDisplayName: true,
+        client: { select: { firstName: true, lastName: true, name: true } },
+        booking: {
+          select: {
+            id: true,
+            bookingPets: {
+              select: { pet: { select: { name: true } } },
+              take: 3,
+            },
+          },
+        },
       },
     }),
-    prisma.booking.findFirst({
-      where: {
-        status: 'COMPLETED',
-        invoice: null,
-        deletedAt: null,
+    prisma.booking.count({ where: unbilledWhere }),
+    prisma.booking.findMany({
+      where: unbilledWhere,
+      orderBy: { endDate: 'desc' },
+      take: 3,
+      select: {
+        id: true,
+        endDate: true,
+        totalPrice: true,
+        client: { select: { firstName: true, lastName: true, name: true } },
+        bookingPets: {
+          select: { pet: { select: { name: true } } },
+          take: 3,
+        },
       },
-      select: { id: true },
-      orderBy: { startDate: 'desc' },
     }),
     prisma.monthlyRevenueSummary.findFirst({
       where: { year: thisMonthStart.getFullYear(), month: thisMonthStart.getMonth() + 1 },
