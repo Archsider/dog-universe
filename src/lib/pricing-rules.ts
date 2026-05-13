@@ -37,7 +37,7 @@ export const PRICING_DEFAULTS: PricingSettings = {
 export type TaxiType = 'STANDARD' | 'VET' | 'AIRPORT';
 export type GroomingSize = 'SMALL' | 'LARGE';
 
-export type ItemCategory = 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' | 'DISCOUNT';
+export type ItemCategory = 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' | 'DISCOUNT' | 'EXTRA_SERVICE' | 'MISC_FEE';
 
 export interface PriceLineItem {
   descriptionFr: string;
