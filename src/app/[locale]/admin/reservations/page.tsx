@@ -15,6 +15,7 @@ import ReservationsList, { type ReservationRow } from './ReservationsList';
 import { toNumber } from '@/lib/decimal';
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
 import { getPricingSettings } from '@/lib/pricing';
+import { computeLiveTotal } from '@/lib/live-pricing';
 
 import TabBar, { type ViewTab } from './_components/TabBar';
 import TodayClient from './_components/TodayClient';
@@ -287,24 +288,51 @@ async function fetchListBookings(
   where: WhereInput,
   orderBy: Prisma.BookingOrderByWithRelationInput[],
 ): Promise<ReservationRow[]> {
-  const raw = await prisma.booking.findMany({
-    where,
-    select: {
-      id: true, status: true, serviceType: true,
-      startDate: true, endDate: true, isOpenEnded: true, totalPrice: true,
-      client: { select: { id: true, firstName: true, lastName: true, phone: true, isWalkIn: true } },
-      bookingPets: { select: { pet: { select: { name: true, species: true } } } },
-      taxiDetail: { select: { id: true } },
-      boardingDetail: { select: { taxiGoEnabled: true, taxiReturnEnabled: true } },
-      taxiTrips: { select: { tripType: true } },
-      invoice: { select: { amount: true } },
-    },
-    orderBy,
-    take: 500,
-  });
+  const [raw, pricing] = await Promise.all([
+    prisma.booking.findMany({
+      where,
+      select: {
+        id: true, status: true, serviceType: true,
+        startDate: true, endDate: true, isOpenEnded: true, totalPrice: true,
+        client: { select: { id: true, firstName: true, lastName: true, phone: true, isWalkIn: true } },
+        bookingPets: { select: { pet: { select: { name: true, species: true } } } },
+        taxiDetail: { select: { id: true } },
+        boardingDetail: { select: { taxiGoEnabled: true, taxiReturnEnabled: true, groomingPrice: true } },
+        taxiTrips: { select: { tripType: true } },
+        invoice: { select: { amount: true } },
+      },
+      orderBy,
+      take: 500,
+    }),
+    getPricingSettings(),
+  ]);
   return raw.map((b) => {
     const hasBoardingTaxi = !!(b.boardingDetail?.taxiGoEnabled || b.boardingDetail?.taxiReturnEnabled);
     const hasStandaloneTaxi = b.serviceType === 'PET_TAXI' && !!b.taxiDetail;
+    // Live total only for open-ended boarding stays that are still active.
+    // CANCELLED / REJECTED / COMPLETED freeze on their stored value.
+    const isLiveCandidate =
+      b.serviceType === 'BOARDING' &&
+      b.isOpenEnded &&
+      (b.status === 'IN_PROGRESS' || b.status === 'CONFIRMED');
+    const liveTotal = isLiveCandidate
+      ? computeLiveTotal(
+          {
+            startDate: b.startDate,
+            pets: b.bookingPets.map((bp) => ({
+              species: (bp.pet.species === 'CAT' ? 'CAT' : 'DOG') as 'DOG' | 'CAT',
+            })),
+            addons: {
+              taxiGoEnabled: b.boardingDetail?.taxiGoEnabled,
+              taxiReturnEnabled: b.boardingDetail?.taxiReturnEnabled,
+              groomingPrice: b.boardingDetail?.groomingPrice
+                ? toNumber(b.boardingDetail.groomingPrice)
+                : undefined,
+            },
+          },
+          pricing,
+        ).total
+      : null;
     return {
       id: b.id,
       status: b.status,
@@ -313,6 +341,7 @@ async function fetchListBookings(
       endDate: b.endDate?.toISOString() ?? null,
       isOpenEnded: b.isOpenEnded,
       totalPrice: toNumber(b.totalPrice),
+      liveTotal,
       invoiceAmount: b.invoice ? toNumber(b.invoice.amount) : null,
       client: {
         id: b.client.id,
