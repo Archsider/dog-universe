@@ -49,7 +49,13 @@ export default async function AdminReservationsPage(props: PageProps) {
     redirect(`/${locale}/auth/login`);
   }
 
-  const view = parseView(searchParams.view);
+  // Deep-link from dashboard "Réserv. sans facture" counter lands on /admin/reservations?noInvoice=1
+  // without a `view` param — force history tab so the filter has somewhere to apply.
+  const view = searchParams.view
+    ? parseView(searchParams.view)
+    : searchParams.noInvoice === '1'
+      ? 'history'
+      : 'today';
   const fr = locale !== 'en';
   const display = searchParams.display === 'board' ? 'board' : 'list';
 
@@ -336,7 +342,7 @@ async function HistoryView({
 }: {
   locale: string;
   display: 'list' | 'board';
-  searchParams: { from?: string; to?: string; status?: string; type?: string; f?: string };
+  searchParams: { from?: string; to?: string; status?: string; type?: string; f?: string; noInvoice?: string };
 }) {
   const fr = locale !== 'en';
   const now = new Date();
@@ -344,7 +350,10 @@ async function HistoryView({
   const defaultTo = format(endOfMonth(now), 'yyyy-MM-dd');
   const from = searchParams.from || defaultFrom;
   const to = searchParams.to || defaultTo;
-  const statusFilter = searchParams.status;
+  const noInvoice = searchParams.noInvoice === '1';
+  // When deep-linked from the dashboard "no-invoice" counter, default status
+  // to COMPLETED — only terminal bookings without an invoice are actionable.
+  const statusFilter = searchParams.status ?? (noInvoice ? 'COMPLETED' : undefined);
   const typeFilter = searchParams.type;
 
   const fromDate = new Date(`${from}T00:00:00.000Z`);
@@ -364,6 +373,7 @@ async function HistoryView({
     deletedAt: null,
     ...statusWhere,
     ...typeWhere,
+    ...(noInvoice && { invoice: null }),
     OR: [
       { endDate: { gte: fromDate, lte: toDate } },
       { endDate: null, startDate: { gte: fromDate, lte: toDate } },
@@ -391,6 +401,7 @@ async function HistoryView({
         rangeTo={to}
         status={statusFilter ?? ''}
         type={typeFilter ?? ''}
+        noInvoice={noInvoice}
       />
       <div className="grid grid-cols-3 gap-3 mb-4">
         <Stat label={fr ? 'Réservations' : 'Bookings'} value={String(stats._count._all)} />

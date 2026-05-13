@@ -86,14 +86,14 @@ export default async function AdminDashboardPage({ params }: PageProps) {
     }),
     prisma.booking.count({
       where: {
-        status: { in: ['CONFIRMED', 'COMPLETED', 'IN_PROGRESS'] },
+        status: 'COMPLETED',
         invoice: null,
         deletedAt: null,
       },
     }),
     prisma.booking.findFirst({
       where: {
-        status: { in: ['CONFIRMED', 'COMPLETED', 'IN_PROGRESS'] },
+        status: 'COMPLETED',
         invoice: null,
         deletedAt: null,
       },
