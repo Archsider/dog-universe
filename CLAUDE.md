@@ -1113,9 +1113,47 @@ Voir section UPTIME SELF-MONITORING.
 
 ## HISTORIQUE
 
-L'historique complet des sessions de travail et décisions techniques (sécurité, perf, architecture) est consigné dans [HISTORY.md](./HISTORY.md).
+L'historique complet des sessions de travail et décisions techniques (sécurité, perf, architecture) est consigné dans [HISTORY.md](./HISTORY.md). Pour reprendre rapidement la session courante : [HANDOFF.md](./HANDOFF.md).
 
 **Décision-clé toujours active : Soft-delete via filtres explicites `deletedAt: null`**
+
+---
+
+## 🆕 SESSION 2026-05-13 (suite) — PRs #48 → #52
+
+7 PRs livrées entre 2026-05-13 matin et soir. Voir [HANDOFF.md](./HANDOFF.md) pour l'état précis.
+
+| PR | Branche | Statut | Sujet |
+|---|---|---|---|
+| #46 | `claude/disable-panel-fix-bugs` | merged | Panel désactivé + fix doublon KPI + compteur "présents" unifié |
+| #47 | `claude/decouple-walkin-controls` | merged | Découplage 3 contrôles walk-in (6 combinaisons) |
+| #48 | `claude/fix-dashboard-no-invoice-counter` | merged | Compteur "sans facture" → COMPLETED only + filtre URL `?noInvoice=1` |
+| #49 | `claude/dashboard-actionable-kpi-lists` | merged | KPI dashboard transformés en mini-listes top 3 cliquables |
+| #50 | `claude/fix-provisional-pricing` | merged | Prix provisoire live pour walk-ins ouverts (0 MAD → calc Setting) |
+| #51 | `claude/products-catalog` | merged | Catalogue Produits étendu (description/costPrice/lowStock/archive) |
+| #52 | `claude/booking-items-ui` | 🟡 en cours | Produits & Extras sur fiche résa — BookingItem CRUD + facture compl. |
+
+### Nouveaux helpers / composants
+
+- **`src/lib/live-pricing.ts`** — `computeLiveTotal({ pets, startDate, addons?, unbilledItemsTotal? }, pricing, now)` — source unique pour le prix provisoire des résa ouvertes. Étendu en PR #52 avec `unbilledItemsTotal` (somme des BookingItem non-facturés).
+- **`DashboardKpiList.tsx`** — composant réutilisable count + top-3 + "Voir tout".
+- **`ProductsExtrasSection.tsx`** — UI complète BookingItem + modales catalog/free + bouton facture compl. (PR #52).
+
+### Migrations Supabase pending (à exécuter manuellement)
+
+⚠️ **`20260513_product_catalog_fields`** — colonnes description / costPrice / lowStockThreshold / isArchived / version + index.
+⚠️ **`20260513_booking_item_product`** — `BookingItem.productId` + `BookingItem.invoiceItemId` + FK + index + 2 valeurs d'enum `ItemCategory` (EXTRA_SERVICE / MISC_FEE).
+
+### Architecture verrouillée
+
+- **Compteur "Réserv. sans facture"** = `status=COMPLETED + invoice=null + deletedAt=null`. CONFIRMED/IN_PROGRESS sans facture = normal, pas un signal actionnable.
+- **Live total open-ended** = `invoiceAmount ?? liveTotal ?? totalPrice` côté affichage. `CloseStayDialog` reste le seul point qui fige `totalPrice` en DB.
+- **Workflow Product** = pas de hard-delete (archive only). `version` pour optimistic lock. Catégorie reste `String` (datalist UI propose les 6 canoniques sans casser les valeurs seedées).
+- **BookingItem vs InvoiceItem** = deux flows coexistent (staging pré-facture vs facturé direct). Ne pas unifier sans plan dédié.
+
+### Audit Redis (read-only — branche `claude/audit-redis-consumption`)
+
+`AUDIT_REDIS.md` à la racine. Consommation estimée 750-950K cmds/mois (vs 500K free tier). Quick wins R1+R2a+R4 = −580K cmds (worker BullMQ */5min, retirer rate-limit Upstash sur availability/health/taxiTracking, flag "last-enqueue" pour skip early-exit).
 
 ---
 

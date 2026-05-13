@@ -7,6 +7,73 @@
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### 2026-05-13 — Sprint « polish opérationnel » : 7 PRs (#46 → #52)
+
+Session longue centrée sur le workflow admin des réservations + catalogue produits. 6 PRs mergées, 1 en cours.
+
+**PRs livrées :**
+
+1. **#46 `fix(reservations)` — Désactivation du side panel + fix UI**
+   - `?booking=` ignoré, redirection vers `/admin/reservations/[id]`. Composants panel conservés sur disque.
+   - Prop `compact` sur `ReservationsList` → masque header + 4 KpiCards quand embed dans HistoryView (fix doublon visuel).
+   - Compteur "présents" unifié sur `prisma.booking.count` (séjours IN_PROGRESS) au lieu de `bookingPet.count` (animaux) — cohérence header subtitle + KPI card.
+
+2. **#47 `refactor(walkin)` — Découplage des 3 contrôles**
+   - Walk-in client / `isOpenEnded` / `initialStatus` traités indépendamment → 6 combinaisons supportées.
+   - Backend dérive `isWalkInClient` (notifications + idempotency) vs `isWalkInBooking` (drapeau DB).
+   - Nouveau refinement Zod `WALKIN_OPENENDED_WITH_COMPLETED` placé en premier.
+   - Garde-fou UI : `effectiveIsOpenEnded = isOpenEnded && initialStatus !== 'COMPLETED'`.
+
+3. **#48 `fix(dashboard)` — Compteur "Réserv. sans facture"**
+   - Query passée de `status IN (CONFIRMED, COMPLETED, IN_PROGRESS)` → `status = COMPLETED` only (seul cas actionnable).
+   - `HistoryView` lit `?noInvoice=1` et ajoute `invoice: null` au where ; force le tab history quand `?view` absent.
+   - Nouveau chip "Sans facture" / "Without invoice" dans `HistoryFilters` (toggle URL-synced, amber quand actif).
+
+4. **#49 `feat(dashboard)` — KPI listes actionnables**
+   - `DashboardKpiList.tsx` réutilisable : count + total optionnel + top 3 entrées cliquables + "Voir tout (X)".
+   - 2 instances : "Réserv. sans facture" (lien vers résa) et "Factures en attente" (lien vers facture).
+   - Empty state émeraude positif ("Tout est facturé" / "Aucun encaissement en attente").
+   - Le sub `pendingInvoicesUnpaid` = Σ amount − Σ paidAmount (vrai solde restant à encaisser).
+
+5. **#50 `fix(reservations)` — Prix provisoire live walk-ins ouverts**
+   - **Bug** : Jon biw (26 nuits) affichait 0 MAD au lieu de 3 120 MAD. Cause : `Booking.totalPrice = 0` jusqu'à `CloseStayDialog`.
+   - Fix : nouveau `src/lib/live-pricing.ts` avec `computeLiveTotal()` pur (réutilise `getPensionPriceNumber` + addons taxi/grooming).
+   - `fetchListBookings` calcule `liveTotal` pour les boarding IN_PROGRESS / CONFIRMED open-ended.
+   - `ListRow` affiche `invoiceAmount ?? liveTotal ?? totalPrice`.
+
+6. **#51 `feat(products)` — Catalogue admin étendu**
+   - **Découverte** : `/admin/products` + ProductsClient + API existaient déjà (~85 produits seedés pour upsell).
+   - Migration additive : `description`, `costPrice`, `lowStockThreshold`, `isArchived`, `version` + index `isArchived`.
+   - API : POST/PATCH/archive/restore avec **optimistic locking** sur `version` (PATCH renvoie 409 `VERSION_CONFLICT`). DELETE legacy reroute vers archive (pas de hard-delete).
+   - UI : modal form étendu (description / costPrice / lowStockThreshold + marge live) ; row action archiver/restaurer ; toggle "voir archivés" ; recherche nom+ref ; highlight rouge si stock ≤ seuil.
+   - **Décision** : `Product.category` reste `String` (pas un enum Postgres) → le seed `Royal Canin / Canvit` n'est pas cassé. UI propose les 6 valeurs canoniques via `<datalist>`.
+   - Cleanup post-merge : `name: z.string().min(2)` relâché à `min(1)` sur PATCH pour permettre les routing-tests (404/409). Schema doc régénéré.
+
+7. **#52 `feat(reservations)` — Produits & Extras sur fiche résa** (🟡 en cours)
+   - Migration `BookingItem.productId` (FK Product) + `BookingItem.invoiceItemId` (FK InvoiceItem, back-link supplementary) + index. Enum `ItemCategory` étendu de `EXTRA_SERVICE` et `MISC_FEE` (additif).
+   - API CRUD `/api/admin/bookings/[id]/items` + `[itemId]` avec `$transaction` + `FOR UPDATE` sur Product, optimistic lock, ActionLog systématique. DISCOUNT validé `unitPrice <= 0`.
+   - API `POST /api/admin/bookings/[id]/invoices/supplementary` — alloue numéro via `InvoiceSequence`, crée Invoice (`supplementaryForBookingId`), copie chaque BookingItem non-billed et back-link via `invoiceItemId`.
+   - `ProductsExtrasSection.tsx` (Client) — liste avec badges catégorie, modales catalog (autocomplete + indicateurs stock) + free-line (description / catégorie / qty / prix).
+   - `computeLiveTotal` étendu avec `unbilledItemsTotal?` optionnel (aucun appelant ne le passe encore — extension future).
+
+**Architecture verrouillée durant cette session :**
+
+- **Side panel `?booking=`** : désactivé prod, fichiers conservés.
+- **Compteur "sans facture"** = COMPLETED only. CONFIRMED/IN_PROGRESS sans facture = pas un signal.
+- **Live total** = `invoiceAmount ?? liveTotal ?? totalPrice` côté affichage. `CloseStayDialog` reste seul point qui fige `Booking.totalPrice`.
+- **Product** = pas de hard-delete (archive). `version` pour optimistic lock. Category reste `String` pour rétro-compat.
+- **BookingItem vs InvoiceItem** = deux flows séparés (staging pré-facture vs facturé). Coexistent par design.
+
+**Migrations Supabase à exécuter manuellement** :
+1. `prisma/migrations/20260513_product_catalog_fields/migration.sql`
+2. `prisma/migrations/20260513_booking_item_product/migration.sql`
+
+**Audit Redis** (branche `claude/audit-redis-consumption`, non mergée — référence read-only) :
+- `AUDIT_REDIS.md` : consommation ~750-950K cmds/mois (vs 500K free tier).
+- Quick wins documentés : passer `/api/workers/process` à `*/5 * * * *` (−200K), retirer rate-limit sur `availability`/`health`/`taxiTracking` (−250K), flag "last-enqueue" pour skip early-exit (−130K).
+
+---
+
 ### 2026-05-11 — Sprint « 9.5 → 10/10 » : 11 PRs (#20 → #30)
 
 Session intensive de durcissement opérationnel post-MVP. 11 PRs mergées sur `main` couvrant la chaîne migrations, l'observabilité, la résilience, le triage automatique des erreurs, les feature flags et l'uptime monitoring.
