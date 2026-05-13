@@ -7,7 +7,11 @@
  */
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-type MockTxFn = (cb: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
+// $transaction(callback) is called inside the route handlers as
+//   prisma.$transaction(async (tx) => { ... })
+// In tests we pass the same `mocks.prisma` object as `tx` so every
+// `tx.foo.bar(...)` resolves to the corresponding vi.fn() mock.
+type TxCallback = (tx: unknown) => Promise<unknown>;
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   prisma: {
@@ -24,7 +28,7 @@ const mocks = vi.hoisted(() => ({
     invoiceItem: { create: vi.fn() },
     actionLog: { create: vi.fn() },
     $queryRaw: vi.fn(),
-    $transaction: vi.fn(async (cb: unknown) => (cb as (tx: unknown) => Promise<unknown>)(undefined)),
+    $transaction: vi.fn(),
   },
 }));
 
@@ -55,9 +59,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue(ADMIN);
   // Default tx: pass through the callback with the prisma mock as the tx client.
-  mocks.prisma.$transaction.mockImplementation(async (cb: unknown) => {
-    return (cb as MockTxFn)(mocks.prisma);
-  });
+  mocks.prisma.$transaction.mockImplementation((async (cb: TxCallback) => {
+    return cb(mocks.prisma);
+  }) as never);
 });
 
 // ─── POST /items ────────────────────────────────────────────────────────────
