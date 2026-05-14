@@ -17,18 +17,53 @@ export default function DeleteAnimalButton({ petId, petName, locale }: Props) {
   const router = useRouter();
 
   const l = locale === 'en'
-    ? { btn: 'Delete animal', title: 'Delete this animal?', warning: 'This will permanently delete the animal and all their records (vaccinations, documents). It will be removed from past bookings. This action cannot be undone.', cancel: 'Cancel', confirm: 'Delete permanently', success: 'Animal deleted', error: 'Error' }
-    : { btn: 'Supprimer l\'animal', title: 'Supprimer cet animal ?', warning: 'Cette action supprimera définitivement l\'animal et tous ses dossiers (vaccinations, documents). Il sera retiré des réservations passées. Irréversible.', cancel: 'Annuler', confirm: 'Supprimer définitivement', success: 'Animal supprimé', error: 'Erreur' };
+    ? {
+        btn: 'Delete animal',
+        title: 'Delete this animal?',
+        warning: 'This will permanently delete the animal and all their records (vaccinations, documents). It will be removed from past bookings. This action cannot be undone.',
+        cancel: 'Cancel',
+        confirm: 'Delete permanently',
+        success: 'Animal deleted',
+        error: 'Error',
+        activeBookings: 'Cannot delete — animal still has active or upcoming bookings. Cancel them first.',
+        notFound: 'Animal not found (already deleted?)',
+      }
+    : {
+        btn: 'Supprimer l\'animal',
+        title: 'Supprimer cet animal ?',
+        warning: 'Cette action supprimera définitivement l\'animal et tous ses dossiers (vaccinations, documents). Il sera retiré des réservations passées. Irréversible.',
+        cancel: 'Annuler',
+        confirm: 'Supprimer définitivement',
+        success: 'Animal supprimé',
+        error: 'Erreur',
+        activeBookings: 'Suppression impossible : l\'animal a encore des réservations en cours ou à venir. Annulez-les d\'abord.',
+        notFound: 'Animal introuvable (déjà supprimé ?)',
+      };
 
   const handleDelete = async () => {
     setDeleting(true);
     try {
       const res = await fetch(`/api/admin/animals/${petId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed');
-      toast({ title: l.success, variant: 'success' });
-      router.push(`/${locale}/admin/animals`);
+      if (res.ok) {
+        toast({ title: l.success, variant: 'success' });
+        router.push(`/${locale}/admin/animals`);
+        return;
+      }
+      // Surface the actual server reason so the operator knows WHY the
+      // delete was refused. Generic "Erreur" toast was the root cause of
+      // Wave-1 bug #1: the user mistook a legitimate active-booking block
+      // for "impossible to delete" and never realised the 4 duplicate
+      // rows next to it were in fact deletable.
+      const data = await res.json().catch(() => ({} as { error?: string }));
+      const code = (data as { error?: string }).error ?? '';
+      const description =
+        res.status === 409 && /active bookings/i.test(code) ? l.activeBookings :
+        res.status === 404 ? l.notFound :
+        code || l.error;
+      toast({ title: l.error, description, variant: 'destructive' });
     } catch {
       toast({ title: l.error, variant: 'destructive' });
+    } finally {
       setDeleting(false);
       setConfirm(false);
     }

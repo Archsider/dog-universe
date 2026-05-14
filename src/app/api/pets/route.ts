@@ -44,10 +44,27 @@ export async function POST(request: Request) {
     }
     const d = parsed.data;
 
+    // Idempotent create: prevent duplicate Pet rows from a double-submit
+    // or network retry. Same (ownerId, species, normalized name) on a
+    // non-soft-deleted Pet returns the existing one with 200 instead of
+    // creating yet another row. Mirrors the admin-side dedup in
+    // /api/admin/animals (POST). See Wave-1 bug #1 root cause analysis.
+    const normalizedName = d.name.trim();
+    const existing = await prisma.pet.findFirst({
+      where: notDeleted({
+        ownerId: session.user.id,
+        species: d.species,
+        name: { equals: normalizedName, mode: 'insensitive' },
+      }),
+    });
+    if (existing) {
+      return NextResponse.json(existing, { status: 200 });
+    }
+
     const pet = await prisma.pet.create({
       data: {
         ownerId: session.user.id,
-        name: d.name,
+        name: normalizedName,
         species: d.species,
         breed: d.breed ?? null,
         dateOfBirth: new Date(d.dateOfBirth),

@@ -266,6 +266,47 @@ export async function createBookingTx(args: CreateBookingTxArgs) {
             taxiAddonPrice: args.taxiAddonPrice,
           },
         });
+
+        // Wave-1 bug #4 root cause: prior to this fix only the admin
+        // "toggle taxi addon" PATCH path (applyBoardingDetail in
+        // booking-admin.service.ts) created TaxiTrip rows. Bookings born
+        // with the taxi addon already enabled — every booking with a
+        // pickup/return planned at creation time — never got a TaxiTrip
+        // row, so the /admin/driver dashboard's "Prochaines courses"
+        // query (which filters TaxiTrip rows directly) silently dropped
+        // them. We create both legs here, in the same transaction as
+        // the BoardingDetail row, so the invariant "addon enabled ⇒
+        // TaxiTrip exists" holds from the very first row write.
+        if (args.taxiGoEnabled) {
+          const trip = await tx.taxiTrip.create({
+            data: {
+              bookingId: booking.id,
+              tripType: 'OUTBOUND',
+              status: 'PLANNED',
+              date: args.taxiGoDate ?? undefined,
+              time: args.taxiGoTime ?? undefined,
+              address: args.taxiGoAddress ?? undefined,
+            },
+          });
+          await tx.taxiStatusHistory.create({
+            data: { taxiTripId: trip.id, status: 'PLANNED', updatedBy: args.clientId },
+          });
+        }
+        if (args.taxiReturnEnabled) {
+          const trip = await tx.taxiTrip.create({
+            data: {
+              bookingId: booking.id,
+              tripType: 'RETURN',
+              status: 'PLANNED',
+              date: args.taxiReturnDate ?? undefined,
+              time: args.taxiReturnTime ?? undefined,
+              address: args.taxiReturnAddress ?? undefined,
+            },
+          });
+          await tx.taxiStatusHistory.create({
+            data: { taxiTripId: trip.id, status: 'PLANNED', updatedBy: args.clientId },
+          });
+        }
       } else if (args.serviceType === 'PET_TAXI') {
         await tx.taxiDetail.create({
           data: {

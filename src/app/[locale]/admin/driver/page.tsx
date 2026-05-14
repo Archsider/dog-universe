@@ -35,6 +35,16 @@ export default async function DriverDashboardPage({
   const now = new Date();
   const todayStr = todayDateStr(now);
 
+  // Booking statuses where a related TaxiTrip should never appear as
+  // "active" on the driver dashboard, regardless of its own status. This
+  // is the defensive filter that catches zombie TaxiTrip rows (Wave-1
+  // bug #3): if the parent booking is closed, the trip is done — full
+  // stop — even if its `status` column was never advanced past
+  // ANIMAL_ON_BOARD. The cascade in `runStatusSideEffects` is the
+  // primary fix; this filter ensures the dashboard never lies even if
+  // the cascade is bypassed by an unusual code path.
+  const BOOKING_DONE_STATUSES = ['COMPLETED', 'CANCELLED', 'REJECTED', 'NO_SHOW'] as const;
+
   // We pivot on TaxiTrip (not Booking) so the dashboard surfaces every leg
   // the driver actually drives: STANDALONE Pet Taxi services AND OUTBOUND /
   // RETURN addon trips attached to BOARDING bookings. The previous version
@@ -47,7 +57,10 @@ export default async function DriverDashboardPage({
           { status: { in: [...ACTIVE_TRIP_STATUSES] } },
           { trackingActive: true },
         ],
-        booking: { deletedAt: null },
+        booking: {
+          deletedAt: null,
+          status: { notIn: [...BOOKING_DONE_STATUSES] },
+        },
       },
       // Most recently updated wins — handles the "tracking left on by mistake"
       // case where two trips technically match.
@@ -76,7 +89,16 @@ export default async function DriverDashboardPage({
     prisma.taxiTrip.findMany({
       where: {
         date: todayStr,
-        booking: { deletedAt: null },
+        booking: {
+          deletedAt: null,
+          // A trip with an UNRELATED booking status (e.g. CANCELLED, NO_SHOW)
+          // should not count toward "today's trips" — it was never driven.
+          // COMPLETED is left IN here because that's a normal terminal state
+          // for a trip that DID happen today; the status filter below uses
+          // TERMINAL_TRIP_STATUSES to separate "completed" vs "in progress"
+          // for KPI purposes.
+          status: { notIn: ['CANCELLED', 'REJECTED', 'NO_SHOW'] },
+        },
       },
       select: {
         id: true,
@@ -86,6 +108,7 @@ export default async function DriverDashboardPage({
         booking: {
           select: {
             serviceType: true,
+            status: true,
             totalPrice: true,
             boardingDetail: { select: { taxiAddonPrice: true } },
           },
@@ -96,7 +119,12 @@ export default async function DriverDashboardPage({
       where: {
         date: { gt: todayStr },
         status: 'PLANNED',
-        booking: { deletedAt: null },
+        booking: {
+          deletedAt: null,
+          // Future trips on a cancelled/rejected booking should not appear
+          // on the driver's "next courses" list — those will never happen.
+          status: { notIn: [...BOOKING_DONE_STATUSES] },
+        },
       },
       take: 10,
       orderBy: [{ date: 'asc' }, { time: 'asc' }],
