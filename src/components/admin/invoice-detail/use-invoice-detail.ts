@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from '@/hooks/use-toast';
+import { submitPayment } from '@/app/[locale]/admin/billing/_lib/submit-payment';
 import {
   autoCategory,
   getDisplayEmail,
@@ -34,6 +35,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
   const [newPaymentDate, setNewPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [newPaymentAmount, setNewPaymentAmount] = useState('');
   const [newPaymentMethod, setNewPaymentMethod] = useState('CASH');
+  const [newPaymentSendSms, setNewPaymentSendSms] = useState(!invoice.client.isWalkIn);
   const [addingPayment, setAddingPayment] = useState(false);
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
 
@@ -165,19 +167,26 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     }
     setAddingPayment(true);
     try {
-      const res = await fetch(`/api/invoices/${invoice.id}/payments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, paymentMethod: newPaymentMethod, paymentDate: newPaymentDate }),
+      // Same canonical submitter the PaymentModal uses. Carries the
+      // Idempotency-Key + sendClientSms flag so the respectful-SMS
+      // policy (ADR-0008) applies here too — previously this code path
+      // bypassed the toggle entirely and always SMS'd the client.
+      const result = await submitPayment({
+        invoiceId: invoice.id,
+        amount,
+        paymentMethod: newPaymentMethod as 'CASH' | 'CARD' | 'CHECK' | 'TRANSFER',
+        paymentDate: newPaymentDate,
+        sendClientSms: newPaymentSendSms,
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || (isFr ? 'Erreur serveur' : 'Server error'));
+      if (!result.ok) {
+        throw new Error(result.error || (isFr ? 'Erreur serveur' : 'Server error'));
       }
       await refetchInvoice();
       const rem = Math.max(0, Number(invoice.amount) - Number(invoice.paidAmount));
       setNewPaymentAmount(rem > 0 ? rem.toFixed(2) : '');
       setNewPaymentDate(new Date().toISOString().slice(0, 10));
+      // Reset the toggle to the context default for the next entry.
+      setNewPaymentSendSms(!invoice.client.isWalkIn);
       toast({ title: isFr ? 'Paiement ajouté' : 'Payment added', variant: 'success' });
     } catch (e: unknown) {
       toast({ title: e instanceof Error ? e.message : (isFr ? 'Erreur' : 'Error'), variant: 'destructive' });
@@ -254,6 +263,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     newPaymentDate, setNewPaymentDate,
     newPaymentAmount, setNewPaymentAmount,
     newPaymentMethod, setNewPaymentMethod,
+    newPaymentSendSms, setNewPaymentSendSms,
     addingPayment,
     deletingPaymentId,
     enterEdit,

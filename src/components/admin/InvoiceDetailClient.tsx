@@ -100,11 +100,13 @@ export default function InvoiceDetailClient({
             newPaymentDate={s.newPaymentDate}
             newPaymentAmount={s.newPaymentAmount}
             newPaymentMethod={s.newPaymentMethod}
+            newPaymentSendSms={s.newPaymentSendSms}
             addingPayment={s.addingPayment}
             deletingPaymentId={s.deletingPaymentId}
             onChangeDate={s.setNewPaymentDate}
             onChangeAmount={s.setNewPaymentAmount}
             onChangeMethod={s.setNewPaymentMethod}
+            onChangeSendSms={s.setNewPaymentSendSms}
             onAddPayment={s.handleAddPayment}
             onDeletePayment={s.handleDeletePayment}
           />

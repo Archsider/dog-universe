@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { formatMAD } from '@/lib/utils';
 import { toNumber, type DecimalLike } from '@/lib/decimal';
 import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
-import RecordPaymentButton from '@/app/[locale]/admin/billing/CreateInvoiceButton';
+import PaymentModal from '@/app/[locale]/admin/billing/PaymentModalLazy';
 
 interface InvoiceData {
   id: string;
@@ -10,7 +10,12 @@ interface InvoiceData {
   status: string;
   amount: DecimalLike;
   paidAmount: DecimalLike;
-  version: number;
+  // `version` is no longer used by the unified PaymentModal (the old
+  // CreateInvoiceButton used it for optimistic-concurrency on PATCH
+  // /api/invoices/[id] — a path that never actually recorded a Payment
+  // row). Kept optional in the type for backward compat with callers
+  // that still pass it, but the new modal ignores it.
+  version?: number;
 }
 
 interface BookingInvoiceSectionProps {
@@ -23,6 +28,10 @@ interface BookingInvoiceSectionProps {
   noInvoiceLabel: string;
   isOpenEnded?: boolean;
   liveTotal?: number;
+  /** Walk-in flag of the booking's client. Propagated to PaymentModal
+   *  so the "Send confirmation SMS" toggle defaults correctly (off for
+   *  walk-ins per ADR-0008). */
+  isWalkInClient?: boolean;
 }
 
 export default function BookingInvoiceSection({
@@ -35,6 +44,7 @@ export default function BookingInvoiceSection({
   noInvoiceLabel,
   isOpenEnded,
   liveTotal,
+  isWalkInClient,
 }: BookingInvoiceSectionProps) {
   const fr = locale !== 'en';
   return (
@@ -89,13 +99,14 @@ export default function BookingInvoiceSection({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <RecordPaymentButton
+            <PaymentModal
               invoiceId={invoice.id}
-              invoiceVersion={invoice.version}
               currentStatus={invoice.status}
               locale={locale}
               invoiceAmount={toNumber(invoice.amount)}
               paidAmount={toNumber(invoice.paidAmount)}
+              isWalkIn={isWalkInClient}
+              triggerVariant="full"
             />
             <Link href={`/${locale}/admin/billing?invoiceId=${invoice.id}`} className="text-xs text-gray-400 hover:text-gold-600">
               {locale === 'fr' ? 'Voir facturation' : 'View billing'}
@@ -169,13 +180,14 @@ export default function BookingInvoiceSection({
               </span>
             </div>
           </div>
-          <RecordPaymentButton
+          <PaymentModal
             invoiceId={supplementaryInvoice.id}
-            invoiceVersion={supplementaryInvoice.version}
             currentStatus={supplementaryInvoice.status}
             locale={locale}
             invoiceAmount={toNumber(supplementaryInvoice.amount)}
             paidAmount={toNumber(supplementaryInvoice.paidAmount)}
+            isWalkIn={isWalkInClient}
+            triggerVariant="full"
           />
         </div>
       )}

@@ -64,20 +64,33 @@ interface AddProps {
   newPaymentDate: string;
   newPaymentAmount: string;
   newPaymentMethod: string;
+  newPaymentSendSms: boolean;
   addingPayment: boolean;
   deletingPaymentId: string | null;
   onChangeDate: (v: string) => void;
   onChangeAmount: (v: string) => void;
   onChangeMethod: (v: string) => void;
+  onChangeSendSms: (v: boolean) => void;
   onAddPayment: () => void;
   onDeletePayment: (paymentId: string) => void;
 }
 
+// Casablanca quiet-hours check mirrors src/lib/sms-policy.ts (UTC+1
+// fixed, 21h–9h). Duplicated as a 1-line inline function so the toggle
+// label updates without a server round-trip. Keep in sync with the
+// policy constants if they're ever tuned. See ADR-0008.
+const CASA_OFFSET_MIN = 60;
+function isQuietHoursCasaClient(now: Date = new Date()): boolean {
+  const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const casaHour = Math.floor((utcMin + CASA_OFFSET_MIN) / 60) % 24;
+  return casaHour < 9 || casaHour >= 21;
+}
+
 export function AddPaymentSection({
   invoice, locale, isFr,
-  newPaymentDate, newPaymentAmount, newPaymentMethod,
+  newPaymentDate, newPaymentAmount, newPaymentMethod, newPaymentSendSms,
   addingPayment, deletingPaymentId,
-  onChangeDate, onChangeAmount, onChangeMethod, onAddPayment, onDeletePayment,
+  onChangeDate, onChangeAmount, onChangeMethod, onChangeSendSms, onAddPayment, onDeletePayment,
 }: AddProps) {
   if (invoice.status === 'CANCELLED') return null;
   return (
@@ -127,6 +140,40 @@ export function AddPaymentSection({
           />
         </div>
       </div>
+
+      {/* Respectful-SMS toggle (ADR-0008). Identical UX to PaymentModal —
+          single canonical control across the 3 payment-recording surfaces
+          (billing list / booking detail / this invoice detail). The
+          server-side policy still kicks in: a checked walkin still skips
+          the SMS, a checked night-time send still defers to 9h Casa. */}
+      <div className="mb-3 rounded-lg border border-ivory-200 bg-ivory-50/50 px-3 py-2.5">
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={newPaymentSendSms}
+            onChange={(e) => onChangeSendSms(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gold-600 focus:ring-gold-300"
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-charcoal">
+              {isFr ? 'Envoyer SMS de confirmation au client' : 'Send confirmation SMS to client'}
+            </p>
+            {invoice.client.isWalkIn && (
+              <p className="text-xs text-gray-500 mt-0.5">
+                ⓘ {isFr ? 'Walk-in — SMS non recommandé' : 'Walk-in — SMS not recommended'}
+              </p>
+            )}
+            {!invoice.client.isWalkIn && newPaymentSendSms && isQuietHoursCasaClient() && (
+              <p className="text-xs text-amber-700 mt-0.5">
+                ⏰ {isFr
+                  ? 'Heures calmes — SMS reporté à 9h demain'
+                  : 'Quiet hours — SMS deferred to 9 AM tomorrow'}
+              </p>
+            )}
+          </div>
+        </label>
+      </div>
+
       <button
         onClick={onAddPayment}
         disabled={addingPayment}

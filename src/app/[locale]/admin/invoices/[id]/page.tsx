@@ -19,7 +19,7 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
   const invoice = await prisma.invoice.findUnique({
     where: { id },
     include: {
-      client: { select: { id: true, name: true, email: true, phone: true } },
+      client: { select: { id: true, name: true, email: true, phone: true, isWalkIn: true } },
       booking: {
         include: {
           bookingPets: { include: { pet: { select: { name: true, species: true, breed: true } } } },
