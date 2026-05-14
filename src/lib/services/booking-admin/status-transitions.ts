@@ -316,6 +316,25 @@ export async function runStatusSideEffects(args: RunStatusSideEffectsArgs) {
       details: { from: booking.status, to: newStatus },
     });
 
+    // Cascade: any TaxiTrip attached to this booking that is still in a
+    // non-terminal status becomes a "zombie" once the parent Booking is
+    // COMPLETED — the driver dashboard pivots on TaxiTrip.status, so a
+    // forgotten ANIMAL_ON_BOARD trip kept showing "Course en cours" days
+    // after the stay was closed. We finalize each leg here using its
+    // type-specific terminal status (OUTBOUND/STANDALONE land at the
+    // pension, RETURN lands at the client), record a history row with a
+    // synthetic actorId, and clear the live-tracking metadata so the
+    // /track/[token] SSE page stops serving a stale state. Failure is
+    // non-fatal — we never block the parent booking completion.
+    try {
+      await finalizeTaxiTripsForBooking(booking.id, actorId);
+    } catch (err) {
+      log('error', 'admin-booking', 'failed to finalize taxi trips on booking complete', {
+        bookingId: booking.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     try {
       const { calculateSuggestedGrade } = await import('@/lib/loyalty');
       const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
@@ -366,4 +385,65 @@ export async function runStatusSideEffects(args: RunStatusSideEffectsArgs) {
       details: { from: booking.status, to: newStatus },
     });
   }
+}
+
+// Maps a TaxiTrip.tripType to the canonical terminal status used by the
+// status machine in /api/admin/taxi-trips/[id]/status. Keep in sync with
+// the FLOWS constant declared there — both encode the same business rule
+// (OUTBOUND/STANDALONE land at the pension, RETURN lands at the client).
+const TAXI_TRIP_TERMINAL_BY_TYPE: Record<string, string> = {
+  OUTBOUND: 'ARRIVED_AT_PENSION',
+  STANDALONE: 'ARRIVED_AT_PENSION',
+  RETURN: 'ARRIVED_AT_CLIENT',
+};
+
+// Non-terminal statuses we cascade to a terminal one when the parent
+// Booking is closed. PLANNED stays untouched: an unstarted return leg
+// after the pension portion was completed simply never happened — we
+// don't want to fabricate a delivery.
+const TAXI_TRIP_ACTIVE_STATUSES = [
+  'EN_ROUTE_TO_CLIENT',
+  'ON_SITE_CLIENT',
+  'ANIMAL_ON_BOARD',
+];
+
+/**
+ * Mark every active TaxiTrip belonging to `bookingId` as terminal in one
+ * transaction. Idempotent: trips already terminal (or PLANNED) are
+ * untouched. Used by the COMPLETED-status cascade — see comment at the
+ * call site for the root-cause discussion (Wave-1 bug #3).
+ */
+async function finalizeTaxiTripsForBooking(bookingId: string, actorId: string): Promise<void> {
+  const trips = await prisma.taxiTrip.findMany({
+    where: {
+      bookingId,
+      status: { in: TAXI_TRIP_ACTIVE_STATUSES },
+    },
+    select: { id: true, tripType: true },
+  });
+  if (trips.length === 0) return;
+
+  await prisma.$transaction(async (tx) => {
+    for (const trip of trips) {
+      const terminal = TAXI_TRIP_TERMINAL_BY_TYPE[trip.tripType] ?? 'ARRIVED_AT_PENSION';
+      await tx.taxiTrip.update({
+        where: { id: trip.id },
+        data: {
+          status: terminal,
+          trackingActive: false,
+          // Rotating the token mirrors the manual terminal path in
+          // /api/admin/taxi-trips/[id]/status: any /track/[token] cached
+          // by the client returns 404 from this point on.
+          trackingToken: null,
+        },
+      });
+      await tx.taxiStatusHistory.create({
+        data: {
+          taxiTripId: trip.id,
+          status: terminal,
+          updatedBy: actorId,
+        },
+      });
+    }
+  });
 }

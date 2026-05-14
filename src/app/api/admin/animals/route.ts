@@ -67,10 +67,29 @@ export async function POST(request: Request) {
   const owner = await prisma.user.findFirst({ where: notDeleted({ id: ownerId, role: 'CLIENT' }) });
   if (!owner) return NextResponse.json({ error: 'Owner not found' }, { status: 404 });
 
+  // Idempotent create: same (ownerId, normalized name, species) on a
+  // non-soft-deleted Pet returns the existing row instead of creating a
+  // duplicate. Production observed up to 5 identical "Athena" rows for
+  // one owner — root cause was no dedup on POST + no DB unique index.
+  // A trailing DB-level unique index (proposed in migration not
+  // auto-applied) is the second line of defense.
+  const normalizedName = String(name).trim();
+  const existing = await prisma.pet.findFirst({
+    where: notDeleted({
+      ownerId,
+      species,
+      // Case-insensitive equality on the trimmed name.
+      name: { equals: normalizedName, mode: 'insensitive' },
+    }),
+  });
+  if (existing) {
+    return NextResponse.json(existing, { status: 200 });
+  }
+
   const pet = await prisma.pet.create({
     data: {
       ownerId,
-      name: name.trim(),
+      name: normalizedName,
       species,
       breed: breed?.trim() || null,
       gender: gender || null,

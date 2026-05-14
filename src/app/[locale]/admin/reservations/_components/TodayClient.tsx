@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { LogIn, LogOut, Clock, CheckCircle2, XCircle, AlertTriangle, Calendar } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { formatMAD } from '@/lib/utils';
+import { daysUntilCasablanca } from '@/lib/dates-casablanca';
 import CloseStayDialog from './CloseStayDialog';
 import type { TodayBooking, TodaySnapshot } from '../_lib/today-queries';
 
@@ -424,8 +425,20 @@ function DepartureBadge({ b, fr }: { b: TodayBooking; fr: boolean }) {
       </span>
     );
   }
-  const diff = Math.round((new Date(b.endDate).getTime() - Date.now()) / 86_400_000);
-  if (diff <= 1) {
+  // Calendar-day diff anchored on Casablanca (UTC+1 fixed). The previous
+  // `Math.round((endMs - nowMs) / 86_400_000)` measured wall-clock instants:
+  // a departure stored at 16-May 00:00 Casa (= 15-May 23:00 UTC) read from
+  // a 14-May afternoon timestamp returned 1, flagging "Départ demain" for
+  // a stay still 2 calendar days away. casa-tz date-only math is the fix.
+  const diff = daysUntilCasablanca(b.endDate);
+  if (diff <= 0) {
+    return (
+      <span className="text-[10px] uppercase bg-red-200 text-red-800 rounded px-1.5 py-0.5">
+        {fr ? "Départ aujourd'hui" : 'Leaves today'}
+      </span>
+    );
+  }
+  if (diff === 1) {
     return (
       <span className="text-[10px] uppercase bg-red-100 text-red-700 rounded px-1.5 py-0.5">
         {fr ? 'Départ demain' : 'Leaves tomorrow'}
