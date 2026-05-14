@@ -35,7 +35,7 @@ vi.mock('@/lib/email', () => ({
 }));
 vi.mock('@/lib/sms', () => ({
   sendSMS: mocks.sendSMS,
-  sendAdminSMS: mocks.sendAdminSMS,
+  sendAdminSMS: mocks.sendAdminSMS, normalizePhone: (p: string) => p,
   petPossessive: vi.fn().mockReturnValue('ses'),
   petVerb: vi.fn().mockReturnValue('sont'),
   petArrived: vi.fn().mockReturnValue('arrivés'),

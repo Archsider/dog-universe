@@ -45,6 +45,9 @@ vi.mock('@/lib/sms', () => ({
   sendSMS: mocks.sendSMS,
   sendAdminSMS: mocks.sendAdminSMS,
   formatMAD: (n: number) => `${n} MAD`,
+  // sms-dedup imports normalizePhone — provide a passthrough so the
+  // SmsLog dedup hash uses a deterministic canonical form in tests.
+  normalizePhone: (p: string) => p,
 }));
 vi.mock('@/lib/log', () => ({
   logAction: mocks.logAction,

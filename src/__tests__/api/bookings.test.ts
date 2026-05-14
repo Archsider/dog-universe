@@ -131,7 +131,7 @@ vi.mock('@/lib/email', () => ({
 
 vi.mock('@/lib/sms', () => ({
   sendSMS: mocks.sendSMS,
-  sendAdminSMS: mocks.sendAdminSMS,
+  sendAdminSMS: mocks.sendAdminSMS, normalizePhone: (p: string) => p,
   formatDateFR: (d: Date) => d.toISOString().slice(0, 10),
   petVerb: () => 'sont',
   petArrived: () => 'arrivés',

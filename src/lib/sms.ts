@@ -3,7 +3,17 @@ import CircuitBreaker from 'opossum'
 import { logger } from '@/lib/logger';
 
 // Normalise un numéro marocain vers +212XXXXXXXXX
-function normalizePhone(phone: string): string {
+//
+// Exported so the SMS dedup hash and any other consumer (logs, metrics,
+// admin search) keys on the same canonical representation. Without this,
+// '0669...' and '+212669...' produce two different SmsLog rows and we
+// silently double-send to the same recipient. See ADR-0007.
+//
+// Special case: the literal 'ADMIN' is a sentinel routed by sendAdminSMS
+// to env.ADMIN_PHONE — it must NOT be normalised (it isn't a real
+// phone number).
+export function normalizePhone(phone: string): string {
+  if (phone === 'ADMIN') return phone
   const clean = phone.replace(/[\s\-\.]/g, '')
   if (clean.startsWith('+')) return clean
   if (clean.startsWith('00')) return '+' + clean.slice(2)

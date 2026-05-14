@@ -93,7 +93,7 @@ vi.mock('@/lib/notifications', () => ({
 }));
 vi.mock('@/lib/email', () => ({ sendEmail: mocks.sendEmail, getEmailTemplate: mocks.getEmailTemplate }));
 vi.mock('@/lib/notify-now', () => ({ sendEmailNow: mocks.sendEmailNow, sendSmsNow: mocks.sendSmsNow }));
-vi.mock('@/lib/sms', () => ({ sendAdminSMS: mocks.sendAdminSMS, formatDateFR: mocks.formatDateFR }));
+vi.mock('@/lib/sms', () => ({ sendAdminSMS: mocks.sendAdminSMS, normalizePhone: (p: string) => p, formatDateFR: mocks.formatDateFR }));
 vi.mock('@/lib/logger', () => ({ log: mocks.log, logger: mocks.logger }));
 vi.mock('@/lib/log', () => ({
   logAction: mocks.logAction,

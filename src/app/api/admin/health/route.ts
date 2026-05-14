@@ -9,6 +9,7 @@ import { getCronLastRun, CRON_NAMES, logServerError } from '@/lib/observability'
 import { isBullMQConfigured } from '@/lib/redis-bullmq';
 import { getDlqQueue } from '@/lib/queues';
 import { getRecentSlowQueries, getSlowQueryStats, SLOW_QUERY_THRESHOLD_MS } from '@/lib/slow-query-monitor';
+import { getDedupBlockedCount } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,11 +33,33 @@ function getDbPoolStatus(): { pooled: boolean; via: 'port' | 'pgbouncer-flag' | 
 async function getSmsStats() {
   try {
     const since24h = new Date(Date.now() - 24 * 3_600_000);
-    const [sent24h, last] = await Promise.all([
+    const [sent24h, pending24h, last, recent, blockedToday] = await Promise.all([
       prisma.smsLog.count({ where: { sentAt: { gte: since24h }, status: 'SENT' } }),
+      prisma.smsLog.count({ where: { sentAt: { gte: since24h }, status: 'PENDING' } }),
       prisma.smsLog.findFirst({ orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
+      prisma.smsLog.findMany({
+        orderBy: { sentAt: 'desc' },
+        take: 20,
+        select: { phone: true, status: true, sentAt: true, bookingId: true },
+      }),
+      getDedupBlockedCount(),
     ]);
-    return { sent24h, lastSentAt: last?.sentAt?.toISOString() ?? null };
+    return {
+      sent24h,
+      pending24h,
+      blockedToday,
+      lastSentAt: last?.sentAt?.toISOString() ?? null,
+      recent: recent.map((r) => ({
+        phone: r.phone === 'ADMIN'
+          ? 'ADMIN'
+          : r.phone.length <= 4
+            ? '****'
+            : `${r.phone.slice(0, 4)}****${r.phone.slice(-2)}`,
+        status: r.status,
+        sentAt: r.sentAt.toISOString(),
+        bookingId: r.bookingId,
+      })),
+    };
   } catch {
     return null;
   }
