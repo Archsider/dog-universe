@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npx prisma generate
@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: node scripts/check-route-exports.mjs
 
   test:
@@ -72,7 +72,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npx prisma generate
@@ -108,7 +108,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npx prisma generate
@@ -130,7 +130,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm audit --audit-level=high
 
@@ -142,7 +142,12 @@ jobs:
     name: E2E (Playwright)
     needs: [build, test]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 25 min budget: npm ci (~2 min) + playwright browser install (~3 min) +
+    # 8 spec files × Worker:1 × retries:2 against the live production URL.
+    # The previous 15 min was getting eaten by install + a few retry-prone
+    # tests, leaving < 8 min for the actual suite — which silently timed out
+    # mid-run with "Cancelled after 15m" on every PR.
+    timeout-minutes: 25
     env:
       PLAYWRIGHT_BASE_URL: https://app.doguniverse.ma
       TEST_CLIENT_EMAIL: ${{ secrets.TEST_CLIENT_EMAIL }}
@@ -154,7 +159,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: Install Playwright browsers

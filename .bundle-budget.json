@@ -6,10 +6,11 @@
       "patterns": [
         ".next/static/chunks/main-*.js",
         ".next/static/chunks/webpack-*.js",
-        ".next/static/chunks/framework-*.js"
+        ".next/static/chunks/framework-*.js",
+        ".next/static/chunks/main-app-*.js"
       ],
-      "maxKB": 280,
-      "rationale": "React + Next.js runtime. Should rarely change."
+      "maxKB": 560,
+      "rationale": "React 19 + Next.js 15 runtime + App Router. Baseline ~520 KB uncompressed (~225 KB gzipped) as of Next 15.5 — matches what `next build` reports under 'First Load JS shared by all'. 40 KB headroom for natural growth. Bump only if a Next major version pushes baseline higher than 560 KB."
     },
     {
       "name": "Total JS shipped to client",
