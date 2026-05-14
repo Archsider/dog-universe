@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { sendAdminSMS, formatDateFR } from '@/lib/sms';
+import { formatDateFR } from '@/lib/sms';
+import { sendSmsNow } from '@/lib/notify-now';
 import { bookingClientCancelSchema, bookingClientRescheduleSchema, formatZodError } from '@/lib/validation';
 import { createNotification } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
@@ -208,9 +209,12 @@ export async function PATCH(request: Request, { params }: Params) {
     ? `from ${formatDateFR(booking.startDate)} to ${formatDateFR(booking.endDate)}`
     : `on ${formatDateFR(booking.startDate)}`;
 
-  sendAdminSMS(
-    `⚠️ Annulation client : ${cancelClientName} a annulé sa réservation pour ${cancelPetNames} ${cancelDateRange}.`,
-  ).catch(() => { /* SMS additif — échec non bloquant */ });
+  // Fire-and-forget via sendSmsNow — atomic SmsLog reservation prevents
+  // duplicate admin SMS on race conditions (concurrent cancel requests).
+  sendSmsNow({
+    to: 'ADMIN',
+    message: `⚠️ Annulation client : ${cancelClientName} a annulé sa réservation pour ${cancelPetNames} ${cancelDateRange}.`,
+  });
 
   try {
     const admins = await prisma.user.findMany({

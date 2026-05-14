@@ -3,7 +3,8 @@ import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
-import { sendSMS, sendAdminSMS, formatMAD } from '@/lib/sms';
+import { formatMAD } from '@/lib/sms';
+import { sendSmsNow } from '@/lib/notify-now';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
 import { toNumber } from '@/lib/decimal';
 import { cacheDel } from '@/lib/cache';
@@ -143,17 +144,22 @@ export async function POST(request: Request, { params }: Params) {
   await cacheDel(`revenue:${yyyy}:${mm}`);
 
   // --- SMS confirmation paiement ---
+  // Route via sendSmsNow so the SmsLog atomic reservation guards against
+  // double-clicks, network retries, or duplicate idempotency-key replays
+  // each sending a separate SMS. Fire-and-forget: the HTTP response is
+  // returned to the operator without waiting on the SMS gateway.
   const clientFullName = invoice.clientDisplayName ?? invoice.client.name ?? '';
   const firstName = clientFullName.split(' ')[0] || clientFullName;
   if (!invoice.client.isWalkIn) {
-    await sendSMS(
-      invoice.client.phone,
-      `Bonjour ${firstName} ! Votre paiement de ${formatMAD(parsedAmount)} a bien été reçu. Merci pour votre fidélité. — Dog Universe`,
-    ).catch(() => undefined); // additive — do not fail the payment recording
+    sendSmsNow({
+      to: invoice.client.phone,
+      message: `Bonjour ${firstName} ! Votre paiement de ${formatMAD(parsedAmount)} a bien été reçu. Merci pour votre fidélité. — Dog Universe`,
+    });
   }
-  await sendAdminSMS(
-    `💰 Paiement : ${formatMAD(parsedAmount)} reçu de ${clientFullName} — ${invoice.invoiceNumber}.`,
-  ).catch(() => undefined);
+  sendSmsNow({
+    to: 'ADMIN',
+    message: `💰 Paiement : ${formatMAD(parsedAmount)} reçu de ${clientFullName} — ${invoice.invoiceNumber}.`,
+  });
 
   // --- Log ---
   await logAction({
