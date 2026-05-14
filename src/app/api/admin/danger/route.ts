@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import bcrypt from 'bcryptjs';
 import { Redis } from '@upstash/redis';
+import { withSpan } from '@/lib/observability';
 
 // Supported operations:
 // - delete_cancelled : delete all CANCELLED bookings + their invoices
@@ -119,7 +120,10 @@ export async function POST(request: Request) {
     details: { operation, count: bookingIds.length },
   });
 
-  await prisma.$transaction(async (tx) => {
+  await withSpan(
+    'api.admin.danger.execute',
+    { operation, actorId: session.user.id, affectedCount: bookingIds.length },
+    () => prisma.$transaction(async (tx) => {
     const invoices = await tx.invoice.findMany({
       where: { bookingId: { in: bookingIds } },
       select: { id: true },
@@ -131,7 +135,8 @@ export async function POST(request: Request) {
     await tx.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
     // BookingPets, BoardingDetail, TaxiDetail cascade from Booking
     await tx.booking.deleteMany({ where: { id: { in: bookingIds } } });
-  });
+  }),
+  );
 
   await logAction({
     userId: session.user.id,

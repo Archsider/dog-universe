@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, Lightbulb, Send, Plus, ShoppingBag } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
 type AgeCategory = 'PUPPY' | 'JUNIOR' | 'ADULT' | 'SENIOR';
 type Species = 'DOG' | 'CAT';
@@ -58,7 +59,17 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Feature flag: `upsell-suggestions` controls whether the upsell block
+  // renders at all. Lets us A/B test the component or kill-switch it if
+  // it ever annoys clients / drives complaints. Default fail-safe: hide
+  // while the flag is loading so the layout doesn't flash an empty block.
+  const { enabled: upsellEnabled, loading: flagLoading } = useFeatureFlag('upsell-suggestions');
+
   useEffect(() => {
+    if (flagLoading || !upsellEnabled) {
+      setLoading(false);
+      return;
+    }
     let alive = true;
     const url = context === 'admin'
       ? `/api/admin/products/suggestions?bookingId=${encodeURIComponent(bookingId)}`
@@ -71,7 +82,10 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
       .catch(() => { if (alive) setSuggestions([]); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [bookingId, context]);
+  }, [bookingId, context, upsellEnabled, flagLoading]);
+
+  // Don't render anything while the flag is loading OR when disabled.
+  if (flagLoading || !upsellEnabled) return null;
 
   async function addToInvoice(productId: string, petId: string, productName: string) {
     if (!hasInvoice) {

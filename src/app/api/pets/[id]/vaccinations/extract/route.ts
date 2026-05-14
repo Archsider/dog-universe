@@ -9,6 +9,7 @@ import { createSignedUrl } from '@/lib/supabase';
 import { vaccinationExtractSchema, formatZodError } from '@/lib/validation';
 import { logger } from '@/lib/logger';
 import { notDeleted } from '@/lib/prisma-soft';
+import { isFeatureEnabled } from '@/lib/feature-flags';
 
 // Validates the JSON Claude returns. Strict mode rejects unknown keys —
 // defends against prototype pollution / unexpected field injection. All
@@ -220,7 +221,15 @@ export async function POST(request: Request, { params }: Params) {
     const fileData = await fetchFileAsBase64(fileUrl);
     let extraction: ExtractionResult | null = null;
 
-    if (fileData) {
+    // Feature flag: `ai-vaccination-extract` is a kill-switch for the Anthropic
+    // call. Useful if Anthropic API is down OR costs spike — flip the flag off
+    // to fall back to a manual-entry DRAFT (the rest of the flow stays identical).
+    const aiEnabled = await isFeatureEnabled('ai-vaccination-extract', {
+      userId: session.user.id,
+      role: session.user.role,
+    });
+
+    if (fileData && aiEnabled) {
       extraction = await callClaudeExtraction(fileData.base64, fileData.mimeType);
     }
 
