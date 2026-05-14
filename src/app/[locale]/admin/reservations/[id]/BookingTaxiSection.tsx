@@ -4,6 +4,7 @@ import { TaxiNavBlock } from '@/components/admin/TaxiNavigationButton';
 import TaxiHeartbeatIndicator from './TaxiHeartbeatIndicator';
 import AdminTaxiLiveMap from './AdminTaxiLiveMap';
 import AdminTaxiReplay from './AdminTaxiReplay';
+import RecomputeDistanceButton from './RecomputeDistanceButton';
 
 interface TaxiDetailProps {
   pickupLat?: number | null;
@@ -113,15 +114,29 @@ export default function BookingTaxiSection({
           )}
           {/* Persistent cumulative distance — survives tracking stop and page refresh. */}
           {rawStandaloneTrip && rawStandaloneTrip.distanceKm > 0 && (
-            <div className="flex items-center justify-between text-xs px-3 py-2 bg-[#FEFCF9] rounded-lg border border-[rgba(196,151,74,0.2)]">
-              <span className="text-charcoal/60">
-                {locale === 'fr' ? 'Distance totale parcourue' : 'Total distance traveled'}
-              </span>
-              <span className="font-semibold text-[#C4974A]">
-                {rawStandaloneTrip.distanceKm >= 10
-                  ? `${rawStandaloneTrip.distanceKm.toFixed(1)} km`
-                  : `${rawStandaloneTrip.distanceKm.toFixed(2)} km`}
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs px-3 py-2 bg-[#FEFCF9] rounded-lg border border-[rgba(196,151,74,0.2)]">
+                <span className="text-charcoal/60">
+                  {locale === 'fr' ? 'Distance totale parcourue' : 'Total distance traveled'}
+                </span>
+                <span className="font-semibold text-[#C4974A]">
+                  {rawStandaloneTrip.distanceKm >= 10
+                    ? `${rawStandaloneTrip.distanceKm.toFixed(1)} km`
+                    : `${rawStandaloneTrip.distanceKm.toFixed(2)} km`}
+                </span>
+              </div>
+              {/* Replay-mode only: recompute from stored points. Hidden while
+                  tracking is live (the live ingestion already uses the same
+                  filter, so it would be a no-op there). */}
+              {!rawStandaloneTrip.trackingActive && (
+                <div className="flex justify-end">
+                  <RecomputeDistanceButton
+                    taxiTripId={rawStandaloneTrip.id}
+                    currentDistanceKm={rawStandaloneTrip.distanceKm}
+                    locale={locale}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
