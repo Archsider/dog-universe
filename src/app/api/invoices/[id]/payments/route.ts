@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { formatMAD } from '@/lib/sms';
-import { sendSmsNow } from '@/lib/notify-now';
+import { sendSmsNow, sendSmsRespectful } from '@/lib/notify-now';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
 import { toNumber } from '@/lib/decimal';
 import { cacheDel } from '@/lib/cache';
@@ -84,6 +84,10 @@ export async function POST(request: Request, { params }: Params) {
 
   const body = await request.json();
   const { amount, paymentMethod, paymentDate, notes } = body;
+  // `sendClientSms` is the UI toggle on PaymentModal. Defaults to `true` so
+  // older clients that don't send the flag get the previous (always-send)
+  // behaviour, refined further by the `sendSmsRespectful` policy below.
+  const sendClientSms: boolean = body.sendClientSms !== false;
 
   // --- Validate ---
   const parsedAmount = Number(amount);
@@ -144,17 +148,25 @@ export async function POST(request: Request, { params }: Params) {
   await cacheDel(`revenue:${yyyy}:${mm}`);
 
   // --- SMS confirmation paiement ---
-  // Route via sendSmsNow so the SmsLog atomic reservation guards against
-  // double-clicks, network retries, or duplicate idempotency-key replays
-  // each sending a separate SMS. Fire-and-forget: the HTTP response is
-  // returned to the operator without waiting on the SMS gateway.
+  // Client SMS:    COMPTA category — respects walk-in skip + quiet hours
+  //                (21h-9h Casablanca defers to 9h). UI toggle from
+  //                PaymentModal opts out entirely via `sendClientSms=false`.
+  // Admin SMS:     OPS — always immediate; the operator wants real-time
+  //                awareness of every payment recorded on their books.
+  //                The 'ADMIN' sentinel bypasses quiet hours in the policy.
   const clientFullName = invoice.clientDisplayName ?? invoice.client.name ?? '';
   const firstName = clientFullName.split(' ')[0] || clientFullName;
-  if (!invoice.client.isWalkIn) {
-    sendSmsNow({
-      to: invoice.client.phone,
-      message: `Bonjour ${firstName} ! Votre paiement de ${formatMAD(parsedAmount)} a bien été reçu. Merci pour votre fidélité. — Dog Universe`,
-    });
+  if (sendClientSms) {
+    sendSmsRespectful(
+      {
+        to: invoice.client.phone,
+        message: `Bonjour ${firstName} ! Votre paiement de ${formatMAD(parsedAmount)} a bien été reçu. Merci pour votre fidélité. — Dog Universe`,
+      },
+      {
+        category: 'COMPTA',
+        recipient: invoice.client.isWalkIn ? 'walkin' : 'standard',
+      },
+    );
   }
   sendSmsNow({
     to: 'ADMIN',

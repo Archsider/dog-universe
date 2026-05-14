@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   sendAdminSMS: vi.fn(),
   tryReserveSmsSend: vi.fn().mockResolvedValue(true),
   markSmsSent: vi.fn().mockResolvedValue(undefined),
+  enqueueSms: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/email', () => ({
@@ -22,11 +23,16 @@ vi.mock('@/lib/sms-dedup', () => ({
   markSmsSent: mocks.markSmsSent,
 }));
 
+vi.mock('@/lib/queues', () => ({
+  enqueueSms: mocks.enqueueSms,
+}));
+
 import {
   sendEmailNow,
   sendSmsNow,
   sendEmailWithRetry,
   sendSmsWithRetry,
+  sendSmsRespectful,
 } from '@/lib/notify-now';
 
 describe('notify-now', () => {
@@ -39,6 +45,7 @@ describe('notify-now', () => {
     mocks.sendAdminSMS.mockReset();
     mocks.tryReserveSmsSend.mockReset().mockResolvedValue(true);
     mocks.markSmsSent.mockReset().mockResolvedValue(undefined);
+    mocks.enqueueSms.mockReset().mockResolvedValue(undefined);
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -157,5 +164,116 @@ describe('notify-now', () => {
     mocks.sendSMS.mockResolvedValue(true);
     const result = sendSmsNow({ to: '+212600000000', message: 'hi' });
     expect(result).toBeUndefined();
+  });
+
+  // ── sendSmsRespectful — policy integration ─────────────────────────────
+  // The decision logic is fully unit-tested in sms-policy.test.ts. These
+  // tests cover the WIRING: each policy outcome must translate into the
+  // right runtime action (direct send, BullMQ delayed enqueue, or skip).
+  describe('sendSmsRespectful — policy integration', () => {
+    // Anchor time inside business hours so quiet-hours doesn't fire.
+    const noonCasa = new Date('2026-05-14T11:00:00Z'); // 12:00 Casa
+
+    // Anchor time inside quiet hours.
+    const midnightCasa = new Date('2026-05-14T23:00:00Z'); // 00:00 Casa next day
+
+    it('OPS + standard + business hours → sends directly via gateway', async () => {
+      vi.setSystemTime(noonCasa);
+      mocks.sendSMS.mockResolvedValue(true);
+      sendSmsRespectful(
+        { to: '+212600000000', message: 'taxi en route' },
+        { category: 'OPS', recipient: 'standard' },
+      );
+      // sendSmsNow is fire-and-forget — drain the microtask queue.
+      await vi.runAllTimersAsync();
+      expect(mocks.sendSMS).toHaveBeenCalledTimes(1);
+      expect(mocks.enqueueSms).not.toHaveBeenCalled();
+    });
+
+    it('OPS + walkin → still sends (urgent ops override walk-in skip)', async () => {
+      vi.setSystemTime(noonCasa);
+      mocks.sendSMS.mockResolvedValue(true);
+      sendSmsRespectful(
+        { to: '+212600000000', message: 'taxi arrivé' },
+        { category: 'OPS', recipient: 'walkin' },
+      );
+      await vi.runAllTimersAsync();
+      expect(mocks.sendSMS).toHaveBeenCalledTimes(1);
+    });
+
+    it('OPS + standard + quiet hours → still sends (OPS bypasses quiet)', async () => {
+      vi.setSystemTime(midnightCasa);
+      mocks.sendSMS.mockResolvedValue(true);
+      sendSmsRespectful(
+        { to: '+212600000000', message: 'taxi tracking' },
+        { category: 'OPS', recipient: 'standard' },
+      );
+      await vi.runAllTimersAsync();
+      expect(mocks.sendSMS).toHaveBeenCalledTimes(1);
+      expect(mocks.enqueueSms).not.toHaveBeenCalled();
+    });
+
+    it('COMPTA + walkin → suppressed entirely (no send, no enqueue)', () => {
+      vi.setSystemTime(noonCasa);
+      sendSmsRespectful(
+        { to: '+212600000000', message: 'Paiement reçu' },
+        { category: 'COMPTA', recipient: 'walkin' },
+      );
+      expect(mocks.sendSMS).not.toHaveBeenCalled();
+      expect(mocks.sendAdminSMS).not.toHaveBeenCalled();
+      expect(mocks.enqueueSms).not.toHaveBeenCalled();
+      expect(mocks.tryReserveSmsSend).not.toHaveBeenCalled();
+    });
+
+    it('COMPTA + standard + business hours → direct send', async () => {
+      vi.setSystemTime(noonCasa);
+      mocks.sendSMS.mockResolvedValue(true);
+      sendSmsRespectful(
+        { to: '+212600000000', message: 'Paiement reçu' },
+        { category: 'COMPTA', recipient: 'standard' },
+      );
+      await vi.runAllTimersAsync();
+      expect(mocks.sendSMS).toHaveBeenCalledTimes(1);
+      expect(mocks.enqueueSms).not.toHaveBeenCalled();
+    });
+
+    it('COMPTA + standard + quiet hours → BullMQ defer with positive delay', () => {
+      vi.setSystemTime(midnightCasa);
+      sendSmsRespectful(
+        { to: '+212600000000', message: 'Paiement reçu' },
+        { category: 'COMPTA', recipient: 'standard' },
+      );
+      expect(mocks.sendSMS).not.toHaveBeenCalled();
+      expect(mocks.enqueueSms).toHaveBeenCalledTimes(1);
+      const call = mocks.enqueueSms.mock.calls[0];
+      // call args: (data, jobId, { delay })
+      expect(call[0]).toEqual({ to: '+212600000000', message: 'Paiement reçu' });
+      expect(call[2]?.delay).toBeGreaterThan(0);
+      // Concretely: ~9h from 00:00 Casa to 09:00 Casa
+      expect(call[2].delay).toBe(9 * 3600 * 1000);
+    });
+
+    it('ADMIN recipient + COMPTA + quiet hours → still immediate (admin wants to know)', async () => {
+      vi.setSystemTime(midnightCasa);
+      mocks.sendAdminSMS.mockResolvedValue(true);
+      sendSmsRespectful(
+        { to: 'ADMIN', message: 'Paiement enregistré' },
+        { category: 'COMPTA' },
+      );
+      await vi.runAllTimersAsync();
+      expect(mocks.sendAdminSMS).toHaveBeenCalledTimes(1);
+      expect(mocks.enqueueSms).not.toHaveBeenCalled();
+    });
+
+    it('auto-detects ADMIN sentinel even without explicit recipient prop', async () => {
+      vi.setSystemTime(midnightCasa);
+      mocks.sendAdminSMS.mockResolvedValue(true);
+      sendSmsRespectful(
+        { to: 'ADMIN', message: 'alerte' },
+        { category: 'COMPTA' }, // no `recipient` prop
+      );
+      await vi.runAllTimersAsync();
+      expect(mocks.sendAdminSMS).toHaveBeenCalledTimes(1);
+    });
   });
 });
