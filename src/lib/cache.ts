@@ -162,6 +162,55 @@ export async function getWorkerLastRun(): Promise<string | null> {
   }
 }
 
+// ─── SMS dedup metrics ─────────────────────────────────────────────────────
+//
+// Counter of duplicates blocked per UTC day. Bumped by `tryReserveSmsSend`
+// every time it returns `false` (lost the INSERT race OR found a fresh
+// row already within the dedup window). Surfaced on /admin/health so the
+// operator can answer "did the dedup do anything today?".
+//
+// Key shape: `sms:dedup_blocked:YYYY-MM-DD`. TTL 8 days = a week of
+// rolling history available for the dashboard. Fail-open: Redis errors
+// never block the SMS path.
+
+function dedupBlockedKey(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `sms:dedup_blocked:${y}-${m}-${d}`;
+}
+
+export async function incrDedupBlocked(): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  const key = dedupBlockedKey(new Date());
+  try {
+    await redis.incr(key);
+    // EXPIRE is idempotent and cheap; refresh the TTL on every bump so a
+    // long-running calendar day always carries its full 8-day retention.
+    await redis.expire(key, 8 * 86400);
+  } catch (err) {
+    breadcrumb('incr', key, 'incrDedupBlocked failed, failing open');
+    logger.warn('cache', 'incrDedupBlocked failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** Reads the count of blocked dedup events for a given UTC day. */
+export async function getDedupBlockedCount(date: Date = new Date()): Promise<number> {
+  const redis = getRedis();
+  if (!redis) return 0;
+  try {
+    const val = await redis.get<number | string>(dedupBlockedKey(date));
+    if (val == null) return 0;
+    const n = typeof val === 'number' ? val : Number(val);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
 // ─── BullMQ enqueue freshness (R4) ─────────────────────────────────────────
 //
 // The `/api/workers/process` cron used to probe BullMQ on every tick

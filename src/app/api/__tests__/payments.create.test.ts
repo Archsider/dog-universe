@@ -38,7 +38,7 @@ vi.mock('@/lib/idempotency', () => ({
 }));
 vi.mock('@/lib/sms', () => ({
   sendSMS: mocks.sendSMS,
-  sendAdminSMS: mocks.sendAdminSMS,
+  sendAdminSMS: mocks.sendAdminSMS, normalizePhone: (p: string) => p,
   formatMAD: (n: number) => `${n} MAD`,
 }));
 vi.mock('@/lib/decimal', () => ({ toNumber: (v: unknown) => Number(v ?? 0) }));

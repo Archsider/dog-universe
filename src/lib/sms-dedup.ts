@@ -11,12 +11,25 @@
  */
 import { createHash } from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { normalizePhone } from '@/lib/sms';
+import { incrDedupBlocked } from '@/lib/cache';
 import { logger } from '@/lib/logger';
 
 const DEDUP_WINDOW_HOURS = 24;
 
+/**
+ * Canonicalise the phone before hashing. Without this, '0669183981' and
+ * '+212669183981' produce two different rows in SmsLog and the dedup
+ * silently misses — we'd double-send to the same recipient. The literal
+ * sentinel 'ADMIN' is preserved as-is (it routes through env.ADMIN_PHONE).
+ */
+function canonicalPhone(phone: string): string {
+  return normalizePhone(phone);
+}
+
 export function smsDedupHash(phone: string, message: string): string {
-  return createHash('sha256').update(`${phone}\x00${message}`).digest('hex');
+  const normalized = canonicalPhone(phone);
+  return createHash('sha256').update(`${normalized}\x00${message}`).digest('hex');
 }
 
 /**
@@ -24,11 +37,12 @@ export function smsDedupHash(phone: string, message: string): string {
  * within the last 24 hours. Fail-open: returns false on DB errors.
  */
 export async function isSmsDedup(phone: string, message: string): Promise<boolean> {
+  const normalized = canonicalPhone(phone);
   const hash = smsDedupHash(phone, message);
   const since = new Date(Date.now() - DEDUP_WINDOW_HOURS * 3_600_000);
   try {
     const existing = await prisma.smsLog.findFirst({
-      where: { phone, contentHash: hash, sentAt: { gte: since } },
+      where: { phone: normalized, contentHash: hash, sentAt: { gte: since } },
       select: { id: true },
     });
     return existing !== null;
@@ -50,13 +64,14 @@ export async function recordSmsSent(
   message: string,
   opts?: { bookingId?: string },
 ): Promise<void> {
+  const normalized = canonicalPhone(phone);
   const hash = smsDedupHash(phone, message);
   try {
     await prisma.smsLog.upsert({
-      where: { phone_contentHash: { phone, contentHash: hash } },
+      where: { phone_contentHash: { phone: normalized, contentHash: hash } },
       update: { sentAt: new Date(), status: 'SENT' },
       create: {
-        phone,
+        phone: normalized,
         contentHash: hash,
         status: 'SENT',
         bookingId: opts?.bookingId ?? null,
@@ -95,16 +110,21 @@ export async function tryReserveSmsSend(
   message: string,
   opts?: { bookingId?: string },
 ): Promise<boolean> {
+  const normalized = canonicalPhone(phone);
   const hash = smsDedupHash(phone, message);
   const since = new Date(Date.now() - DEDUP_WINDOW_HOURS * 3_600_000);
 
   try {
     const existing = await prisma.smsLog.findUnique({
-      where: { phone_contentHash: { phone, contentHash: hash } },
+      where: { phone_contentHash: { phone: normalized, contentHash: hash } },
       select: { sentAt: true },
     });
     if (existing && existing.sentAt >= since) {
-      return false; // already sent within the dedup window
+      // Same content sent (or attempted) within the dedup window. Bump the
+      // daily counter so the operator dashboard surfaces "Y duplicates
+      // blocked today". Fire-and-forget — never block the dedup path.
+      void incrDedupBlocked();
+      return false;
     }
 
     if (existing) {
@@ -112,7 +132,7 @@ export async function tryReserveSmsSend(
       // First caller's UPDATE wins; later concurrent UPDATEs overwrite with
       // the same data — harmless.
       await prisma.smsLog.update({
-        where: { phone_contentHash: { phone, contentHash: hash } },
+        where: { phone_contentHash: { phone: normalized, contentHash: hash } },
         data: { sentAt: new Date(), status: 'PENDING', bookingId: opts?.bookingId ?? null },
       });
       return true;
@@ -123,7 +143,7 @@ export async function tryReserveSmsSend(
     try {
       await prisma.smsLog.create({
         data: {
-          phone,
+          phone: normalized,
           contentHash: hash,
           status: 'PENDING',
           bookingId: opts?.bookingId ?? null,
@@ -132,7 +152,12 @@ export async function tryReserveSmsSend(
       return true;
     } catch (err: unknown) {
       const code = (err as { code?: string } | null)?.code;
-      if (code === 'P2002') return false; // lost the race
+      if (code === 'P2002') {
+        // Lost the INSERT race. The other concurrent caller already claimed
+        // this (phone, hash). Bump the dashboard counter.
+        void incrDedupBlocked();
+        return false;
+      }
       throw err;
     }
   } catch (err) {
@@ -147,10 +172,11 @@ export async function tryReserveSmsSend(
  * Mark a previously reserved SMS as actually delivered. Idempotent.
  */
 export async function markSmsSent(phone: string, message: string): Promise<void> {
+  const normalized = canonicalPhone(phone);
   const hash = smsDedupHash(phone, message);
   try {
     await prisma.smsLog.update({
-      where: { phone_contentHash: { phone, contentHash: hash } },
+      where: { phone_contentHash: { phone: normalized, contentHash: hash } },
       data: { status: 'SENT', sentAt: new Date() },
     });
   } catch {

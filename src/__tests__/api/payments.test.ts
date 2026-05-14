@@ -30,7 +30,7 @@ vi.mock('@/lib/log', () => ({
 }));
 vi.mock('@/lib/sms', () => ({
   sendSMS: mocks.sendSMS,
-  sendAdminSMS: mocks.sendAdminSMS,
+  sendAdminSMS: mocks.sendAdminSMS, normalizePhone: (p: string) => p,
   formatMAD: (n: number) => `${n} MAD`,
 }));
 vi.mock('@/lib/idempotency', () => ({

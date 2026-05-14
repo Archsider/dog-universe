@@ -89,7 +89,7 @@ vi.mock('@/lib/notify-now', () => ({
   sendSmsNow: mocks.sendSmsNow,
 }));
 vi.mock('@/lib/sms', () => ({
-  sendAdminSMS: mocks.sendAdminSMS,
+  sendAdminSMS: mocks.sendAdminSMS, normalizePhone: (p: string) => p,
   formatDateFR: mocks.formatDateFR,
 }));
 vi.mock('@/lib/logger', () => ({ log: mocks.log, logger: mocks.logger }));

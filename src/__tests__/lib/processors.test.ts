@@ -25,6 +25,9 @@ vi.mock('@/lib/email', () => ({
 vi.mock('@/lib/sms', () => ({
   sendSMS: mocks.sendSMS,
   sendAdminSMS: mocks.sendAdminSMS,
+  // sms-dedup re-exports normalizePhone for the hash canonical form;
+  // provide a passthrough so tests have deterministic hashes.
+  normalizePhone: (p: string) => p,
 }));
 
 // Import AFTER mocks

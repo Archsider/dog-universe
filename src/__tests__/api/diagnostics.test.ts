@@ -139,7 +139,15 @@ describe('GET /api/admin/diagnostics', () => {
     mocks.auth.mockResolvedValueOnce({ user: { id: 'sa', role: 'SUPERADMIN' } });
     const fakeDate = new Date('2026-05-07T10:00:00Z');
     // Email side: BullMQ getCompleted(0, 0) returns the latest finished job.
-    mocks.getEmailQueue.mockReturnValueOnce(
+    //
+    // getEmailQueue() is called TWICE in this route — once for the queue
+    // counts probe and once inside lastEmailSentIso. Both run inside the
+    // same Promise.all, so the resolution order is non-deterministic. Using
+    // `mockReturnValueOnce` here caused a 50/50 flake (the queue probe
+    // sometimes ate the only mocked return value, leaving lastEmailSentIso
+    // with `undefined`). Use `mockReturnValue` so BOTH calls get the
+    // completed jobs array.
+    mocks.getEmailQueue.mockReturnValue(
       makeQueueOk(
         { waiting: 1, active: 0, completed: 5, failed: 0, delayed: 0 },
         [{ finishedOn: fakeDate.getTime() }],

@@ -47,6 +47,27 @@ describe('smsDedupHash', () => {
     expect(smsDedupHash('+212600000000', 'a')).not.toBe(smsDedupHash('+212600000001', 'a'));
     expect(smsDedupHash('+212600000000', 'a')).not.toBe(smsDedupHash('+212600000000', 'b'));
   });
+
+  it('treats equivalent Moroccan phone formats as the same recipient', () => {
+    // Same human, three written forms. Without normalisation each would
+    // produce a different dedup row and we'd triple-send.
+    const local = smsDedupHash('0669183981', 'rendez-vous demain 10h');
+    const intl = smsDedupHash('+212669183981', 'rendez-vous demain 10h');
+    const dialled = smsDedupHash('00212669183981', 'rendez-vous demain 10h');
+    expect(local).toBe(intl);
+    expect(intl).toBe(dialled);
+  });
+
+  it('still distinguishes different real recipients', () => {
+    expect(smsDedupHash('+212669183981', 'x')).not.toBe(smsDedupHash('+212669183982', 'x'));
+  });
+
+  it('does not normalize the ADMIN sentinel', () => {
+    // 'ADMIN' is a routing keyword resolved at send-time to env.ADMIN_PHONE.
+    // It must survive intact through the hash so the loss-of-race detection
+    // matches across the two code paths that target the admin.
+    expect(smsDedupHash('ADMIN', 'alert')).toBe(smsDedupHash('ADMIN', 'alert'));
+  });
 });
 
 describe('tryReserveSmsSend — atomic INSERT-first dedup', () => {
