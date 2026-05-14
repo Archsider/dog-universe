@@ -326,6 +326,7 @@ export default function TodayClient({ snapshot, pricing, locale }: Props) {
             endDate: closeFor.endDate,
             isOpenEnded: closeFor.isOpenEnded,
             totalPrice: closeFor.totalPrice,
+            invoiceAmount: closeFor.invoiceAmount,
           }}
           pricing={pricing}
           locale={locale}

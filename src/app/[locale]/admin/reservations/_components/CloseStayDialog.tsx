@@ -14,9 +14,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatMAD } from '@/lib/utils';
-import { getPensionPriceNumber, type PricingSettings } from '@/lib/pricing-rules';
+import { type PricingSettings } from '@/lib/pricing-rules';
+import { selectCloseStayTotal, type CloseStayPet } from '../_lib/close-stay-total';
 
-type Pet = { id: string; name: string; species: 'DOG' | 'CAT' };
+type Pet = CloseStayPet;
 
 type Props = {
   open: boolean;
@@ -29,6 +30,12 @@ type Props = {
     endDate: string | null;
     isOpenEnded: boolean;
     totalPrice: number;
+    /** Current invoice amount, post-discount. When present and the stay is
+     *  not open-ended, this is the authoritative "Total final" — it accounts
+     *  for DISCOUNT items the admin may have already applied via the
+     *  invoice editor. `totalPrice` is the gross-of-discount booking total,
+     *  preserved as a fallback for bookings created before invoicing. */
+    invoiceAmount?: number | null;
   };
   pricing: PricingSettings;
   locale: string;
@@ -47,13 +54,6 @@ function nightsBetween(startISO: string, endISO: string): number {
   return Math.max(1, Math.ceil((end - start) / 86_400_000));
 }
 
-function computeLiveTotal(pets: Pet[], nights: number, pricing: PricingSettings): number {
-  const dogs = pets.filter((x) => x.species === 'DOG').length;
-  return pets.reduce(
-    (acc, pet) => acc + getPensionPriceNumber({ species: pet.species }, dogs, nights, pricing) * nights,
-    0,
-  );
-}
 
 export default function CloseStayDialog({ open, onClose, booking, pricing, locale, onSuccess }: Props) {
   const fr = locale !== 'en';
@@ -78,10 +78,18 @@ export default function CloseStayDialog({ open, onClose, booking, pricing, local
   }, [open, booking.endDate]);
 
   const nights = useMemo(() => nightsBetween(booking.startDate, endDate), [booking.startDate, endDate]);
-  const liveTotal = useMemo(() => {
-    if (!booking.isOpenEnded) return booking.totalPrice;
-    return computeLiveTotal(booking.pets, nights, pricing);
-  }, [booking.isOpenEnded, booking.totalPrice, booking.pets, nights, pricing]);
+  const liveTotal = useMemo(
+    () =>
+      selectCloseStayTotal({
+        isOpenEnded: booking.isOpenEnded,
+        pets: booking.pets,
+        nights,
+        pricing,
+        invoiceAmount: booking.invoiceAmount,
+        totalPrice: booking.totalPrice,
+      }),
+    [booking.isOpenEnded, booking.totalPrice, booking.invoiceAmount, booking.pets, nights, pricing],
+  );
 
   async function confirm() {
     setSubmitting(true);
