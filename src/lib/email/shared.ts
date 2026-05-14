@@ -111,10 +111,52 @@ export async function sendEmail({
   html: string;
   text?: string;
 }): Promise<void> {
+  // Pre-flight env check — in production, Nodemailer with undefined host
+  // silently constructs a transport then fails at sendMail with an opaque
+  // network error. Surface the real cause early so the operator sees
+  // "config_missing" instead of "ENOTFOUND undefined" in the toast.
+  if (process.env.NODE_ENV === 'production') {
+    const missing: string[] = [];
+    if (!process.env.EMAIL_SERVER_HOST) missing.push('EMAIL_SERVER_HOST');
+    if (!process.env.EMAIL_SERVER_USER) missing.push('EMAIL_SERVER_USER');
+    if (!process.env.EMAIL_SERVER_PASSWORD) missing.push('EMAIL_SERVER_PASSWORD');
+    if (missing.length > 0) {
+      const err = new Error(`email_config_missing: ${missing.join(', ')}`);
+      logger.error('email', 'sendEmail aborted (config_missing)', {
+        to: maskEmail(to), missing,
+      });
+      throw err;
+    }
+  }
+
+  // Structured trace: every send leaves a breadcrumb so the operator
+  // can correlate `last successful send` in /admin/diagnostics with a
+  // concrete Vercel log line. Masked recipient + duration ms + provider
+  // host (no creds). Logged BEFORE the breaker fire so we can pinpoint
+  // a circuit-open scenario in the breaker's own logger ('email' channel,
+  // 'Circuit breaker OPEN').
+  const startedAt = Date.now();
+  const host = process.env.EMAIL_SERVER_HOST ?? 'ethereal';
+  logger.info('email', 'sendEmail start', {
+    to: maskEmail(to),
+    host,
+    subjectLength: subject.length,
+  });
+
   try {
     await getEmailBreaker().fire({ to, subject, html, text });
+    logger.info('email', 'sendEmail ok', {
+      to: maskEmail(to),
+      host,
+      durationMs: Date.now() - startedAt,
+    });
   } catch (error) {
-    logger.error('email', 'Failed to send email', { to: maskEmail(to), error: error instanceof Error ? error.message : String(error) });
+    logger.error('email', 'Failed to send email', {
+      to: maskEmail(to),
+      host,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    });
     // Propagate to BullMQ worker (retries per `attempts: 4`).
     throw error instanceof Error ? error : new Error(String(error));
   }

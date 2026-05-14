@@ -16,10 +16,14 @@
 //   - Returns structured stats so the caller can surface them in the UI.
 
 import { gzipSync } from 'node:zlib';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { prisma } from '@/lib/prisma';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import {
+  uploadBackupBuffer,
+  listBackupObjects,
+  removeBackupObjects,
+} from '@/lib/supabase';
 
 export const BACKUP_PREFIX = 'backups/';
 const RETENTION_DAYS = 30;
@@ -51,15 +55,6 @@ export class BackupError extends Error {
   }
 }
 
-function getSupabaseClient(): SupabaseClient {
-  const supabaseUrl = env.SUPABASE_URL;
-  const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !supabaseKey) {
-    throw new BackupError('Supabase env vars not configured', 'NOT_CONFIGURED');
-  }
-  return createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
-}
-
 /**
  * Runs a full backup and uploads it to Supabase. Throws `BackupError` for
  * structured failures (caller decides whether to log + propagate or surface
@@ -71,8 +66,14 @@ function getSupabaseClient(): SupabaseClient {
 export async function runDbBackup(options: { rotate?: boolean } = {}): Promise<BackupRunResult> {
   const rotate = options.rotate !== false;
   const startedAt = Date.now();
-  const supabase = getSupabaseClient();
-  const bucket = getBackupBucket();
+
+  // Bucket is read lazily by `uploadBackupBuffer` / `listBackupObjects`
+  // through the shared singleton in src/lib/supabase.ts. NOT_CONFIGURED
+  // surfaces as a thrown Error from those helpers — wrap and re-emit
+  // as a BackupError so the caller's structured logging stays clean.
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new BackupError('Supabase env vars not configured', 'NOT_CONFIGURED');
+  }
 
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const objectKey = `${BACKUP_PREFIX}${today}.json.gz`;
@@ -177,17 +178,17 @@ export async function runDbBackup(options: { rotate?: boolean } = {}): Promise<B
   const json = JSON.stringify(dump);
   const gz = gzipSync(json, { level: 9 });
 
-  const { error: uploadErr } = await supabase.storage
-    .from(bucket)
-    .upload(objectKey, gz, {
-      // application/octet-stream because the private bucket's MIME whitelist
-      // does NOT include application/gzip (only pdf + images). The file
-      // extension `.json.gz` keeps the format obvious for downloads.
-      contentType: 'application/octet-stream',
-      upsert: true,
-    });
-  if (uploadErr) {
-    throw new BackupError(`Upload failed: ${uploadErr.message}`, 'UPLOAD_FAILED');
+  // Upload through the dedicated internal-trust helper (no magic-bytes
+  // validation, default `application/octet-stream`, upsert: true). The
+  // bucket itself must allow this MIME — see CLAUDE.md "Action manuelle
+  // backup bucket" for the one-time Supabase SQL.
+  try {
+    await uploadBackupBuffer(gz, objectKey);
+  } catch (err) {
+    throw new BackupError(
+      `Upload failed: ${err instanceof Error ? err.message : String(err)}`,
+      'UPLOAD_FAILED',
+    );
   }
 
   // Rotation — list and delete dumps older than RETENTION_DAYS. Non-fatal:
@@ -195,22 +196,18 @@ export async function runDbBackup(options: { rotate?: boolean } = {}): Promise<B
   let deleted = 0;
   if (rotate) {
     try {
-      const { data: files, error: listErr } = await supabase.storage
-        .from(bucket)
-        .list(BACKUP_PREFIX.replace(/\/$/, ''), { limit: 1000 });
-      if (!listErr && files) {
-        const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 3600 * 1000);
-        const stale = files
-          .filter((f) => /^\d{4}-\d{2}-\d{2}\.json\.gz$/.test(f.name))
-          .filter((f) => {
-            const day = f.name.slice(0, 10);
-            return new Date(day) < cutoff;
-          })
-          .map((f) => `${BACKUP_PREFIX}${f.name}`);
-        if (stale.length > 0) {
-          const { error: delErr } = await supabase.storage.from(bucket).remove(stale);
-          if (!delErr) deleted = stale.length;
-        }
+      const files = await listBackupObjects(BACKUP_PREFIX.replace(/\/$/, ''), { limit: 1000 });
+      const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 3600 * 1000);
+      const stale = files
+        .filter((f) => /^\d{4}-\d{2}-\d{2}\.json\.gz$/.test(f.name))
+        .filter((f) => {
+          const day = f.name.slice(0, 10);
+          return new Date(day) < cutoff;
+        })
+        .map((f) => `${BACKUP_PREFIX}${f.name}`);
+      if (stale.length > 0) {
+        await removeBackupObjects(stale);
+        deleted = stale.length;
       }
     } catch (err) {
       logger.warn('db-backup', 'rotation failed (non-fatal)', {
@@ -242,13 +239,11 @@ export interface BackupListItem {
 }
 
 export async function listBackups(limit = 90): Promise<BackupListItem[]> {
-  const supabase = getSupabaseClient();
-  const bucket = getBackupBucket();
-  const { data: files, error } = await supabase.storage
-    .from(bucket)
-    .list(BACKUP_PREFIX.replace(/\/$/, ''), { limit, sortBy: { column: 'name', order: 'desc' } });
-  if (error) throw error;
-  return (files ?? [])
+  const files = await listBackupObjects(BACKUP_PREFIX.replace(/\/$/, ''), {
+    limit,
+    sortBy: { column: 'name', order: 'desc' },
+  });
+  return files
     .filter((f) => /^\d{4}-\d{2}-\d{2}\.json\.gz$/.test(f.name))
     .map((f) => ({
       date: f.name.slice(0, 10),

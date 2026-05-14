@@ -24,6 +24,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: 'INVALID_BODY' }, { status: 400 });
   }
 
+  // Surface a precise "config_missing" code BEFORE attempting send, so
+  // the SUPERADMIN sees exactly which Vercel env var is absent rather
+  // than an opaque SMTP timeout. The list is duplicated server-side
+  // (not relying on /api/admin/diagnostics' env booleans) so this
+  // endpoint stands alone as a "is email actually working?" probe.
+  if (process.env.NODE_ENV === 'production') {
+    const missing: string[] = [];
+    if (!process.env.EMAIL_SERVER_HOST) missing.push('EMAIL_SERVER_HOST');
+    if (!process.env.EMAIL_SERVER_USER) missing.push('EMAIL_SERVER_USER');
+    if (!process.env.EMAIL_SERVER_PASSWORD) missing.push('EMAIL_SERVER_PASSWORD');
+    if (missing.length > 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'config_missing',
+          missing,
+          hint: 'Configure these env vars in Vercel → Project Settings → Environment Variables, then redeploy.',
+        },
+        { status: 503 },
+      );
+    }
+  }
+
+  const startedAt = Date.now();
   const now = new Date();
   try {
     await sendEmail({
@@ -32,11 +56,18 @@ export async function POST(request: Request) {
       html: `<p>Si tu lis ce message, l'envoi email fonctionne. <strong>${now.toISOString()}</strong></p>`,
       text: `Si tu lis ce message, l'envoi email fonctionne. ${now.toISOString()}`,
     });
-    return NextResponse.json({ ok: true, sentAt: now.toISOString() });
+    return NextResponse.json({
+      ok: true,
+      sentAt: now.toISOString(),
+      durationMs: Date.now() - startedAt,
+    });
   } catch (err) {
     // Mask provider details — only return a short message, never the stack
     // (could leak SMTP creds in some Nodemailer error paths).
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ ok: false, error: msg.slice(0, 200) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: msg.slice(0, 200), durationMs: Date.now() - startedAt },
+      { status: 500 },
+    );
   }
 }
