@@ -27,6 +27,19 @@ jobs:
       - run: npx prisma generate
       - run: npx tsc --noEmit
 
+  route-exports:
+    # Catches the Next.js 15 "route.ts can only export HTTP handlers"
+    # build error WAY before Vercel sees it. See scripts/check-route-exports.mjs.
+    name: route.ts exports
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/check-route-exports.mjs
+
   test:
     name: Tests
     runs-on: ubuntu-latest
