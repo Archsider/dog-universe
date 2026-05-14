@@ -1,0 +1,45 @@
+name: Bundle budget
+
+on:
+  pull_request:
+    branches: [main]
+
+# Builds the Next.js client bundle, then runs scripts/check-bundle-budget.mjs
+# against .bundle-budget.json. Fails the PR if any limit is exceeded.
+#
+# Why this matters: a casual `npm install heavy-lib` can quietly add
+# 200 KB to the initial JS payload. On 3G Maroc that's 1-2 extra seconds
+# of LCP for every visitor. This guard makes the regression visible BEFORE
+# merge, not after a customer complains.
+jobs:
+  budget:
+    name: Bundle size check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Build needs minimal env to compile.
+      NEXTAUTH_SECRET: bundle-budget-fake-secret
+      NEXTAUTH_URL: http://localhost:3000
+      DATABASE_URL: postgresql://bb:bb@localhost:5432/bb
+      DIRECT_URL: postgresql://bb:bb@localhost:5432/bb
+      SKIP_ENV_VALIDATION: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Build Next.js
+        run: npx next build
+
+      - name: Check bundle budget
+        run: node scripts/check-bundle-budget.mjs

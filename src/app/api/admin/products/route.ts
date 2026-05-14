@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
+import { serializeProduct } from './_lib/serialize';
 
 function isAdmin(role?: string) {
   return role === 'ADMIN' || role === 'SUPERADMIN';
@@ -28,39 +29,6 @@ const createSchema = z.object({
   imageUrl: z.string().max(2048).optional(),
 });
 
-type ProductRow = {
-  id: string; name: string; brand: string | null; reference: string | null;
-  category: string | null; description: string | null;
-  price: unknown; costPrice: unknown;
-  stock: number; lowStockThreshold: number | null;
-  available: boolean; isArchived: boolean; version: number;
-  targetSpecies: string; targetAge: string; supplier: string | null;
-  weight: string | null; imageUrl: string | null; createdAt: Date;
-};
-
-export function serializeProduct(p: ProductRow) {
-  return {
-    id: p.id,
-    name: p.name,
-    brand: p.brand,
-    reference: p.reference,
-    category: p.category,
-    description: p.description,
-    price: toNumber(p.price as never),
-    costPrice: p.costPrice == null ? null : toNumber(p.costPrice as never),
-    stock: p.stock,
-    lowStockThreshold: p.lowStockThreshold,
-    available: p.available,
-    isArchived: p.isArchived,
-    version: p.version,
-    targetSpecies: p.targetSpecies,
-    targetAge: p.targetAge,
-    supplier: p.supplier,
-    weight: p.weight,
-    imageUrl: p.imageUrl,
-    createdAt: p.createdAt,
-  };
-}
 
 export async function GET(request: NextRequest) {
   const session = await auth();

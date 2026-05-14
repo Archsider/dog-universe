@@ -5,6 +5,7 @@ import { logAction } from '@/lib/log';
 import { calculateSuggestedGrade } from '@/lib/loyalty';
 import { invalidateLoyaltyCache } from '@/lib/loyalty-server';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -146,7 +147,11 @@ export async function PATCH(request: Request, { params }: Params) {
     updateData.historicalNote = body.historicalNote ? String(body.historicalNote).trim().slice(0, 500) : null;
   }
 
-  await prisma.user.update({ where: { id }, data: updateData });
+  await withSpan(
+    'api.admin.clients.update',
+    { clientId: id, actorId: session.user.id, fields: Object.keys(updateData).join(',') },
+    () => prisma.user.update({ where: { id }, data: updateData }),
+  );
 
   // Recalculate loyalty grade when historical data changes (unless manually overridden)
   if (recalculateLoyalty) {
@@ -186,22 +191,27 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   const now = new Date();
 
-  await prisma.$transaction(async (tx) => {
-    // Soft-delete all active pets (preserve history of past bookings)
-    await tx.pet.updateMany({
-      where: notDeleted({ ownerId: id }),
-      data: { deletedAt: now },
-    });
+  await withSpan(
+    'api.admin.clients.softDelete',
+    { clientId: id, actorId: session.user.id },
+    () =>
+      prisma.$transaction(async (tx) => {
+        // Soft-delete all active pets (preserve history of past bookings)
+        await tx.pet.updateMany({
+          where: notDeleted({ ownerId: id }),
+          data: { deletedAt: now },
+        });
 
-    // Soft-delete all active bookings
-    await tx.booking.updateMany({
-      where: notDeleted({ clientId: id }),
-      data: { deletedAt: now },
-    });
+        // Soft-delete all active bookings
+        await tx.booking.updateMany({
+          where: notDeleted({ clientId: id }),
+          data: { deletedAt: now },
+        });
 
-    // Soft-delete the User row (preserves FK integrity on Invoice/ActionLog)
-    await tx.user.update({ where: { id }, data: { deletedAt: now } });
-  });
+        // Soft-delete the User row (preserves FK integrity on Invoice/ActionLog)
+        await tx.user.update({ where: { id }, data: { deletedAt: now } });
+      }),
+  );
 
   await logAction({
     userId: session.user.id,
