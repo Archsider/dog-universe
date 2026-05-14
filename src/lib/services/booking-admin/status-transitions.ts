@@ -27,7 +27,7 @@ import { getEmailTemplate } from '@/lib/email';
 import {
   formatDateFR, petVerb, petArrived, petChouchoute,
 } from '@/lib/sms';
-import { sendEmailNow, sendSmsNow } from '@/lib/notify-now';
+import { sendEmailNow, sendSmsNow, sendSmsRespectful } from '@/lib/notify-now';
 import { ServiceType } from './constants';
 import { notDeleted } from '@/lib/prisma-soft';
 
@@ -44,6 +44,10 @@ type BookingForStatus = {
     email: string;
     phone: string | null;
     language: string | null;
+    /** Walk-in flag — drives the COMPTA SMS suppression policy
+     *  (`docs/adr/0008-respectful-sms-policy.md`). Always loaded by the
+     *  PATCH dispatcher which `include: { client: true }`. */
+    isWalkIn: boolean;
   };
   bookingPets: Array<{ pet: { id: string; name: string; species: string; gender: string | null } }>;
   boardingDetail: { includeGrooming: boolean } | null;
@@ -288,7 +292,20 @@ export async function runStatusSideEffects(args: RunStatusSideEffectsArgs) {
       hasGrooming
     );
 
-    sendSmsNow({ to: booking.client.phone, message: `Bonjour ${firstName} ! Le séjour de ${petNames} est terminé. Ce fut un plaisir de ${pets.length > 1 ? 'les' : "l'"} accueillir. À très bientôt ! — Dog Universe 🐾` });
+    // Client SMS = COMPTA: a "stay finished" message is non-urgent (animal
+    // is already home or on its way), so it respects walk-in skip + quiet
+    // hours per the respectful-SMS policy. Admin SMS = OPS (operator wants
+    // to see the close happened, even at 23h doing accounting catch-up).
+    sendSmsRespectful(
+      {
+        to: booking.client.phone,
+        message: `Bonjour ${firstName} ! Le séjour de ${petNames} est terminé. Ce fut un plaisir de ${pets.length > 1 ? 'les' : "l'"} accueillir. À très bientôt ! — Dog Universe 🐾`,
+      },
+      {
+        category: 'COMPTA',
+        recipient: booking.client.isWalkIn ? 'walkin' : 'standard',
+      },
+    );
     sendSmsNow({ to: 'ADMIN', message: `✅ Départ : ${petNames} de ${booking.client.name} a quitté la pension.` });
 
     await logAction({

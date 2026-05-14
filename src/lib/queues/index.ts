@@ -140,18 +140,35 @@ export async function enqueueEmail(data: EmailJobData, jobId?: string): Promise<
   }
 }
 
-export async function enqueueSms(data: SmsJobData, jobId?: string): Promise<void> {
+export async function enqueueSms(
+  data: SmsJobData,
+  jobId?: string,
+  options?: {
+    /** BullMQ delay in milliseconds — job is invisible to workers until
+     *  the delay has elapsed. Used by the respectful-SMS policy to defer
+     *  non-urgent compta SMS until business hours. The worker cron tick
+     *  every 5 min picks delayed jobs up as soon as they become eligible. */
+    delay?: number;
+  },
+): Promise<void> {
   const masked = data.to && data.to !== 'ADMIN' ? maskPhone(data.to) : (data.to ?? 'null');
   // Use caller-supplied jobId or derive one from content — prevents BullMQ
   // from re-enqueuing the same SMS when Redis flushes and the cron re-runs.
   const resolvedJobId = jobId ?? autoSmsJobId(data);
   if (!isBullMQConfigured()) {
+    // Fail-open fallback: send directly. We deliberately IGNORE the
+    // requested delay here — without Redis we have no queue, and a
+    // direct send is better than no send at all.
     const fn = data.to === 'ADMIN' ? sendAdminSMS(data.message) : sendSMS(data.to, data.message);
     await fn.catch((e) => logger.error('bullmq', 'sms direct send failed', { masked, error: e instanceof Error ? e.message : String(e) }));
     return;
   }
   try {
-    await getSmsQueue().add('send', data, { ...SMS_JOB_OPTIONS, jobId: resolvedJobId });
+    await getSmsQueue().add('send', data, {
+      ...SMS_JOB_OPTIONS,
+      jobId: resolvedJobId,
+      ...(options?.delay !== undefined && options.delay > 0 ? { delay: options.delay } : {}),
+    });
     // R4: stamp last-enqueue so the worker cron can skip BullMQ probes on idle ticks.
     void markQueueEnqueue();
   } catch (err) {

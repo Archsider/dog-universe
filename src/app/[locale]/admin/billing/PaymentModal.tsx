@@ -23,6 +23,12 @@ interface Props {
   locale: string;
   invoiceAmount: number | Decimal;
   paidAmount: number | Decimal;
+  /** Walk-in flag of the invoice's client. When `true`, the "Envoyer SMS
+   *  de confirmation" checkbox defaults to OFF — the respectful-SMS policy
+   *  (ADR-0008) suppresses payment SMS for walk-ins anyway, this just
+   *  surfaces that decision to the operator. Optional for backward
+   *  compatibility with call sites that don't pass it yet. */
+  isWalkIn?: boolean;
 }
 
 const PAYMENT_METHODS = [
@@ -43,8 +49,21 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Casablanca quiet hours mirror the server policy (src/lib/sms-policy.ts).
+// Duplicated here as a pure 1-line function so the UI label updates without
+// a server round-trip. Keep the constants in sync — if the server policy
+// changes, update both. See ADR-0008.
+const CASA_OFFSET_MINUTES = 60;
+const QUIET_START = 21;
+const QUIET_END = 9;
+function isQuietHoursCasaClient(now: Date = new Date()): boolean {
+  const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const casaHour = Math.floor((utcMin + CASA_OFFSET_MINUTES) / 60) % 24;
+  return casaHour < QUIET_END || casaHour >= QUIET_START;
+}
+
 export default function PaymentModal({
-  invoiceId, currentStatus, locale, invoiceAmount: invoiceAmountProp, paidAmount: paidAmountProp,
+  invoiceId, currentStatus, locale, invoiceAmount: invoiceAmountProp, paidAmount: paidAmountProp, isWalkIn,
 }: Props) {
   const isFr = locale === 'fr';
   const router = useRouter();
@@ -61,6 +80,10 @@ export default function PaymentModal({
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // SMS notification toggle. Defaults: ON for standard clients, OFF for
+  // walk-ins (matches the server policy default — see ADR-0008). The
+  // operator can override either way per-payment.
+  const [sendClientSms, setSendClientSms] = useState<boolean>(!isWalkIn);
 
   // Recompute remaining from live payments (may differ from paidAmount prop after actions)
   const livePaid = payments.reduce((s, p) => s + Number(p.amount), 0);
@@ -86,6 +109,9 @@ export default function PaymentModal({
     setMethod('CASH');
     setPaymentDate(todayIso());
     setNotes('');
+    // Reset SMS toggle to its context-aware default on each open. Avoids
+    // a sticky "I unchecked it once 3 months ago" surprise.
+    setSendClientSms(!isWalkIn);
     setOpen(true);
     await fetchPayments();
   };
@@ -116,7 +142,13 @@ export default function PaymentModal({
           'Content-Type': 'application/json',
           'Idempotency-Key': idempotencyKey,
         },
-        body: JSON.stringify({ amount, paymentMethod: method, paymentDate, notes: notes || null }),
+        body: JSON.stringify({
+          amount,
+          paymentMethod: method,
+          paymentDate,
+          notes: notes || null,
+          sendClientSms,
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -256,6 +288,41 @@ export default function PaymentModal({
                   placeholder={isFr ? 'Ex : chèque n°1234' : 'e.g. cheque #1234'}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gold-300"
                 />
+              </div>
+
+              {/* ── Confirmation SMS toggle ── */}
+              {/* Surfaces the respectful-SMS policy (ADR-0008) directly in
+                  the form. The checkbox is the single source of truth: if
+                  unchecked, no SMS at all. If checked, the server still
+                  applies walk-in suppression + quiet-hours defer based on
+                  context. The dynamic label tells the operator what will
+                  actually happen so they're never surprised. */}
+              <div className="rounded-lg border border-ivory-200 bg-ivory-50/50 px-3 py-2.5">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sendClientSms}
+                    onChange={(e) => setSendClientSms(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gold-600 focus:ring-gold-300"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-charcoal">
+                      {isFr ? 'Envoyer SMS de confirmation au client' : 'Send confirmation SMS to client'}
+                    </p>
+                    {isWalkIn && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        ⓘ {isFr ? 'Walk-in — SMS non recommandé' : 'Walk-in — SMS not recommended'}
+                      </p>
+                    )}
+                    {!isWalkIn && sendClientSms && isQuietHoursCasaClient() && (
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        ⏰ {isFr
+                          ? 'Heures calmes — SMS reporté à 9h demain'
+                          : 'Quiet hours — SMS deferred to 9 AM tomorrow'}
+                      </p>
+                    )}
+                  </div>
+                </label>
               </div>
 
               {/* ── Submit ── */}

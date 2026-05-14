@@ -13,7 +13,7 @@ interface InvoiceRow {
   amount: unknown;
   paidAmount: unknown;
   status: string;
-  client: { id: string; name: string; email: string };
+  client: { id: string; name: string; email: string; isWalkIn: boolean };
   booking: { serviceType: string } | null;
 }
 
@@ -211,6 +211,7 @@ export function BillingInvoicesTable({
                             locale={locale}
                             invoiceAmount={invAmount}
                             paidAmount={invPaidAmount}
+                            isWalkIn={inv.client.isWalkIn}
                           />
                         </div>
                       </td>

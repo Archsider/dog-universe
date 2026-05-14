@@ -21,7 +21,13 @@
 import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
 import { tryReserveSmsSend, markSmsSent } from '@/lib/sms-dedup';
+import { enqueueSms } from '@/lib/queues';
 import type { EmailJobData, SmsJobData } from '@/lib/queues/index';
+import {
+  decideSmsPolicy,
+  type SmsCategory,
+  type SmsRecipientType,
+} from '@/lib/sms-policy';
 import { logger } from '@/lib/logger';
 
 const RETRY_DELAYS_MS = [0, 1_000, 3_000];
@@ -107,4 +113,75 @@ export function sendEmailNow(data: EmailJobData): void {
 
 export function sendSmsNow(data: SmsJobData): void {
   void sendSmsWithRetry(data);
+}
+
+/**
+ * Send a transactional SMS while respecting the business policy:
+ *
+ *   - Walk-in client + COMPTA category → SKIP (no SMS at all). A
+ *     one-off cash payer doesn't expect ongoing notifications.
+ *
+ *   - Standard client + COMPTA + quiet hours (21h–9h Casablanca) →
+ *     DEFER to next 9h via BullMQ delayed job. Atomic SmsLog dedup
+ *     still applies, so even multiple admin-side mutations queue at
+ *     most one SMS per (phone, content) pair.
+ *
+ *   - ADMIN recipient OR OPS category → send immediately, no
+ *     conditions. Operational events (taxi tracking, booking
+ *     confirmations) and admin-side notifications are real-time by
+ *     design.
+ *
+ * Defaults are conservative: `category = 'OPS'` and
+ * `recipient = 'standard'` (or 'admin' if `to === 'ADMIN'`). A caller
+ * that forgets to mark a payment SMS as COMPTA ships it as OPS — which
+ * means it WILL get sent (no spam suppression). Better to leak a
+ * notification than to silence a critical one.
+ *
+ * See `src/lib/sms-policy.ts` for the pure decision function and the
+ * docs/adr/0008-respectful-sms-policy.md ADR for the rationale.
+ */
+export function sendSmsRespectful(
+  data: SmsJobData,
+  opts: {
+    category: SmsCategory;
+    /** Override recipient classification. Defaults: 'admin' if
+     *  `to === 'ADMIN'`, otherwise 'standard'. Pass 'walkin' for known
+     *  walk-in client phones. */
+    recipient?: SmsRecipientType;
+  },
+): void {
+  const recipient: SmsRecipientType =
+    opts.recipient ?? (data.to === 'ADMIN' ? 'admin' : 'standard');
+
+  const decision = decideSmsPolicy({
+    category: opts.category,
+    recipient,
+  });
+
+  switch (decision.kind) {
+    case 'send-now':
+      sendSmsNow(data);
+      return;
+
+    case 'defer':
+      // BullMQ delayed job → invisible until delayMs elapses → worker
+      // cron tick after 9h picks it up. The standard processor path
+      // re-checks SmsLog dedup at delivery time, so a second compta SMS
+      // with the same content queued during the night collapses to one.
+      void enqueueSms(data, undefined, { delay: decision.delayMs });
+      logger.info('notify-now', 'sms deferred (quiet hours)', {
+        to: data.to === 'ADMIN' ? 'ADMIN' : maskPhone(data.to ?? ''),
+        delayMs: decision.delayMs,
+        category: opts.category,
+      });
+      return;
+
+    case 'skip':
+      logger.info('notify-now', 'sms suppressed by policy', {
+        to: data.to === 'ADMIN' ? 'ADMIN' : maskPhone(data.to ?? ''),
+        reason: decision.reason,
+        category: opts.category,
+      });
+      return;
+  }
 }
