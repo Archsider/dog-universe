@@ -5,6 +5,21 @@ import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
 
+// Trip statuses where the driver is actively driving (the green-pulse banner).
+// Mirrors the FLOWS table in the status transition route — keep in sync.
+const ACTIVE_TRIP_STATUSES = ['EN_ROUTE_TO_CLIENT', 'ON_SITE_CLIENT', 'ANIMAL_ON_BOARD'] as const;
+const TERMINAL_TRIP_STATUSES = ['ARRIVED_AT_PENSION', 'ARRIVED_AT_CLIENT', 'COMPLETED'] as const;
+
+// "YYYY-MM-DD" in the local timezone (Casablanca). TaxiTrip.date is stored
+// as a String in that format (it comes straight from <input type="date">),
+// so comparing string-to-string is exact and timezone-free.
+function todayDateStr(now: Date): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default async function DriverDashboardPage({
   params,
 }: {
@@ -18,75 +33,120 @@ export default async function DriverDashboardPage({
 
   const isFr = locale !== 'en';
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart);
-  todayEnd.setDate(todayEnd.getDate() + 1);
+  const todayStr = todayDateStr(now);
 
-  const [activeBooking, todayBookings, upcoming] = await Promise.all([
-    prisma.booking.findFirst({
+  // We pivot on TaxiTrip (not Booking) so the dashboard surfaces every leg
+  // the driver actually drives: STANDALONE Pet Taxi services AND OUTBOUND /
+  // RETURN addon trips attached to BOARDING bookings. The previous version
+  // filtered Booking.serviceType=PET_TAXI and TaxiTrip.tripType=STANDALONE,
+  // which silently hid all boarding-addon driving from the driver dashboard.
+  const [activeTrip, todayTrips, upcomingTrips] = await Promise.all([
+    prisma.taxiTrip.findFirst({
       where: {
-        serviceType: 'PET_TAXI',
-        status: 'IN_PROGRESS',
-        deletedAt: null,
+        OR: [
+          { status: { in: [...ACTIVE_TRIP_STATUSES] } },
+          { trackingActive: true },
+        ],
+        booking: { deletedAt: null },
       },
+      // Most recently updated wins — handles the "tracking left on by mistake"
+      // case where two trips technically match.
+      orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
-        startDate: true,
-        arrivalTime: true,
-        client: { select: { name: true, phone: true } },
-        bookingPets: { select: { pet: { select: { name: true } } } },
-        taxiDetail: { select: { pickupAddress: true, dropoffAddress: true } },
-        taxiTrips: {
-          where: { tripType: 'STANDALONE' },
-          select: { distanceKm: true, status: true, trackingActive: true },
-        },
-      },
-    }),
-    prisma.booking.findMany({
-      where: {
-        serviceType: 'PET_TAXI',
-        startDate: { gte: todayStart, lt: todayEnd },
-        status: { in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },
-        deletedAt: null,
-      },
-      select: {
-        id: true,
+        bookingId: true,
+        tripType: true,
         status: true,
-        totalPrice: true,
-        taxiTrips: {
-          where: { tripType: 'STANDALONE' },
-          select: { distanceKm: true },
+        address: true,
+        distanceKm: true,
+        trackingActive: true,
+        booking: {
+          select: {
+            id: true,
+            startDate: true,
+            arrivalTime: true,
+            client: { select: { name: true, phone: true } },
+            bookingPets: { select: { pet: { select: { name: true } } } },
+            taxiDetail: { select: { pickupAddress: true, dropoffAddress: true } },
+            boardingDetail: { select: { taxiGoAddress: true, taxiReturnAddress: true } },
+          },
         },
       },
     }),
-    prisma.booking.findMany({
+    prisma.taxiTrip.findMany({
       where: {
-        serviceType: 'PET_TAXI',
-        startDate: { gte: now, lt: new Date(todayEnd.getTime() + 24 * 60 * 60 * 1000) },
-        status: 'CONFIRMED',
-        deletedAt: null,
+        date: todayStr,
+        booking: { deletedAt: null },
+      },
+      select: {
+        id: true,
+        tripType: true,
+        status: true,
+        distanceKm: true,
+        booking: {
+          select: {
+            serviceType: true,
+            totalPrice: true,
+            boardingDetail: { select: { taxiAddonPrice: true } },
+          },
+        },
+      },
+    }),
+    prisma.taxiTrip.findMany({
+      where: {
+        date: { gt: todayStr },
+        status: 'PLANNED',
+        booking: { deletedAt: null },
       },
       take: 10,
-      orderBy: [{ startDate: 'asc' }, { arrivalTime: 'asc' }],
+      orderBy: [{ date: 'asc' }, { time: 'asc' }],
       select: {
         id: true,
-        startDate: true,
-        arrivalTime: true,
-        client: { select: { name: true } },
-        taxiDetail: { select: { pickupAddress: true } },
+        bookingId: true,
+        tripType: true,
+        date: true,
+        time: true,
+        address: true,
+        booking: {
+          select: {
+            client: { select: { name: true } },
+            taxiDetail: { select: { pickupAddress: true } },
+            boardingDetail: { select: { taxiGoAddress: true, taxiReturnAddress: true } },
+          },
+        },
       },
     }),
   ]);
 
-  const totalKmToday = todayBookings.reduce(
-    (sum, b) => sum + (b.taxiTrips[0]?.distanceKm ?? 0),
-    0,
-  );
-  const completedCount = todayBookings.filter(b => b.status === 'COMPLETED').length;
-  const inProgressCount = todayBookings.filter(b => b.status === 'IN_PROGRESS').length;
-  const revenueToday = todayBookings
-    .filter(b => b.status === 'COMPLETED')
-    .reduce((sum, b) => sum + Number(b.totalPrice ?? 0), 0);
+  const totalKmToday = todayTrips.reduce((sum, t) => sum + (t.distanceKm ?? 0), 0);
+  const completedCount = todayTrips.filter((t) =>
+    (TERMINAL_TRIP_STATUSES as readonly string[]).includes(t.status),
+  ).length;
+  const inProgressCount = todayTrips.filter((t) =>
+    (ACTIVE_TRIP_STATUSES as readonly string[]).includes(t.status),
+  ).length;
+  // Revenue today: for STANDALONE trips, the whole booking is the taxi ride;
+  // for addon trips, only the taxiAddonPrice slice represents the driver's
+  // revenue (the rest is boarding/grooming, not driving).
+  const revenueToday = todayTrips
+    .filter((t) => (TERMINAL_TRIP_STATUSES as readonly string[]).includes(t.status))
+    .reduce((sum, t) => {
+      if (t.booking.serviceType === 'PET_TAXI') {
+        return sum + Number(t.booking.totalPrice ?? 0);
+      }
+      return sum + Number(t.booking.boardingDetail?.taxiAddonPrice ?? 0);
+    }, 0);
+
+  // Pickup address for the active trip: OUTBOUND/STANDALONE use the client's
+  // pickup; RETURN uses the pension as the pickup (the dog leaves the
+  // pension and goes back home), so taxiReturnAddress is the start.
+  const activePickupAddress =
+    activeTrip?.tripType === 'RETURN'
+      ? activeTrip.booking.boardingDetail?.taxiReturnAddress ?? null
+      : activeTrip?.booking.taxiDetail?.pickupAddress ??
+        activeTrip?.booking.boardingDetail?.taxiGoAddress ??
+        activeTrip?.address ??
+        null;
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
@@ -98,9 +158,9 @@ export default async function DriverDashboardPage({
       </header>
 
       {/* Active trip */}
-      {activeBooking ? (
+      {activeTrip ? (
         <Link
-          href={`/${locale}/admin/reservations/${activeBooking.id}`}
+          href={`/${locale}/admin/reservations/${activeTrip.bookingId}`}
           className="block bg-white rounded-xl border-2 border-[#C4974A] p-5 shadow-card hover:shadow-lg transition-shadow"
         >
           <div className="flex items-center gap-2 mb-2">
@@ -108,26 +168,29 @@ export default async function DriverDashboardPage({
             <span className="text-xs font-semibold uppercase tracking-wider text-green-600">
               {isFr ? 'Course en cours' : 'Active trip'}
             </span>
-            {activeBooking.taxiTrips[0]?.trackingActive && (
+            <span className="text-[10px] text-charcoal/50 uppercase tracking-wider">
+              · {activeTrip.tripType}
+            </span>
+            {activeTrip.trackingActive && (
               <span className="ml-auto text-xs text-[#C4974A] font-medium">
                 📍 {isFr ? 'Suivi actif' : 'Tracking on'}
               </span>
             )}
           </div>
-          <p className="font-medium text-charcoal">{activeBooking.client.name}</p>
+          <p className="font-medium text-charcoal">{activeTrip.booking.client.name}</p>
           <p className="text-sm text-charcoal/70 mt-1">
-            🐾 {activeBooking.bookingPets.map(bp => bp.pet.name).join(', ')}
+            🐾 {activeTrip.booking.bookingPets.map((bp) => bp.pet.name).join(', ')}
           </p>
-          {activeBooking.taxiDetail?.pickupAddress && (
+          {activePickupAddress && (
             <p className="text-xs text-charcoal/60 mt-2 flex items-start gap-1">
               <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
-              <span>{activeBooking.taxiDetail.pickupAddress}</span>
+              <span>{activePickupAddress}</span>
             </p>
           )}
-          {activeBooking.taxiTrips[0] && activeBooking.taxiTrips[0].distanceKm > 0 && (
+          {activeTrip.distanceKm > 0 && (
             <p className="text-xs text-[#C4974A] font-semibold mt-2">
               <Route className="inline h-3 w-3 mr-1" />
-              {activeBooking.taxiTrips[0].distanceKm.toFixed(1)} km
+              {activeTrip.distanceKm.toFixed(1)} km
             </p>
           )}
         </Link>
@@ -141,7 +204,7 @@ export default async function DriverDashboardPage({
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl border border-[rgba(196,151,74,0.2)] p-4">
           <p className="text-xs text-charcoal/60 mb-1">{isFr ? 'Courses aujourd\'hui' : 'Trips today'}</p>
-          <p className="text-2xl font-semibold text-charcoal">{todayBookings.length}</p>
+          <p className="text-2xl font-semibold text-charcoal">{todayTrips.length}</p>
           <p className="text-[10px] text-charcoal/50">
             {completedCount} {isFr ? 'terminées' : 'completed'} · {inProgressCount} {isFr ? 'en cours' : 'in progress'}
           </p>
@@ -156,45 +219,64 @@ export default async function DriverDashboardPage({
         </div>
         <div className="bg-white rounded-xl border border-[rgba(196,151,74,0.2)] p-4">
           <p className="text-xs text-charcoal/60 mb-1">{isFr ? 'À venir' : 'Upcoming'}</p>
-          <p className="text-2xl font-semibold text-charcoal">{upcoming.length}</p>
+          <p className="text-2xl font-semibold text-charcoal">{upcomingTrips.length}</p>
         </div>
       </section>
 
       {/* Upcoming */}
-      {upcoming.length > 0 && (
+      {upcomingTrips.length > 0 && (
         <section>
           <h2 className="font-serif text-lg text-charcoal mb-3">
             {isFr ? 'Prochaines courses' : 'Upcoming trips'}
           </h2>
           <div className="space-y-2">
-            {upcoming.map(b => (
-              <Link
-                key={b.id}
-                href={`/${locale}/admin/reservations/${b.id}`}
-                className="block bg-white rounded-lg border border-[rgba(196,151,74,0.2)] p-3 hover:border-[#C4974A] transition-colors"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-charcoal text-sm truncate">{b.client.name}</p>
-                    {b.taxiDetail?.pickupAddress && (
-                      <p className="text-xs text-charcoal/60 truncate mt-0.5">
-                        <MapPin className="inline h-3 w-3 mr-1" />
-                        {b.taxiDetail.pickupAddress}
+            {upcomingTrips.map((trip) => {
+              const upcomingAddress =
+                trip.tripType === 'RETURN'
+                  ? trip.booking.boardingDetail?.taxiReturnAddress ?? null
+                  : trip.booking.taxiDetail?.pickupAddress ??
+                    trip.booking.boardingDetail?.taxiGoAddress ??
+                    trip.address ??
+                    null;
+              return (
+                <Link
+                  key={trip.id}
+                  href={`/${locale}/admin/reservations/${trip.bookingId}`}
+                  className="block bg-white rounded-lg border border-[rgba(196,151,74,0.2)] p-3 hover:border-[#C4974A] transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-charcoal text-sm truncate">
+                        {trip.booking.client.name}
+                        <span className="ml-1 text-[10px] uppercase tracking-wider text-charcoal/50">
+                          · {trip.tripType}
+                        </span>
                       </p>
-                    )}
+                      {upcomingAddress && (
+                        <p className="text-xs text-charcoal/60 truncate mt-0.5">
+                          <MapPin className="inline h-3 w-3 mr-1" />
+                          {upcomingAddress}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <p className="text-sm font-medium text-charcoal flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {trip.time ?? '—'}
+                      </p>
+                      <p className="text-xs text-charcoal/50">
+                        {trip.date
+                          ? new Date(`${trip.date}T00:00:00`).toLocaleDateString(
+                              isFr ? 'fr-FR' : 'en-GB',
+                              { day: '2-digit', month: 'short' },
+                            )
+                          : '—'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-shrink-0 text-right">
-                    <p className="text-sm font-medium text-charcoal flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {b.arrivalTime ?? '—'}
-                    </p>
-                    <p className="text-xs text-charcoal/50">
-                      {b.startDate.toLocaleDateString(isFr ? 'fr-FR' : 'en-GB', { day: '2-digit', month: 'short' })}
-                    </p>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </section>
       )}

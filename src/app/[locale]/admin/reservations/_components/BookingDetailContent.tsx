@@ -41,7 +41,9 @@ export default function BookingDetailContent({
     setBooking((prev) => ({ ...prev, notes }));
   }, []);
 
-  // Build CloseStayDialog booking shape
+  // Build CloseStayDialog booking shape. `invoiceAmount` is the post-discount
+  // total (source of truth once the invoice exists). The dialog falls back
+  // to `totalPrice` for bookings that don't have an invoice yet.
   const closeStayBooking = {
     id: booking.id,
     clientName: booking.client.name ?? booking.client.email,
@@ -50,6 +52,7 @@ export default function BookingDetailContent({
     endDate: booking.endDate,
     isOpenEnded: booking.isOpenEnded,
     totalPrice: booking.totalPrice,
+    invoiceAmount: booking.invoice?.amount ?? null,
   };
 
   return (

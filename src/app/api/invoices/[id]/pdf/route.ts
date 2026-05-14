@@ -66,6 +66,15 @@ export async function GET(req: Request, { params }: Params) {
         'Content-Type': 'application/pdf',
         'Content-Disposition': inline ? `inline; filename="${invoice.invoiceNumber}.pdf"` : `attachment; filename="${invoice.invoiceNumber}.pdf"`,
         'Content-Length': pdfBuffer.byteLength.toString(),
+        // Invoices are mutable: admin can add a discount or edit items, then
+        // re-open the same `?view=1` URL — Chrome's PDF viewer would
+        // otherwise serve the previous render from disk cache. Force a
+        // fresh fetch every time. The download path (no `?view=1`) shows
+        // the right number because the file is saved, not cached as a
+        // navigable URL — but we set the header uniformly anyway so
+        // a proxy/CDN can't second-guess us.
+        'Cache-Control': 'private, no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
       },
     });
   } catch (error) {
