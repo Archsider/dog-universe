@@ -6,6 +6,7 @@ import { generateContractPDF } from '@/lib/contract-pdf';
 import { uploadBufferPrivate, createSignedUrl } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -107,15 +108,19 @@ export async function POST(req: NextRequest) {
 
   // Save contract record in DB — catch P2002 for concurrent signing race condition
   try {
-    await prisma.clientContract.create({
-      data: {
-        clientId,
-        signedAt,
-        storageKey,
-        ipAddress,
-        version: '1.0',
-      },
-    });
+    await withSpan(
+      'api.contracts.sign',
+      { clientId, version: '1.0' },
+      () => prisma.clientContract.create({
+        data: {
+          clientId,
+          signedAt,
+          storageKey,
+          ipAddress,
+          version: '1.0',
+        },
+      }),
+    );
   } catch (err) {
     if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002') {
       return NextResponse.json({ error: 'Contract already signed' }, { status: 409 });

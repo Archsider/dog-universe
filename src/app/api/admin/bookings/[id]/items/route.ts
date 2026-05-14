@@ -12,6 +12,7 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { toNumber } from '@/lib/decimal';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -103,7 +104,10 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!booking) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await withSpan(
+      'api.admin.bookingItems.create',
+      { bookingId, actorId: session.user.id, type: parsed.data.type },
+      () => prisma.$transaction(async (tx) => {
       if (parsed.data.type === 'catalog') {
         const { productId, quantity } = parsed.data;
         // Lock the product row to serialize concurrent stock decrements.
@@ -191,7 +195,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       });
 
       return item;
-    });
+    }),
+    );
 
     return NextResponse.json(serializeItem(result), { status: 201 });
   } catch (err) {

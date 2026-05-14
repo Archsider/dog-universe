@@ -7,6 +7,7 @@ import { getEmailTemplate } from '@/lib/email';
 import { sendEmailNow } from '@/lib/notify-now';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -51,13 +52,17 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const result = await uploadFile(file, 'stay-photo');
 
-  const photo = await prisma.stayPhoto.create({
-    data: {
-      bookingId: id,
-      url: result.url,
-      caption,
-    },
-  });
+  const photo = await withSpan(
+    'api.admin.stayPhoto.create',
+    { bookingId: id, actorId: session.user.id, hasCaption: !!caption },
+    () => prisma.stayPhoto.create({
+      data: {
+        bookingId: id,
+        url: result.url,
+        caption,
+      },
+    }),
+  );
 
   // Notify client (non-blocking — photo is already saved)
   const petNames = booking.bookingPets.map(bp => bp.pet.name);

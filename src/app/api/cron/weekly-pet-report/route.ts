@@ -6,6 +6,7 @@ import { createNotification } from '@/lib/notifications';
 import { enqueueEmail } from '@/lib/queues';
 import { generateWeeklyPetReport } from '@/lib/ai';
 import { defineCron } from '@/lib/cron-runner';
+import { isFeatureEnabled } from '@/lib/feature-flags';
 
 export const maxDuration = 60;
 
@@ -30,6 +31,16 @@ export const GET = defineCron({
   name: 'weekly-pet-report',
   period: 'weekly',
   fn: async ({ now }) => {
+    // Feature flag: `weekly-pet-report-enabled` is OFF by default — the
+    // AI-generated weekly report is still maturing. Flip the flag ON
+    // (via /admin/feature-flags) when we're ready to ship.
+    // Anonymous context here because the cron has no user — only the
+    // global `enabled` and `rolloutPercent` matter.
+    const enabled = await isFeatureEnabled('weekly-pet-report-enabled', {});
+    if (!enabled) {
+      return { skipped: true, reason: 'feature_flag_off', sent: 0 };
+    }
+
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
 

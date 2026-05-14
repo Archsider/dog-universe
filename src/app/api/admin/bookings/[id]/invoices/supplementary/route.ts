@@ -17,6 +17,7 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -62,7 +63,10 @@ export async function POST(_request: NextRequest, { params }: Params) {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await withSpan(
+      'api.admin.invoices.supplementary',
+      { bookingId, actorId: session.user.id },
+      () => prisma.$transaction(async (tx) => {
       const unbilled = await tx.bookingItem.findMany({
         where: { bookingId, invoiceItemId: null },
       });
@@ -121,7 +125,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
       });
 
       return invoice;
-    });
+    }),
+    );
 
     return NextResponse.json(
       {

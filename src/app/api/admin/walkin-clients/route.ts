@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 // ---------------------------------------------------------------------------
 // POST /api/admin/walkin-clients
@@ -93,19 +94,23 @@ export async function POST(request: Request) {
   const walkInFirstName = parts[0] || trimmedName;
   const walkInLastName = parts.slice(1).join(' ') || walkInFirstName;
 
-  const user = await prisma.user.create({
-    data: {
-      firstName: walkInFirstName,
-      lastName: walkInLastName,
-      name: trimmedName,
-      phone: trimmedPhone,
-      email,
-      // Placeholder non-bcrypt → login portal impossible
-      passwordHash: `WALKIN_NO_ACCESS_${randomUUID().replace(/-/g, '')}`,
-      role: 'CLIENT',
-      isWalkIn: true,
-    },
-  });
+  const user = await withSpan(
+    'api.admin.walkin-clients.create',
+    { actorId: session.user.id, hasEmail: !!email },
+    () => prisma.user.create({
+      data: {
+        firstName: walkInFirstName,
+        lastName: walkInLastName,
+        name: trimmedName,
+        phone: trimmedPhone,
+        email,
+        // Placeholder non-bcrypt → login portal impossible
+        passwordHash: `WALKIN_NO_ACCESS_${randomUUID().replace(/-/g, '')}`,
+        role: 'CLIENT',
+        isWalkIn: true,
+      },
+    }),
+  );
 
   return NextResponse.json({
     id: user.id,
