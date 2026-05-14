@@ -52,6 +52,9 @@ What else was on the table, and why did we reject it?
 - [ADR-0003 — Idempotency strategy: Stripe-style header](0003-idempotency.md)
 - [ADR-0004 — Storage: 3 Supabase buckets, not 1](0004-three-storage-buckets.md)
 - [ADR-0005 — Decimal money columns, not Float](0005-decimal-money.md)
+- [ADR-0006 — GPS distance filter for Pet Taxi tracking](0006-gps-distance-filter.md)
+- [ADR-0007 — One way to send transactional SMS (atomic SmsLog dedup)](0007-transactional-sms-policy.md)
+- [ADR-0008 — Respectful SMS policy (quiet hours + walk-in suppression)](0008-respectful-sms-policy.md)
 
 ## Naming
 
