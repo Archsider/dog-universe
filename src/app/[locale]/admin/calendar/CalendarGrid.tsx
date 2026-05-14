@@ -1,96 +1,43 @@
 'use client';
 
+// Slim orchestrator — see _lib/ and _components/ for the extracted helpers
+// and section components.
+//
+// File went from 504 LOC to ~95 by extracting:
+//   - _lib/calendar-helpers.ts        (180L) types + constants + isBookingActiveOnDay
+//                                            + precomputeMaps (4 indexes)
+//   - _components/MonthHeader.tsx     (35L)  prev/next + month title
+//   - _components/DayCell.tsx         (130L) single day cell with chips + taxi indicators
+//   - _components/Legend.tsx          (50L)  status colours legend at bottom
+//   - _components/SelectedDayPanel.tsx (210L) right-hand details panel
+//
+// Re-exporting CalendarBooking so the page that consumes this component
+// keeps the same import path.
+
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, PawPrint, Car, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import {
+  type CalendarBooking,
+  DAY_NAMES_EN,
+  DAY_NAMES_FR,
+  MONTH_NAMES_EN,
+  MONTH_NAMES_FR,
+  STATUS_LABEL_EN,
+  STATUS_LABEL_FR,
+  precomputeMaps,
+} from './_lib/calendar-helpers';
+import { MonthHeader } from './_components/MonthHeader';
+import { DayCell } from './_components/DayCell';
+import { Legend } from './_components/Legend';
+import { SelectedDayPanel } from './_components/SelectedDayPanel';
 
-interface BookingPet {
-  pet: { name: string; species: string };
-}
-
-export interface CalendarBooking {
-  id: string;
-  serviceType: string;
-  status: string;
-  startDate: string;
-  endDate: string | null;
-  client: { name: string };
-  bookingPets: BookingPet[];
-  taxiGoEnabled?: boolean;
-  taxiGoDate?: string | null;
-  taxiGoTime?: string | null;
-  taxiReturnEnabled?: boolean;
-  taxiReturnDate?: string | null;
-  taxiReturnTime?: string | null;
-}
-
-interface TaxiDayEntry {
-  bookingId: string;
-  clientName: string;
-  pets: string;
-  direction: 'aller' | 'retour';
-  time: string | null;
-}
+export type { CalendarBooking };
 
 interface Props {
   year: number;
   month: number;
   locale: string;
   bookings: CalendarBooking[];
-}
-
-const DAY_NAMES_FR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-const DAY_NAMES_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const MONTH_NAMES_FR = [
-  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
-];
-const MONTH_NAMES_EN = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
-const STATUS_CHIP: Record<string, string> = {
-  PENDING: 'bg-amber-100 text-amber-800 border-amber-200',
-  CONFIRMED: 'bg-green-100 text-green-800 border-green-200',
-  IN_PROGRESS: 'bg-blue-100 text-blue-800 border-blue-200',
-  COMPLETED: 'bg-gray-100 text-gray-600 border-gray-200',
-};
-
-const STATUS_LABEL_FR: Record<string, string> = {
-  PENDING: 'En attente',
-  CONFIRMED: 'Confirmé',
-  IN_PROGRESS: 'En cours',
-  COMPLETED: 'Terminé',
-};
-const STATUS_LABEL_EN: Record<string, string> = {
-  PENDING: 'Pending',
-  CONFIRMED: 'Confirmed',
-  IN_PROGRESS: 'In progress',
-  COMPLETED: 'Completed',
-};
-
-function isBookingActiveOnDay(b: CalendarBooking, year: number, month: number, day: number): boolean {
-  const dayDate = new Date(year, month - 1, day, 12, 0, 0);
-
-  if (b.serviceType === 'PET_TAXI') {
-    const start = new Date(b.startDate);
-    return (
-      start.getFullYear() === year &&
-      start.getMonth() + 1 === month &&
-      start.getDate() === day
-    );
-  }
-
-  // BOARDING
-  const start = new Date(b.startDate);
-  start.setHours(0, 0, 0, 0);
-  const end = b.endDate ? new Date(b.endDate) : null;
-  if (end) end.setHours(23, 59, 59, 0);
-
-  return start <= dayDate && (!end || end >= dayDate);
 }
 
 export function CalendarGrid({ year, month, locale, bookings }: Props) {
@@ -119,65 +66,8 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
     setSelectedDay(null);
   };
 
-  // Precompute bookings per day
-  const dayBookingsMap = new Map<number, CalendarBooking[]>();
-  for (let d = 1; d <= daysInMonth; d++) {
-    const active = bookings.filter((b) => isBookingActiveOnDay(b, year, month, d));
-    if (active.length > 0) dayBookingsMap.set(d, active);
-  }
-
-  // Precompute departure days: Set of booking IDs whose endDate falls on each day of the month
-  const dayDepartureIds = new Map<number, Set<string>>();
-  for (const b of bookings) {
-    if (b.serviceType !== 'BOARDING' || !b.endDate) continue;
-    const endD = new Date(b.endDate);
-    if (endD.getFullYear() === year && endD.getMonth() + 1 === month) {
-      const d = endD.getDate();
-      const ids = dayDepartureIds.get(d) ?? new Set<string>();
-      ids.add(b.id);
-      dayDepartureIds.set(d, ids);
-    }
-  }
-
-  // Precompute arrival days: Set of booking IDs whose startDate falls on each day of the month
-  const dayArrivalIds = new Map<number, Set<string>>();
-  for (const b of bookings) {
-    if (b.serviceType !== 'BOARDING') continue;
-    const startD = new Date(b.startDate);
-    if (startD.getFullYear() === year && startD.getMonth() + 1 === month) {
-      const d = startD.getDate();
-      const ids = dayArrivalIds.get(d) ?? new Set<string>();
-      ids.add(b.id);
-      dayArrivalIds.set(d, ids);
-    }
-  }
-
-  // Precompute taxi add-on indicators per day (BOARDING only)
-  // Use taxiGoDate/taxiReturnDate from boardingDetail when set; fall back to startDate/endDate.
-  const dayTaxiMap = new Map<number, TaxiDayEntry[]>();
-  for (const b of bookings) {
-    if (b.serviceType !== 'BOARDING') continue;
-    if (b.taxiGoEnabled) {
-      const goDate = b.taxiGoDate ? new Date(b.taxiGoDate) : new Date(b.startDate);
-      if (goDate.getFullYear() === year && goDate.getMonth() + 1 === month) {
-        const d = goDate.getDate();
-        const entries = dayTaxiMap.get(d) ?? [];
-        const pets = b.bookingPets.map((bp) => bp.pet.name).join(', ');
-        entries.push({ bookingId: b.id, clientName: b.client.name, pets, direction: 'aller', time: b.taxiGoTime ?? null });
-        dayTaxiMap.set(d, entries);
-      }
-    }
-    if (b.taxiReturnEnabled) {
-      const retDate = b.taxiReturnDate ? new Date(b.taxiReturnDate) : (b.endDate ? new Date(b.endDate) : null);
-      if (retDate && retDate.getFullYear() === year && retDate.getMonth() + 1 === month) {
-        const d = retDate.getDate();
-        const entries = dayTaxiMap.get(d) ?? [];
-        const pets = b.bookingPets.map((bp) => bp.pet.name).join(', ');
-        entries.push({ bookingId: b.id, clientName: b.client.name, pets, direction: 'retour', time: b.taxiReturnTime ?? null });
-        dayTaxiMap.set(d, entries);
-      }
-    }
-  }
+  const { dayBookingsMap, dayDepartureIds, dayArrivalIds, dayTaxiMap } =
+    precomputeMaps(bookings, year, month, daysInMonth);
 
   const selectedBookings = selectedDay ? (dayBookingsMap.get(selectedDay) ?? []) : [];
   const selectedTaxis = selectedDay ? (dayTaxiMap.get(selectedDay) ?? []) : [];
@@ -186,31 +76,20 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
     <div className="flex flex-col xl:flex-row gap-6">
       {/* Calendar */}
       <div className="flex-1 bg-white rounded-2xl border border-ivory-200 shadow-sm overflow-hidden">
-        {/* Month header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-ivory-200">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 rounded-lg hover:bg-ivory-50 text-charcoal/60 hover:text-charcoal transition-colors"
-            aria-label="Previous month"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <h2 className="text-lg font-serif font-bold text-charcoal">
-            {monthNames[month - 1]} {year}
-          </h2>
-          <button
-            onClick={() => navigate(1)}
-            className="p-2 rounded-lg hover:bg-ivory-50 text-charcoal/60 hover:text-charcoal transition-colors"
-            aria-label="Next month"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
-        </div>
+        <MonthHeader
+          monthName={monthNames[month - 1]}
+          year={year}
+          onPrev={() => navigate(-1)}
+          onNext={() => navigate(1)}
+        />
 
         {/* Day-of-week header */}
         <div className="grid grid-cols-7 border-b border-ivory-200 bg-ivory-50/50">
           {dayNames.map((d) => (
-            <div key={d} className="py-2 text-center text-xs font-semibold text-charcoal/40 uppercase tracking-wide">
+            <div
+              key={d}
+              className="py-2 text-center text-xs font-semibold text-charcoal/40 uppercase tracking-wide"
+            >
               {d}
             </div>
           ))}
@@ -218,7 +97,6 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
 
         {/* Grid */}
         <div className="grid grid-cols-7">
-          {/* Empty cells before first day */}
           {Array.from({ length: startOffset }).map((_, i) => (
             <div
               key={`empty-${i}`}
@@ -226,278 +104,45 @@ export function CalendarGrid({ year, month, locale, bookings }: Props) {
             />
           ))}
 
-          {/* Day cells */}
           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
             const dayBks = dayBookingsMap.get(day) ?? [];
+            const dayTaxis = dayTaxiMap.get(day) ?? [];
             const isToday = isCurrentMonth && today.getDate() === day;
             const isSelected = selectedDay === day;
-            const hasBoardings = dayBks.length > 0;
-
             return (
-              <div
+              <DayCell
                 key={day}
+                day={day}
+                isToday={isToday}
+                isSelected={isSelected}
+                isEn={isEn}
+                bookings={dayBks}
+                taxis={dayTaxis}
+                departureIds={dayDepartureIds.get(day)}
+                arrivalIds={dayArrivalIds.get(day)}
                 onClick={() => setSelectedDay(isSelected ? null : day)}
-                className={cn(
-                  'min-h-[88px] border-b border-r border-ivory-100 p-1.5 cursor-pointer transition-colors select-none',
-                  isSelected
-                    ? 'bg-gold-50 ring-1 ring-inset ring-gold-300'
-                    : hasBoardings
-                    ? 'bg-[#FDF8F0] hover:bg-[#FAF4E8]'
-                    : 'hover:bg-ivory-50',
-                )}
-              >
-                {/* Day number */}
-                <div
-                  className={cn(
-                    'w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold mb-1.5',
-                    isToday
-                      ? 'bg-gold-500 text-white'
-                      : 'text-charcoal/70',
-                  )}
-                >
-                  {day}
-                </div>
-
-                {/* Booking chips */}
-                <div className="space-y-0.5">
-                  {dayBks.slice(0, 2).map((b) => {
-                    const petName = b.bookingPets[0]?.pet.name ?? '?';
-                    const extra = b.bookingPets.length > 1 ? ` +${b.bookingPets.length - 1}` : '';
-                    const isDeparture = dayDepartureIds.get(day)?.has(b.id) ?? false;
-                    const isArrival = dayArrivalIds.get(day)?.has(b.id) ?? false;
-                    const title = isDeparture
-                      ? (isEn ? 'Departure day' : 'Jour de départ')
-                      : isArrival
-                      ? (isEn ? 'Arrival day' : 'Jour d\'arrivée')
-                      : undefined;
-                    return (
-                      <div
-                        key={b.id}
-                        className={cn(
-                          'text-[10px] leading-tight px-1.5 py-0.5 rounded border flex items-center gap-1 overflow-hidden',
-                          STATUS_CHIP[b.status] ?? 'bg-gray-100 text-gray-600 border-gray-200',
-                          isDeparture && 'border-dashed',
-                        )}
-                        title={title}
-                      >
-                        {isArrival && <span className="text-[9px] flex-shrink-0">→</span>}
-                        {b.serviceType === 'PET_TAXI' ? (
-                          <Car className="h-2.5 w-2.5 flex-shrink-0" />
-                        ) : (
-                          <PawPrint className="h-2.5 w-2.5 flex-shrink-0" />
-                        )}
-                        <span className="truncate font-medium">{petName}{extra}</span>
-                        {isDeparture && <span className="ml-auto text-[9px] flex-shrink-0">↩</span>}
-                      </div>
-                    );
-                  })}
-                  {dayBks.length > 2 && (
-                    <p className="text-[10px] text-charcoal/40 px-1">
-                      +{dayBks.length - 2} {isEn ? 'more' : 'de plus'}
-                    </p>
-                  )}
-                </div>
-
-                {/* Taxi add-on indicators */}
-                {(dayTaxiMap.get(day) ?? []).map((t) => {
-                  const dirLabel = t.direction === 'aller' ? (isEn ? 'Go' : 'Aller') : (isEn ? 'Return' : 'Retour');
-                  const dirIcon = t.direction === 'aller' ? '→' : '↩';
-                  const timeLabel = t.time ?? (isEn ? 'TBD' : 'À confirmer');
-                  const tooltip = `Pet Taxi ${dirLabel} — ${t.clientName} — ${t.pets} — ${timeLabel}`;
-                  const firstPet = t.pets.split(', ')[0];
-                  return (
-                    <div
-                      key={`${t.bookingId}-${t.direction}`}
-                      title={tooltip}
-                      className="text-[10px] leading-tight px-1.5 py-0.5 rounded border flex items-center gap-1 overflow-hidden bg-orange-50 border-orange-200 text-orange-700 cursor-help mt-0.5"
-                    >
-                      <span className="truncate font-medium">
-                        🚗 {firstPet} {dirIcon}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              />
             );
           })}
         </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3 border-t border-ivory-100 bg-ivory-50/50">
-          <span className="text-xs text-charcoal/40 font-medium">{isEn ? 'Legend:' : 'Légende :'}</span>
-          {[
-            { label: statusLabel.PENDING, color: 'bg-amber-100 border-amber-200' },
-            { label: statusLabel.CONFIRMED, color: 'bg-green-100 border-green-200' },
-            { label: statusLabel.IN_PROGRESS, color: 'bg-blue-100 border-blue-200' },
-            { label: statusLabel.COMPLETED, color: 'bg-gray-100 border-gray-200' },
-          ].map((item) => (
-            <div key={item.label} className="flex items-center gap-1.5">
-              <div className={cn('w-3 h-3 rounded border', item.color)} />
-              <span className="text-xs text-charcoal/50">{item.label}</span>
-            </div>
-          ))}
-          <div className="flex items-center gap-1.5 ml-2">
-            <PawPrint className="h-3 w-3 text-charcoal/40" />
-            <span className="text-xs text-charcoal/50">Boarding</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Car className="h-3 w-3 text-charcoal/40" />
-            <span className="text-xs text-charcoal/50">Taxi</span>
-          </div>
-        </div>
+        <Legend isEn={isEn} statusLabels={statusLabel} />
       </div>
 
-      {/* Side panel: selected day detail */}
       {selectedDay !== null && (
-        <div className="xl:w-80 bg-white rounded-2xl border border-ivory-200 shadow-sm overflow-hidden self-start xl:sticky xl:top-24">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-ivory-100">
-            <h3 className="font-serif font-bold text-charcoal">
-              {selectedDay} {monthNames[month - 1]} {year}
-            </h3>
-            <button
-              onClick={() => setSelectedDay(null)}
-              className="text-charcoal/40 hover:text-charcoal transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="p-4 space-y-4">
-            {selectedBookings.length === 0 && selectedTaxis.length === 0 ? (
-              <p className="text-sm text-charcoal/40 text-center py-6">
-                {isEn ? 'No bookings this day' : 'Aucune réservation ce jour'}
-              </p>
-            ) : (
-              <>
-                {selectedBookings.length > 0 && (() => {
-                  // Tag each booking: arrival | departure | ongoing
-                  const tagged = selectedBookings.map((b) => ({
-                    b,
-                    isArrival: dayArrivalIds.get(selectedDay!)?.has(b.id) ?? false,
-                    isDeparture: dayDepartureIds.get(selectedDay!)?.has(b.id) ?? false,
-                  }));
-                  // Sort: arrivals first, then ongoing, then departures
-                  const sorted = [
-                    ...tagged.filter((t) => t.isArrival && !t.isDeparture),
-                    ...tagged.filter((t) => !t.isArrival && !t.isDeparture),
-                    ...tagged.filter((t) => t.isDeparture),
-                  ];
-
-                  const formatShort = (iso: string) =>
-                    new Intl.DateTimeFormat(isEn ? 'en-US' : 'fr-FR', { day: 'numeric', month: 'short' }).format(new Date(iso));
-
-                  return (
-                    <div className="space-y-3">
-                      {sorted.map(({ b, isArrival, isDeparture }) => (
-                        <a
-                          key={b.id}
-                          href={`/${locale}/admin/reservations/${b.id}`}
-                          className={cn(
-                            'block p-3 rounded-xl border transition-colors group',
-                            isDeparture
-                              ? 'border-purple-200 bg-purple-50/40 hover:border-purple-400 hover:bg-purple-50'
-                              : isArrival
-                              ? 'border-green-200 bg-green-50/40 hover:border-green-400 hover:bg-green-50'
-                              : 'border-ivory-200 hover:border-gold-300 hover:bg-ivory-50',
-                          )}
-                        >
-                          {/* Top row: type + status + event badge */}
-                          <div className="flex items-center justify-between mb-1.5 gap-1">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              {b.serviceType === 'PET_TAXI' ? (
-                                <Car className="h-3.5 w-3.5 text-charcoal/40 flex-shrink-0" />
-                              ) : (
-                                <PawPrint className="h-3.5 w-3.5 text-charcoal/40 flex-shrink-0" />
-                              )}
-                              <span className="text-xs font-semibold text-charcoal truncate">
-                                {b.serviceType === 'BOARDING' ? (isEn ? 'Boarding' : 'Pension') : 'Taxi'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              {isDeparture && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded border bg-purple-100 border-purple-300 text-purple-700 font-semibold">
-                                  ↩ {isEn ? 'Departure' : 'Départ'}
-                                </span>
-                              )}
-                              {isArrival && !isDeparture && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded border bg-green-100 border-green-300 text-green-700 font-semibold">
-                                  → {isEn ? 'Arrival' : 'Arrivée'}
-                                </span>
-                              )}
-                              {!isDeparture && !isArrival && (
-                                <span
-                                  className={cn(
-                                    'text-[10px] px-1.5 py-0.5 rounded border',
-                                    STATUS_CHIP[b.status] ?? 'bg-gray-100 border-gray-200 text-gray-600',
-                                  )}
-                                >
-                                  {statusLabel[b.status] ?? b.status}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          {/* Client */}
-                          <p className="text-xs text-charcoal/50 mb-0.5">{b.client.name}</p>
-                          {/* Pets */}
-                          <p className="text-xs font-medium text-charcoal group-hover:text-gold-700 transition-colors">
-                            {b.bookingPets.map((bp) => bp.pet.name).join(', ')}
-                          </p>
-                          {/* Species + dates */}
-                          <div className="flex items-center justify-between mt-0.5">
-                            {b.bookingPets.length > 0 && (
-                              <p className="text-[10px] text-charcoal/40">
-                                {b.bookingPets.map((bp) => bp.pet.species === 'DOG' ? '🐶' : '🐱').join(' ')}
-                              </p>
-                            )}
-                            {b.serviceType === 'BOARDING' && b.endDate && (
-                              <p className="text-[10px] text-charcoal/35 ml-auto">
-                                {formatShort(b.startDate)} → {formatShort(b.endDate)}
-                              </p>
-                            )}
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-                {/* Transports du jour */}
-                {selectedTaxis.length > 0 && (
-                  <div>
-                    {selectedBookings.length > 0 && (
-                      <div className="border-t border-ivory-100 pt-3 mb-3" />
-                    )}
-                    <p className="text-[10px] font-semibold text-charcoal/40 uppercase tracking-wide mb-2">
-                      {isEn ? 'Transports' : 'Transports'}
-                    </p>
-                    <div className="space-y-2">
-                      {selectedTaxis.map((t) => {
-                        const dir = t.direction === 'aller' ? (isEn ? 'Go' : 'Aller') : (isEn ? 'Return' : 'Retour');
-                        const timeLabel = t.time ?? (isEn ? 'TBD' : 'À confirmer');
-                        return (
-                          <div
-                            key={`${t.bookingId}-${t.direction}`}
-                            className="flex items-start gap-2 p-2.5 rounded-lg bg-orange-50 border border-orange-100"
-                          >
-                            <span className="text-base leading-none mt-0.5">🚗</span>
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-orange-800">
-                                {dir}
-                                {t.time && <span className="ml-1 font-normal text-orange-700">· {t.time}</span>}
-                                {!t.time && <span className="ml-1 font-normal italic text-orange-500">· {timeLabel}</span>}
-                              </p>
-                              <p className="text-[11px] text-orange-700/70 truncate">{t.clientName} — {t.pets}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+        <SelectedDayPanel
+          isEn={isEn}
+          locale={locale}
+          selectedDay={selectedDay}
+          monthName={monthNames[month - 1]}
+          year={year}
+          bookings={selectedBookings}
+          taxis={selectedTaxis}
+          departureIds={dayDepartureIds.get(selectedDay)}
+          arrivalIds={dayArrivalIds.get(selectedDay)}
+          statusLabels={statusLabel}
+          onClose={() => setSelectedDay(null)}
+        />
       )}
     </div>
   );
