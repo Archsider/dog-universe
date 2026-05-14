@@ -168,6 +168,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             noInvoiceLabel={labels.noInvoice}
             isOpenEnded={booking.isOpenEnded && !TERMINAL_STATUSES.has(booking.status)}
             liveTotal={liveOpenEnded?.total}
+            isWalkInClient={booking.client.isWalkIn}
           />
         </div>
 

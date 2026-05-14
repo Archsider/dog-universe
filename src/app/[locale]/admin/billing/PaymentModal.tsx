@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import type { Decimal } from '@prisma/client/runtime/library';
+import { submitPayment } from './_lib/submit-payment';
 
 interface Payment {
   id: string;
@@ -29,6 +30,11 @@ interface Props {
    *  surfaces that decision to the operator. Optional for backward
    *  compatibility with call sites that don't pass it yet. */
   isWalkIn?: boolean;
+  /** Visual style of the trigger button. `icon` = the small ✅ used in
+   *  the billing-invoices table. `full` = a labeled rectangular button
+   *  used in the booking-detail invoice section. Defaults to `icon` to
+   *  match the historical billing-page UX. */
+  triggerVariant?: 'icon' | 'full';
 }
 
 const PAYMENT_METHODS = [
@@ -63,7 +69,7 @@ function isQuietHoursCasaClient(now: Date = new Date()): boolean {
 }
 
 export default function PaymentModal({
-  invoiceId, currentStatus, locale, invoiceAmount: invoiceAmountProp, paidAmount: paidAmountProp, isWalkIn,
+  invoiceId, currentStatus, locale, invoiceAmount: invoiceAmountProp, paidAmount: paidAmountProp, isWalkIn, triggerVariant = 'icon',
 }: Props) {
   const isFr = locale === 'fr';
   const router = useRouter();
@@ -128,31 +134,19 @@ export default function PaymentModal({
     }
     setSubmitting(true);
     try {
-      // Idempotency-Key: random UUID per submit attempt. The server stores
-      // it for 24h; a replay of the same key (double-click, network retry,
-      // bfcache resubmit) is rejected with 409 instead of creating a
-      // duplicate Payment row + duplicate SMS. See ADR-0007.
-      const idempotencyKey =
-        typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `pay-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const res = await fetch(`/api/invoices/${invoiceId}/payments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': idempotencyKey,
-        },
-        body: JSON.stringify({
-          amount,
-          paymentMethod: method,
-          paymentDate,
-          notes: notes || null,
-          sendClientSms,
-        }),
+      // Single canonical entry point — also used by the booking-detail and
+      // invoice-detail pages. Includes Idempotency-Key + sendClientSms.
+      // See src/app/[locale]/admin/billing/_lib/submit-payment.ts.
+      const result = await submitPayment({
+        invoiceId,
+        amount,
+        paymentMethod: method as 'CASH' | 'CARD' | 'CHECK' | 'TRANSFER',
+        paymentDate,
+        notes: notes || null,
+        sendClientSms,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed');
+      if (!result.ok) {
+        throw new Error(result.error);
       }
       toast({ title: isFr ? 'Paiement enregistré' : 'Payment recorded', variant: 'success' });
       setNotes('');
@@ -183,15 +177,27 @@ export default function PaymentModal({
 
   if (currentStatus === 'PAID' || currentStatus === 'CANCELLED') return null;
 
+  const triggerLabel = isFr ? 'Enregistrer un paiement' : 'Record payment';
+
   return (
     <>
-      <button
-        onClick={handleOpen}
-        className="p-1.5 text-gray-400 hover:text-green-600 rounded transition-colors"
-        title={isFr ? 'Enregistrer un paiement' : 'Record payment'}
-      >
-        <CheckCircle className="h-4 w-4" />
-      </button>
+      {triggerVariant === 'icon' ? (
+        <button
+          onClick={handleOpen}
+          className="p-1.5 text-gray-400 hover:text-green-600 rounded transition-colors"
+          title={triggerLabel}
+        >
+          <CheckCircle className="h-4 w-4" />
+        </button>
+      ) : (
+        <button
+          onClick={handleOpen}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors"
+        >
+          <CheckCircle className="h-3.5 w-3.5" />
+          {triggerLabel}
+        </button>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto">

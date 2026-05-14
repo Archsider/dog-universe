@@ -7,6 +7,71 @@
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### 2026-05-14 — Session GPS + SMS + CI + Wave 1 (PRs #67 → #75)
+
+Session marathon : 9 PRs ouvertes (7 mergées, 2 ouvertes au bouclage), 3 ADR (0006/0007/0008), +123 tests, +1 module de cleanup SQL pour les données existantes corrompues.
+
+**PRs livrées :**
+
+1. **#67 `fix(taxi-gps)` — Filtre GPS classe mondiale (drift no longer counts as movement)**
+   - Trajet ~5 km loggait 64,4 km en prod. Trois causes racines identifiées : (1) option `distanceFilter: 5` est React Native — silencieusement ignorée par le Web Geolocation API (60 fixes/sec malgré le réglage) ; (2) drift GPS à l'arrêt = 8-15 m entre deux fixes consécutifs ; (3) seuil serveur à 10 m comptait chaque jitter comme mouvement.
+   - **`src/lib/taxi-gps-filter.ts`** : module unique, source de vérité partagée entre ingestion live et replay rétroactif. Fonction pure `shouldCountFix({ deltaKm, dtSec, accuracyMeters })` à 6 portes : `low_accuracy` (>50m) / `speed_outlier` (>200 km/h) / `time_too_close` (<1.5s) / `delta_too_large` (>2km/fix) / `delta_too_small` (<30m) / `speed_too_low` (<3 km/h). Deux outputs (store vs countTowardDistance) — un taxi à l'arrêt reste affiché sur la map mais n'inflate plus distanceKm.
+   - **Client** : throttle 3 s sur les pushes vers le backend, suppression de la fausse option `distanceFilter`. Le forced-ping 30 s et le fix initial bypass le throttle via `force=true`.
+   - **Endpoint admin `POST /api/admin/taxi-trips/[id]/recompute-distance`** : rejoue les `TaxiLocation` stockés à travers le même filtre. Idempotent. Bouton "↻ Recalculer la distance" dans la fiche admin du trajet.
+   - ADR-0006 + 17 tests dont reproduction exacte du bug d'origine (30 min de jitter ±12 m à 1 fix/sec → 0 km au lieu de 21,6).
+
+2. **#68 `fix` — 3 bugs prod consécutifs : driver dashboard, PDF cache, close-stay discount**
+   - **Driver dashboard à 0 km** : la query pivotait sur `Booking.serviceType='PET_TAXI'` et `TaxiTrip.tripType='STANDALONE'`. Tous les boardings avec addon taxi silencieusement masqués. Réécrit pour pivoter directement sur `TaxiTrip` (any type, any booking service).
+   - **PDF preview figé à 1650 MAD** après application d'une remise : Chrome cache l'URL `?view=1` du PDF viewer. Ajout `Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0`.
+   - **CloseStayDialog 1650 ignorant la remise** : recalculait depuis dates × pets × pricing sans tenir compte des DISCOUNT items. Helper `selectCloseStayTotal()` extrait avec priorité explicite : open-ended → live ; fixed + invoice → `invoice.amount` ; fallback → `booking.totalPrice`. **`??` (pas `||`)** pour préserver un invoice à 0.
+
+3. **#69 `fix(sms)` — Burst + duplicates SMS éradiqués (un canonical path, dédup atomique)**
+   - Cliente reçoit 6 SMS en une minute, admin reçoit chaque notif doublée.
+   - Trois causes racines : (1) 13 appels directs à `sendSMS`/`sendAdminSMS` contournaient la dédup ; (2) TOCTOU window dans `isSmsDedup → sendSMS → recordSmsSent` ; (3) PaymentModal sans `Idempotency-Key`.
+   - **`tryReserveSmsSend()`** : utilise la contrainte unique Postgres `SmsLog(phone, contentHash)` comme **verrou atomique**. Race conditions impossibles par construction de la DB.
+   - Tous les SMS transactionnels passent par `sendSmsNow`. PaymentModal envoie un `Idempotency-Key` UUID par soumission. **ESLint `no-restricted-imports`** empêche réintroduction des appels directs hors whitelist.
+   - ADR-0007 + 26 tests dont la course exacte (deux INSERT concurrents → un seul gagne via P2002).
+
+4. **#70 `feat(sms)` — Hardening : phone normalization + dashboard + integration tests + flake kill**
+   - **Normalisation téléphone** dans la dédup : `0669…`, `+212669…`, `00212669…` produisent le même hash. Le sentinel `'ADMIN'` est préservé tel quel.
+   - **Dashboard `/admin/health`** : 4 KPI SMS (Envoyés / Pending-failed / **Doublons bloqués aujourd'hui** / Dernier envoi) + table des 20 dernières activités avec numéros masqués. Compteur Redis `sms:dedup_blocked:YYYY-MM-DD`.
+   - **5 tests d'intégration contre vrai Postgres** (`sms-dedup-pg-integration.test.ts`) — skipped en local sans `INTEGRATION_DATABASE_URL`, activés automatiquement en CI via service container `postgres:16-alpine`. Détectent une migration oubliée.
+   - **Flake `diagnostics.test.ts`** : root cause = `mockReturnValueOnce` sur un getter appelé 2× dans le même `Promise.all`. Remplacé par `mockReturnValue` (sans Once). 5/5 runs verts.
+
+5. **#71 `ci` — Kill the perma-red : Node 22, Next 15.5.18 security, E2E timeout, bundle honest**
+   - 5 checks rouges en permanence depuis des semaines, noyant les vraies régressions.
+   - `route.ts exports` + `bundle-budget` : crash dans `scripts/*.mjs` car `fs.promises.glob()` exige Node 22+. **Bump Node 20 → 22 LTS** sur tous les workflows.
+   - **Bundle budget** : seuil à 280 KB calé Next 14 + React 18. Vraie baseline Next 15.5 + React 19 = 510 KB. Bump à **560 KB** honnête.
+   - **Security Audit** : Next 15.5.15 a la CVE high-severity `GHSA-8h8q-6873-q5fj` (DoS Server Components + 9 CVE liées). Bump à **15.5.18 (tag `backport`)** — security only.
+   - **E2E timeout 15 → 25 min**. Projet Vercel orphelin `dog-universe-2btg` documenté pour suppression manuelle.
+
+6. **#74 `feat(sms)` (ouverte) — Respectful policy : quiet hours + walk-in suppression + UI toggle**
+   - **`src/lib/sms-policy.ts`** : `decideSmsPolicy({ category, recipient, now })` retourne `{kind: 'send-now' | 'defer' | 'skip'}`. Trois règles : ADMIN/OPS → send-now toujours ; Walk-in + COMPTA → skip ; Standard + COMPTA + 21h-9h Casa → defer via BullMQ delayed job jusqu'à 9h.
+   - **Casablanca = UTC+1 fixe** (DST aboli en 2018), un seul offset constant.
+   - **Toggle UI sur PaymentModal** avec label dynamique (Walk-in / Heures calmes / standard). Override per-paiement.
+   - ADMIN bypasses everything — l'opérateur reçoit ses notifs en temps réel.
+   - ADR-0008 + 41 tests + 8 tests d'intégration sur `sendSmsRespectful`.
+
+7. **#75 `fix(wave-1)` (ouverte) — 5 bugs métier prod, causes racines documentées, cleanup SQL proposé**
+   - **#1 Athena ×5** : `prisma.pet.create()` sans dédup. Fix : POST `/api/pets` et `/api/admin/animals` font une read-before-create idempotente sur `(ownerId, species, lower(name))`. Bouton Delete surface la vraie erreur (active bookings vs not found).
+   - **#2 "Départ demain" à J+2** : `Math.round((endMs - nowMs) / 86_400_000)` mesurait UTC, pas Casablanca calendar days. Nouveau module **`src/lib/dates-casablanca.ts`** (UTC+1 fixe) : `casablancaDateOnly`, `daysUntilCasablanca`, `isDepartureTomorrowCasablanca`, `isSameDayCasablanca`. 17 tests.
+   - **#3 TaxiTrip zombie** : `Booking → COMPLETED` ne cascadait pas. Nouveau helper **`finalizeTaxiTripsForBooking`** dans `status-transitions.ts` : transaction qui passe OUTBOUND/STANDALONE → `ARRIVED_AT_PENSION`, RETURN → `ARRIVED_AT_CLIENT`, clear `trackingActive`/`trackingToken`. PLANNED legs préservées. Filtre défensif sur `/admin/driver` : exclure bookings CANCELLED/REJECTED/NO_SHOW/COMPLETED.
+   - **#4 Marie Lagarde manquante** : `createBookingTx` écrivait `BoardingDetail` avec addons mais ne créait jamais les `TaxiTrip`. Seul le PATCH admin le faisait. Fix : `createBookingTx` crée OUTBOUND/RETURN dans la même transaction Serializable. Invariant restauré.
+   - **#5 CA / À venir faux** : downstream de #3 + #4. Filtres défensifs sur 3 queries driver mode.
+   - **Cleanup SQL** dans `docs/wave-1-cleanup-sql.md` (3 sections + bloc de vérification). **NON auto-exécuté** — opérateur le lance dans Supabase SQL editor.
+
+**Décisions clés livrées :**
+
+- **Casablanca UTC+1 fixe** dans tout calcul "aujourd'hui / demain" (date-only, jamais d'instant UTC). Module `src/lib/dates-casablanca.ts` est la seule façon valide.
+- **SMS dedup = contrainte unique DB** (PR #69), pas convention de code. Race conditions mathématiquement impossibles.
+- **Cascade Booking COMPLETED → TaxiTrip terminal** (PR #75) : invariant garanti par transaction, plus de zombies.
+- **Invariant "addon taxi enabled ⇒ TaxiTrip exists"** (PR #75) : créés dans la même transaction que BoardingDetail.
+- **Politique SMS respectueuse** (PR #74) : la nuit, on ne dérange pas les clients. Le founder fait sa compta sans risque de spam.
+
+**Stats session** : 9 PR (7 mergées #67-#71, 2 ouvertes #74 #75), +123 tests (1046 total), 3 ADR (0006/0007/0008), 1 doc cleanup SQL, 1 garde ESLint (no-restricted-imports).
+
+---
+
 ### 2026-05-11 — Sprint « 9.5 → 10/10 » : 11 PRs (#20 → #30)
 
 Session intensive de durcissement opérationnel post-MVP. 11 PRs mergées sur `main` couvrant la chaîne migrations, l'observabilité, la résilience, le triage automatique des erreurs, les feature flags et l'uptime monitoring.

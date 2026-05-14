@@ -46,7 +46,7 @@ export interface InvoiceData {
   clientDisplayName: string | null;
   clientDisplayPhone: string | null;
   clientDisplayEmail: string | null;
-  client: { id: string; name: string; email: string; phone: string | null };
+  client: { id: string; name: string; email: string; phone: string | null; isWalkIn: boolean };
   booking: BookingData | null;
   items: InvoiceItemData[];
   payments: PaymentData[];

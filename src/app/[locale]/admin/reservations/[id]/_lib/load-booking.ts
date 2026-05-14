@@ -89,7 +89,7 @@ export async function loadAdminBookingDetail(id: string) {
   const booking = await prisma.booking.findFirst({
     where: notDeleted({ id }),
     include: {
-      client: { select: { id: true, name: true, email: true, phone: true } },
+      client: { select: { id: true, name: true, email: true, phone: true, isWalkIn: true } },
       bookingPets: { include: { pet: true } },
       boardingDetail: true,
       taxiDetail: true,
