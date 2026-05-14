@@ -102,9 +102,20 @@ export default function PaymentModal({
     }
     setSubmitting(true);
     try {
+      // Idempotency-Key: random UUID per submit attempt. The server stores
+      // it for 24h; a replay of the same key (double-click, network retry,
+      // bfcache resubmit) is rejected with 409 instead of creating a
+      // duplicate Payment row + duplicate SMS. See ADR-0007.
+      const idempotencyKey =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `pay-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const res = await fetch(`/api/invoices/${invoiceId}/payments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+        },
         body: JSON.stringify({ amount, paymentMethod: method, paymentDate, notes: notes || null }),
       });
       if (!res.ok) {

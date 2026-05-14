@@ -20,7 +20,7 @@
  */
 import { sendEmail } from '@/lib/email';
 import { sendSMS, sendAdminSMS } from '@/lib/sms';
-import { isSmsDedup, recordSmsSent } from '@/lib/sms-dedup';
+import { tryReserveSmsSend, markSmsSent } from '@/lib/sms-dedup';
 import type { EmailJobData, SmsJobData } from '@/lib/queues/index';
 import { logger } from '@/lib/logger';
 
@@ -57,10 +57,12 @@ export async function sendSmsWithRetry(data: SmsJobData): Promise<void> {
   }
   const phone = data.to as string; // 'ADMIN' or real number
 
-  // DB-level dedup — survives Redis restarts. Fail-open on DB error.
-  const dup = await isSmsDedup(phone, data.message);
-  if (dup) {
-    logger.warn('notify-now', 'sms doublon bloqué', {
+  // Atomic reservation via SmsLog unique index. The first caller wins and
+  // proceeds to the gateway; concurrent callers see the row already exists
+  // and bail. This is the ONLY dedup gate — no TOCTOU window.
+  const reserved = await tryReserveSmsSend(phone, data.message);
+  if (!reserved) {
+    logger.warn('notify-now', 'sms doublon bloqué (reservation lost)', {
       to: phone === 'ADMIN' ? 'ADMIN' : maskPhone(phone),
     });
     return;
@@ -77,13 +79,17 @@ export async function sendSmsWithRetry(data: SmsJobData): Promise<void> {
           ? await sendAdminSMS(data.message)
           : await sendSMS(data.to, data.message);
       if (ok) {
-        await recordSmsSent(phone, data.message);
+        await markSmsSent(phone, data.message);
         return;
       }
     } catch (err) {
       lastErr = err;
     }
   }
+  // All retries exhausted. The reservation row stays PENDING and blocks
+  // re-sends for the dedup window. We prefer this over "no record" (which
+  // would let a manual retry re-send) — the operator can see in SmsLog
+  // which messages failed by filtering on status='PENDING'.
   logger.error('notify-now', 'sms failed after 3 attempts', { to: phone === 'ADMIN' ? 'ADMIN' : maskPhone(phone), error: lastErr instanceof Error ? lastErr.message : String(lastErr) });
 }
 

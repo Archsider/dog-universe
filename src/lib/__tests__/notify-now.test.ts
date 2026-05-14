@@ -4,8 +4,8 @@ const mocks = vi.hoisted(() => ({
   sendEmail: vi.fn(),
   sendSMS: vi.fn(),
   sendAdminSMS: vi.fn(),
-  isSmsDedup: vi.fn().mockResolvedValue(false),
-  recordSmsSent: vi.fn().mockResolvedValue(undefined),
+  tryReserveSmsSend: vi.fn().mockResolvedValue(true),
+  markSmsSent: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/email', () => ({
@@ -18,8 +18,8 @@ vi.mock('@/lib/sms', () => ({
 }));
 
 vi.mock('@/lib/sms-dedup', () => ({
-  isSmsDedup: mocks.isSmsDedup,
-  recordSmsSent: mocks.recordSmsSent,
+  tryReserveSmsSend: mocks.tryReserveSmsSend,
+  markSmsSent: mocks.markSmsSent,
 }));
 
 import {
@@ -37,8 +37,8 @@ describe('notify-now', () => {
     mocks.sendEmail.mockReset();
     mocks.sendSMS.mockReset();
     mocks.sendAdminSMS.mockReset();
-    mocks.isSmsDedup.mockResolvedValue(false);
-    mocks.recordSmsSent.mockResolvedValue(undefined);
+    mocks.tryReserveSmsSend.mockReset().mockResolvedValue(true);
+    mocks.markSmsSent.mockReset().mockResolvedValue(undefined);
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -83,18 +83,34 @@ describe('notify-now', () => {
     const logged = JSON.parse(errorSpy.mock.calls[0][0] as string);
     expect(logged.service).toBe('notify-now');
     expect(logged.error).toBe('smtp down');
-    expect(logged.to).toContain('***'); // email masked
+    expect(logged.to).toContain('***');
   });
 
   it('sendSmsWithRetry succeeds on first attempt (returns true)', async () => {
     mocks.sendSMS.mockResolvedValueOnce(true);
     const promise = sendSmsWithRetry({ to: '+212600000000', message: 'hi' });
     await promise;
+    expect(mocks.tryReserveSmsSend).toHaveBeenCalledWith('+212600000000', 'hi');
     expect(mocks.sendSMS).toHaveBeenCalledTimes(1);
+    expect(mocks.markSmsSent).toHaveBeenCalledWith('+212600000000', 'hi');
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('sendSmsWithRetry retries when sendSMS returns false', async () => {
+  it('sendSmsWithRetry skips entirely when reservation is lost (concurrent duplicate)', async () => {
+    // Simulate: two concurrent calls for the same (phone, message). One
+    // wins the SmsLog INSERT race, the other loses → tryReserveSmsSend
+    // returns false → no send, no error.
+    mocks.tryReserveSmsSend.mockResolvedValueOnce(false);
+    const promise = sendSmsWithRetry({ to: 'ADMIN', message: '💰 Paiement reçu' });
+    await promise;
+    expect(mocks.sendSMS).not.toHaveBeenCalled();
+    expect(mocks.sendAdminSMS).not.toHaveBeenCalled();
+    expect(mocks.markSmsSent).not.toHaveBeenCalled();
+    // The lost-race path is a warn, not an error.
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('sendSmsWithRetry retries when sendSMS returns false (config not lost-race)', async () => {
     mocks.sendSMS
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
@@ -102,6 +118,7 @@ describe('notify-now', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await promise;
     expect(mocks.sendSMS).toHaveBeenCalledTimes(2);
+    expect(mocks.markSmsSent).toHaveBeenCalledTimes(1);
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
@@ -112,22 +129,25 @@ describe('notify-now', () => {
     await vi.advanceTimersByTimeAsync(3_000);
     await expect(promise).resolves.toBeUndefined();
     expect(mocks.sendSMS).toHaveBeenCalledTimes(3);
+    // markSmsSent must NOT be called when the SMS never actually delivered.
+    // The reservation row stays PENDING and blocks re-sends for the window.
+    expect(mocks.markSmsSent).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    const logged = JSON.parse(errorSpy.mock.calls[0][0] as string);
-    expect(logged.service).toBe('notify-now');
   });
 
   it('sendSmsWithRetry routes ADMIN to sendAdminSMS', async () => {
     mocks.sendAdminSMS.mockResolvedValueOnce(true);
     const promise = sendSmsWithRetry({ to: 'ADMIN', message: 'alert' });
     await promise;
+    expect(mocks.tryReserveSmsSend).toHaveBeenCalledWith('ADMIN', 'alert');
     expect(mocks.sendAdminSMS).toHaveBeenCalledWith('alert');
     expect(mocks.sendSMS).not.toHaveBeenCalled();
   });
 
-  it('sendSmsWithRetry skips silently when to is null', async () => {
+  it('sendSmsWithRetry skips silently when to is null (no reservation either)', async () => {
     const promise = sendSmsWithRetry({ to: null as unknown as string, message: 'x' });
     await promise;
+    expect(mocks.tryReserveSmsSend).not.toHaveBeenCalled();
     expect(mocks.sendSMS).not.toHaveBeenCalled();
     expect(mocks.sendAdminSMS).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();

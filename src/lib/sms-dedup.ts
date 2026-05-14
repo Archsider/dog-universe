@@ -66,3 +66,94 @@ export async function recordSmsSent(
     // non-blocking: a missed dedup record is acceptable; a blocked send is not
   }
 }
+
+/**
+ * Atomically reserve the right to send `(phone, message)`.
+ *
+ * Races between two concurrent sends (admin double-click, retry, two code
+ * paths firing the same event) are resolved here by the unique index
+ * `(phone, contentHash)`: only one INSERT wins, the loser sees a P2002 and
+ * returns `false`. The winner is the one allowed to hit the SMS gateway.
+ *
+ * Why this exists in addition to `isSmsDedup` + `recordSmsSent`: the old
+ * read-then-write pair has a TOCTOU window — between the `findFirst` and
+ * the eventual `upsert` a second caller can pass the dedup check and race
+ * to send. We saw this in production (admin SMS shipped in pairs at busy
+ * moments). INSERT-first uses the DB constraint as the lock. No window.
+ *
+ * Sentinel status `'PENDING'`: rows are created BEFORE the send. On send
+ * success the caller flips them to `'SENT'`. On send failure they stay
+ * `'PENDING'` and the dedup window blocks retries for the TTL — we prefer
+ * "no SMS" over "two SMS" when the gateway is misbehaving.
+ *
+ * Fail-open: if the table doesn't exist or the DB is unreachable, return
+ * `true` so an outage of the dedup layer never silences the user's
+ * notifications. The warn log tells the operator.
+ */
+export async function tryReserveSmsSend(
+  phone: string,
+  message: string,
+  opts?: { bookingId?: string },
+): Promise<boolean> {
+  const hash = smsDedupHash(phone, message);
+  const since = new Date(Date.now() - DEDUP_WINDOW_HOURS * 3_600_000);
+
+  try {
+    const existing = await prisma.smsLog.findUnique({
+      where: { phone_contentHash: { phone, contentHash: hash } },
+      select: { sentAt: true },
+    });
+    if (existing && existing.sentAt >= since) {
+      return false; // already sent within the dedup window
+    }
+
+    if (existing) {
+      // Row exists but is stale (outside the window). Refresh atomically.
+      // First caller's UPDATE wins; later concurrent UPDATEs overwrite with
+      // the same data — harmless.
+      await prisma.smsLog.update({
+        where: { phone_contentHash: { phone, contentHash: hash } },
+        data: { sentAt: new Date(), status: 'PENDING', bookingId: opts?.bookingId ?? null },
+      });
+      return true;
+    }
+
+    // No row at all — try to claim it. The unique constraint resolves the
+    // race: exactly one concurrent caller's INSERT succeeds.
+    try {
+      await prisma.smsLog.create({
+        data: {
+          phone,
+          contentHash: hash,
+          status: 'PENDING',
+          bookingId: opts?.bookingId ?? null,
+        },
+      });
+      return true;
+    } catch (err: unknown) {
+      const code = (err as { code?: string } | null)?.code;
+      if (code === 'P2002') return false; // lost the race
+      throw err;
+    }
+  } catch (err) {
+    logger.warn('sms-dedup', 'reserve failed — fail-open (allow send)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return true;
+  }
+}
+
+/**
+ * Mark a previously reserved SMS as actually delivered. Idempotent.
+ */
+export async function markSmsSent(phone: string, message: string): Promise<void> {
+  const hash = smsDedupHash(phone, message);
+  try {
+    await prisma.smsLog.update({
+      where: { phone_contentHash: { phone, contentHash: hash } },
+      data: { status: 'SENT', sentAt: new Date() },
+    });
+  } catch {
+    // non-blocking
+  }
+}

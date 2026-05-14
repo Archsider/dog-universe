@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
-import { sendSMS } from '@/lib/sms';
+import { sendSmsNow } from '@/lib/notify-now';
 import { recordLocation, clearLocation, haversineKm } from '@/lib/taxi-location';
 import { maybeAutoTransition } from '@/lib/taxi-auto-transition';
 import { signTaxiToken } from '@/lib/taxi-token';
@@ -139,13 +139,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const clientLocale = client?.language === 'en' ? 'en' : 'fr';
     const trackingUrl = `${APP_URL}/${clientLocale}/track/${trackingToken}`;
 
-    // SMS automatique au client (additif, échec n'empêche pas l'admin de démarrer le tracking)
+    // SMS automatique au client — fire-and-forget via sendSmsNow so the
+    // SmsLog atomic reservation deduplicates concurrent "start tracking"
+    // clicks (the admin clicking twice would otherwise send two identical
+    // tracking-link SMS to the client, which we saw in production).
     if (client?.phone) {
       const firstName = (client.name ?? '').split(' ')[0] || (client.name ?? '');
       const msg = clientLocale === 'en'
         ? `Hello ${firstName}! 🚗 Dog Universe is on the way. Track your pet live: ${trackingUrl} — Dog Universe`
         : `Bonjour ${firstName} ! 🚗 Dog Universe est en route. Suivez votre animal en direct : ${trackingUrl} — Dog Universe`;
-      sendSMS(client.phone, msg).catch(() => { /* SMS additif */ });
+      sendSmsNow({ to: client.phone, message: msg });
     }
 
     return NextResponse.json({

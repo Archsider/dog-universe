@@ -9,7 +9,16 @@
       "assertionStyle": "as",
       "objectLiteralTypeAssertions": "allow-as-parameter"
     }],
-    "@typescript-eslint/no-non-null-assertion": "warn"
+    "@typescript-eslint/no-non-null-assertion": "warn",
+    "no-restricted-imports": ["error", {
+      "paths": [
+        {
+          "name": "@/lib/sms",
+          "importNames": ["sendSMS", "sendAdminSMS"],
+          "message": "Direct sendSMS/sendAdminSMS calls bypass the SmsLog dedup and cause duplicate messages to the client. Use `sendSmsNow` from '@/lib/notify-now' instead. See ADR-0007."
+        }
+      ]
+    }]
   },
   "overrides": [
     {
@@ -17,13 +26,29 @@
       "rules": {
         "@typescript-eslint/no-explicit-any": "off",
         "@typescript-eslint/no-non-null-assertion": "off",
-        "@typescript-eslint/consistent-type-assertions": "off"
+        "@typescript-eslint/consistent-type-assertions": "off",
+        "no-restricted-imports": "off"
       }
     },
     {
       "files": ["scripts/**/*"],
       "rules": {
-        "@typescript-eslint/no-explicit-any": "off"
+        "@typescript-eslint/no-explicit-any": "off",
+        "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": [
+        "src/lib/notify-now.ts",
+        "src/lib/sms.ts",
+        "src/lib/queues/**/*",
+        "src/workers/**/*",
+        "src/app/api/cron/heartbeat/route.ts",
+        "src/app/api/admin/clients/*/sms/route.ts",
+        "src/app/api/admin/diagnostics/test-sms/route.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
       }
     }
   ]
