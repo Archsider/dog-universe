@@ -204,10 +204,29 @@ These are **enforced by CI**. PRs that break them won't merge.
 - All MAD amounts use Prisma `Decimal @db.Decimal(10,2)`. Never `Float`. See ADR-0005.
 - Use `formatMAD()` for display. Use `toNumber()` for JS arithmetic at the boundary.
 
+### Dates / timezones
+
+- All "today / tomorrow / this week" comparisons go through `src/lib/dates-casablanca.ts`. Morocco is permanent **UTC+01:00** (DST abolished 2018), encoded as a single offset constant. **NEVER** use `Math.round((endMs - nowMs) / 86_400_000)` — that compares UTC instants, not Casablanca calendar days, and silently misfires across the day boundary.
+
+### SMS
+
+- Transactional SMS MUST go through `sendSmsRespectful` (or `sendSmsNow` for pure OPS events) from `src/lib/notify-now.ts`. Direct imports of `sendSMS` / `sendAdminSMS` from `@/lib/sms` are blocked by ESLint `no-restricted-imports` outside a small whitelist. See ADR-0007 (atomic dedup) and ADR-0008 (respectful policy: quiet hours + walk-in suppression).
+- Cron batch SMS use `enqueueSms` from `src/lib/queues`. Both paths participate in the same SmsLog deduplication.
+
+### GPS / Pet Taxi
+
+- "Should this fix count toward distance?" goes through `shouldCountFix()` in `src/lib/taxi-gps-filter.ts` — the only legitimate place that applies the 6-gate filter. Used by both live ingestion and retroactive replay (`POST /api/admin/taxi-trips/[id]/recompute-distance`). See ADR-0006.
+
+### Booking → TaxiTrip invariants
+
+- "Booking has a taxi addon enabled" ⇒ "TaxiTrip row exists" — enforced by `createBookingTx` and `applyBoardingDetail`.
+- "Booking.status → COMPLETED" ⇒ "all attached TaxiTrip move to a terminal status" — enforced by `finalizeTaxiTripsForBooking` in `status-transitions.ts`.
+
 ### Tests
 
 - Lib code → unit tests in `src/lib/__tests__/`
 - API routes → integration tests in `src/__tests__/api/`
+- Real-Postgres integration suite in `src/__tests__/integration/*` (skipped locally without `INTEGRATION_DATABASE_URL`, activated in CI via a `postgres:16-alpine` service container)
 - Run with `npm test`
 
 ---
