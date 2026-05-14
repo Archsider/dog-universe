@@ -14,13 +14,13 @@
 // row counts that WOULD be processed, so the admin can preview the impact.
 import { NextRequest, NextResponse } from 'next/server';
 import { gunzipSync } from 'node:zlib';
-import { createClient } from '@supabase/supabase-js';
 import { Prisma } from '@prisma/client';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { env } from '@/lib/env';
 import { logServerError } from '@/lib/observability';
-import { getBackupBucket, BACKUP_PREFIX } from '@/lib/db-backup';
+import { BACKUP_PREFIX } from '@/lib/db-backup';
+import { downloadBackupBlob } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -124,20 +124,18 @@ export async function POST(
 
   const dryRun = request.nextUrl.searchParams.get('dryRun') === '1';
 
-  const supabaseUrl = env.SUPABASE_URL;
-  const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY;
-  const bucket = getBackupBucket();
-
-  if (!supabaseUrl || !supabaseKey) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: 'Storage not configured' }, { status: 503 });
   }
 
   try {
-    const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
     const objectKey = `${BACKUP_PREFIX}${date}.json.gz`;
 
-    const { data, error } = await supabase.storage.from(bucket).download(objectKey);
-    if (error || !data) {
+    // Single canonical download path through the backups bucket helper.
+    let data: Blob;
+    try {
+      data = await downloadBackupBlob(objectKey);
+    } catch {
       return NextResponse.json({ error: 'Backup not found' }, { status: 404 });
     }
 
