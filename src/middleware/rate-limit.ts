@@ -121,6 +121,22 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(30, '60 m'),
       prefix: 'rl:geocode',
     }),
+    // taxiDriverPing: 2000 / 60 min — POST /api/admin/taxi-trips/{id}/tracking
+    // from the DRIVER phone. Hot path during an active ride:
+    //   - forced ping every 30 s (= 120/h baseline)
+    //   - + watchPosition fires on every 5 m movement (= 1-3 push/min in
+    //     traffic, so easily 60-180/h)
+    //   - + retries when fetch fails
+    // The previous `adminMutation: 300/h` bucket exploded after ~30 min of
+    // active driving — the local FIFO queue saturated at 100 positions and
+    // the admin/client tracking display froze (bug found 2026-05-14).
+    // 2000/h = 1 push every ~1.8 s on average. Comfortable headroom even
+    // for a high-speed urban ride with frequent direction changes.
+    taxiDriverPing: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(2000, '60 m'),
+      prefix: 'rl:taxi-driver',
+    }),
   };
 }
 
@@ -163,7 +179,8 @@ type DynamicBucket =
   | 'invoiceCreate'
   | 'vaccinationExtract'
   | 'productOrder'
-  | 'geocode';
+  | 'geocode'
+  | 'taxiDriverPing';
 
 // Routes rate-limited regardless of HTTP method (e.g. expensive GETs).
 //
@@ -192,6 +209,14 @@ export function getDynamicLimitBucket(path: string): DynamicBucket | null {
   // /api/taxi/{token}/stream — public SSE endpoint, 60 opens/h per IP
   if (path.startsWith('/api/taxi/') && path.endsWith('/stream')) {
     return 'taxiStream';
+  }
+  // /api/admin/taxi-trips/{id}/tracking — DRIVER write endpoint for live GPS.
+  // Hot path during an active ride: forced ping every 30 s + watchPosition
+  // on every 5 m. Old `adminMutation: 300/h` saturated after ~30 min; the
+  // local FIFO queue maxed at 100 positions and the display froze. Dedicated
+  // 2000/h bucket gives 1 push every 1.8 s avg (comfortable headroom).
+  if (path.startsWith('/api/admin/taxi-trips/') && path.endsWith('/tracking')) {
+    return 'taxiDriverPing';
   }
   // 2026-05-13 (R2a): /api/taxi-tracking/* no longer rate-limited via Upstash.
   // Active polling viewer = ~360 req/h baseline; the bucket consumed ~5 cmds
