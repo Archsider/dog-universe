@@ -3,6 +3,7 @@ import { sendSMS } from '@/lib/sms';
 import { tryAcquireFlag } from '@/lib/cache';
 import { countConsecutiveFailures } from '@/lib/heartbeat';
 import { defineCron } from '@/lib/cron-runner';
+import { getBackupFreshness, notifyBackupStale } from '@/lib/backup-health';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -102,6 +103,21 @@ export const GET = defineCron({
       }
     }
 
+    // Backup staleness — independent of the heartbeat outcome itself. If no
+    // successful backup landed in the last 25h we broadcast one SMS per UTC
+    // day to every SUPERADMIN (dedup inside notifyBackupStale). Wrapped so a
+    // Redis/Prisma hiccup here can never poison the heartbeat row already
+    // inserted above.
+    let backupStaleAlerted = false;
+    let backupFreshnessHours: number | null = null;
+    try {
+      const freshness = await getBackupFreshness();
+      backupFreshnessHours = freshness.hoursSinceLast;
+      backupStaleAlerted = await notifyBackupStale(freshness);
+    } catch (err) {
+      logger.error('cron-heartbeat', 'backup staleness check failed', { error: err instanceof Error ? err.message : String(err) });
+    }
+
     // Retention sweep — drop heartbeats older than 30 days.
     let deleted = 0;
     try {
@@ -121,6 +137,8 @@ export const GET = defineCron({
       redisStatus,
       alerted,
       pruned: deleted,
+      backupStaleAlerted,
+      backupFreshnessHours,
     };
   },
 });

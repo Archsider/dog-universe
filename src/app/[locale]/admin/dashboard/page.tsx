@@ -20,7 +20,8 @@ import { Star, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
-import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { subMonths } from 'date-fns';
+import { startOfMonthCasa, endOfMonthCasa } from '@/lib/dates-casablanca';
 import {
   totalCashCollected,
   billedByCategory,
@@ -63,10 +64,15 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   }
 
   const now = new Date();
-  const thisMonthStart = startOfMonth(now);
-  const thisMonthEnd = endOfMonth(now);
-  const lastMonthStart = startOfMonth(subMonths(now, 1));
-  const lastMonthEnd = endOfMonth(subMonths(now, 1));
+  // Month bounds in Africa/Casablanca (UTC+1 fixed). Pre-fix this used
+  // date-fns `startOfMonth(new Date())` which snaps to the UTC local
+  // month — at 00:30 Casa on the 1st of a month, UTC was still the
+  // previous month, so the dashboard showed "ce mois" stats from the
+  // wrong month for ~1h. See ADR-0008 / src/lib/dates-casablanca.ts.
+  const thisMonthStart = startOfMonthCasa(now);
+  const thisMonthEnd = endOfMonthCasa(now);
+  const lastMonthStart = startOfMonthCasa(subMonths(now, 1));
+  const lastMonthEnd = endOfMonthCasa(subMonths(now, 1));
 
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);

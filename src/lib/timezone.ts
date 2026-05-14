@@ -1,29 +1,31 @@
 // Helpers timezone Maroc — toute logique métier "horaire local" passe par
-// ce fichier. Vercel runs en UTC, le Maroc est UTC+1 (Africa/Casablanca).
-// Ne JAMAIS utiliser getDay/getHours/getDate sur un Date directement
-// pour des règles métier — toujours via ces helpers.
-import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+// `src/lib/dates-casablanca.ts` (jour/mois + math fixed-offset, pas de DST).
+// Ce fichier conserve les helpers Intl.DateTimeFormat encore utilisés ailleurs
+// (`getDayOfWeekMaroc`, `getHourMaroc`, etc.) et re-exporte les fonctions
+// jour pour ne pas casser les anciens call sites (`getCasaStartOfDay`,
+// `getCasaEndOfDay`).
+//
+// **Nouveau code → utilise directement `@/lib/dates-casablanca`** (fonctions
+// nommées `startOfDayCasa`, `endOfDayCasa`, `startOfMonthCasa`,
+// `endOfMonthCasa`, `dayRangeCasa`, `monthRangeCasa`). Ce module-ci reste
+// pour la rétrocompatibilité des crons et de la route /api/availability.
+import { startOfDayCasa, endOfDayCasa } from './dates-casablanca';
 
 export const CASA_TZ = 'Africa/Casablanca';
 const TZ = CASA_TZ;
 
 /**
- * Returns the UTC instant corresponding to 00:00:00.000 *local Casablanca*
- * on the same calendar day as `date`. Replaces `setHours(0,0,0,0)` which
- * interprets the day in the server (UTC) timezone — wrong for cron windows
- * and "today" comparisons in a Morocco-only product.
+ * Alias de `startOfDayCasa` — voir `dates-casablanca.ts`. Conservé pour
+ * les call sites historiques (reminders, review-requests, overdue-invoices,
+ * availability). Nouveau code : utiliser `startOfDayCasa` directement.
  */
 export function getCasaStartOfDay(date: Date = new Date()): Date {
-  const zoned = toZonedTime(date, CASA_TZ);
-  zoned.setHours(0, 0, 0, 0);
-  return fromZonedTime(zoned, CASA_TZ);
+  return startOfDayCasa(date);
 }
 
-/** Upper-bound complement of `getCasaStartOfDay`. */
+/** Alias de `endOfDayCasa` — voir `dates-casablanca.ts`. */
 export function getCasaEndOfDay(date: Date = new Date()): Date {
-  const zoned = toZonedTime(date, CASA_TZ);
-  zoned.setHours(23, 59, 59, 999);
-  return fromZonedTime(zoned, CASA_TZ);
+  return endOfDayCasa(date);
 }
 
 export function getDayOfWeekMaroc(date: Date): number {
