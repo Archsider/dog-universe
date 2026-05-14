@@ -3,7 +3,7 @@ import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
 import { z } from 'zod';
-import { serializeProduct } from '../route';
+import { serializeProduct } from '../_lib/serialize';
 import { withSpan } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
