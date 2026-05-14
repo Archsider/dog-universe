@@ -9,7 +9,7 @@ export const maxDuration = 30;
 
 export const GET = defineCron({
   name: 'dlq-watch',
-  period: 'weekly',
+  period: 'daily',
   fn: async ({ logger }) => {
     if (!isBullMQConfigured()) {
       return { skipped: true, reason: 'BullMQ not configured', count: 0, alerted: false };
