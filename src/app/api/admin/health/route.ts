@@ -8,6 +8,7 @@ import { runAllInvariantChecks } from '@/lib/health-invariants';
 import { getCronLastRun, CRON_NAMES, logServerError } from '@/lib/observability';
 import { isBullMQConfigured } from '@/lib/redis-bullmq';
 import { getDlqQueue } from '@/lib/queues';
+import { getRecentSlowQueries, getSlowQueryStats, SLOW_QUERY_THRESHOLD_MS } from '@/lib/slow-query-monitor';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,25 +49,30 @@ export async function GET() {
   }
 
   try {
-    const [invariants, cronRuns, dlqCount, smsStats] = await Promise.all([
-      runAllInvariantChecks(),
-      Promise.all(
-        CRON_NAMES.map(async (name) => ({ name, lastRun: await getCronLastRun(name) })),
-      ),
-      (async () => {
-        if (!isBullMQConfigured()) return null;
-        try {
-          const dlq = getDlqQueue();
-          if (!dlq) return null;
-          const counts = await dlq.getJobCounts('waiting', 'failed', 'completed');
-          return (counts.waiting ?? 0) + (counts.failed ?? 0);
-        } catch (err) {
-          logServerError('health', 'DLQ count failed', err);
-          return null;
-        }
-      })(),
-      getSmsStats(),
-    ]);
+    const [invariants, cronRuns, dlqCount, smsStats, slowQueryStats, slowQueriesSample] =
+      await Promise.all([
+        runAllInvariantChecks(),
+        Promise.all(
+          CRON_NAMES.map(async (name) => ({ name, lastRun: await getCronLastRun(name) })),
+        ),
+        (async () => {
+          if (!isBullMQConfigured()) return null;
+          try {
+            const dlq = getDlqQueue();
+            if (!dlq) return null;
+            const counts = await dlq.getJobCounts('waiting', 'failed', 'completed');
+            return (counts.waiting ?? 0) + (counts.failed ?? 0);
+          } catch (err) {
+            logServerError('health', 'DLQ count failed', err);
+            return null;
+          }
+        })(),
+        getSmsStats(),
+        getSlowQueryStats(),
+        // Top 10 most recent slow queries — enough to spot a pattern without
+        // bloating the response payload (each entry can be ~600 bytes).
+        getRecentSlowQueries().then((all) => all.slice(0, 10)),
+      ]);
 
     return NextResponse.json({
       invariants,
@@ -74,7 +80,15 @@ export async function GET() {
       dlqCount,
       smsStats,
       dbPool: getDbPoolStatus(),
-      sentry: { available: !!process.env.SENTRY_DSN, note: 'open issues not queried via SaaS API' },
+      slowQueries: {
+        thresholdMs: SLOW_QUERY_THRESHOLD_MS,
+        stats: slowQueryStats, // null when no data
+        recent: slowQueriesSample,
+      },
+      sentry: {
+        available: !!process.env.SENTRY_DSN,
+        note: 'open issues not queried via SaaS API',
+      },
       generatedAt: new Date().toISOString(),
     });
   } catch (err) {

@@ -1,0 +1,27 @@
+{
+  "$schema-comment": "Bundle size budgets for Dog Universe. Sizes are measured in KILOBYTES (1024 bytes), uncompressed. Numbers reflect what `next build` reports in the 'Size' column (NOT 'First Load JS', which adds shared chunks). Bump only with intentionality.",
+  "limits": [
+    {
+      "name": "Framework + main shared chunks",
+      "patterns": [
+        ".next/static/chunks/main-*.js",
+        ".next/static/chunks/webpack-*.js",
+        ".next/static/chunks/framework-*.js"
+      ],
+      "maxKB": 280,
+      "rationale": "React + Next.js runtime. Should rarely change."
+    },
+    {
+      "name": "Total JS shipped to client",
+      "patterns": [".next/static/chunks/**/*.js"],
+      "maxKB": 4500,
+      "rationale": "Sum of every chunk. Bump only when adding a major feature (chart lib, PDF viewer, etc)."
+    },
+    {
+      "name": "CSS bundle",
+      "patterns": [".next/static/css/*.css"],
+      "maxKB": 200,
+      "rationale": "Tailwind purges aggressively; if this jumps you've probably leaked an unused class."
+    }
+  ]
+}

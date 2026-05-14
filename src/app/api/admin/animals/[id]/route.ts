@@ -3,6 +3,7 @@ import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -32,7 +33,11 @@ export async function DELETE(_req: Request, { params }: Params) {
   }
 
   // Soft-delete — préserve l'historique des réservations passées
-  await prisma.pet.update({ where: { id }, data: { deletedAt: new Date() } });
+  await withSpan(
+    'api.admin.animals.softDelete',
+    { petId: id, actorId: session.user.id, species: pet.species },
+    () => prisma.pet.update({ where: { id }, data: { deletedAt: new Date() } }),
+  );
 
   await logAction({
     userId: session.user.id,

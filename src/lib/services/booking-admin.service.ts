@@ -69,7 +69,7 @@ export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
   // P0-8: wrap boardingDetail upsert + taxi trip creates/updates in a single
   // transaction so a partial failure (e.g. taxiStatusHistory create) cannot
   // leave boardingDetail updated but taxi trips missing.
-  let bd = await prisma.$transaction(async (tx) => {
+  const bd = await prisma.$transaction(async (tx) => {
     await tx.boardingDetail.upsert({
       where: { bookingId },
       update: patch,

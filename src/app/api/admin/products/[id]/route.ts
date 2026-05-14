@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
 import { z } from 'zod';
 import { serializeProduct } from '../route';
+import { withSpan } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -82,7 +83,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     );
   }
 
-  const updated = await prisma.product.update({
+  const updated = await withSpan(
+    'api.admin.products.update',
+    { productId: id, actorId: session.user.id, version: before.version },
+    () => prisma.product.update({
     where: { id },
     data: {
       ...(name !== undefined && { name: name.trim() }),
@@ -102,7 +106,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       ...(imageUrl !== undefined && { imageUrl: imageUrl?.trim() || null }),
       version: { increment: 1 },
     },
-  });
+  }),
+  );
 
   await prisma.actionLog.create({
     data: {
@@ -133,10 +138,14 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   const product = await prisma.product.findUnique({ where: { id } });
   if (!product) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
 
-  await prisma.product.update({
-    where: { id },
-    data: { isArchived: true, version: { increment: 1 } },
-  });
+  await withSpan(
+    'api.admin.products.archive',
+    { productId: id, actorId: session.user.id },
+    () => prisma.product.update({
+      where: { id },
+      data: { isArchived: true, version: { increment: 1 } },
+    }),
+  );
 
   await prisma.actionLog.create({
     data: {

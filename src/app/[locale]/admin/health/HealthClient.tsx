@@ -23,12 +23,32 @@ interface DbPoolStatus {
   warning: string | null;
 }
 
+interface SlowQueryEntry {
+  at: string;
+  durationMs: number;
+  sql: string;
+}
+
+interface SlowQueryStats {
+  count: number;
+  newest: string;
+  maxDurationMs: number;
+  avgDurationMs: number;
+}
+
+interface SlowQueriesPayload {
+  thresholdMs: number;
+  stats: SlowQueryStats | null;
+  recent: SlowQueryEntry[];
+}
+
 interface Snapshot {
   invariants: InvariantResult[];
   cronRuns: Array<{ name: string; lastRun: string | null }>;
   dlqCount: number | null;
   smsStats: SmsStats | null;
   dbPool?: DbPoolStatus;
+  slowQueries?: SlowQueriesPayload;
   sentry: { available: boolean; note: string };
   generatedAt: string;
 }
@@ -272,6 +292,81 @@ export default function HealthClient({
               </div>
             </div>
           </div>
+        </section>
+      )}
+
+      {/* DB slow queries */}
+      {data.slowQueries && (
+        <section className="space-y-2">
+          <h2 className="text-lg font-semibold text-charcoal">
+            {isFr ? 'Requêtes DB lentes' : 'Slow DB queries'}
+            <span className="ml-2 text-xs font-normal text-charcoal/50">
+              ({isFr ? 'seuil' : 'threshold'} {data.slowQueries.thresholdMs} ms)
+            </span>
+          </h2>
+          {!data.slowQueries.stats ? (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <span className="font-medium text-charcoal text-sm">
+                {isFr
+                  ? `Aucune requête > ${data.slowQueries.thresholdMs} ms enregistrée.`
+                  : `No queries above ${data.slowQueries.thresholdMs} ms recorded.`}
+              </span>
+            </div>
+          ) : (
+            <>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 grid grid-cols-3 gap-2 text-sm">
+                <div>
+                  <p className="text-xs text-amber-700/70 uppercase tracking-wide">
+                    {isFr ? 'Récentes' : 'Recent'}
+                  </p>
+                  <p className="text-xl font-bold text-amber-900 tabular-nums">
+                    {data.slowQueries.stats.count}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-amber-700/70 uppercase tracking-wide">
+                    {isFr ? 'Pire' : 'Worst'}
+                  </p>
+                  <p className="text-xl font-bold text-amber-900 tabular-nums">
+                    {data.slowQueries.stats.maxDurationMs} ms
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-amber-700/70 uppercase tracking-wide">
+                    {isFr ? 'Moy.' : 'Avg.'}
+                  </p>
+                  <p className="text-xl font-bold text-amber-900 tabular-nums">
+                    {data.slowQueries.stats.avgDurationMs} ms
+                  </p>
+                </div>
+              </div>
+              {data.slowQueries.recent.length > 0 && (
+                <details className="rounded-lg border border-gray-200 bg-white p-3">
+                  <summary className="cursor-pointer text-xs font-medium text-charcoal/70">
+                    {isFr ? 'Voir les 10 plus récentes' : 'Show 10 most recent'}
+                  </summary>
+                  <ul className="mt-2 space-y-2 max-h-64 overflow-y-auto">
+                    {data.slowQueries.recent.map((q, i) => (
+                      <li key={i} className="text-xs border-l-2 border-amber-300 pl-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-mono text-amber-700 font-semibold">
+                            {q.durationMs} ms
+                          </span>
+                          <span className="text-charcoal/40">
+                            {new Date(q.at).toLocaleTimeString(isFr ? 'fr-FR' : 'en-GB')}
+                          </span>
+                        </div>
+                        <pre className="whitespace-pre-wrap break-all text-[10px] text-charcoal/70 font-mono">
+                          {q.sql}
+                        </pre>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </>
+          )}
         </section>
       )}
 
