@@ -54,6 +54,14 @@ const FORCED_PING_INTERVAL_MS = 30_000;
 const FETCH_TIMEOUT_MS = 5_000;
 const QUEUE_TOAST_THRESHOLD = 5;
 
+// Minimum gap between two POSTs to the tracking endpoint. The server filter
+// already rejects fixes < 1.5 s apart, but enforcing it client-side cuts
+// network noise + Lambda invocations by ~3× during active driving. Below
+// this gap the GPS movement is below useful resolution anyway (≤ 25 m at
+// 30 km/h). watchPosition keeps firing for the watchdog freshness signal,
+// only the network push is throttled.
+const PUSH_MIN_INTERVAL_MS = 3_000;
+
 export interface UseGpsTrackingResult {
   gpsHealth: 'live' | 'stale' | 'lost' | 'idle';
   pendingSize: number;
@@ -73,6 +81,8 @@ export function useGpsTracking(
   const pendingQueueRef = useRef<QueueItem[]>([]);
   const watchdogIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const forcedPingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Throttle: last time we actually POSTed to the server (vs received a fix).
+  const lastPushAtRef = useRef<number>(0);
   // Snapshot of trackingActive for DOM handlers (avoids stale closure).
   const trackingActiveRef = useRef(trackingActive);
   trackingActiveRef.current = trackingActive;
@@ -155,10 +165,19 @@ export function useGpsTracking(
       setPendingSize(pendingQueueRef.current.length);
     };
 
-    const pushLocation = async (coords: GeolocationCoordinates) => {
-      lastFixAtRef.current = Date.now();
+    const pushLocation = async (coords: GeolocationCoordinates, force = false) => {
+      const now = Date.now();
+      // Always update the freshness ref — the watchdog and the gpsHealth
+      // chip both key off "last fix received", not "last fix pushed".
+      lastFixAtRef.current = now;
+      // Throttle network pushes (the forced-ping path passes force=true so
+      // the 30 s server keepalive is never starved by the throttle).
+      if (!force && now - lastPushAtRef.current < PUSH_MIN_INTERVAL_MS) {
+        return;
+      }
+      lastPushAtRef.current = now;
       const item: QueueItem = {
-        ts: Date.now(),
+        ts: now,
         latitude: coords.latitude,
         longitude: coords.longitude,
         heading: coords.heading ?? null,
@@ -196,20 +215,16 @@ export function useGpsTracking(
         (pos) => pushLocation(pos.coords),
         (err) =>
           logger.error('gps', 'watch error', { code: err.code, message: err.message }),
-        {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 15000,
-          distanceFilter: 5,
-        } as PositionOptions,
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
       );
     };
 
     // 1) Initial fix via getCurrentPosition (don't wait for the first
-    //    watchPosition tick).
+    //    watchPosition tick). force=true: bypass throttle for the very
+    //    first fix so the map shows the marker immediately.
     lastFixAtRef.current = Date.now();
     navigator.geolocation.getCurrentPosition(
-      (pos) => pushLocation(pos.coords),
+      (pos) => pushLocation(pos.coords, true),
       (err) =>
         logger.error('gps-init', 'getCurrentPosition failed', {
           code: err.code,
@@ -219,16 +234,14 @@ export function useGpsTracking(
     );
 
     // 2) Continuous watch — fires on each significant position change.
+    // `distanceFilter` does NOT exist in the Web Geolocation spec (that's
+    // a React Native option); the browser silently ignores it. Throttling
+    // happens inside pushLocation instead (PUSH_MIN_INTERVAL_MS).
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => pushLocation(pos.coords),
       (err) =>
         logger.error('gps', 'watch error', { code: err.code, message: err.message }),
-      {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 15000,
-        distanceFilter: 5,
-      } as PositionOptions,
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
     );
     setGpsHealth('live');
 
@@ -288,7 +301,9 @@ export function useGpsTracking(
     forcedPingIntervalRef.current = setInterval(() => {
       if (typeof navigator === 'undefined' || !navigator.geolocation) return;
       navigator.geolocation.getCurrentPosition(
-        (pos) => pushLocation(pos.coords),
+        // force=true: this is a keepalive — the throttle must not eat it
+        // (the whole point is to push even when stationary).
+        (pos) => pushLocation(pos.coords, true),
         (err) =>
           logger.warn('gps-forced', 'getCurrentPosition failed', {
             code: err.code,
@@ -307,7 +322,9 @@ export function useGpsTracking(
       // Force an immediate fix + restart watch (avoids zombie watch in bg).
       restartWatch();
       navigator.geolocation.getCurrentPosition(
-        (pos) => pushLocation(pos.coords),
+        // force=true: user just came back to the tab — give them an
+        // immediate fix on the map without waiting on the throttle.
+        (pos) => pushLocation(pos.coords, true),
         () => {
           /* silent */
         },

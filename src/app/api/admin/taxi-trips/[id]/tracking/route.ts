@@ -7,9 +7,7 @@ import { maybeAutoTransition } from '@/lib/taxi-auto-transition';
 import { signTaxiToken } from '@/lib/taxi-token';
 import { withSpan } from '@/lib/observability';
 import { logger } from '@/lib/logger';
-
-const MAX_ACCURACY_METERS = 50;
-const MAX_SPEED_KMH = 200;
+import { shouldCountFix } from '@/lib/taxi-gps-filter';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.doguniverse.ma';
 const MAX_LOCATIONS_PER_TRIP = 50;
@@ -180,13 +178,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'INVALID_COORDINATES' }, { status: 400 });
     }
 
-    // ── Quality gate: reject low-accuracy fixes (>50 m horizontal error) ──
-    if (isValidNumber(accuracy) && accuracy > MAX_ACCURACY_METERS) {
-      logger.error('taxi-tracking', 'gps point ignored (low_accuracy)', { tripId: id, accuracy });
-      return NextResponse.json({ ok: true, ignored: 'low_accuracy' });
-    }
-
-    // Compute distance delta from the previous GPS point (noise-filtered at 10 m).
+    // ── Single source of truth: shouldCountFix() from taxi-gps-filter ────
+    // The filter decides BOTH whether to store the row and whether to add
+    // the delta to distanceKm. Two independent outputs: a fix can be stored
+    // but not counted (taxi crawling at a red light → marker on map, but
+    // 12 m of drift must not inflate the cumulative distance).
     const prev = await prisma.taxiLocation.findFirst({
       where: { taxiTripId: id },
       orderBy: { createdAt: 'desc' },
@@ -194,16 +190,43 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
 
     let deltaKm = 0;
+    let filterReason: string | null = null;
+    let shouldStore = true;
+
     if (prev) {
       const d = haversineKm(prev.latitude, prev.longitude, latitude, longitude);
-      // ── Quality gate: reject implausible speeds (>200 km/h teleport / GPS bug) ──
       const dtSec = Math.max(0.001, (Date.now() - prev.createdAt.getTime()) / 1000);
-      const speedKmh = (d / dtSec) * 3600;
-      if (speedKmh > MAX_SPEED_KMH) {
-        logger.error('taxi-tracking', 'gps point ignored (speed_outlier)', { tripId: id, speedKmh: Math.round(speedKmh), deltaKm: d, dtSec });
-        return NextResponse.json({ ok: true, ignored: 'speed_outlier' });
+      const decision = shouldCountFix({
+        deltaKm: d,
+        dtSec,
+        accuracyMeters: isValidNumber(accuracy) ? accuracy : null,
+      });
+      filterReason = decision.reason;
+      shouldStore = decision.store;
+      if (decision.countTowardDistance) {
+        deltaKm = d;
       }
-      if (d >= 0.01) deltaKm = d; // ignore < 10 m (GPS drift)
+      if (decision.reason) {
+        // Observability: per-trip rejection stats surface in Sentry breadcrumbs.
+        // INFO-level on purpose: rejections are expected noise, not errors.
+        logger.info('taxi-tracking', `gps fix filtered: ${decision.reason}`, {
+          tripId: id,
+          reason: decision.reason,
+          deltaKm: Number(d.toFixed(4)),
+          dtSec: Number(dtSec.toFixed(2)),
+          speedKmh: Math.round(decision.speedKmh),
+          accuracy: isValidNumber(accuracy) ? Math.round(accuracy) : null,
+        });
+      }
+    } else {
+      // First fix of the trip: nothing to filter against. Store it,
+      // distanceKm stays at 0 until the next fix arrives.
+      shouldStore = !(isValidNumber(accuracy) && accuracy > 50);
+      if (!shouldStore) filterReason = 'low_accuracy';
+    }
+
+    if (!shouldStore) {
+      return NextResponse.json({ ok: true, ignored: filterReason });
     }
 
     await prisma.taxiLocation.create({
