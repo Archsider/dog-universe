@@ -89,3 +89,111 @@ export function isDepartureTomorrowCasablanca(end: Date | string, from: Date | s
 export function isSameDayCasablanca(a: Date | string, b: Date | string): boolean {
   return casablancaDateOnly(a) === casablancaDateOnly(b);
 }
+
+// ─── Day / month range helpers (UTC instants for Prisma `gte/lte`) ─────────
+//
+// CONVENTION (read once, follow everywhere)
+// =========================================
+//   - The DB stores instants in UTC (Postgres `timestamp` columns).
+//   - Business filters ("today", "this month", "next 7 days") are calendar
+//     bounds in **Africa/Casablanca** (UTC+1 fixed, no DST since 2018).
+//   - To query Prisma we convert Casa-local bounds → UTC instants:
+//
+//        startOfTodayCasa() → first instant of today in Casa, as a UTC Date
+//        endOfTodayCasa()   → last  instant of today in Casa, as a UTC Date
+//        startOfMonthCasa() / endOfMonthCasa()       — same idea, monthly
+//        startOfDayCasa(d) / endOfDayCasa(d)         — for an arbitrary d
+//
+//     Each returns a `Date` that JS prints in UTC but represents the right
+//     Casa wall-clock boundary. Pass these directly to Prisma's `gte / lte`.
+//
+//     Concrete example: "today" at 00:30 Casa on 2026-05-15:
+//        startOfTodayCasa() === 2026-05-14T23:00:00.000Z  (= 2026-05-15 00:00 Casa)
+//        endOfTodayCasa()   === 2026-05-15T22:59:59.999Z  (= 2026-05-15 23:59 Casa)
+//
+//     Compare with the buggy `setUTCHours(0,0,0,0)`, which at the same
+//     instant would yield 2026-05-15T00:00:00Z and silently include the
+//     last hour of the 14th in "today". This is the root cause of the
+//     "dashboard one day behind" bug observed at 00:15 Casa.
+
+/**
+ * Current wall-clock instant. Just a wrapper around `new Date()` —
+ * exists so call sites read self-documenting (`nowCasa()` flags that
+ * the developer is doing Casa-local arithmetic, not naive UTC).
+ */
+export function nowCasa(): Date {
+  return new Date();
+}
+
+/**
+ * First instant of the Casablanca-local day containing `d`, returned as
+ * a UTC Date directly usable in Prisma filters.
+ */
+export function startOfDayCasa(d: Date | string = new Date()): Date {
+  return casablancaStartOfDay(d);
+}
+
+/**
+ * Last instant of the Casablanca-local day containing `d`. Returns
+ * 23:59:59.999 Casa as a UTC Date.
+ */
+export function endOfDayCasa(d: Date | string = new Date()): Date {
+  const start = casablancaStartOfDay(d);
+  // Add 24h - 1ms via UTC arithmetic (no DST in Casa → safe).
+  return new Date(start.getTime() + 86_400_000 - 1);
+}
+
+/** Convenience: today's start in Casa, as a UTC instant. */
+export function startOfTodayCasa(): Date {
+  return startOfDayCasa(new Date());
+}
+
+/** Convenience: today's end in Casa, as a UTC instant. */
+export function endOfTodayCasa(): Date {
+  return endOfDayCasa(new Date());
+}
+
+/**
+ * First instant of the Casablanca-local month containing `d`. Implemented
+ * by projecting `d` onto the Casa calendar day, snapping to day 01, and
+ * converting back to a UTC Date.
+ */
+export function startOfMonthCasa(d: Date | string = new Date()): Date {
+  const ymd = casablancaDateOnly(d); // 'YYYY-MM-DD' in Casa
+  const firstOfMonth = `${ymd.slice(0, 7)}-01`;
+  return new Date(`${firstOfMonth}T00:00:00+01:00`);
+}
+
+/**
+ * Last instant of the Casablanca-local month containing `d`. Computes
+ * the start of the NEXT month and subtracts 1 ms.
+ */
+export function endOfMonthCasa(d: Date | string = new Date()): Date {
+  const ymd = casablancaDateOnly(d);
+  const year = Number(ymd.slice(0, 4));
+  const monthIdx = Number(ymd.slice(5, 7)); // 1-12
+  // Next month, year wrap. Use Date.UTC arithmetic via ISO construction:
+  // "year-(month+1)-01" with overflow handled by Date constructor.
+  const nextYear = monthIdx === 12 ? year + 1 : year;
+  const nextMonth = monthIdx === 12 ? 1 : monthIdx + 1;
+  const nextMonthIso = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+  const nextMonthStart = new Date(`${nextMonthIso}T00:00:00+01:00`);
+  return new Date(nextMonthStart.getTime() - 1);
+}
+
+/**
+ * Return both bounds of the Casablanca-local day for `d`. Convenient for
+ * Prisma filters that want both ends without two calls.
+ *   prisma.booking.findMany({ where: { startDate: { gte, lte } } })
+ */
+export function dayRangeCasa(d: Date | string = new Date()): { start: Date; end: Date } {
+  return { start: startOfDayCasa(d), end: endOfDayCasa(d) };
+}
+
+/**
+ * Like `dayRangeCasa` but for a calendar month. Use for "this month",
+ * "last month" KPIs, billing summaries, etc.
+ */
+export function monthRangeCasa(d: Date | string = new Date()): { start: Date; end: Date } {
+  return { start: startOfMonthCasa(d), end: endOfMonthCasa(d) };
+}

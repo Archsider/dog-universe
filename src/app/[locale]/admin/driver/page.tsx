@@ -4,21 +4,12 @@ import { Car, Clock, MapPin, Route } from 'lucide-react';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
+import { casablancaDateOnly } from '@/lib/dates-casablanca';
 
 // Trip statuses where the driver is actively driving (the green-pulse banner).
 // Mirrors the FLOWS table in the status transition route — keep in sync.
 const ACTIVE_TRIP_STATUSES = ['EN_ROUTE_TO_CLIENT', 'ON_SITE_CLIENT', 'ANIMAL_ON_BOARD'] as const;
 const TERMINAL_TRIP_STATUSES = ['ARRIVED_AT_PENSION', 'ARRIVED_AT_CLIENT', 'COMPLETED'] as const;
-
-// "YYYY-MM-DD" in the local timezone (Casablanca). TaxiTrip.date is stored
-// as a String in that format (it comes straight from <input type="date">),
-// so comparing string-to-string is exact and timezone-free.
-function todayDateStr(now: Date): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
 
 export default async function DriverDashboardPage({
   params,
@@ -32,8 +23,14 @@ export default async function DriverDashboardPage({
   }
 
   const isFr = locale !== 'en';
-  const now = new Date();
-  const todayStr = todayDateStr(now);
+  // `TaxiTrip.date` is a string stored as YYYY-MM-DD straight from
+  // `<input type="date">` in Casablanca local time. We compute today's
+  // string via casablancaDateOnly so a query at 00:30 Casa (= 23:30 UTC
+  // the previous day) still says "today" = May 15 — not the UTC date
+  // of May 14. Pre-fix this used `now.getDate()` which is UTC on Vercel
+  // → driver dashboard was showing yesterday's courses for ~1 hour
+  // around midnight Casa.
+  const todayStr = casablancaDateOnly(new Date());
 
   // Booking statuses where a related TaxiTrip should never appear as
   // "active" on the driver dashboard, regardless of its own status. This

@@ -5,6 +5,12 @@ import {
   daysUntilCasablanca,
   isDepartureTomorrowCasablanca,
   isSameDayCasablanca,
+  nowCasa,
+  startOfDayCasa,
+  endOfDayCasa,
+  startOfMonthCasa,
+  endOfMonthCasa,
+  dayRangeCasa,
 } from '../dates-casablanca';
 
 // Wave-1 bug #2 regression suite. Every case here is one a naive
@@ -124,5 +130,78 @@ describe('isSameDayCasablanca', () => {
         new Date('2026-05-14T23:01:00Z'), // 00:01 Casa 15-May
       ),
     ).toBe(false);
+  });
+});
+
+// ─── Day / month range helpers — the "dashboard 1-day-behind" fix ─────────
+
+describe('startOfDayCasa / endOfDayCasa', () => {
+  it('returns 00:00 Casa as 23:00 UTC the previous day for an arbitrary intra-day instant', () => {
+    // 14:30 Casa on 2026-05-15 → 13:30 UTC. Day start should snap to
+    // 00:00 Casa 15-May = 23:00 UTC on 14-May.
+    const intraDay = new Date('2026-05-15T13:30:00Z');
+    expect(startOfDayCasa(intraDay).toISOString()).toBe('2026-05-14T23:00:00.000Z');
+    expect(endOfDayCasa(intraDay).toISOString()).toBe('2026-05-15T22:59:59.999Z');
+  });
+
+  it('handles the late-evening Casa boundary correctly', () => {
+    // 23:30 Casa 14-May = 22:30 UTC. Still Casa-day 14-May.
+    const lateEvening = new Date('2026-05-14T22:30:00Z');
+    expect(casablancaDateOnly(startOfDayCasa(lateEvening))).toBe('2026-05-14');
+  });
+
+  it('handles the post-midnight Casa boundary correctly — the BUG case', () => {
+    // 00:15 Casa 15-May = 23:15 UTC 14-May. The buggy `setUTCHours(0,0,0,0)`
+    // would have returned `2026-05-14T00:00:00Z` (yesterday Casa). The
+    // Casa-aware helper returns 23:00 UTC 14-May = 00:00 Casa 15-May.
+    const afterMidnight = new Date('2026-05-14T23:15:00Z');
+    expect(startOfDayCasa(afterMidnight).toISOString()).toBe('2026-05-14T23:00:00.000Z');
+    expect(casablancaDateOnly(startOfDayCasa(afterMidnight))).toBe('2026-05-15');
+  });
+});
+
+describe('startOfMonthCasa / endOfMonthCasa', () => {
+  it('returns 00:00 Casa on the 1st for an arbitrary mid-month instant', () => {
+    const midMonth = new Date('2026-05-14T13:30:00Z'); // 14:30 Casa 14-May
+    expect(startOfMonthCasa(midMonth).toISOString()).toBe('2026-04-30T23:00:00.000Z'); // 00:00 Casa 1-May
+  });
+
+  it('returns 23:59:59.999 Casa on the last day of the month for endOfMonthCasa', () => {
+    const may = new Date('2026-05-14T13:30:00Z');
+    const eom = endOfMonthCasa(may);
+    // 23:59:59.999 Casa 31-May = 22:59:59.999 UTC 31-May
+    expect(eom.toISOString()).toBe('2026-05-31T22:59:59.999Z');
+  });
+
+  it('December → January year rollover', () => {
+    const dec = new Date('2026-12-14T12:00:00Z');
+    expect(endOfMonthCasa(dec).toISOString()).toBe('2026-12-31T22:59:59.999Z');
+    const jan = new Date('2027-01-14T12:00:00Z');
+    expect(startOfMonthCasa(jan).toISOString()).toBe('2026-12-31T23:00:00.000Z'); // 00:00 Casa 1-Jan
+  });
+
+  it('handles "00:30 Casa on the 1st" boundary (the BUG case for monthly KPIs)', () => {
+    // 00:30 Casa 1-May = 23:30 UTC 30-Apr. The buggy `startOfMonth(new Date())`
+    // would have returned 1-Apr 00:00 UTC (= April month start) because UTC
+    // was still April. The Casa helper correctly returns 1-May Casa.
+    const postMidnight1st = new Date('2026-04-30T23:30:00Z');
+    expect(casablancaDateOnly(startOfMonthCasa(postMidnight1st))).toBe('2026-05-01');
+    expect(startOfMonthCasa(postMidnight1st).toISOString()).toBe('2026-04-30T23:00:00.000Z');
+  });
+});
+
+describe('dayRangeCasa', () => {
+  it('produces a 24-hour window aligned on Casa midnight', () => {
+    const noon = new Date('2026-05-14T11:00:00Z'); // 12:00 Casa
+    const { start, end } = dayRangeCasa(noon);
+    expect(end.getTime() - start.getTime()).toBe(86_400_000 - 1);
+    expect(start.toISOString()).toBe('2026-05-13T23:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-05-14T22:59:59.999Z');
+  });
+});
+
+describe('nowCasa', () => {
+  it('returns a Date (smoke — just confirms exported and callable)', () => {
+    expect(nowCasa()).toBeInstanceOf(Date);
   });
 });

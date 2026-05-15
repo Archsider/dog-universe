@@ -7,7 +7,8 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { LayoutList, LayoutGrid, Plus } from 'lucide-react';
-import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { format } from 'date-fns';
+import { startOfMonthCasa, endOfMonthCasa } from '@/lib/dates-casablanca';
 
 import { Prisma, type BookingStatus } from '@prisma/client';
 import { ReservationsKanban, type KanbanBooking } from './ReservationsKanban';
@@ -232,8 +233,8 @@ async function ListView({
     return <BoardView where={where} locale={locale_} />;
   }
   const now = new Date();
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
+  const monthStart = startOfMonthCasa(now);
+  const monthEnd = endOfMonthCasa(now);
   const [bookingsRaw, monthRevenueAgg] = await Promise.all([
     fetchListBookings(where, orderBy),
     prisma.invoice.aggregate({
@@ -376,8 +377,8 @@ async function HistoryView({
 }) {
   const fr = locale !== 'en';
   const now = new Date();
-  const defaultFrom = format(startOfMonth(now), 'yyyy-MM-dd');
-  const defaultTo = format(endOfMonth(now), 'yyyy-MM-dd');
+  const defaultFrom = format(startOfMonthCasa(now), 'yyyy-MM-dd');
+  const defaultTo = format(endOfMonthCasa(now), 'yyyy-MM-dd');
   const from = searchParams.from || defaultFrom;
   const to = searchParams.to || defaultTo;
   const noInvoice = searchParams.noInvoice === '1';

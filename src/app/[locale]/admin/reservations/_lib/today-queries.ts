@@ -5,6 +5,7 @@ import { toNumber } from '@/lib/decimal';
 import { getPricingSettings, type PricingSettings } from '@/lib/pricing';
 import { computeLiveTotal, CASA_TZ } from '@/lib/live-pricing';
 import { notDeleted } from '@/lib/prisma-soft';
+import { dayRangeCasa } from '@/lib/dates-casablanca';
 
 export { CASA_TZ };
 
@@ -39,12 +40,15 @@ export type TodaySnapshot = {
   upcomingWeek: { date: string; count: number }[];
 };
 
+// Casablanca-aware day range for Prisma filters. Pre-fix this used
+// `setUTCHours(0, 0, 0, 0)` which silently treated "today" as the UTC
+// day — so a request at 00:30 Casa (= 23:30 UTC previous day) returned
+// yesterday's arrivals/departures. The helper below projects on the
+// Africa/Casablanca calendar (fixed UTC+1) and returns the UTC instants
+// of 00:00 Casa and 23:59:59.999 Casa for the same calendar day.
+// See ADR-0008 / src/lib/dates-casablanca.ts for the convention.
 export function dayRangeUTC(date: Date): { start: Date; end: Date } {
-  const start = new Date(date);
-  start.setUTCHours(0, 0, 0, 0);
-  const end = new Date(date);
-  end.setUTCHours(23, 59, 59, 999);
-  return { start, end };
+  return dayRangeCasa(date);
 }
 
 const BOOKING_SELECT = {
@@ -119,13 +123,12 @@ function withLiveTotal(b: TodayBooking, pricing: PricingSettings, now: Date): To
 export async function loadTodaySnapshot(now: Date = new Date()): Promise<TodaySnapshot> {
   const { start, end } = dayRangeUTC(now);
 
-  // Window for upcoming week: today+1 → today+7
-  const weekStart = new Date(end);
-  weekStart.setUTCDate(weekStart.getUTCDate() + 1);
-  weekStart.setUTCHours(0, 0, 0, 0);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
-  weekEnd.setUTCHours(23, 59, 59, 999);
+  // Window for upcoming week: tomorrow Casa → today+7 Casa. Computed by
+  // shifting `end` (today's last instant Casa) forward in millisecond
+  // arithmetic — safe because Casa is permanent UTC+1, no DST jumps.
+  const ONE_MS = 1;
+  const weekStart = new Date(end.getTime() + ONE_MS); // 00:00 Casa tomorrow
+  const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000 - ONE_MS); // 23:59:59.999 Casa, day+7
 
   const [arrivalsRaw, departuresRaw, currentRaw, pendingRaw, upcomingRaw] = await Promise.all([
     // Arrivals today: confirmed, startDate is today, not yet checked-in
