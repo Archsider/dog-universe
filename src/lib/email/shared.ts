@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import CircuitBreaker from 'opossum';
 import { petCompanion, petVerb, petArrived } from '../sms';
 import { logger } from '@/lib/logger';
+import { markEmailSent } from '@/lib/email-health';
 
 let transporter: nodemailer.Transporter;
 
@@ -150,6 +151,12 @@ export async function sendEmail({
       host,
       durationMs: Date.now() - startedAt,
     });
+    // Telemetry: stamps `email:last:sent` in Redis. Captures BOTH the
+    // BullMQ-queued path (cron batches via processEmailJob) and the
+    // direct `sendEmailNow` path (transactional, fire-and-forget). The
+    // /admin/diagnostics widget reads this key. Fire-and-forget: we
+    // never block an email-send on the telemetry write.
+    void markEmailSent();
   } catch (error) {
     logger.error('email', 'Failed to send email', {
       to: maskEmail(to),

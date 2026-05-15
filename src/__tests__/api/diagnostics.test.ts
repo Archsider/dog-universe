@@ -15,6 +15,11 @@ const mocks = vi.hoisted(() => ({
   getSmsQueue: vi.fn(),
   getDlqQueue: vi.fn(),
   getWorkerLastRun: vi.fn(),
+  // `lastSuccessfulSends.email` source of truth moved from BullMQ getCompleted
+  // (broken — only saw queued cron batches, missed direct `sendEmailNow`
+  // transactional sends, hence "Email il y a 3059 min" widget bug) to a Redis
+  // `email:last:sent` key written from inside `sendEmail()`.
+  getLastEmailSentAt: vi.fn(),
   prisma: {
     actionLog: { findFirst: vi.fn() },
     smsLog: { findFirst: vi.fn() },
@@ -29,6 +34,7 @@ vi.mock('@/lib/queues/index', () => ({
   getDlqQueue: mocks.getDlqQueue,
 }));
 vi.mock('@/lib/cache', () => ({ getWorkerLastRun: mocks.getWorkerLastRun }));
+vi.mock('@/lib/email-health', () => ({ getLastEmailSentAt: mocks.getLastEmailSentAt }));
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.prisma }));
 
 import { GET } from '@/app/api/admin/diagnostics/route';
@@ -47,6 +53,7 @@ beforeEach(() => {
   mocks.getSmsQueue.mockReturnValue(makeQueueOk({ waiting: 0, active: 0, completed: 2, failed: 0, delayed: 0 }));
   mocks.getDlqQueue.mockReturnValue(makeQueueOk({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }));
   mocks.getWorkerLastRun.mockResolvedValue(new Date().toISOString());
+  mocks.getLastEmailSentAt.mockResolvedValue(null);
   mocks.prisma.actionLog.findFirst.mockResolvedValue(null);
   mocks.prisma.smsLog.findFirst.mockResolvedValue(null);
 });
@@ -135,24 +142,15 @@ describe('GET /api/admin/diagnostics', () => {
     expect(body.lastSuccessfulSends.sms).toBeNull();
   });
 
-  it('reports last send ISO string when SmsLog + BullMQ have entries', async () => {
+  it('reports last send ISO string when email-health Redis + SmsLog have entries', async () => {
     mocks.auth.mockResolvedValueOnce({ user: { id: 'sa', role: 'SUPERADMIN' } });
     const fakeDate = new Date('2026-05-07T10:00:00Z');
-    // Email side: BullMQ getCompleted(0, 0) returns the latest finished job.
-    //
-    // getEmailQueue() is called TWICE in this route — once for the queue
-    // counts probe and once inside lastEmailSentIso. Both run inside the
-    // same Promise.all, so the resolution order is non-deterministic. Using
-    // `mockReturnValueOnce` here caused a 50/50 flake (the queue probe
-    // sometimes ate the only mocked return value, leaving lastEmailSentIso
-    // with `undefined`). Use `mockReturnValue` so BOTH calls get the
-    // completed jobs array.
-    mocks.getEmailQueue.mockReturnValue(
-      makeQueueOk(
-        { waiting: 1, active: 0, completed: 5, failed: 0, delayed: 0 },
-        [{ finishedOn: fakeDate.getTime() }],
-      ),
-    );
+    // Email side: `email-health.getLastEmailSentAt()` reads the
+    // `email:last:sent` Redis key written by `sendEmail()`. Captures both
+    // the BullMQ cron-batch path AND the direct `sendEmailNow` path
+    // (the previous BullMQ-only implementation missed direct sends and
+    // surfaced as the "Email il y a 3059 min" widget bug, May 15 2026).
+    mocks.getLastEmailSentAt.mockResolvedValueOnce(fakeDate.toISOString());
     // SMS side: SmsLog.findFirst orderBy sentAt desc returns the latest row.
     mocks.prisma.smsLog.findFirst.mockResolvedValue({ sentAt: fakeDate });
     const res = await GET();
