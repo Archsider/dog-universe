@@ -270,13 +270,13 @@ describe('getCapacityLimits — custom client bypasses cache', () => {
   it('falls back to defaults when DB returns empty rows', async () => {
     mockClient.setting.findMany.mockResolvedValueOnce([]);
     const limits = await getCapacityLimits(mockClient as unknown as typeof prisma);
-    expect(limits).toEqual({ dogs: 20, cats: 10 }); // DEFAULT_LIMITS
+    expect(limits).toEqual({ dogs: 50, cats: 10 }); // DEFAULT_LIMITS (bumped 2026-05-15)
   });
 
   it('falls back to defaults on DB error', async () => {
     mockClient.setting.findMany.mockRejectedValueOnce(new Error('DB error'));
     const limits = await getCapacityLimits(mockClient as unknown as typeof prisma);
-    expect(limits).toEqual({ dogs: 20, cats: 10 });
+    expect(limits).toEqual({ dogs: 50, cats: 10 });
   });
 
   it('uses custom limits from DB when available', async () => {
