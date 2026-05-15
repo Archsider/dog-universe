@@ -121,8 +121,13 @@ export default withSentryConfig(withBundleAnalyzer(withNextIntl(nextConfig)), {
   // Hides source maps from generated client bundles
   hideSourceMaps: true,
 
-  // Proxy Sentry requests through /monitoring to bypass ad-blockers
-  tunnelRoute: '/monitoring',
+  // tunnelRoute removed 2026-05-15 — was set to '/monitoring' to bypass ad-blockers
+  // but Vercel's external rewrite proxy returned 403 on every envelope POST (verified
+  // in prod logs: 8 consecutive `POST /monitoring → 403` with empty Level column,
+  // meaning the response never traversed our middleware). Direct ingest works
+  // (`connect-src https://*.sentry.io` already in CSP). Trade-off: ad-blockers
+  // intercept `*.ingest.sentry.io` for some end users — acceptable for an internal
+  // B2B SaaS where the operator can disable extensions on the work browser.
 
   // Reduce Sentry bundle size — removes debug statements and Replay shadow DOM
   bundleSizeOptimizations: {

@@ -17,12 +17,19 @@
 
 import * as Sentry from '@sentry/nextjs';
 
+// Top-level probe — fires when the module is LOADED (regardless of whether
+// register() is later invoked). Discriminator:
+//   - This log present + REGISTER CALLED absent → Next loads the file but
+//     doesn't call register() (Next config issue, conventions, etc).
+//   - Both absent → the file isn't loaded at all (outputFileTracing excludes
+//     it, lambda bundling drops it, wrong path detection by Next 15).
+//   - Both present → instrumentation works; drill into sentry.server.config.ts
+//     for the silent init failure.
+// Two separate `console.log` lines, both unconditional, both fire-and-forget.
+// Remove the pair once Sentry server observability is confirmed green.
+console.log('INSTRUMENTATION FILE LOADED', { runtime: process.env.NEXT_RUNTIME });
+
 export async function register() {
-  // Diagnostic probe — unconditional log, no NODE_ENV gate. If this line
-  // never appears in Vercel runtime logs after a cold start, Next is not
-  // invoking `register()` at all and the instrumentation is dead before
-  // it even tries to import the Sentry config. Remove once observability
-  // is confirmed green.
   console.log('INSTRUMENTATION REGISTER CALLED', process.env.NEXT_RUNTIME);
 
   if (process.env.NEXT_RUNTIME === 'nodejs') {
