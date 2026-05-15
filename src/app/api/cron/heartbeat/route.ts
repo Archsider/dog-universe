@@ -4,6 +4,7 @@ import { tryAcquireFlag } from '@/lib/cache';
 import { countConsecutiveFailures } from '@/lib/heartbeat';
 import { defineCron } from '@/lib/cron-runner';
 import { getBackupFreshness, notifyBackupStale } from '@/lib/backup-health';
+import { classifyCronFreshness, STALENESS_THRESHOLD_HOURS } from '@/lib/cron-freshness';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -118,6 +119,34 @@ export const GET = defineCron({
       logger.error('cron-heartbeat', 'backup staleness check failed', { error: err instanceof Error ? err.message : String(err) });
     }
 
+    // Cron freshness watchdog — detects crons that were declared in
+    // vercel.json but Vercel's scheduler never fired (typical cause: the
+    // deploy that added the cron entry didn't re-sync the schedule list).
+    // The classifier stamps a "first-seen" anchor in Redis the first time
+    // it observes lastRun=null, then alerts once >48h elapsed since that
+    // anchor (24h dedup on the SMS). See docs/CRON_RECOVERY.md.
+    let staleCrons: string[] = [];
+    try {
+      const rows = await classifyCronFreshness();
+      const stale = rows.filter((r) => r.stale);
+      if (stale.length > 0) {
+        staleCrons = stale.map((r) => r.name);
+        const superadmins = await prisma.user.findMany({
+          where: { role: 'SUPERADMIN', deletedAt: null, phone: { not: null } },
+          select: { phone: true },
+        });
+        const message =
+          `🚨 Dog Universe: cron(s) jamais exécuté(s) depuis ≥${STALENESS_THRESHOLD_HOURS}h : ${staleCrons.join(', ')}. Voir docs/CRON_RECOVERY.md.`;
+        await Promise.all(
+          superadmins
+            .filter((u): u is { phone: string } => Boolean(u.phone))
+            .map((u) => sendSMS(u.phone, message).catch(() => false)),
+        );
+      }
+    } catch (err) {
+      logger.error('cron-heartbeat', 'cron freshness check failed', { error: err instanceof Error ? err.message : String(err) });
+    }
+
     // Retention sweep — drop heartbeats older than 30 days.
     let deleted = 0;
     try {
@@ -139,6 +168,7 @@ export const GET = defineCron({
       pruned: deleted,
       backupStaleAlerted,
       backupFreshnessHours,
+      staleCrons,
     };
   },
 });
