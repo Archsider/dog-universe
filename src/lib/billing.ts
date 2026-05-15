@@ -54,9 +54,14 @@ export function getMonthlyInvoicesWhere(
       //    Sémantique : on rattache au mois d'occupation tant qu'aucune
       //    caisse n'a encore matérialisé le mois cible. Une facture déjà
       //    encaissée AVANT le mois cible ne doit pas réapparaître ici.
+      //    `deletedAt: null` exclut les bookings soft-deleted (RGPD ou
+      //    annulation administrative) — sinon une réservation supprimée
+      //    re-pèserait sur le CA "en attente" du mois (regression test
+      //    Module 2 case #5).
       {
         payments: { none: { paymentDate: { gte: monthStart, lte: monthEnd } } },
         booking: {
+          deletedAt: null,
           status: { in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },
           startDate: { lte: monthEnd },
           OR: [
