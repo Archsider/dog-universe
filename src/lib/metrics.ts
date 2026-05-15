@@ -45,14 +45,18 @@ export type MonthlyEntry = {
   croquettes: number;
 };
 
-// Revenue per calendar month, split by InvoiceItem.category, with **prorata
-// over real nights consumed**:
-//   - BOARDING items: spread the paid amount across months according to
-//     nightsInMonth / totalNights of the underlying booking.
-//   - Non-BOARDING items (taxi, grooming, product, other): bucketed entirely
-//     in the month of booking.startDate (date de service, jamais createdAt).
-// Source de vérité = SUM(Payment.amount). Open-ended bookings (no endDate)
-// fall back to single-bucket on startDate.
+// Revenue per calendar month, split by InvoiceItem.category — sémantique A
+// ("facture clôturée ce mois"). Voir src/lib/accounting.ts + docs/REVENUE_
+// ATTRIBUTION_DECISION.md pour la règle complète. Tldr :
+//   - une facture intégralement payée bascule entièrement sur le mois de son
+//     dernier payment, chaque item crédité à 100 % de son `total`
+//   - les factures PARTIALLY_PAID ne contribuent pas à la ventilation
+//     (visibles uniquement dans le brut encaissé total)
+//   - 1 facture = 1 mois, indépendant de l'ordre des items
+//
+// `MonthlyEntry.total` reste la SOMME des buckets ventilés — pour le brut
+// encaissé (somme Payment.amount sans filtre invoice-close) voir
+// `totalCashCollected()` dans le même fichier.
 export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
   const yearStart = new Date(year, 0, 1);
   const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
@@ -166,27 +170,25 @@ export type CategoryBreakdown = {
   other: number;
 };
 
-// Revenue by category for a window [start, end], with **prorata par nuits
-// réellement consommées** :
-//   - BOARDING items : montant payé spreadé sur les mois selon
-//     nightsOverlap(booking.startDate, booking.endDate, start, end) / totalNights.
-//   - Non-BOARDING items : bucketés sur le mois de booking.startDate (ou
-//     invoice.periodDate à défaut). Jamais createdAt.
-//   - Open-ended bookings (endDate IS NULL OR isOpenEnded) sans endDate :
-//     fallback single-bucket sur startDate.
+// Revenue by category for a window [start, end] — sémantique A ("facture
+// clôturée ce mois"). Délégué row-by-row à `computeMonthlyRevenueByCategory`
+// dans `src/lib/accounting.ts` ; cette fonction n'est qu'un aggrégateur SQL.
 //
-// Source de vérité = SUM(Payment.amount) sur la facture. Un paiement de 1 200
-// MAD pour un séjour 25 avril → 10 mai (15 nuits, 5 avril / 10 mai) donne
-// 400 MAD à avril et 800 MAD à mai.
+// Une facture contribue UNIQUEMENT si elle est intégralement payée (somme
+// payments ≥ amount, tolérance 1 centime) ET que son dernier payment tombe
+// dans [start, end]. Sinon elle contribue 0 à la ventilation (les KPIs
+// "brut encaissé" la voient toujours, via totalCashCollected).
 //
-// La fenêtre de requête est élargie de ±90 j pour capturer les séjours qui
-// chevauchent partiellement la période cible. La cap take=2000 protège du
-// DoS / OOM en cas de volume élevé.
-// TODO: switch to monthly_revenue_mv when stable.
-// The materialized view (migration 20260509_monthly_revenue_mv) pre-aggregates
-// the same allocation per (year, month, category) and is refreshed hourly by
-// /api/cron/refresh-monthly-revenue. Once we've validated parity in prod, swap
-// the body of this function for a `prisma.$queryRaw` against the view.
+// La fenêtre de requête englobe les 3 cas comptables (caisse, sans-payment,
+// manuel) via `getMonthlyInvoicesWhere`. La cap take=2000 protège du DoS /
+// OOM en cas de volume élevé sur un mois donné.
+//
+// Cohérence avec la MV : la materialized view `monthly_revenue_mv`
+// (migration 20260515_revenue_mv_semantic_a) implémente la MÊME règle en SQL.
+// L'appelant lit la MV en priorité via `readRevenueFromMV` puis tombe sur
+// cette fonction live si la MV est vide. Les deux paths doivent rester
+// arithmétiquement identiques — toute évolution sémantique doit toucher
+// les deux dans la même PR.
 async function computeRevenueByCategoryProrata(
   start: Date,
   end: Date,

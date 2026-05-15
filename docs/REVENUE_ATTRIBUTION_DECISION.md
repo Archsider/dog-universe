@@ -1,7 +1,11 @@
 # Décision — Attribution des paiements aux catégories de service
 
-**Statut :** PROPOSITION — attendre validation Mehdi avant de coder
+**Statut :** ✅ ACTIVE depuis 2026-05-15 (Sémantique A + A1 retenues)
 **Auteur :** Claude (audit 2026-05-15 sur facture DU-2026-0030 Kabbaj Rita)
+**Validation :** Mehdi 2026-05-15 — A1 (acceptation bougement chiffres passés, aucun CA ventilé jamais transmis au comptable)
+**Implémentation :** voir `src/lib/accounting.ts` (commentaire d'en-tête) +
+`prisma/migrations/20260515_revenue_mv_semantic_a/` + tests
+`src/lib/__tests__/billing.test.ts` (régression Rita figée).
 **Impact :** comptable + déclaratif fisc Maroc + KPIs `/admin/dashboard` + `/admin/analytics`
 
 ---

@@ -1,33 +1,56 @@
 // Comptabilité — règles métier de rattachement du chiffre d'affaires à un mois.
 //
-// Source de vérité : Payment.paymentDate (= "paidAt" dans le langage produit).
-// La caisse prime sur tout. Trois cas exclusifs :
+// ═══════════════════════════════════════════════════════════════════════════
+// SÉMANTIQUE A — "Facture clôturée ce mois" (active depuis 2026-05-15)
+// ═══════════════════════════════════════════════════════════════════════════
 //
-//   CAS 1 — Aucun paiement enregistré sur la facture :
-//     prorata des nuits réelles. Pour chaque mois cible :
-//       montant = invoice.amount × (nuits dans le mois / total nuits)
-//     Si pas de booking (facture manuelle), on rattache au mois de issuedAt.
+// **Règle unique :** une facture contribue au CA ventilé par catégorie d'un
+// mois UNIQUEMENT si :
+//   (1) elle est intégralement payée (somme des Payment.amount ≥ Invoice.amount,
+//       tolérance 1 centime pour l'arrondi DECIMAL(10,2))
+//   (2) le DERNIER paiement (max paymentDate) tombe dans la fenêtre [monthStart,
+//       monthEnd].
 //
-//   CAS 2 — Paiements partiels :
-//     chaque Payment.amount est comptabilisé dans le mois de son paymentDate.
-//     1 000 MAD encaissés en avril → CA avril ; 940 MAD en mai → CA mai.
+// Quand ces deux conditions sont vraies, chaque item est crédité à 100 % de
+// son `total` au bucket de sa catégorie pour ce mois-là. Sinon : 0.
 //
-//   CAS 3 — Paiement total anticipé (couvert par CAS 2) :
-//     un séjour 20 avril → 15 mai entièrement payé 1 940 MAD le 20 avril
-//     compte 100 % en avril, 0 en mai.
+// **Conséquences immédiates :**
+//   - Les factures `PARTIALLY_PAID` ne contribuent PAS au CA ventilé tant
+//     qu'elles ne sont pas closes. C'est une décision explicite (cohérent
+//     "caisse close" comptable, défendable au comptable Maroc TVA à
+//     l'encaissement). Le KPI "encaissé brut total" (somme Payment.amount)
+//     les voit toujours — c'est cette ventilation par catégorie qui les
+//     exclut tant qu'elles bougent encore.
+//   - 1 facture = 1 mois (jamais répartie sur 2 mois). Un long séjour à
+//     cheval avril-mai, payé intégralement le 6 mai, bascule TOUT en mai.
+//   - Indépendant de l'ordre de saisie des items (vs ancien algo FIFO qui
+//     attribuait selon l'ordre `cuid asc` — non déterministe métier).
 //
-// La fonction est pure (pas d'I/O) — l'appelant fournit les données.
+// **Pourquoi pas le prorata (sémantique B) ni l'allocation explicite (C) :**
+// voir docs/REVENUE_ATTRIBUTION_DECISION.md pour le compare + la décision
+// argumentée. Cas de référence pour cette sémantique = DU-2026-0030 (Kabbaj
+// Rita, mai 2026) — test régression figé dans __tests__/billing.test.ts.
 //
-// Deux variantes :
-//   - computeMonthlyRevenue : total pour un (invoice, mois cible)
-//   - computeMonthlyRevenueByCategory : décomposition par InvoiceItem.category,
-//     allocation pondérée par item.total. Utilisée pour les KPIs par service.
+// **Source de vérité = caisse :** `Payment.paymentDate`. Pas de `issuedAt`,
+// pas de `createdAt`, pas de `Booking.startDate`. La date d'émission d'une
+// facture est une métadonnée technique ; la caisse est la vérité comptable.
+//
+// **Pureté :** les deux fonctions exportées sont pures (pas d'I/O). L'appelant
+// fournit les rows déjà chargées via Prisma.
+//
+//   - computeMonthlyRevenueByCategory : breakdown { boarding, taxi, grooming,
+//     croquettes, other } pour un mois cible
+//   - allocateBetweenItems            : breakdown par item pour le drill-down
+//     /admin/analytics
+//
+// Les deux appliquent la même règle gate (1)+(2). Si la gate est fausse,
+// chaque retour est à zéro / vide.
 
 import { Prisma } from '@prisma/client';
 import { toNumber, type DecimalLike } from '@/lib/decimal';
 import { inferItemCategory } from '@/lib/category';
 
-const MS_PER_DAY = 86_400_000;
+const FULL_PAID_TOLERANCE = new Prisma.Decimal('0.01');
 
 export interface AccountingItem {
   category: string;
@@ -52,7 +75,7 @@ export interface AccountingBooking {
 }
 
 function nightsBetween(start: Date, end: Date): number {
-  return Math.max(0, Math.round((end.getTime() - start.getTime()) / MS_PER_DAY));
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000));
 }
 
 function nightsOverlap(bStart: Date, bEnd: Date, wStart: Date, wEnd: Date): number {
@@ -63,7 +86,9 @@ function nightsOverlap(bStart: Date, bEnd: Date, wStart: Date, wEnd: Date): numb
 }
 
 // Nuits réellement consommées dans la fenêtre [monthStart, monthEnd] pour un
-// séjour [startDate, endDate]. Open-ended (endDate null) → on borne au mois.
+// séjour [startDate, endDate]. Conservé pour les helpers /admin/analytics qui
+// rapportent la "durée moyenne de séjour" — n'a aucun lien avec la sémantique
+// A d'attribution des paiements.
 export function countNightsInMonth(
   startDate: Date,
   endDate: Date | null,
@@ -77,11 +102,12 @@ function isWithin(d: Date, start: Date, end: Date): boolean {
   return d.getTime() >= start.getTime() && d.getTime() <= end.getTime();
 }
 
-// Total encaissé pour une facture sur le mois cible. Règle « caisse prime » :
-// uniquement la somme des Payment.amount dont paymentDate ∈ [monthStart, monthEnd].
-// Aucun prorata fictif — une facture sans payment compte 0 dans les KPIs encaissés.
-// Les paramètres invoice/booking restent dans la signature pour stabilité, ils
-// ne sont plus utilisés (gardés pour limiter la blast radius des call sites).
+// Total brut encaissé pour une facture sur le mois cible. Cette fonction garde
+// l'ancienne sémantique "caisse pure" (somme des Payment.amount du mois) parce
+// qu'elle alimente les KPI "encaissé brut total" — pas la ventilation par
+// catégorie. Les deux KPIs coexistent : "j'ai mis 940 MAD dans la caisse en
+// mai" (cette fonction) vs "j'ai clôturé une vente de 940 MAD en mai"
+// (sémantique A, ci-dessous).
 export function computeMonthlyRevenue(
   payments: AccountingPayment[],
   _invoice: AccountingInvoice,
@@ -120,17 +146,46 @@ function bucketOf(category: string, description?: string | null): keyof Category
   return 'other';
 }
 
+// Helpers internes — partagés par les deux fonctions publiques.
+function sumPayments(payments: AccountingPayment[]): Prisma.Decimal {
+  return payments.reduce(
+    (acc, p) => acc.plus(new Prisma.Decimal(toNumber(p.amount))),
+    new Prisma.Decimal(0),
+  );
+}
+
+function sumItems(items: AccountingItem[]): Prisma.Decimal {
+  return items.reduce(
+    (acc, it) => acc.plus(new Prisma.Decimal(toNumber(it.total))),
+    new Prisma.Decimal(0),
+  );
+}
+
+function lastPaymentDate(payments: AccountingPayment[]): Date {
+  return payments.reduce(
+    (max, p) => (p.paymentDate.getTime() > max.getTime() ? p.paymentDate : max),
+    payments[0].paymentDate,
+  );
+}
+
+// Sémantique A — gate "facture clôturée ce mois".
+// True si (1) la facture est intégralement payée à la tolérance centime près
+// ET (2) la date du dernier payment tombe dans la fenêtre cible. Pure.
+export function isInvoiceClosedInMonth(
+  payments: AccountingPayment[],
+  items: AccountingItem[],
+  monthStart: Date,
+  monthEnd: Date,
+): boolean {
+  if (payments.length === 0 || items.length === 0) return false;
+  const totalPaid = sumPayments(payments);
+  const invoiceTotal = sumItems(items);
+  if (totalPaid.lt(invoiceTotal.minus(FULL_PAID_TOLERANCE))) return false;
+  return isWithin(lastPaymentDate(payments), monthStart, monthEnd);
+}
+
 // Décomposition par catégorie pour un (payments, items, mois cible).
-//
-// RÈGLE MÉTIER DÉFINITIVE — La caisse prime, allocation séquentielle :
-//   - Source de vérité = Payment.paymentDate. Pas de prorata fictif.
-//   - Aucun paiement enregistré → 0 partout (la facture reste « en attente »).
-//   - Sinon : payments triés par date asc, items dans l'ordre reçu (le caller
-//     doit fournir orderBy id asc côté Prisma — cuid est chronologique). Chaque
-//     payment est consommé séquentiellement contre les items en cours, et
-//     **uniquement** comptabilisé si Payment.paymentDate tombe dans le mois cible.
-//   - Un item ne se coupe jamais en deux mois côté logique : la portion allouée
-//     à un paiement reste indivisible. C'est la *date du payment* qui décide.
+// Implémente la sémantique A décrite en haut du fichier.
 export function computeMonthlyRevenueByCategory(
   payments: AccountingPayment[],
   items: AccountingItem[],
@@ -138,52 +193,18 @@ export function computeMonthlyRevenueByCategory(
   monthEnd: Date,
 ): CategoryBreakdown {
   const result: CategoryBreakdown = { ...EMPTY_BREAKDOWN };
-  if (payments.length === 0 || items.length === 0) return result;
+  if (!isInvoiceClosedInMonth(payments, items, monthStart, monthEnd)) return result;
 
-  const sortedPayments = [...payments].sort(
-    (a, b) => a.paymentDate.getTime() - b.paymentDate.getTime(),
-  );
-
-  // Restant à allouer par item (Decimal — précision centime).
-  const itemRemaining: Prisma.Decimal[] = items.map(
-    (it) => new Prisma.Decimal(toNumber(it.total)),
-  );
-  let itemIdx = 0;
-
-  for (const payment of sortedPayments) {
-    const isThisMonth = isWithin(payment.paymentDate, monthStart, monthEnd);
-    let remaining = new Prisma.Decimal(toNumber(payment.amount));
-
-    while (remaining.gt(0) && itemIdx < items.length) {
-      const slot = itemRemaining[itemIdx];
-      const allocated = Prisma.Decimal.min(remaining, slot);
-
-      if (isThisMonth && allocated.gt(0)) {
-        const bucket = bucketOf(items[itemIdx].category, items[itemIdx].description);
-        result[bucket] += allocated.toNumber();
-      }
-
-      remaining = remaining.minus(allocated);
-      itemRemaining[itemIdx] = slot.minus(allocated);
-
-      if (itemRemaining[itemIdx].lte(0)) {
-        itemIdx += 1;
-      }
-    }
+  for (const it of items) {
+    const bucket = bucketOf(it.category, it.description);
+    result[bucket] += toNumber(it.total);
   }
-
   return result;
 }
 
-// Allocation séquentielle Payment → InvoiceItem.
-// Renvoie pour chaque item l'alloué cumulé sur la fenêtre [monthStart, monthEnd]
-// + le dernier paymentDate ayant contribué (utile pour trier par date de caisse).
-//
-// Règle identique à computeMonthlyRevenueByCategory : payments triés par date asc,
-// items dans l'ordre reçu, slots décrémentés au fur et à mesure. Seules les portions
-// allouées par un payment ∈ [monthStart, monthEnd] sont comptabilisées.
-//
-// Decimal exact, pas de toFixed(2) JS.
+// Allocation par item pour le drill-down /admin/analytics. Sous sémantique A,
+// si la facture est close ce mois → chaque item porte son `total` complet,
+// tagué avec la date du dernier payment. Sinon → toutes les allocations à 0.
 export interface ItemAllocation {
   amount: Prisma.Decimal;
   lastPaidAt: Date | null;
@@ -199,43 +220,18 @@ export function allocateBetweenItems(
     amount: new Prisma.Decimal(0),
     lastPaidAt: null,
   }));
-  if (payments.length === 0 || items.length === 0) return allocations;
+  if (!isInvoiceClosedInMonth(payments, items, monthStart, monthEnd)) return allocations;
 
-  const sortedPayments = [...payments].sort(
-    (a, b) => a.paymentDate.getTime() - b.paymentDate.getTime(),
-  );
-
-  const itemRemaining: Prisma.Decimal[] = items.map(
-    (it) => new Prisma.Decimal(toNumber(it.total)),
-  );
-  let itemIdx = 0;
-
-  for (const payment of sortedPayments) {
-    const inMonth = isWithin(payment.paymentDate, monthStart, monthEnd);
-    let remaining = new Prisma.Decimal(toNumber(payment.amount));
-
-    while (remaining.gt(0) && itemIdx < items.length) {
-      const slot = itemRemaining[itemIdx];
-      const allocated = Prisma.Decimal.min(remaining, slot);
-
-      if (inMonth && allocated.gt(0)) {
-        allocations[itemIdx].amount = allocations[itemIdx].amount.plus(allocated);
-        allocations[itemIdx].lastPaidAt = payment.paymentDate;
-      }
-
-      remaining = remaining.minus(allocated);
-      itemRemaining[itemIdx] = slot.minus(allocated);
-
-      if (itemRemaining[itemIdx].lte(0)) {
-        itemIdx += 1;
-      }
-    }
+  const closedAt = lastPaymentDate(payments);
+  for (let i = 0; i < items.length; i++) {
+    allocations[i] = {
+      amount: new Prisma.Decimal(toNumber(items[i].total)),
+      lastPaidAt: closedAt,
+    };
   }
-
   return allocations;
 }
 
 // Filtre mensuel comptabilité : déplacé dans `src/lib/billing.ts` —
 // `getMonthlyInvoicesWhere(monthStart, monthEnd)`. Source de vérité unique
 // pour TOUT rattachement de facture à un mois (caisse + en attente + manuel).
-
