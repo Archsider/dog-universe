@@ -81,6 +81,31 @@ export async function createAdminMessageNotification(
   });
 }
 
+// End-of-stay report — same pipeline as ADMIN_MESSAGE but with a distinct
+// `type` so the client app can render a dedicated icon/header and the
+// admin can filter the inbox. The structured form data lives in
+// `EndStayReport` (separate table). Here we only persist the rendered
+// text body alongside the bookingId metadata for routing/links.
+export async function createEndStayReportNotification(
+  userId: string,
+  messageFr: string,
+  messageEn: string,
+  bookingId: string,
+  reportId: string,
+) {
+  return createNotification({
+    userId,
+    type: 'END_STAY_REPORT',
+    titleFr: 'Rapport de fin de séjour',
+    titleEn: 'End-of-stay report',
+    titleAr: 'تقرير نهاية الإقامة',
+    messageFr,
+    messageEn,
+    messageAr: messageEn,
+    metadata: { bookingId, reportId },
+  });
+}
+
 export async function notifyAdminsNewClient(
   clientName: string,
   clientEmail: string,

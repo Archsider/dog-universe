@@ -34,6 +34,7 @@ export type NotificationType =
   | 'WEEKLY_PET_REPORT'         // client receives weekly AI-generated stay report during IN_PROGRESS boarding
   | 'INVOICE_OVERDUE'           // client receives when an invoice is unpaid at J+30 then J+60
   | 'REVIEW_REQUEST'            // client receives after a completed stay to submit a review
+  | 'END_STAY_REPORT'           // client receives at checkout — structured narrative report (see EndStayReport table)
   | 'PRODUCT_ORDER';            // admin receives when a client orders a product on an active booking
 
 export interface CreateNotificationData {
@@ -81,7 +82,10 @@ export async function getUnreadCount(userId: string): Promise<number> {
   return cacheReadThrough<number>(
     CacheKeys.notifCount(userId),
     CacheTTL.notifCount,
-    () => prisma.notification.count({ where: { userId, read: false } }),
+    // `deletedAt: null` — soft-deleted ADMIN_MESSAGE / END_STAY_REPORT
+    // disappear from the bell badge count even if they were still unread
+    // at the moment the admin clicked "Supprimer".
+    () => prisma.notification.count({ where: { userId, read: false, deletedAt: null } }),
   );
 }
 

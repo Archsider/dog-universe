@@ -32,12 +32,22 @@ export interface ParsedAddonRequest {
   createdAt: string;
 }
 
-interface BookingMessage {
+// Raw Prisma row shape — name lookup is done in a 2nd pass after filtering.
+interface RawBookingMessageRow {
   id: string;
   messageFr: string;
   messageEn: string;
   createdAt: Date;
   metadata: string | null;
+  deletedAt: Date | null;
+  deletedBy: string | null;
+}
+
+interface BookingMessage extends RawBookingMessageRow {
+  // Enriched after filterMessagesForBooking — resolved admin name (or
+  // 'Unknown' fallback if the deleter has been hard-deleted from User).
+  // Null when the row itself is not soft-deleted.
+  deletedByName: string | null;
 }
 
 // Compute a [day-1, start-day] window for finding a booking ending the
@@ -68,7 +78,7 @@ function computeAfterWindow(endDate: Date | null): { gte: Date; lte: Date } | nu
 // Parse Notification.metadata.bookingId in JS — avoids the fragile
 // JSONB substring scan that the route used to do via a Prisma `contains`
 // (slow + false-positive on bookings whose ID is a prefix of another).
-function filterMessagesForBooking(rows: BookingMessage[], bookingId: string): BookingMessage[] {
+function filterMessagesForBooking(rows: RawBookingMessageRow[], bookingId: string): RawBookingMessageRow[] {
   return rows.filter((n) => {
     if (!n.metadata) return false;
     try {
@@ -168,10 +178,22 @@ export async function loadAdminBookingDetail(id: string) {
           orderBy: { startDate: 'asc' },
         })
       : Promise.resolve(null),
+    // Admin view keeps soft-deleted messages visible (struck-through + label)
+    // — distinct from the client view which filters them out via `deletedAt:
+    // null`. Includes END_STAY_REPORT alongside ADMIN_MESSAGE so the report
+    // history shares the same UI section.
     prisma.notification.findMany({
-      where: { userId: clientId, type: 'ADMIN_MESSAGE' },
+      where: { userId: clientId, type: { in: ['ADMIN_MESSAGE', 'END_STAY_REPORT'] } },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, messageFr: true, messageEn: true, createdAt: true, metadata: true },
+      select: {
+        id: true,
+        messageFr: true,
+        messageEn: true,
+        createdAt: true,
+        metadata: true,
+        deletedAt: true,
+        deletedBy: true,
+      },
       take: 200,
     }),
     prisma.addonRequest.findMany({
@@ -182,7 +204,35 @@ export async function loadAdminBookingDetail(id: string) {
     }),
   ]);
 
-  const bookingMessages = filterMessagesForBooking(rawBookingMessages, id);
+  const filteredMessages = filterMessagesForBooking(rawBookingMessages, id);
+
+  // Second-pass enrichment: resolve admin names for any soft-deleted rows
+  // so the UI can display "Supprimé par <Name> le <Date>". We do a single
+  // User.findMany on the distinct set of deleter IDs (typically 1-2 admins
+  // on this codebase) rather than joining at the Notification query level —
+  // because `Notification.deletedBy` is not a Prisma relation (it's a plain
+  // TEXT column for now, avoids a destructive schema migration).
+  const deleterIds = Array.from(
+    new Set(
+      filteredMessages
+        .map((m) => m.deletedBy)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  const deleterNameById = new Map<string, string>();
+  if (deleterIds.length > 0) {
+    const deleters = await prisma.user.findMany({
+      where: { id: { in: deleterIds } },
+      select: { id: true, name: true },
+    });
+    for (const u of deleters) {
+      deleterNameById.set(u.id, u.name ?? 'Unknown');
+    }
+  }
+  const bookingMessages: BookingMessage[] = filteredMessages.map((m) => ({
+    ...m,
+    deletedByName: m.deletedBy ? (deleterNameById.get(m.deletedBy) ?? 'Unknown') : null,
+  }));
 
   const addonRequests: ParsedAddonRequest[] = addonRequestRows
     .filter(

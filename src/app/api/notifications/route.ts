@@ -13,7 +13,11 @@ export async function GET(request: Request) {
   const unreadOnly = searchParams.get('unreadOnly') === 'true';
   const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') ?? '50')), 100);
 
-  const where: Record<string, unknown> = { userId: session.user.id };
+  // `deletedAt: null` — admins can soft-delete an ADMIN_MESSAGE /
+  // END_STAY_REPORT sent by mistake (wrong owner, wrong content). The
+  // client view filters them out so the message disappears from the bell
+  // + notifications page. Audit copy + admin view stay accessible.
+  const where: Record<string, unknown> = { userId: session.user.id, deletedAt: null };
   if (unreadOnly) where.read = false;
 
   const notifications = await prisma.notification.findMany({
