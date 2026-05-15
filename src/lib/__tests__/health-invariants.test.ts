@@ -27,7 +27,11 @@ vi.mock('@/lib/dates-casablanca', () => ({
   endOfMonthCasa: () => new Date('2026-05-31T23:59:59Z'),
 }));
 
-import { checkMonthlyRevenueMvFresh, checkJsVsMvCurrentMonth } from '../health-invariants';
+import {
+  checkMonthlyRevenueMvFresh,
+  checkJsVsMvCurrentMonth,
+  checkItemAllocatedOverflow,
+} from '../health-invariants';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -113,5 +117,57 @@ describe('checkJsVsMvCurrentMonth — JS vs MV parity', () => {
     const r = await checkJsVsMvCurrentMonth();
     expect(r.count).toBe(0);
     expect(r.sample[0]).toMatchObject({ note: expect.stringContaining('unavailable') });
+  });
+});
+
+describe('checkItemAllocatedOverflow — DISCOUNT exclusion (Bug B)', () => {
+  it('SQL keeps the `total > 0` guard on both sample and count queries', async () => {
+    mocks.prisma.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ c: BigInt(0) }]);
+    await checkItemAllocatedOverflow();
+    expect(mocks.prisma.$queryRaw).toHaveBeenCalledTimes(2);
+    // tagged-template first arg is the TemplateStringsArray — join the
+    // pieces to inspect the raw SQL the function actually issued.
+    const sqlSample = mocks.prisma.$queryRaw.mock.calls[0][0].join(' ');
+    const sqlCount = mocks.prisma.$queryRaw.mock.calls[1][0].join(' ');
+    expect(sqlSample).toMatch(/total > 0/);
+    expect(sqlCount).toMatch(/total > 0/);
+  });
+
+  it('does NOT flag DISCOUNT items (total=-150, allocatedAmount=0)', async () => {
+    // Server-side filter excludes negative-total rows before they reach
+    // the application — mocks the WHERE-clause-filtered result.
+    mocks.prisma.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ c: BigInt(0) }]);
+    const r = await checkItemAllocatedOverflow();
+    expect(r.key).toBe('item_allocated_overflow');
+    expect(r.count).toBe(0);
+    expect(r.sample).toEqual([]);
+    expect(r.severity).toBe('critical');
+  });
+
+  it('still flags real overflows (total=100, allocatedAmount=150.50)', async () => {
+    mocks.prisma.$queryRaw
+      .mockResolvedValueOnce([
+        { id: 'item-real-bug', invoiceId: 'inv-x', total: '100', allocatedAmount: '150.5' },
+      ])
+      .mockResolvedValueOnce([{ c: BigInt(1) }]);
+    const r = await checkItemAllocatedOverflow();
+    expect(r.count).toBe(1);
+    expect(r.sample[0]).toMatchObject({
+      id: 'item-real-bug',
+      total: '100',
+      allocatedAmount: '150.5',
+    });
+  });
+
+  it('returns count=0 when SUM rows are empty (no items at all)', async () => {
+    mocks.prisma.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const r = await checkItemAllocatedOverflow();
+    expect(r.count).toBe(0);
   });
 });
