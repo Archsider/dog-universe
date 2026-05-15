@@ -1,7 +1,17 @@
+// Edge-runtime Sentry init (middleware, edge route handlers). Loaded by
+// `src/instrumentation.ts` via dynamic import in `register()` when
+// NEXT_RUNTIME === 'edge'.
+//
+// DSN resolved through `src/lib/sentry-dsn.ts` — see server config for the
+// rationale. The diag log is omitted here because the edge runtime serializes
+// console output less reliably and a one-line print on every edge cold start
+// would dominate the log feed.
+
 import * as Sentry from '@sentry/nextjs';
+import { SENTRY_DSN } from './src/lib/sentry-dsn';
 
 Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  dsn: SENTRY_DSN,
   tracesSampleRate: 0.1,
   enabled: process.env.NODE_ENV === 'production',
 

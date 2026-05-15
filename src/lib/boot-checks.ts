@@ -28,7 +28,11 @@ const REQUIRED_VARS: RequiredVar[] = [
 const OPTIONAL_VARS: RequiredVar[] = [
   { name: 'UPSTASH_REDIS_HOST', minLength: 5 },     // BullMQ TCP
   { name: 'UPSTASH_REDIS_PASSWORD', minLength: 5 }, // BullMQ TCP
-  { name: 'SENTRY_DSN', minLength: 10 },
+  // The runtime resolver (`src/lib/sentry-dsn.ts`) accepts either
+  // NEXT_PUBLIC_SENTRY_DSN OR SENTRY_DSN, falling back to a hardcoded prod
+  // DSN. We don't validate either here — a deliberate "no env var" deploy
+  // still works via the fallback. If the hardcoded fallback is ever removed,
+  // re-add a check on at least one of the two names.
   { name: 'SENTRY_WEBHOOK_SECRET', minLength: 10 }, // AI Guardian webhook
   { name: 'ANTHROPIC_API_KEY', minLength: 10 },     // Vaccination AI + Guardian classify
   { name: 'GITHUB_TOKEN', minLength: 10 },          // Guardian auto-issue

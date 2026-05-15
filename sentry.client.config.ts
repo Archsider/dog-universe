@@ -1,7 +1,12 @@
+// Legacy entry-point retained for any tool/plugin that still references the
+// old `sentry.client.config.ts` filename. The active client init lives in
+// `src/instrumentation-client.ts` (Sentry SDK v9+ pattern). DSN comes from
+// the shared `src/lib/sentry-dsn.ts` resolver — same value as server + edge.
 import * as Sentry from '@sentry/nextjs';
+import { SENTRY_DSN } from './src/lib/sentry-dsn';
 
 Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  dsn: SENTRY_DSN,
 
   // Capture 10% of transactions for performance monitoring
   tracesSampleRate: 0.1,

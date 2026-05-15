@@ -1,7 +1,20 @@
+// Server-side Sentry init for the Node.js runtime (API routes, RSC,
+// Server Actions, crons). Loaded by `src/instrumentation.ts` via dynamic
+// import in `register()` when NEXT_RUNTIME === 'nodejs'.
+//
+// DSN is resolved through `src/lib/sentry-dsn.ts` — same source of truth as
+// the edge config and the client `instrumentation-client.ts`. See that file
+// for the resolution order. A diag log is emitted at init so the operator
+// can confirm in Vercel runtime logs which DSN source actually won (and
+// catch a future env-var drift before it silences server events again).
+
 import * as Sentry from '@sentry/nextjs';
+import { resolveSentryDsn } from './src/lib/sentry-dsn';
+
+const { dsn, source } = resolveSentryDsn();
 
 Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  dsn,
 
   // Capture 10% of transactions
   tracesSampleRate: 0.1,
@@ -38,3 +51,20 @@ Sentry.init({
     return event;
   },
 });
+
+// Diag log: prints once per cold start. Search "[sentry-server] init" in
+// Vercel runtime logs to confirm the SDK actually initialised AND which DSN
+// source was used. Absence of this line on a fresh deploy means the file
+// itself is not being imported — re-check `src/instrumentation.ts`.
+if (process.env.NODE_ENV === 'production') {
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify({
+    level: 'info',
+    service: 'sentry-server',
+    message: 'init',
+    timestamp: new Date().toISOString(),
+    dsnSource: source,
+    dsnHostname: (() => { try { return new URL(dsn).hostname; } catch { return 'invalid'; } })(),
+    enabled: true,
+  }));
+}

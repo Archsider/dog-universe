@@ -31,6 +31,7 @@
 // key present? GitHub PAT present?).
 
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { auth } from '../../../../../../auth';
 import { logger } from '@/lib/logger';
 
@@ -57,7 +58,26 @@ export async function POST() {
     actorId: session.user.id,
   });
 
-  // The throw is the entire point. Sentry's Next.js SDK auto-captures
-  // unhandled errors from route handlers. We never reach the line below.
-  throw new Error(canaryId);
+  const err = new Error(canaryId);
+
+  // Belt-and-suspenders capture. Next 15's `onRequestError` (wired in
+  // `src/instrumentation.ts`) should already auto-capture the throw below,
+  // but if that hook ever regresses (Next bump, Sentry SDK bump, plugin
+  // mis-config) the canary would silently lose the entire diag — exactly
+  // the failure mode this endpoint is meant to detect. Calling
+  // captureException here + a short flush guarantees Sentry receives the
+  // event even when the implicit fan-out is broken.
+  Sentry.captureException(err, {
+    tags: { canary: 'guardian', actorRole: 'SUPERADMIN' },
+    extra: { canaryId, actorId: session.user.id },
+  });
+  // Flush before the throw kills the function context. 2 s is enough for a
+  // single envelope on a warm Lambda; we don't await indefinitely because
+  // Vercel kills the function after maxDuration anyway.
+  await Sentry.flush(2_000).catch(() => {});
+
+  // The throw is the entire point — exercises the implicit `onRequestError`
+  // path on top of the explicit capture above. If only one of the two
+  // produces an issue in Sentry, we know exactly which rail is broken.
+  throw err;
 }

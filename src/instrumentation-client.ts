@@ -3,9 +3,13 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
+import { SENTRY_DSN } from "@/lib/sentry-dsn";
 
 Sentry.init({
-  dsn: "https://5afa584dbdac521c8ba12d42a6e3394e@o4511208546828288.ingest.de.sentry.io/4511209470689360",
+  // DSN resolved by `src/lib/sentry-dsn.ts` — same source of truth as the
+  // server + edge configs. Hardcoded fallback inside the resolver keeps the
+  // client working even if NEXT_PUBLIC_SENTRY_DSN drifts off the env list.
+  dsn: SENTRY_DSN,
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: 0.1,
