@@ -33,6 +33,9 @@ function defaultTtl(period: CronPeriod): number {
     case 'daily': return 23 * 3600;
     case 'weekly': return 6 * 86400;
     case 'monthly': return 28 * 86400;
+    case 'hourly': return 55 * 60; // 55 min — give 5 min slack so the lock
+                                   // expires before the next tick (Vercel
+                                   // schedules at minute 0 each hour).
     case '5min': return 4 * 60;
   }
 }

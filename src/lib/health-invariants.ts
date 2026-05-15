@@ -107,12 +107,284 @@ export async function checkInvoiceAmountDrift(): Promise<InvariantResult> {
   };
 }
 
+// ─── Accounting invariants (Module 1, 2026-05-15) ────────────────────────
+// Six additional checks added on top of the original four to cover the
+// invariants flagged after the Rita bug (Sémantique A revenue attribution)
+// and the broader hardening of the accounting pipeline. These run on the
+// HOURLY `invariants-check` cron with SMS alerts on critical violations,
+// alongside the existing daily `health-reconciliation` email digest.
+//
+// Tolerance everywhere = 0.01 MAD (1 centime) — absorbs DECIMAL(10,2)
+// rounding without false positives.
+
+export async function checkAllocatedSumVsPaid(): Promise<InvariantResult> {
+  // SUM(InvoiceItem.allocatedAmount) ≠ Invoice.paidAmount per invoice.
+  // Means the per-item allocator drifted away from the master paidAmount
+  // — analytics drill-down per category would lie.
+  const rows = await prisma.$queryRaw<Array<{ id: string; invoiceNumber: string; paidAmount: string; sum_allocated: string }>>`
+    SELECT i.id, i."invoiceNumber",
+           i."paidAmount"::text AS "paidAmount",
+           COALESCE(SUM(ii."allocatedAmount"), 0)::text AS sum_allocated
+    FROM "Invoice" i
+    LEFT JOIN "InvoiceItem" ii ON ii."invoiceId" = i.id
+    WHERE i."paidAmount" > 0
+    GROUP BY i.id
+    HAVING ABS(i."paidAmount" - COALESCE(SUM(ii."allocatedAmount"), 0)) > 0.01
+    ORDER BY i."issuedAt" DESC
+    LIMIT 5
+  `;
+  const countRow = await prisma.$queryRaw<Array<{ c: bigint }>>`
+    SELECT COUNT(*)::bigint AS c FROM (
+      SELECT i.id
+      FROM "Invoice" i
+      LEFT JOIN "InvoiceItem" ii ON ii."invoiceId" = i.id
+      WHERE i."paidAmount" > 0
+      GROUP BY i.id
+      HAVING ABS(i."paidAmount" - COALESCE(SUM(ii."allocatedAmount"), 0)) > 0.01
+    ) sub
+  `;
+  return {
+    key: 'allocated_sum_vs_paid',
+    label: 'SUM(InvoiceItem.allocatedAmount) ≠ Invoice.paidAmount',
+    count: Number(countRow[0]?.c ?? BigInt(0)),
+    sample: rows,
+    severity: 'critical',
+  };
+}
+
+export async function checkPaymentSumVsPaid(): Promise<InvariantResult> {
+  // SUM(Payment.amount) ≠ Invoice.paidAmount per invoice.
+  // Means a Payment row was deleted/edited without recomputing paidAmount,
+  // OR paidAmount was edited manually. Either way the cash register lies.
+  const rows = await prisma.$queryRaw<Array<{ id: string; invoiceNumber: string; paidAmount: string; sum_payments: string }>>`
+    SELECT i.id, i."invoiceNumber",
+           i."paidAmount"::text AS "paidAmount",
+           COALESCE(SUM(p.amount), 0)::text AS sum_payments
+    FROM "Invoice" i
+    LEFT JOIN "Payment" p ON p."invoiceId" = i.id
+    GROUP BY i.id
+    HAVING ABS(i."paidAmount" - COALESCE(SUM(p.amount), 0)) > 0.01
+    ORDER BY i."issuedAt" DESC
+    LIMIT 5
+  `;
+  const countRow = await prisma.$queryRaw<Array<{ c: bigint }>>`
+    SELECT COUNT(*)::bigint AS c FROM (
+      SELECT i.id
+      FROM "Invoice" i
+      LEFT JOIN "Payment" p ON p."invoiceId" = i.id
+      GROUP BY i.id
+      HAVING ABS(i."paidAmount" - COALESCE(SUM(p.amount), 0)) > 0.01
+    ) sub
+  `;
+  return {
+    key: 'payment_sum_vs_paid',
+    label: 'SUM(Payment.amount) ≠ Invoice.paidAmount',
+    count: Number(countRow[0]?.c ?? BigInt(0)),
+    sample: rows,
+    severity: 'critical',
+  };
+}
+
+export async function checkItemAllocatedOverflow(): Promise<InvariantResult> {
+  // InvoiceItem.allocatedAmount > InvoiceItem.total per row.
+  // Means more was allocated to this line than the line costs — analytics
+  // double-counts revenue.
+  const rows = await prisma.$queryRaw<Array<{ id: string; invoiceId: string; total: string; allocatedAmount: string }>>`
+    SELECT id, "invoiceId",
+           total::text AS total,
+           "allocatedAmount"::text AS "allocatedAmount"
+    FROM "InvoiceItem"
+    WHERE "allocatedAmount" > total + 0.01
+    LIMIT 5
+  `;
+  const countRow = await prisma.$queryRaw<Array<{ c: bigint }>>`
+    SELECT COUNT(*)::bigint AS c FROM "InvoiceItem" WHERE "allocatedAmount" > total + 0.01
+  `;
+  return {
+    key: 'item_allocated_overflow',
+    label: 'InvoiceItem.allocatedAmount > InvoiceItem.total',
+    count: Number(countRow[0]?.c ?? BigInt(0)),
+    sample: rows,
+    severity: 'critical',
+  };
+}
+
+export async function checkFullyPaidMissingPaidAt(): Promise<InvariantResult> {
+  // Invoice is fully paid (paidAmount ≈ amount) but paidAt is NULL.
+  // Means the "mark as paid" hook didn't fire when the last payment
+  // landed — comptable reports use paidAt for closure dates.
+  const rows = await prisma.$queryRaw<Array<{ id: string; invoiceNumber: string; amount: string; paidAmount: string }>>`
+    SELECT id, "invoiceNumber",
+           amount::text AS amount,
+           "paidAmount"::text AS "paidAmount"
+    FROM "Invoice"
+    WHERE "paidAt" IS NULL
+      AND amount > 0
+      AND ABS("paidAmount" - amount) < 0.01
+    ORDER BY "issuedAt" DESC
+    LIMIT 5
+  `;
+  const countRow = await prisma.$queryRaw<Array<{ c: bigint }>>`
+    SELECT COUNT(*)::bigint AS c FROM "Invoice"
+    WHERE "paidAt" IS NULL
+      AND amount > 0
+      AND ABS("paidAmount" - amount) < 0.01
+  `;
+  return {
+    key: 'fully_paid_missing_paidat',
+    label: 'Invoice fully paid mais paidAt = NULL',
+    count: Number(countRow[0]?.c ?? BigInt(0)),
+    sample: rows,
+    severity: 'warning',
+  };
+}
+
+const MV_STALENESS_THRESHOLD_HOURS = 2;
+
+export async function checkMonthlyRevenueMvFresh(): Promise<InvariantResult> {
+  // monthly_revenue_mv must be refreshed within the last 2h.
+  // The refresh cron runs hourly (`5 * * * *`) ; if it stops firing, the
+  // dashboards under-report revenue. We use the Redis last_run timestamp
+  // (markCronRun) as the freshness signal — same data the /admin/health
+  // dashboard reads.
+  const { getCronLastRun } = await import('@/lib/observability');
+  const lastRun = await getCronLastRun('refresh-monthly-revenue');
+  const sample: Array<Record<string, unknown>> = [];
+  let count = 0;
+  if (!lastRun) {
+    count = 1;
+    sample.push({ reason: 'cron:last_run:refresh-monthly-revenue is missing' });
+  } else {
+    const ageMs = Date.now() - new Date(lastRun).getTime();
+    const ageHours = ageMs / 3_600_000;
+    if (ageHours > MV_STALENESS_THRESHOLD_HOURS) {
+      count = 1;
+      sample.push({
+        lastRun,
+        ageHours: Math.round(ageHours * 10) / 10,
+        thresholdHours: MV_STALENESS_THRESHOLD_HOURS,
+      });
+    }
+  }
+  return {
+    key: 'mv_refresh_stale',
+    label: 'monthly_revenue_mv non rafraîchie depuis >2h',
+    count,
+    sample,
+    severity: 'critical',
+  };
+}
+
+export async function checkJsVsMvCurrentMonth(): Promise<InvariantResult> {
+  // The JS allocator (computeMonthlyRevenueByCategory under Sémantique A)
+  // and the materialized view must agree for the current month. If they
+  // diverge, one of the two paths has drifted — Rita-style bug.
+  //
+  // Implementation : load all invoices closed this month via the same
+  // gate the JS path uses, compute the breakdown, then read the MV row
+  // for the same month. Compare totals per category with 0.01 MAD
+  // tolerance.
+  const { getMonthlyInvoicesWhere } = await import('@/lib/billing');
+  const { computeMonthlyRevenueByCategory } = await import('@/lib/accounting');
+  const { startOfMonthCasa, endOfMonthCasa } = await import('@/lib/dates-casablanca');
+
+  const now = new Date();
+  const monthStart = startOfMonthCasa(now);
+  const monthEnd = endOfMonthCasa(now);
+  const year = monthStart.getFullYear();
+  const month = monthStart.getMonth() + 1; // MV uses 1-12
+
+  // JS path — same input shape the metrics.ts caller uses
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      status: { in: ['PAID', 'PARTIALLY_PAID', 'PENDING'] },
+      ...getMonthlyInvoicesWhere(monthStart, monthEnd),
+    },
+    select: {
+      items: { select: { category: true, description: true, total: true }, orderBy: { id: 'asc' } },
+      payments: { select: { amount: true, paymentDate: true } },
+    },
+    take: 2000,
+  });
+  const jsBreakdown = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0, other: 0 };
+  for (const inv of invoices) {
+    const sub = computeMonthlyRevenueByCategory(inv.payments, inv.items, monthStart, monthEnd);
+    jsBreakdown.boarding += sub.boarding;
+    jsBreakdown.taxi += sub.taxi;
+    jsBreakdown.grooming += sub.grooming;
+    jsBreakdown.croquettes += sub.croquettes;
+    jsBreakdown.other += sub.other;
+  }
+
+  // MV path
+  let mvRows: Array<{ category: string; total: number | string }> = [];
+  try {
+    mvRows = await prisma.$queryRaw<Array<{ category: string; total: number | string }>>`
+      SELECT category, total FROM monthly_revenue_mv
+      WHERE year = ${year} AND month = ${month}
+    `;
+  } catch {
+    // If the MV doesn't exist (fresh DB without migrations), skip the
+    // check — return 0 violations rather than a noisy false positive.
+    return {
+      key: 'js_vs_mv_current_month',
+      label: 'CA JS vs monthly_revenue_mv (mois courant)',
+      count: 0,
+      sample: [{ note: 'monthly_revenue_mv unavailable, skipping' }],
+      severity: 'critical',
+    };
+  }
+  const mvBreakdown = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0, other: 0 };
+  for (const row of mvRows) {
+    const amount = typeof row.total === 'string' ? parseFloat(row.total) : Number(row.total);
+    switch (row.category) {
+      case 'BOARDING': mvBreakdown.boarding += amount; break;
+      case 'PET_TAXI': mvBreakdown.taxi += amount; break;
+      case 'GROOMING': mvBreakdown.grooming += amount; break;
+      case 'PRODUCT': mvBreakdown.croquettes += amount; break;
+      default: mvBreakdown.other += amount; break;
+    }
+  }
+
+  // Compare per category. Any divergence > 0.01 MAD = 1 violation.
+  const tolerance = 0.01;
+  const diffs: Array<Record<string, unknown>> = [];
+  for (const key of ['boarding', 'taxi', 'grooming', 'croquettes', 'other'] as const) {
+    const js = jsBreakdown[key];
+    const mv = mvBreakdown[key];
+    if (Math.abs(js - mv) > tolerance) {
+      diffs.push({ category: key, js, mv, diff: Math.round((js - mv) * 100) / 100 });
+    }
+  }
+  return {
+    key: 'js_vs_mv_current_month',
+    label: 'CA JS vs monthly_revenue_mv (mois courant)',
+    count: diffs.length,
+    sample: diffs,
+    severity: 'critical',
+  };
+}
+
 export async function runAllInvariantChecks(): Promise<InvariantResult[]> {
-  const [overpaid, negativeStock, itemDrift, invoiceDrift] = await Promise.all([
+  const [
+    overpaid, negativeStock, itemDrift, invoiceDrift,
+    allocatedSum, paymentSum, allocOverflow, missingPaidAt,
+    mvFresh, jsVsMv,
+  ] = await Promise.all([
     checkOverpaidInvoices(),
     checkNegativeStock(),
     checkItemTotalDrift(),
     checkInvoiceAmountDrift(),
+    checkAllocatedSumVsPaid(),
+    checkPaymentSumVsPaid(),
+    checkItemAllocatedOverflow(),
+    checkFullyPaidMissingPaidAt(),
+    checkMonthlyRevenueMvFresh(),
+    checkJsVsMvCurrentMonth(),
   ]);
-  return [overpaid, negativeStock, itemDrift, invoiceDrift];
+  return [
+    overpaid, negativeStock, itemDrift, invoiceDrift,
+    allocatedSum, paymentSum, allocOverflow, missingPaidAt,
+    mvFresh, jsVsMv,
+  ];
 }

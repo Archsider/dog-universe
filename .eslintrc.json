@@ -44,6 +44,7 @@
         "src/lib/queues/**/*",
         "src/workers/**/*",
         "src/app/api/cron/heartbeat/route.ts",
+        "src/app/api/cron/invariants-check/route.ts",
         "src/app/api/admin/clients/*/sms/route.ts",
         "src/app/api/admin/diagnostics/test-sms/route.ts"
       ],

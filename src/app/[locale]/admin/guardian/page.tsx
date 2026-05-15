@@ -25,6 +25,7 @@ export default async function GuardianPage({ params }: { params: Promise<{ local
   return (
     <GuardianClient
       isFr={isFr}
+      locale={locale}
       events={events.map((e) => ({
         id: e.id,
         sentryEventId: e.sentryEventId,
