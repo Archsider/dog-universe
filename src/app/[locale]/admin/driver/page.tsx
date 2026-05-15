@@ -5,6 +5,8 @@ import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
 import { casablancaDateOnly } from '@/lib/dates-casablanca';
+import { DriverTabs } from './_components/DriverTabs';
+import { HistoryClient } from './_components/HistoryClient';
 
 // Trip statuses where the driver is actively driving (the green-pulse banner).
 // Mirrors the FLOWS table in the status transition route — keep in sync.
@@ -13,16 +15,38 @@ const TERMINAL_TRIP_STATUSES = ['ARRIVED_AT_PENSION', 'ARRIVED_AT_CLIENT', 'COMP
 
 export default async function DriverDashboardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ view?: string }>;
 }) {
   const { locale } = await params;
+  const { view: viewParam } = await searchParams;
   const session = await auth();
   if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role ?? '')) {
     redirect(`/${locale}/auth/login`);
   }
 
   const isFr = locale !== 'en';
+  // Tabbed UI : `?view=history` switches to the Historique tab. Default
+  // (no param or any other value) keeps the live "Mode chauffeur" view.
+  // We branch BEFORE the expensive live-mode Prisma queries so opening the
+  // Historique tab doesn't pay for the live data we'll never render.
+  const view: 'live' | 'history' = viewParam === 'history' ? 'history' : 'live';
+  if (view === 'history') {
+    return (
+      <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
+        <header className="flex items-center gap-3">
+          <Car className="h-7 w-7 text-[#C4974A]" />
+          <h1 className="font-serif text-2xl text-charcoal">
+            {isFr ? 'Tableau de bord chauffeur' : 'Driver dashboard'}
+          </h1>
+        </header>
+        <DriverTabs locale={locale} view={view} />
+        <HistoryClient locale={locale} />
+      </div>
+    );
+  }
   // `TaxiTrip.date` is a string stored as YYYY-MM-DD straight from
   // `<input type="date">` in Casablanca local time. We compute today's
   // string via casablancaDateOnly so a query at 00:30 Casa (= 23:30 UTC
@@ -178,9 +202,10 @@ export default async function DriverDashboardPage({
       <header className="flex items-center gap-3">
         <Car className="h-7 w-7 text-[#C4974A]" />
         <h1 className="font-serif text-2xl text-charcoal">
-          {isFr ? 'Mode chauffeur' : 'Driver mode'}
+          {isFr ? 'Tableau de bord chauffeur' : 'Driver dashboard'}
         </h1>
       </header>
+      <DriverTabs locale={locale} view={view} />
 
       {/* Active trip */}
       {activeTrip ? (
