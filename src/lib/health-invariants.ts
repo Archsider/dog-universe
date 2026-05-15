@@ -290,11 +290,18 @@ export async function checkJsVsMvCurrentMonth(): Promise<InvariantResult> {
   // and the materialized view must agree for the current month. If they
   // diverge, one of the two paths has drifted — Rita-style bug.
   //
-  // Implementation : load all invoices closed this month via the same
-  // gate the JS path uses, compute the breakdown, then read the MV row
-  // for the same month. Compare totals per category with 0.01 MAD
-  // tolerance.
-  const { getMonthlyInvoicesWhere } = await import('@/lib/billing');
+  // Implementation (Bug A, 2026-05-15) : mirror the MV's source CTE
+  // exactly — exclude CANCELLED invoices, scope to those with ≥1 payment
+  // in the current month, no booking-derived path. The JS gate inside
+  // `computeMonthlyRevenueByCategory` (Sémantique A) does the rest.
+  //
+  // The previous implementation used `getMonthlyInvoicesWhere` (case 1
+  // ∪ case 2 ∪ case 3) which is intended for the "Total Facturé" KPI
+  // (includes booking-active invoices regardless of payment status).
+  // That asymmetry — JS scoping by booking, MV scoping by Payment —
+  // produced false-positive flags on CANCELLED full-paid invoices
+  // (counted by MV, ignored by JS). Both sides now read the same Payment-
+  // anchored source.
   const { computeMonthlyRevenueByCategory } = await import('@/lib/accounting');
   const { startOfMonthCasa, endOfMonthCasa } = await import('@/lib/dates-casablanca');
 
@@ -304,11 +311,17 @@ export async function checkJsVsMvCurrentMonth(): Promise<InvariantResult> {
   const year = monthStart.getFullYear();
   const month = monthStart.getMonth() + 1; // MV uses 1-12
 
-  // JS path — same input shape the metrics.ts caller uses
+  // JS path — mirror the MV's source data exactly (Payment-anchored,
+  // non-CANCELLED). The Sémantique A gate inside the helper filters
+  // out invoices that aren't fully paid OR whose last payment fell
+  // outside the window — same logic the MV's `closed_invoices` CTE
+  // applies in SQL.
   const invoices = await prisma.invoice.findMany({
     where: {
-      status: { in: ['PAID', 'PARTIALLY_PAID', 'PENDING'] },
-      ...getMonthlyInvoicesWhere(monthStart, monthEnd),
+      status: { not: 'CANCELLED' },
+      payments: {
+        some: { paymentDate: { gte: monthStart, lte: monthEnd } },
+      },
     },
     select: {
       items: { select: { category: true, description: true, total: true }, orderBy: { id: 'asc' } },
