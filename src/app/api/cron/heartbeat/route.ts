@@ -4,6 +4,7 @@ import { tryAcquireFlag } from '@/lib/cache';
 import { countConsecutiveFailures } from '@/lib/heartbeat';
 import { defineCron } from '@/lib/cron-runner';
 import { getBackupFreshness, notifyBackupStale } from '@/lib/backup-health';
+import { classifyCronFreshness, STALENESS_THRESHOLD_HOURS } from '@/lib/cron-freshness';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
