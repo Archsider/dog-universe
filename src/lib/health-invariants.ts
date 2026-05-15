@@ -303,13 +303,17 @@ export async function checkJsVsMvCurrentMonth(): Promise<InvariantResult> {
   // (counted by MV, ignored by JS). Both sides now read the same Payment-
   // anchored source.
   const { computeMonthlyRevenueByCategory } = await import('@/lib/accounting');
-  const { startOfMonthCasa, endOfMonthCasa } = await import('@/lib/dates-casablanca');
+  const { startOfMonthCasa, endOfMonthCasa, currentMonthCasa } = await import('@/lib/dates-casablanca');
 
   const now = new Date();
   const monthStart = startOfMonthCasa(now);
   const monthEnd = endOfMonthCasa(now);
-  const year = monthStart.getFullYear();
-  const month = monthStart.getMonth() + 1; // MV uses 1-12
+  // `monthStart.getFullYear()/getMonth()` would return the *previous* Casa
+  // month on a UTC runtime (Casa midnight = 23:00 UTC the day before, so
+  // `monthStart` is timestamped on the last day of the prior UTC month).
+  // `currentMonthCasa()` reads from the Casa calendar string and is
+  // timezone-correct on every runtime. See docs/BUSINESS_RULES.md §6.
+  const { year, month } = currentMonthCasa();
 
   // JS path — mirror the MV's source data exactly (Payment-anchored,
   // non-CANCELLED). The Sémantique A gate inside the helper filters

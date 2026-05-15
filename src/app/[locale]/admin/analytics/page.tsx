@@ -1,7 +1,8 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { subMonths } from 'date-fns';
+import { startOfMonthCasa, endOfMonthCasa, currentMonthCasa } from '@/lib/dates-casablanca';
 import {
   totalCashCollected,
   cashByMonth,
@@ -33,14 +34,19 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
     redirect(`/${locale}/auth/login`);
 
   const now         = new Date();
-  const currentYear = now.getFullYear();
+  // Casa-anchored "this month" — date-fns startOfMonth/endOfMonth + raw
+  // `.getFullYear()/.getMonth()` use the runtime's local TZ (UTC on Vercel)
+  // and are off-by-one across the 00:00 Casa = 23:00 UTC previous-day
+  // boundary. All analytics KPIs (cash, billing, volume, basket, charts)
+  // must read the Casa calendar. See docs/BUSINESS_RULES.md §6.
+  const { year: currentYear, month: currentMonthNum } = currentMonthCasa();
   const lastYear    = currentYear - 1;
-  const thisM       = now.getMonth(); // 0-indexed
+  const thisM       = currentMonthNum - 1; // 0-indexed for the chart's monthly array lookup
 
-  const thisMonthStart = startOfMonth(now);
-  const thisMonthEnd   = endOfMonth(now);
-  const lastMonthStart = startOfMonth(subMonths(now, 1));
-  const lastMonthEnd   = endOfMonth(subMonths(now, 1));
+  const thisMonthStart = startOfMonthCasa(now);
+  const thisMonthEnd   = endOfMonthCasa(now);
+  const lastMonthStart = startOfMonthCasa(subMonths(now, 1));
+  const lastMonthEnd   = endOfMonthCasa(subMonths(now, 1));
 
   const [
     thisAmt,

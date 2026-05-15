@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { CalendarGrid } from './CalendarGrid';
 import { AvailabilityCalendar } from '@/components/shared/AvailabilityCalendar';
+import { currentMonthCasa } from '@/lib/dates-casablanca';
 
 interface Props {
   params: Promise<{ locale: string }>;
@@ -16,9 +17,12 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/auth/login`);
 
-  const now = new Date();
-  const year = parseInt(sp.year ?? String(now.getFullYear()));
-  const month = parseInt(sp.month ?? String(now.getMonth() + 1)); // 1-based
+  // Casa-anchored default month — `now.getMonth()` on a UTC runtime would
+  // return the previous Casa month between 23:00–00:00 UTC, causing the
+  // calendar to open on April when the operator is already in May Casa-time.
+  const { year: defaultYear, month: defaultMonth } = currentMonthCasa();
+  const year = parseInt(sp.year ?? String(defaultYear));
+  const month = parseInt(sp.month ?? String(defaultMonth)); // 1-based
 
   const firstDay = new Date(year, month - 1, 1);
   firstDay.setHours(0, 0, 0, 0);

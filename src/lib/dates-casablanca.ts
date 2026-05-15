@@ -197,3 +197,43 @@ export function dayRangeCasa(d: Date | string = new Date()): { start: Date; end:
 export function monthRangeCasa(d: Date | string = new Date()): { start: Date; end: Date } {
   return { start: startOfMonthCasa(d), end: endOfMonthCasa(d) };
 }
+
+/**
+ * Year/month/day integers for `d` as seen by a Casablanca-local wall clock.
+ * Use this everywhere you'd otherwise call `.getMonth() / .getFullYear() /
+ * .getDate()` on a Date — those return the runtime's local timezone (UTC
+ * on Vercel), which is off-by-one across the Casa midnight boundary
+ * (00:00 Casa = 23:00 UTC the previous day).
+ *
+ * Returns `{ year: number, month: 1..12, day: 1..31 }`. The integers are
+ * the Casa calendar values, ready to feed into Prisma queries that key on
+ * (year, month, day) tuples (e.g. monthly_revenue_mv, MonthlyRevenueSummary).
+ *
+ * Examples on a UTC-runtime server:
+ *   casablancaYMD(new Date('2026-04-30T23:00:00Z'))
+ *     → { year: 2026, month: 5, day: 1 }   ← Casa already in May
+ *   `(new Date('2026-04-30T23:00:00Z')).getMonth()` → 3 (April) ← the bug
+ */
+export function casablancaYMD(d: Date | string = new Date()): { year: number; month: number; day: number } {
+  const ymd = casablancaDateOnly(d);
+  return {
+    year: Number(ymd.slice(0, 4)),
+    month: Number(ymd.slice(5, 7)),
+    day: Number(ymd.slice(8, 10)),
+  };
+}
+
+/**
+ * Convenience: current Casablanca year + month as integers (month 1-12).
+ * Replaces the unsafe pattern:
+ *   const now = new Date();
+ *   const year = now.getFullYear(); const month = now.getMonth() + 1;
+ *
+ * On a UTC runtime, that pattern returns the *previous* Casa month during
+ * the 23:00→00:00 UTC window. This helper is timezone-correct on every
+ * runtime.
+ */
+export function currentMonthCasa(): { year: number; month: number } {
+  const { year, month } = casablancaYMD(new Date());
+  return { year, month };
+}

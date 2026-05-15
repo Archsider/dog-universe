@@ -3,6 +3,7 @@ import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
 import { cacheDel } from '@/lib/cache';
+import { casablancaYMD } from '@/lib/dates-casablanca';
 
 type Params = { params: Promise<{ id: string; paymentId: string }> };
 
@@ -39,8 +40,9 @@ export async function DELETE(_req: Request, { params }: Params) {
   await allocatePayments(id);
 
   // O5 — invalide le cache revenue du mois du paiement supprimé.
-  const yyyy = payment.paymentDate.getFullYear();
-  const mm = payment.paymentDate.getMonth() + 1;
+  // Casa-anchored : symétrie avec l'invalidation côté création (cf.
+  // src/lib/payment-allocation.ts). Voir docs/BUSINESS_RULES.md §6.
+  const { year: yyyy, month: mm } = casablancaYMD(payment.paymentDate);
   await cacheDel(`revenue:${yyyy}:${mm}`);
 
   return new NextResponse(null, { status: 204 });

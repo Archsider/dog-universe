@@ -8,9 +8,13 @@ interface Props {
 }
 
 export default async function DashboardCheckInOut({ locale, labels }: Props) {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  // Casa-anchored day boundaries — `new Date(now.getFullYear(), …)` on a
+  // UTC runtime builds UTC midnight (= 01:00 Casa). Check-ins between
+  // 00:00–01:00 Casa would be assigned to the previous day. Use the
+  // explicit Casa helpers instead. See docs/BUSINESS_RULES.md §6.
+  const { startOfTodayCasa, endOfTodayCasa } = await import('@/lib/dates-casablanca');
+  const todayStart = startOfTodayCasa();
+  const todayEnd = endOfTodayCasa();
 
   const [todayCheckIns, todayCheckOuts] = await Promise.all([
     prisma.booking.findMany({

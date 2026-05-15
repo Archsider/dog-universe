@@ -1,11 +1,16 @@
+import { currentMonthCasa } from '@/lib/dates-casablanca';
+
 export const MONTH_NAMES_FR_LC = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
 ];
 
 export function getCurrentYYYYMM(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  // Casa-anchored. `now.getMonth()` returns the runtime's local TZ value
+  // (UTC on Vercel) which is the PREVIOUS Casa month between 23:00–00:00
+  // UTC on the last day of the month. Use the Casa calendar string instead.
+  const { year, month } = currentMonthCasa();
+  return `${year}-${String(month).padStart(2, '0')}`;
 }
 
 export function parseMonth(raw: string | undefined): string {
