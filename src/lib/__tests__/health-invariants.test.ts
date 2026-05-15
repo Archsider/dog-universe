@@ -14,6 +14,10 @@ vi.mock('@/lib/observability', () => ({
   CRON_NAMES: [],
 }));
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.prisma }));
+// Bug A : `getMonthlyInvoicesWhere` is no longer imported by
+// `checkJsVsMvCurrentMonth` (the JS path now mirrors the MV's source
+// CTE directly). The mock stays for any other consumer that might
+// import it through the test surface, but is now unused.
 vi.mock('@/lib/billing', () => ({
   getMonthlyInvoicesWhere: vi.fn(() => ({ OR: [] })),
 }));
@@ -113,5 +117,44 @@ describe('checkJsVsMvCurrentMonth — JS vs MV parity', () => {
     const r = await checkJsVsMvCurrentMonth();
     expect(r.count).toBe(0);
     expect(r.sample[0]).toMatchObject({ note: expect.stringContaining('unavailable') });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Bug A : the JS path must mirror the MV's source CTE exactly. Both
+  // sides exclude CANCELLED invoices and scope by Payment-in-window
+  // (no booking-derived path). These tests pin that contract.
+  // ───────────────────────────────────────────────────────────────────────
+
+  it('JS query filters status != CANCELLED and payments.some in window (Bug A)', async () => {
+    mocks.prisma.invoice.findMany.mockResolvedValue([]);
+    mocks.prisma.$queryRaw.mockResolvedValue([]);
+    await checkJsVsMvCurrentMonth();
+    expect(mocks.prisma.invoice.findMany).toHaveBeenCalledTimes(1);
+    const where = mocks.prisma.invoice.findMany.mock.calls[0][0].where;
+    // Must exclude CANCELLED invoices (parity with MV's CTE).
+    expect(where.status).toEqual({ not: 'CANCELLED' });
+    // Must scope by at least one payment in the current month — same as
+    // the MV's WHERE clause + closed_invoices gate semantic.
+    expect(where.payments).toEqual({
+      some: { paymentDate: { gte: expect.any(Date), lte: expect.any(Date) } },
+    });
+    // Must NOT use the `getMonthlyInvoicesWhere` OR-union path. After
+    // Bug A, the JS where clause is exactly { status, payments } — no
+    // booking-derived branch.
+    expect(where).not.toHaveProperty('OR');
+    expect(where).not.toHaveProperty('booking');
+  });
+
+  it('CANCELLED full-paid invoice does not contribute to JS (Bug A)', async () => {
+    // The new `findMany` filter excludes CANCELLED rows server-side,
+    // so the mock returns [] when the helper queries for the month.
+    // Same row is also excluded from the MV by the parallel migration
+    // (20260516_revenue_mv_skip_cancelled), so MV returns [] too. No
+    // divergence flagged.
+    mocks.prisma.invoice.findMany.mockResolvedValue([]);
+    mocks.prisma.$queryRaw.mockResolvedValue([]);
+    const r = await checkJsVsMvCurrentMonth();
+    expect(r.count).toBe(0);
+    expect(r.sample).toEqual([]);
   });
 });
