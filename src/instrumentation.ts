@@ -18,6 +18,13 @@
 import * as Sentry from '@sentry/nextjs';
 
 export async function register() {
+  // Diagnostic probe — unconditional log, no NODE_ENV gate. If this line
+  // never appears in Vercel runtime logs after a cold start, Next is not
+  // invoking `register()` at all and the instrumentation is dead before
+  // it even tries to import the Sentry config. Remove once observability
+  // is confirmed green.
+  console.log('INSTRUMENTATION REGISTER CALLED', process.env.NEXT_RUNTIME);
+
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { assertProductionEnv } = await import('./lib/boot-checks');
     assertProductionEnv();
