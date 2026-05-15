@@ -38,6 +38,7 @@ import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
 import { cacheDel } from '@/lib/cache';
 import { toNumber } from '@/lib/decimal';
+import { casablancaYMD } from '@/lib/dates-casablanca';
 
 type PrismaLike = typeof prisma | Prisma.TransactionClient;
 
@@ -175,8 +176,13 @@ export async function recordPayment(
   await allocatePayments(input.invoiceId);
 
   // ── Revenue cache invalidation (fail-open) ─────────────────────────────
-  const yyyy = paymentDate.getFullYear();
-  const mm = paymentDate.getMonth() + 1;
+  // Casa-anchored cache key — the consumer (`revenueByCategoryProrata`
+  // and the MV) writes keys for the Casa calendar month. Using
+  // `paymentDate.getMonth()` on a UTC runtime would invalidate the
+  // PREVIOUS Casa month for payments timestamped between 23:00–00:00
+  // UTC on the last day, leaving the real Casa-month cache stale.
+  // See docs/BUSINESS_RULES.md §6.
+  const { year: yyyy, month: mm } = casablancaYMD(paymentDate);
   await cacheDel(`revenue:${yyyy}:${mm}`);
 
   return { ok: true, paymentId: payment.id };

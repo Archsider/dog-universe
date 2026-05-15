@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { cashByMonth } from '@/lib/metrics';
 import RevenueChartWrapper from '../RevenueChartWrapper';
 import { notDeleted } from '@/lib/prisma-soft';
+import { currentMonthCasa } from '@/lib/dates-casablanca';
 
 interface Props {
   locale: string;
@@ -27,8 +28,11 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default async function DashboardActivity({ locale, labels, statusLabels }: Props) {
-  const now = new Date();
-  const currentYear = now.getFullYear();
+  // Casa-anchored "this month" — `now.getMonth()` on a UTC runtime would
+  // return the previous Casa month at the boundary, shifting every chart
+  // bar by one position. See docs/BUSINESS_RULES.md §6.
+  const { year: currentYear, month: currentMonth } = currentMonthCasa();
+  const currentMonthIdx = currentMonth - 1; // 0-indexed for the chart loop
 
   const [recentBookings, lastYearMonthly, currentYearMonthly] = await Promise.all([
     prisma.booking.findMany({
@@ -49,7 +53,12 @@ export default async function DashboardActivity({ locale, labels, statusLabels }
   const chartLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
   const chartData: { month: string; boarding: number; taxi: number; grooming: number; croquettes: number }[] = [];
   for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    // Anchor the iterator on the Casa current month, not the UTC one.
+    // `new Date(currentYear, currentMonthIdx - i, 1)` builds a local-TZ
+    // date; on Vercel that's UTC midnight 1st of that month. The label
+    // / month-index pair stays correct as long as the seed (currentYear,
+    // currentMonthIdx) is Casa-anchored, which it now is.
+    const d = new Date(currentYear, currentMonthIdx - i, 1);
     const key = d.toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' });
     const yr = d.getFullYear();
     const mo = d.getMonth();

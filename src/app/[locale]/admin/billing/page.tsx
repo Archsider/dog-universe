@@ -14,6 +14,7 @@ import { BillingPaymentMethods } from './BillingPaymentMethods';
 import { BillingInvoicesTable } from './BillingInvoicesTable';
 import { BillingStatusFilters } from './BillingStatusFilters';
 import { MONTH_NAMES_FR_LC, parseMonth, monthBounds, makeBuildQS } from './billing-utils';
+import { casablancaYMD } from '@/lib/dates-casablanca';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -66,7 +67,11 @@ export default async function AdminBillingPage(props: PageProps) {
     });
     if (targetInv) {
       const refDate = targetInv.periodDate ?? targetInv.issuedAt;
-      const invoiceMonth = `${refDate.getFullYear()}-${String(refDate.getMonth() + 1).padStart(2, '0')}`;
+      // Casa-anchored : `refDate.getMonth()` retournerait le mois UTC,
+      // off-by-one pour les Invoice.issuedAt typés à 23:00 UTC = 00:00
+      // Casa le 1er du mois suivant. Voir docs/BUSINESS_RULES.md §6.
+      const { year, month } = casablancaYMD(refDate);
+      const invoiceMonth = `${year}-${String(month).padStart(2, '0')}`;
       if (invoiceMonth !== selectedMonth) {
         redirect(`/${locale}/admin/billing?month=${invoiceMonth}&invoiceId=${highlightInvoiceId}`);
       }

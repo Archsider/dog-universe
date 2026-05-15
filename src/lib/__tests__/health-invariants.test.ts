@@ -27,8 +27,14 @@ vi.mock('@/lib/accounting', () => ({
   })),
 }));
 vi.mock('@/lib/dates-casablanca', () => ({
-  startOfMonthCasa: () => new Date('2026-05-01T00:00:00Z'),
-  endOfMonthCasa: () => new Date('2026-05-31T23:59:59Z'),
+  // Recreate the Bug-A-timezone production hazard in the mock : the Date
+  // returned by startOfMonthCasa for May is timestamped at 23:00 UTC the
+  // last day of April. Calling `.getMonth()` on it on a UTC runtime gives
+  // 3 (April). The fix in src/lib/health-invariants.ts uses
+  // `currentMonthCasa()` (also mocked here) to bypass that hazard.
+  startOfMonthCasa: () => new Date('2026-04-30T23:00:00Z'),
+  endOfMonthCasa: () => new Date('2026-05-31T22:59:59.999Z'),
+  currentMonthCasa: () => ({ year: 2026, month: 5 }),
 }));
 
 import {
@@ -160,6 +166,30 @@ describe('checkJsVsMvCurrentMonth — JS vs MV parity', () => {
     const r = await checkJsVsMvCurrentMonth();
     expect(r.count).toBe(0);
     expect(r.sample).toEqual([]);
+  });
+
+  it('MV query uses Casa-anchored year/month, not getMonth() of monthStart (TZ bug regression)', async () => {
+    // Reproduces the production failure mode : on a UTC runtime,
+    // `monthStart` from startOfMonthCasa() is 2026-04-30T23:00Z and its
+    // `.getMonth()` returns 3 (April). Before this fix the invariant
+    // queried MV for (year=2026, month=4) but JS ran for May, producing
+    // a permanent false-positive divergence flag.
+    //
+    // After the fix, the MV-side year/month come from `currentMonthCasa()`
+    // (mocked to return { year: 2026, month: 5 }) and the raw SQL is
+    // parameterized with those values.
+    mocks.prisma.invoice.findMany.mockResolvedValue([]);
+    mocks.prisma.$queryRaw.mockResolvedValue([]);
+    await checkJsVsMvCurrentMonth();
+    // tagged-template call shape : [stringsArray, ...interpolatedValues]
+    // Find the call that targets `monthly_revenue_mv` (sample/count/MV).
+    const mvCall = mocks.prisma.$queryRaw.mock.calls.find(
+      (c: unknown[]) => Array.isArray(c[0]) && (c[0] as string[]).join(' ').includes('monthly_revenue_mv'),
+    );
+    expect(mvCall, 'MV query was issued').toBeTruthy();
+    const [, year, month] = mvCall!;
+    expect(year).toBe(2026);
+    expect(month).toBe(5); // ← was 4 (April) before the fix
   });
 });
 

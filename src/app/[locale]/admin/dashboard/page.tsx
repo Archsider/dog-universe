@@ -21,7 +21,7 @@ import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
 import { subMonths } from 'date-fns';
-import { startOfMonthCasa, endOfMonthCasa } from '@/lib/dates-casablanca';
+import { startOfMonthCasa, endOfMonthCasa, casablancaYMD } from '@/lib/dates-casablanca';
 import {
   totalCashCollected,
   billedByCategory,
@@ -167,28 +167,38 @@ export default async function AdminDashboardPage({ params }: PageProps) {
         },
       },
     }),
-    prisma.monthlyRevenueSummary
-      .findFirst({
-        where: { year: thisMonthStart.getFullYear(), month: thisMonthStart.getMonth() + 1 },
-        select: {
-          boardingRevenue: true,
-          groomingRevenue: true,
-          taxiRevenue: true,
-          otherRevenue: true,
-        },
-      })
-      .catch(() => null),
-    prisma.monthlyRevenueSummary
-      .findFirst({
-        where: { year: lastMonthStart.getFullYear(), month: lastMonthStart.getMonth() + 1 },
-        select: {
-          boardingRevenue: true,
-          groomingRevenue: true,
-          taxiRevenue: true,
-          otherRevenue: true,
-        },
-      })
-      .catch(() => null),
+    (async () => {
+      // casablancaYMD : `thisMonthStart` est typé à 23:00 UTC du dernier
+      // jour du mois précédent (= 00:00 Casa du 1er du mois courant).
+      // `.getMonth()` sur runtime UTC retournerait le mois précédent —
+      // bug systémique fixé par cette PR. Voir docs/BUSINESS_RULES.md §6.
+      const { year, month } = casablancaYMD(thisMonthStart);
+      return prisma.monthlyRevenueSummary
+        .findFirst({
+          where: { year, month },
+          select: {
+            boardingRevenue: true,
+            groomingRevenue: true,
+            taxiRevenue: true,
+            otherRevenue: true,
+          },
+        })
+        .catch(() => null);
+    })(),
+    (async () => {
+      const { year, month } = casablancaYMD(lastMonthStart);
+      return prisma.monthlyRevenueSummary
+        .findFirst({
+          where: { year, month },
+          select: {
+            boardingRevenue: true,
+            groomingRevenue: true,
+            taxiRevenue: true,
+            otherRevenue: true,
+          },
+        })
+        .catch(() => null);
+    })(),
     billedByCategory(thisMonthStart, thisMonthEnd),
     billedByCategory(lastMonthStart, lastMonthEnd),
     prisma.pet.count({

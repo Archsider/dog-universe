@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   casablancaDateOnly,
   casablancaStartOfDay,
+  casablancaYMD,
+  currentMonthCasa,
   daysUntilCasablanca,
   isDepartureTomorrowCasablanca,
   isSameDayCasablanca,
@@ -203,5 +205,65 @@ describe('dayRangeCasa', () => {
 describe('nowCasa', () => {
   it('returns a Date (smoke — just confirms exported and callable)', () => {
     expect(nowCasa()).toBeInstanceOf(Date);
+  });
+});
+
+describe('casablancaYMD — Casa-anchored year/month/day extraction', () => {
+  it('returns Casa values, not UTC, for an instant just before Casa midnight', () => {
+    // 22:30 UTC on 14 May = 23:30 Casa on 14 May → still May 14 both sides
+    const beforeCasaMidnight = new Date('2026-05-14T22:30:00Z');
+    expect(casablancaYMD(beforeCasaMidnight)).toEqual({ year: 2026, month: 5, day: 14 });
+  });
+
+  it('rolls to the next Casa day when UTC is still on the previous day', () => {
+    // 23:30 UTC on 14 May = 00:30 Casa on 15 May → Casa is already May 15
+    // even though `(new Date(...)).getUTCDate()` would return 14.
+    const afterCasaMidnight = new Date('2026-05-14T23:30:00Z');
+    expect(casablancaYMD(afterCasaMidnight)).toEqual({ year: 2026, month: 5, day: 15 });
+  });
+
+  it('rolls to the next Casa MONTH at the month-boundary midnight (the bug case)', () => {
+    // 23:30 UTC on 30 April = 00:30 Casa on 1 May.
+    // The buggy pattern (`monthStart = startOfMonthCasa(...)` then
+    // `.getMonth()`) returned 3 (April, 0-indexed) on a UTC runtime;
+    // this helper correctly returns May.
+    const postMidnightFirstOfMay = new Date('2026-04-30T23:30:00Z');
+    expect(casablancaYMD(postMidnightFirstOfMay)).toEqual({ year: 2026, month: 5, day: 1 });
+  });
+
+  it('rolls year on Casa Jan 1 even when UTC is still 31 December', () => {
+    // 23:30 UTC on 31 December 2026 = 00:30 Casa on 1 January 2027
+    const postMidnightNewYear = new Date('2026-12-31T23:30:00Z');
+    expect(casablancaYMD(postMidnightNewYear)).toEqual({ year: 2027, month: 1, day: 1 });
+  });
+
+  it('accepts a `startOfMonthCasa(d)` return value and yields the correct Casa month', () => {
+    // The exact production failure mode that Bug A surfaced. The Date
+    // returned by startOfMonthCasa for May is 2026-04-30T23:00:00Z;
+    // calling .getMonth() on it returns 3 (April). casablancaYMD must
+    // bypass that and return May (5).
+    const monthStart = startOfMonthCasa(new Date('2026-05-14T12:00:00Z'));
+    expect(monthStart.toISOString()).toBe('2026-04-30T23:00:00.000Z');
+    // Sanity: confirm the buggy pattern indeed reports April on this Date.
+    expect(monthStart.getUTCMonth()).toBe(3); // April 0-indexed — this is the bug
+    // The correct helper returns May.
+    expect(casablancaYMD(monthStart)).toEqual({ year: 2026, month: 5, day: 1 });
+  });
+});
+
+describe('currentMonthCasa — runtime-safe "this month" extraction', () => {
+  it('returns { year, month } as a Casa-anchored tuple, callable without args', () => {
+    const r = currentMonthCasa();
+    expect(typeof r.year).toBe('number');
+    expect(typeof r.month).toBe('number');
+    expect(r.month).toBeGreaterThanOrEqual(1);
+    expect(r.month).toBeLessThanOrEqual(12);
+  });
+
+  it('matches casablancaYMD(new Date()) — single source of truth', () => {
+    const a = currentMonthCasa();
+    const b = casablancaYMD(new Date());
+    expect(a.year).toBe(b.year);
+    expect(a.month).toBe(b.month);
   });
 });

@@ -136,8 +136,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'INVALID_MONTH_RANGE' }, { status: 400 });
     }
     const requested = year * 12 + (monthNum - 1);
-    const now = new Date();
-    const current = now.getFullYear() * 12 + now.getMonth();
+    // Casa-anchored "current month" — `now.getMonth()` on a UTC runtime
+    // returns the previous Casa month at the boundary, allowing a request
+    // for "Casa May" to be rejected as `>24` past UTC April when both are
+    // valid Casa months. See docs/BUSINESS_RULES.md §6.
+    const { currentMonthCasa } = await import('@/lib/dates-casablanca');
+    const { year: cy, month: cm } = currentMonthCasa();
+    const current = cy * 12 + (cm - 1);
     if (Math.abs(requested - current) > 24) {
       return NextResponse.json({ error: 'INVALID_MONTH_RANGE' }, { status: 400 });
     }
