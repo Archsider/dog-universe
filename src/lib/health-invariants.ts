@@ -189,16 +189,26 @@ export async function checkItemAllocatedOverflow(): Promise<InvariantResult> {
   // InvoiceItem.allocatedAmount > InvoiceItem.total per row.
   // Means more was allocated to this line than the line costs — analytics
   // double-counts revenue.
+  //
+  // `total > 0` filter : DISCOUNT items have negative total by construction
+  // (deductive items) and never receive allocation (`computeItemAllocation`
+  // short-circuits `category === 'DISCOUNT'` to allocatedAmount=0, see
+  // src/lib/payments.ts:72-74). A row like {total: -150, allocatedAmount: 0}
+  // would otherwise satisfy `0 > -149.99` and falsely flag every discounted
+  // invoice. The business semantic is "cash allocated to an item can't
+  // exceed the item's price" — vacuous for negative-priced items.
   const rows = await prisma.$queryRaw<Array<{ id: string; invoiceId: string; total: string; allocatedAmount: string }>>`
     SELECT id, "invoiceId",
            total::text AS total,
            "allocatedAmount"::text AS "allocatedAmount"
     FROM "InvoiceItem"
-    WHERE "allocatedAmount" > total + 0.01
+    WHERE total > 0
+      AND "allocatedAmount" > total + 0.01
     LIMIT 5
   `;
   const countRow = await prisma.$queryRaw<Array<{ c: bigint }>>`
-    SELECT COUNT(*)::bigint AS c FROM "InvoiceItem" WHERE "allocatedAmount" > total + 0.01
+    SELECT COUNT(*)::bigint AS c FROM "InvoiceItem"
+    WHERE total > 0 AND "allocatedAmount" > total + 0.01
   `;
   return {
     key: 'item_allocated_overflow',
