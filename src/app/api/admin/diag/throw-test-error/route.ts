@@ -87,10 +87,86 @@ export async function POST() {
     tags: { canary: 'guardian', actorRole: 'SUPERADMIN' },
     extra: { canaryId, actorId: session.user.id },
   });
-  // Flush before the throw kills the function context. 2 s is enough for a
-  // single envelope on a warm Lambda; we don't await indefinitely because
-  // Vercel kills the function after maxDuration anyway.
-  await Sentry.flush(2_000).catch(() => {});
+
+  // Diag — log the EXPLICIT result of flush(). `flush()` returns
+  // Promise<boolean> : `true` = queue drained within timeout, `false` =
+  // timeout / events still pending (= POST hung or Sentry refused).
+  // The previous code did `.catch(() => {})` which swallowed both the
+  // boolean AND any error — total blind spot.
+  const flushedOk = await Sentry.flush(2_000).catch((flushErr) => {
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({
+      level: 'error',
+      service: 'guardian-canary',
+      message: 'sentry-flush-threw',
+      error: flushErr instanceof Error ? flushErr.message : String(flushErr),
+      canaryId,
+    }));
+    return false;
+  });
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify({
+    level: 'info',
+    service: 'guardian-canary',
+    message: 'sentry-flush-result',
+    flushedOk,
+    canaryId,
+  }));
+
+  // Direct ingest probe — bypasses the Sentry SDK entirely. POSTs a minimal
+  // hand-crafted envelope to the DSN's ingest endpoint and logs the
+  // response. If the SDK flushedOk:true but no event appears in Sentry, AND
+  // this direct probe returns 200/202, the cause is server-side filtering
+  // (Inbound Filters / project disabled / wrong project). If this probe
+  // returns 4xx/5xx, the DSN is bad / project unreachable — which means
+  // the SDK has the same problem.
+  try {
+    const parsed = new URL(dsn);
+    const projectId = parsed.pathname.replace(/\//g, '');
+    const publicKey = parsed.username;
+    const ingestUrl = `${parsed.protocol}//${parsed.hostname}/api/${projectId}/envelope/?sentry_key=${publicKey}&sentry_version=7`;
+
+    const envelopeHeader = JSON.stringify({ event_id: canaryId.replace(/[^a-z0-9]/gi, '').slice(0, 32).padEnd(32, '0'), sent_at: new Date().toISOString(), dsn });
+    const itemHeader = JSON.stringify({ type: 'event' });
+    const payload = JSON.stringify({
+      event_id: canaryId.replace(/[^a-z0-9]/gi, '').slice(0, 32).padEnd(32, '0'),
+      timestamp: Date.now() / 1000,
+      level: 'error',
+      logger: 'guardian-canary-direct',
+      platform: 'node',
+      message: `${canaryId} (direct-probe)`,
+      tags: { canary: 'guardian-direct' },
+    });
+    const envelope = `${envelopeHeader}\n${itemHeader}\n${payload}\n`;
+
+    const directResp = await fetch(ingestUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-sentry-envelope' },
+      body: envelope,
+      signal: AbortSignal.timeout(5_000),
+    });
+    const respBody = await directResp.text().catch(() => '<unreadable>');
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({
+      level: 'info',
+      service: 'guardian-canary',
+      message: 'sentry-direct-probe',
+      ingestUrl: ingestUrl.replace(publicKey, '<key>'),
+      status: directResp.status,
+      statusText: directResp.statusText,
+      bodyHead: respBody.slice(0, 300),
+      canaryId,
+    }));
+  } catch (probeErr) {
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({
+      level: 'error',
+      service: 'guardian-canary',
+      message: 'sentry-direct-probe-failed',
+      error: probeErr instanceof Error ? probeErr.message : String(probeErr),
+      canaryId,
+    }));
+  }
 
   // The throw is the entire point — exercises the implicit `onRequestError`
   // path on top of the explicit capture above. If only one of the two
