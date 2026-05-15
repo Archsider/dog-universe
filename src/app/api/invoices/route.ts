@@ -4,12 +4,27 @@ import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { createInvoiceNotification } from '@/lib/notifications';
 import { getEmailTemplate } from '@/lib/email';
-import { sendEmailNow } from '@/lib/notify-now';
+import { sendEmailNow, sendSmsNow } from '@/lib/notify-now';
 import { formatMAD } from '@/lib/utils';
-import { allocatePayments } from '@/lib/payments';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
 import { withSpan, logServerError } from '@/lib/observability';
 import { notDeleted } from '@/lib/prisma-soft';
+import {
+  recordPayment,
+  type PaymentMethod,
+  type RecordPaymentError,
+} from '@/lib/payment-allocation';
+
+// Map structured recordPayment errors → HTTP status codes. Centralised so
+// Site A and Site B respond identically to the same validation failure.
+const PAYMENT_ERROR_HTTP_STATUS: Record<RecordPaymentError, number> = {
+  INVALID_AMOUNT: 400,
+  INVALID_PAYMENT_METHOD: 400,
+  INVALID_PAYMENT_DATE: 400,
+  INVOICE_NOT_FOUND: 404,
+  INVOICE_CANCELLED: 400,
+  OVERPAYMENT: 400,
+};
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -149,6 +164,12 @@ export async function POST(request: Request) {
 
     const client = await prisma.user.findFirst({ where: notDeleted({ id: clientId }) });
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    // Authz cross-role : ADMIN ne peut créer une facture (et a fortiori
+    // l'encaisser) que pour un CLIENT. SUPERADMIN passe partout.
+    // Parité avec POST /api/invoices/[id]/payments.
+    if (session.user.role === 'ADMIN' && client.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+    }
 
     // Generate invoice number atomiquement via la table InvoiceSequence.
     // INSERT ... ON CONFLICT DO UPDATE RETURNING garantit qu'aucun deux
@@ -274,17 +295,43 @@ export async function POST(request: Request) {
       throw err;
     }
 
-    // If markPaid: create a Payment row and run allocation
+    // If markPaid: route the Payment creation through the canonical helper.
+    // `trustedAmount: true` is durable here — Site B builds payment.amount
+    // = invoice.amount by construction, so overpayment is structurally
+    // impossible. The helper also handles paymentMethod whitelist + cache
+    // invalidation for `revenue:YYYY:MM` (both were missing pre-Module 4-A).
     if (isPaid && paymentMethod) {
-      await prisma.payment.create({
-        data: {
+      const payResult = await recordPayment(
+        {
           invoiceId: invoice.id,
           amount,
-          paymentMethod,
+          paymentMethod: paymentMethod as PaymentMethod,
           paymentDate: resolvedPaidAt ?? new Date(),
         },
+        {
+          trustedAmount: true,
+          // Invoice was just created in the tx above — no point re-fetching.
+          prefetchedInvoice: {
+            id: invoice.id,
+            status: 'PENDING',
+            amount,
+            payments: [],
+          },
+        },
+      );
+      if (!payResult.ok) {
+        const status = PAYMENT_ERROR_HTTP_STATUS[payResult.error];
+        return NextResponse.json({ error: payResult.error }, { status });
+      }
+      // Admin SMS OPS — parity with Site A. Operator wants real-time
+      // awareness of every payment recorded on their books. Walk-in clients
+      // do NOT receive a COMPTA SMS here (Module 4-A Q1) — the invoice_available
+      // email below is enough, and a paid-confirmation SMS would double-notify.
+      const clientFullName = client.name ?? '';
+      sendSmsNow({
+        to: 'ADMIN',
+        message: `💰 Paiement : ${formatMAD(amount)} reçu de ${clientFullName} — ${invoiceNumber}.`,
       });
-      await allocatePayments(invoice.id);
     }
 
     // Walk-in clients: skip notification and email (no portal, no inbox)
