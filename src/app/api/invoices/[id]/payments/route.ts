@@ -1,18 +1,29 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
-import { allocatePayments } from '@/lib/payments';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { formatMAD } from '@/lib/sms';
 import { sendSmsNow, sendSmsRespectful } from '@/lib/notify-now';
 import { tryAcquireIdempotency, IdempotencyKeyInvalidError } from '@/lib/idempotency';
-import { toNumber } from '@/lib/decimal';
-import { cacheDel } from '@/lib/cache';
 import { withSpan } from '@/lib/observability';
+import {
+  recordPayment,
+  type PaymentMethod,
+  type RecordPaymentError,
+} from '@/lib/payment-allocation';
 
 type Params = { params: Promise<{ id: string }> };
 
-const VALID_PAYMENT_METHODS = ['CASH', 'CARD', 'CHECK', 'TRANSFER'];
+// Map structured recordPayment errors → HTTP status codes. Centralised so
+// Site A and Site B respond identically to the same validation failure.
+const ERROR_HTTP_STATUS: Record<RecordPaymentError, number> = {
+  INVALID_AMOUNT: 400,
+  INVALID_PAYMENT_METHOD: 400,
+  INVALID_PAYMENT_DATE: 400,
+  INVOICE_NOT_FOUND: 404,
+  INVOICE_CANCELLED: 400,
+  OVERPAYMENT: 400,
+};
 
 // ---------------------------------------------------------------------------
 // GET /api/invoices/[id]/payments — payment history, chronological
@@ -65,10 +76,18 @@ export async function POST(request: Request, { params }: Params) {
     throw err;
   }
 
+  // Fetch invoice up front : the cross-role gate + SMS bodies need
+  // client info, and we pass the same row to `recordPayment` as
+  // `prefetchedInvoice` so the helper doesn't re-query.
   const invoice = await prisma.invoice.findUnique({
     where: { id },
-    include: {
-      payments: true,
+    select: {
+      id: true,
+      status: true,
+      amount: true,
+      invoiceNumber: true,
+      clientDisplayName: true,
+      payments: { select: { amount: true } },
       client: { select: { name: true, email: true, phone: true, isWalkIn: true, role: true } },
     },
   });
@@ -78,9 +97,6 @@ export async function POST(request: Request, { params }: Params) {
   if (session.user.role === 'ADMIN' && invoice.client.role !== 'CLIENT') {
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
-  if (invoice.status === 'CANCELLED') {
-    return NextResponse.json({ error: 'INVOICE_CANCELLED' }, { status: 400 });
-  }
 
   const body = await request.json();
   const { amount, paymentMethod, paymentDate, notes } = body;
@@ -88,64 +104,40 @@ export async function POST(request: Request, { params }: Params) {
   // older clients that don't send the flag get the previous (always-send)
   // behaviour, refined further by the `sendSmsRespectful` policy below.
   const sendClientSms: boolean = body.sendClientSms !== false;
-
-  // --- Validate ---
   const parsedAmount = Number(amount);
-  if (isNaN(parsedAmount) || parsedAmount <= 0) {
-    return NextResponse.json({ error: 'INVALID_AMOUNT' }, { status: 400 });
-  }
-
-  if (!paymentMethod || !VALID_PAYMENT_METHODS.includes(paymentMethod)) {
-    return NextResponse.json({ error: 'INVALID_PAYMENT_METHOD' }, { status: 400 });
-  }
-
   const parsedDate = paymentDate ? new Date(paymentDate) : new Date();
-  if (isNaN(parsedDate.getTime())) {
-    return NextResponse.json({ error: 'INVALID_PAYMENT_DATE' }, { status: 400 });
-  }
-
-  // Reject overpayment outright (Sprint 1 sécurité critique). Tolerance 0.01
-  // MAD (1 centime) to absorb Decimal rounding without allowing actual excess.
-  // If the admin needs to add a new line item before recording the payment,
-  // they must update the invoice first — the previous "briefly accepted"
-  // behaviour masked legitimate accounting errors.
-  const alreadyPaid = invoice.payments.reduce((s, p) => s + toNumber(p.amount), 0);
-  const invoiceTotal = toNumber(invoice.amount);
-  if (alreadyPaid + parsedAmount > invoiceTotal + 0.01) {
-    return NextResponse.json(
-      {
-        error: 'OVERPAYMENT',
-        invoiceTotal,
-        alreadyPaid,
-        attempted: parsedAmount,
-      },
-      { status: 400 },
-    );
-  }
 
   // --- Insert Payment + Reallocate (span for observability) ---
-  await withSpan(
+  const result = await withSpan(
     'api.payment.create',
     { entityId: id, userId: session.user.id, amount: parsedAmount, paymentMethod },
-    async () => {
-      await prisma.payment.create({
-        data: {
+    () =>
+      recordPayment(
+        {
           invoiceId: id,
           amount: parsedAmount,
-          paymentMethod,
-          paymentDate: parsedDate,
-          notes: typeof notes === 'string' ? notes.trim() || null : null,
+          paymentMethod: paymentMethod as PaymentMethod,
+          paymentDate: paymentDate ? parsedDate : undefined,
+          notes,
         },
-      });
-      await allocatePayments(id);
-    },
+        {
+          prefetchedInvoice: {
+            id: invoice.id,
+            status: invoice.status,
+            amount: invoice.amount,
+            payments: invoice.payments,
+          },
+        },
+      ),
   );
 
-  // O5 — invalide le cache revenue du mois du paiement (KPIs dashboard /
-  // analytics). Fail-open via cacheDel.
-  const yyyy = parsedDate.getFullYear();
-  const mm = parsedDate.getMonth() + 1;
-  await cacheDel(`revenue:${yyyy}:${mm}`);
+  if (!result.ok) {
+    const status = ERROR_HTTP_STATUS[result.error];
+    if (result.error === 'OVERPAYMENT') {
+      return NextResponse.json({ error: result.error, ...result.detail }, { status });
+    }
+    return NextResponse.json({ error: result.error }, { status });
+  }
 
   // --- SMS confirmation paiement ---
   // Client SMS:    COMPTA category — respects walk-in skip + quiet hours

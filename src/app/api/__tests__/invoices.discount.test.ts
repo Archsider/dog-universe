@@ -85,7 +85,7 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
   mocks.tryAcquireIdempotency.mockResolvedValue({ acquired: true });
   mocks.prisma.user.findFirst.mockResolvedValue({
-    id: 'client-1', name: 'Foo', email: 'foo@x.com', isWalkIn: false, language: 'fr',
+    id: 'client-1', name: 'Foo', email: 'foo@x.com', isWalkIn: false, language: 'fr', role: 'CLIENT',
   });
   // Atomic invoice number sequence
   mocks.prisma.$queryRaw.mockResolvedValue([{ lastSeq: 1 }]);

@@ -88,6 +88,11 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({ user: { id: 'admin1', role: 'ADMIN' } });
   mocks.tryAcquireIdempotency.mockResolvedValue({ acquired: true });
   mocks.invoiceFindUnique.mockResolvedValue({ ...baseInvoice });
+  // recordPayment (Module 4-A) now does `payment.create({...,select:{id:true}})`
+  // and reads `.id` off the result — default mock prevents an undefined throw
+  // that would otherwise cascade as 500 + leak mockResolvedValueOnce queue
+  // entries to subsequent tests.
+  mocks.paymentCreate.mockResolvedValue({ id: 'pay-test' });
 });
 
 describe('POST /api/invoices/[id]/payments — auth', () => {
@@ -259,15 +264,17 @@ describe('POST /api/invoices/[id]/payments — happy path', () => {
       ctx,
     );
     expect(res.status).toBe(201);
-    expect(mocks.paymentCreate).toHaveBeenCalledWith({
-      data: {
-        invoiceId: 'inv1',
-        amount: 100,
-        paymentMethod: 'CASH',
-        paymentDate: expect.any(Date),
-        notes: 'Test note', // trimmed
-      },
-    });
+    expect(mocks.paymentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          invoiceId: 'inv1',
+          amount: 100,
+          paymentMethod: 'CASH',
+          paymentDate: expect.any(Date),
+          notes: 'Test note', // trimmed
+        },
+      }),
+    );
     expect(mocks.allocatePayments).toHaveBeenCalledWith('inv1');
     expect(mocks.cacheDel).toHaveBeenCalledWith('revenue:2026:5');
   });
