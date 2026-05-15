@@ -15,8 +15,14 @@ export interface CapacityLimits {
   cats: number;
 }
 
+// Fallback values when the `Setting` table doesn't have rows for
+// `capacity_dog` / `capacity_cat` (e.g. a fresh DB before the
+// `20260428_capacity_defaults` seed runs, or after a manual wipe). The
+// live runtime value comes from the DB — see `getCapacityLimits()` below.
+// Kept in sync with the prod seed value (50 / 10) since 2026-05-15 so a
+// fallback never accidentally caps an existing kennel.
 const DEFAULT_LIMITS: CapacityLimits = {
-  dogs: 20,
+  dogs: 50,
   cats: 10,
 };
 
