@@ -34,6 +34,7 @@ import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { auth } from '../../../../../../auth';
 import { logger } from '@/lib/logger';
+import { resolveSentryDsn } from '@/lib/sentry-dsn';
 
 export const dynamic = 'force-dynamic';
 // 10 s is plenty — we throw immediately, the rest is just the
@@ -57,6 +58,21 @@ export async function POST() {
     canaryId,
     actorId: session.user.id,
   });
+
+  // Diag — print the DSN source + hostname at request time, NOT just at
+  // cold-start init time. Confirms what the SDK is currently configured
+  // with even on a warm Lambda where the init log fired hours earlier.
+  const { source, dsn } = resolveSentryDsn();
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify({
+    level: 'info',
+    service: 'guardian-canary',
+    message: 'dsn-resolved',
+    dsnSource: source,
+    dsnHostname: (() => { try { return new URL(dsn).hostname; } catch { return 'invalid'; } })(),
+    sentryEnabled: process.env.NODE_ENV === 'production',
+    canaryId,
+  }));
 
   const err = new Error(canaryId);
 

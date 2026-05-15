@@ -25,7 +25,29 @@ Sentry.init({
   // RGPD : pas d'envoi de PII (IP, headers, cookies)
   sendDefaultPii: false,
 
+  // TEMPORARY 2026-05-15 — verbose SDK logs to diagnose the "no event in
+  // Sentry despite captureException + flush" prod symptom. Once Sentry
+  // events confirmed flowing, set back to `false` (or remove the flag).
+  // Output goes to console, Vercel captures it as runtime logs.
+  debug: true,
+
   beforeSend(event) {
+    // TEMPORARY diag — confirms events reach beforeSend (i.e. the SDK
+    // accepted them for processing, before the envelope POST). If we see
+    // this log AND the SDK debug shows the POST attempt with a 200, but
+    // the event still isn't in Sentry's UI, the cause is server-side
+    // (Inbound Filters / Sampling / Quota).
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({
+      level: 'info',
+      service: 'sentry-server',
+      message: 'beforeSend invoked',
+      eventId: event.event_id,
+      eventType: event.type ?? 'error',
+      messageText: event.message ?? (event.exception?.values?.[0]?.value?.slice(0, 80) ?? null),
+      timestamp: new Date().toISOString(),
+    }));
+
     // Strip PII from user context
     if (event.user) {
       delete event.user.email;
