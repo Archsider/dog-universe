@@ -2,17 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
-
-function escapeCsv(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '';
-  const str = String(value);
-  // Neutralise les formules CSV (Excel/LibreOffice formula injection)
-  const sanitized = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
-  if (sanitized.includes(';') || sanitized.includes('"') || sanitized.includes('\n')) {
-    return `"${sanitized.replace(/"/g, '""')}"`;
-  }
-  return sanitized;
-}
+// Shared CSV escaper — see src/lib/csv.ts for the safety contract.
+import { escapeCsv } from '@/lib/csv';
 
 const PAYMENT_LABELS: Record<string, string> = {
   CASH: 'Espèces',
