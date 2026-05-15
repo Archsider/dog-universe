@@ -6,7 +6,10 @@
 // the edge config and the client `instrumentation-client.ts`. See that file
 // for the resolution order. A diag log is emitted at init so the operator
 // can confirm in Vercel runtime logs which DSN source actually won (and
-// catch a future env-var drift before it silences server events again).
+// catch a future env-var drift before it silences server events again —
+// which is the exact failure mode that hid bug #6 for weeks: NEXT_PUBLIC_
+// SENTRY_DSN on Vercel pointed at a stale "sentry-celeste-bucket" project
+// that no longer existed. See docs/SENTRY_INTEGRATION.md).
 
 import * as Sentry from '@sentry/nextjs';
 import { resolveSentryDsn } from './src/lib/sentry-dsn';
@@ -25,29 +28,7 @@ Sentry.init({
   // RGPD : pas d'envoi de PII (IP, headers, cookies)
   sendDefaultPii: false,
 
-  // TEMPORARY 2026-05-15 — verbose SDK logs to diagnose the "no event in
-  // Sentry despite captureException + flush" prod symptom. Once Sentry
-  // events confirmed flowing, set back to `false` (or remove the flag).
-  // Output goes to console, Vercel captures it as runtime logs.
-  debug: true,
-
   beforeSend(event) {
-    // TEMPORARY diag — confirms events reach beforeSend (i.e. the SDK
-    // accepted them for processing, before the envelope POST). If we see
-    // this log AND the SDK debug shows the POST attempt with a 200, but
-    // the event still isn't in Sentry's UI, the cause is server-side
-    // (Inbound Filters / Sampling / Quota).
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify({
-      level: 'info',
-      service: 'sentry-server',
-      message: 'beforeSend invoked',
-      eventId: event.event_id,
-      eventType: event.type ?? 'error',
-      messageText: event.message ?? (event.exception?.values?.[0]?.value?.slice(0, 80) ?? null),
-      timestamp: new Date().toISOString(),
-    }));
-
     // Strip PII from user context
     if (event.user) {
       delete event.user.email;
@@ -76,8 +57,9 @@ Sentry.init({
 
 // Diag log: prints once per cold start. Search "[sentry-server] init" in
 // Vercel runtime logs to confirm the SDK actually initialised AND which DSN
-// source was used. Absence of this line on a fresh deploy means the file
-// itself is not being imported — re-check `src/instrumentation.ts`.
+// source was used. Kept as a permanent observability signal — if the env
+// var ever drifts to a wrong project again (bug #6, May 15), this is the
+// first place to look.
 if (process.env.NODE_ENV === 'production') {
   // eslint-disable-next-line no-console
   console.log(JSON.stringify({
