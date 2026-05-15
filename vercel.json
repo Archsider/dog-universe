@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/heartbeat",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/invariants-check",
+      "schedule": "10 * * * *"
     }
   ]
 }

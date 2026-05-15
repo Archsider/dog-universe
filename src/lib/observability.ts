@@ -102,4 +102,5 @@ export const CRON_NAMES = [
   'refresh-monthly-revenue',
   'purge-anonymized',
   'health-reconciliation',
+  'invariants-check',
 ] as const;

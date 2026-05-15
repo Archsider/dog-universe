@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, ShieldCheck, ShieldAlert, GitBranch, BellRing, VolumeX, Loader2, AlertCircle } from 'lucide-react';
+import Link from 'next/link';
+import { RefreshCw, ShieldCheck, ShieldAlert, GitBranch, BellRing, VolumeX, Loader2, AlertCircle, Activity } from 'lucide-react';
 
 interface GuardianEventView {
   id: string;
@@ -73,9 +74,11 @@ function StatCard({ label, value, color = 'text-charcoal', icon }: StatCardProps
 
 export default function GuardianClient({
   isFr,
+  locale,
   events: initialEvents,
 }: {
   isFr: boolean;
+  locale: string;
   events: GuardianEventView[];
 }) {
   const [events, setEvents] = useState<GuardianEventView[]>(initialEvents);
@@ -151,6 +154,13 @@ export default function GuardianClient({
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href={`/${locale}/admin/guardian/invariants`}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-ivory-200 bg-white hover:bg-ivory-50 text-sm text-charcoal"
+          >
+            <Activity className="h-4 w-4" />
+            {isFr ? 'Invariants comptables' : 'Accounting invariants'}
+          </Link>
           <span className="text-xs text-charcoal/50">
             {isFr ? 'Actualisé' : 'Refreshed'} {relativeTime(lastRefresh, isFr)}
           </span>
