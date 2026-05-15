@@ -8,6 +8,7 @@ import type { Queue } from 'bullmq';
 import { isBullMQConfigured } from '@/lib/redis-bullmq';
 import { getEmailQueue, getSmsQueue, getDlqQueue } from '@/lib/queues/index';
 import { getWorkerLastRun } from '@/lib/cache';
+import { getLastEmailSentAt } from '@/lib/email-health';
 import { prisma } from '@/lib/prisma';
 
 type Counts = { waiting: number; active: number; completed: number; failed: number; delayed: number };
@@ -46,14 +47,14 @@ async function lastSmsSentIso(): Promise<string | null> {
 }
 
 async function lastEmailSentIso(): Promise<string | null> {
-  try {
-    if (!isBullMQConfigured()) return null;
-    const completed = await getEmailQueue().getCompleted(0, 0);
-    if (!completed.length || !completed[0].finishedOn) return null;
-    return new Date(completed[0].finishedOn).toISOString();
-  } catch {
-    return null;
-  }
+  // Reads `email:last:sent` from Redis. `markEmailSent()` writes this key
+  // from inside `sendEmail()` — single chokepoint for both the BullMQ
+  // worker path (cron batches) and the direct `sendEmailNow` path
+  // (transactional). The previous implementation queried BullMQ's
+  // `getCompleted(0,0)` which only saw the queue path → widget froze
+  // when all current sends went through `sendEmailNow`. Fixed by
+  // re-routing the source of truth through Redis.
+  return getLastEmailSentAt();
 }
 
 export async function GET() {
