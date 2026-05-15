@@ -92,9 +92,11 @@ export async function GET(
     orderBy: { createdAt: 'desc' },
   });
 
-  // Last admin message for this booking
+  // Last admin message for this booking — excludes soft-deleted so KPIs
+  // don't surface a message the admin already retracted via the trash
+  // icon on AdminMessageSection.
   const lastAdminMsg = await prisma.notification.findFirst({
-    where: { userId: booking.clientId, type: 'ADMIN_MESSAGE' },
+    where: { userId: booking.clientId, type: 'ADMIN_MESSAGE', deletedAt: null },
     orderBy: { createdAt: 'desc' },
     select: { messageFr: true, metadata: true },
   });

@@ -59,6 +59,8 @@ model User {
   reviewedClaims   LoyaltyBenefitClaim[] @relation("ClaimReviewer")
   revenueSummaries MonthlyRevenueSummary[]
   reviews          Review[]
+  endStayReportsReceived EndStayReport[] @relation("EndStayReportClient")
+  endStayReportsSent     EndStayReport[] @relation("EndStayReportSender")
 
   @@index([deletedAt])
   @@index([role, isWalkIn]) // Hot path: admin pages filter by role='CLIENT' AND isWalkIn=false
@@ -191,6 +193,7 @@ model Booking {
   review         Review?
   rescheduleRequest RescheduleRequest?
   addonRequests     AddonRequest[]
+  endStayReports    EndStayReport[]
 
   @@index([clientId])
   @@index([status])
@@ -464,7 +467,7 @@ model Payment {
 model Notification {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // "BOOKING_CONFIRMATION" | "BOOKING_VALIDATION" | "BOOKING_REFUSAL" | "STAY_REMINDER" | "INVOICE_AVAILABLE" | "ADMIN_MESSAGE" | "STAY_PHOTO" | "STAY_PHOTO_ADDED" | "LOYALTY_UPDATE" | "WEEKLY_PET_REPORT"
+  type      String   // "BOOKING_CONFIRMATION" | "BOOKING_VALIDATION" | "BOOKING_REFUSAL" | "STAY_REMINDER" | "INVOICE_AVAILABLE" | "ADMIN_MESSAGE" | "STAY_PHOTO" | "STAY_PHOTO_ADDED" | "LOYALTY_UPDATE" | "WEEKLY_PET_REPORT" | "END_STAY_REPORT"
   titleFr   String
   titleEn   String
   titleAr   String?  // nullable: legacy rows pre-2026-05-05 have no AR translation (fallback to EN at render time)
@@ -474,6 +477,13 @@ model Notification {
   metadata  String?  // JSON string e.g. {"bookingId":"..."}
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+  // Soft-delete for ADMIN_MESSAGE / END_STAY_REPORT only (admin-initiated
+  // messages sent to client by mistake — wrong owner, wrong content). The
+  // client view filters `deletedAt: null`; admin reservation page keeps
+  // showing them with strikethrough + "Supprimé par X" label for audit.
+  // See docs/CLIENT_MESSAGES.md for the full pipeline.
+  deletedAt DateTime?
+  deletedBy String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -482,6 +492,7 @@ model Notification {
   @@index([createdAt])
   @@index([userId, read]) // Hot path : compteur de notifications non lues
   @@index([type, createdAt]) // Hot path : dedup batch par type sur fenêtre récente (cron reminders/birthday)
+  @@index([deletedAt]) // soft-delete filter on client + admin queries
 }
 
 model LoyaltyGrade {
@@ -579,6 +590,39 @@ model Review {
 
   @@index([clientId])
   @@index([createdAt])
+}
+
+// End-of-stay narrative report sent to the client at checkout. Pipeline :
+//   Admin opens /admin/reservations/[id]/end-report → fills 5 sections
+//   (behaviour / food / sleep / activities / health) with checkboxes +
+//   free text → previews → confirms → row inserted here + a Notification
+//   of type END_STAY_REPORT is created for the client (same pipeline as
+//   ADMIN_MESSAGE) + email sent via sendEmailNow.
+//
+// `version` distinguishes the manual template (v=1) from future AI drafts
+// (v=2 unedited Haiku output, v=3 admin-edited Haiku draft). See
+// docs/END_STAY_REPORT_AI.md for the AI scoping.
+//
+// One row per (bookingId, sentAt) — a booking can have multiple reports
+// over time (e.g. interim update + final report) but the UI gates a
+// second send unless the operator explicitly chooses "Renvoyer".
+model EndStayReport {
+  id            String   @id @default(cuid())
+  bookingId     String
+  clientId      String
+  formData      String   // JSON: { sections: [{key, checked: [], freeText}], closingNote }
+  finalMessage  String   // The exact text body sent in the Notification.messageFr
+  sentAt        DateTime @default(now())
+  sentBy        String   // userId of the admin who clicked send
+  version       Int      @default(1) // 1 = manual template ; 2+ reserved for AI workflow
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  client  User    @relation("EndStayReportClient", fields: [clientId], references: [id])
+  sender  User    @relation("EndStayReportSender", fields: [sentBy],   references: [id])
+
+  @@index([bookingId])
+  @@index([clientId])
+  @@index([sentAt])
 }
 
 // Client-initiated reschedule request on a booking. Replaces the older pattern

@@ -5,7 +5,7 @@ import {
   CheckCheck, Loader2, BellOff, Camera, MessageSquare,
   CheckCircle2, XCircle, Bell, Star, Receipt, CalendarClock,
   ArrowRight, Cake, Truck, UserX, Hourglass, Sparkles, AlertTriangle,
-  AlertCircle, RefreshCw, Car, MapPin,
+  AlertCircle, RefreshCw, Car, MapPin, FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
@@ -53,6 +53,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   WEEKLY_PET_REPORT:            { icon: Sparkles,    color: 'text-emerald-600', bg: 'bg-emerald-50' },
   INVOICE_OVERDUE:              { icon: Receipt,     color: 'text-red-600',     bg: 'bg-red-50' },
   REVIEW_REQUEST:               { icon: Star,        color: 'text-gold-500',    bg: 'bg-gold-50' },
+  END_STAY_REPORT:              { icon: FileText,    color: 'text-emerald-700', bg: 'bg-emerald-50' },
 };
 
 function parseMetadata(raw: string | null): Record<string, unknown> {
@@ -146,7 +147,7 @@ export default function NotificationsClient({ initialNotifications, locale }: Pr
             const Icon = cfg.icon;
             const meta = parseMetadata(n.metadata);
             const bookingId = meta.bookingId;
-            const showBookingLink = !!bookingId && (n.type === 'STAY_PHOTO' || n.type === 'STAY_PHOTO_ADDED' || n.type === 'ADMIN_MESSAGE');
+            const showBookingLink = !!bookingId && (n.type === 'STAY_PHOTO' || n.type === 'STAY_PHOTO_ADDED' || n.type === 'ADMIN_MESSAGE' || n.type === 'END_STAY_REPORT');
 
             return (
               <div

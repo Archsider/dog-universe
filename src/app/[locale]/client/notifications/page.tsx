@@ -11,7 +11,9 @@ export default async function NotificationsPage({ params }: PageProps) {
   if (!session?.user) redirect(`/${locale}/auth/login`);
 
   const rows = await prisma.notification.findMany({
-    where: { userId: session.user.id },
+    // `deletedAt: null` — admin-deleted messages disappear from the
+    // client list (see docs/CLIENT_MESSAGES.md).
+    where: { userId: session.user.id, deletedAt: null },
     orderBy: { createdAt: 'desc' },
     take: 100,
     select: {

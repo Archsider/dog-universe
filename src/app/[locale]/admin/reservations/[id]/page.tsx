@@ -17,6 +17,7 @@ import ReservationActions from './ReservationActions';
 import type { TaxiTripData } from '@/components/shared/TaxiTimeline';
 import StayPhotosSection from './StayPhotosSection';
 import AdminMessageSection from './AdminMessageSection';
+import EndStayReportCta from './EndStayReportCta';
 import AddonRequestsSection from './AddonRequestsSection';
 import ExtendBookingSection from './ExtendBookingSection';
 import MergeBookingsSection from './MergeBookingsSection';
@@ -370,6 +371,15 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
               booking={{ id: booking.id }}
               adjacentBookings={adjacentBookings}
               locale={locale}
+            />
+          )}
+
+          {!isPendingExtension && (
+            <EndStayReportCta
+              bookingId={booking.id}
+              locale={locale}
+              status={booking.status}
+              endDate={booking.endDate ? booking.endDate.toISOString() : null}
             />
           )}
 

@@ -58,5 +58,6 @@ export {
   createStayPhotoNotification,
   createStayPhotoAddedNotification,
   createAdminMessageNotification,
+  createEndStayReportNotification,
   notifyAdminsNewClient,
 } from './notifications/misc';
