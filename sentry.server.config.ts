@@ -19,8 +19,20 @@ const { dsn, source } = resolveSentryDsn();
 Sentry.init({
   dsn,
 
-  // Capture 10% of transactions
-  tracesSampleRate: 0.1,
+  // Dynamic sampling tuned for 10x growth (May 17 scale prep):
+  //  - 1.0 for crons (low volume, high signal — never miss a job failure)
+  //  - 0.1 for API routes and everything else (~10% sample is enough to
+  //    surface regressions while keeping monthly transaction budget bounded
+  //    when API QPS grows by an order of magnitude).
+  // A static `tracesSampleRate: 1.0` would have multiplied Sentry transaction
+  // ingestion cost by 10× at the projected traffic — see PR scale-prep-may17.
+  tracesSampler: (samplingContext) => {
+    const url = (samplingContext.attributes?.['http.url'] as string | undefined)
+      ?? (samplingContext.normalizedRequest?.url as string | undefined)
+      ?? '';
+    if (typeof url === 'string' && url.includes('/api/cron/')) return 1.0;
+    return 0.1;
+  },
 
   // Don't send errors in development
   enabled: process.env.NODE_ENV === 'production',

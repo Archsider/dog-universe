@@ -103,4 +103,5 @@ export const CRON_NAMES = [
   'purge-anonymized',
   'health-reconciliation',
   'invariants-check',
+  'archive-notifications',
 ] as const;

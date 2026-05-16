@@ -172,8 +172,13 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(data, {
     headers: {
-      // CDN: serve cached for 60s, allow stale-while-revalidate up to 5 min
-      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+      // CDN: serve cached for 5 min (mirrors the Redis TTL used by the
+      // read-through above), allow up to 60s of stale-while-revalidate so
+      // the first request after expiry returns instantly while the cache
+      // is rebuilt in the background. At 10x scale this collapses ~all
+      // requests for a given (species, month) into a single origin hit
+      // per 5-min window. See PR scale-prep-may17.
+      'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60',
     },
   });
 }
