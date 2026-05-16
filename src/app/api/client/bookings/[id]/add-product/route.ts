@@ -96,6 +96,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         },
       });
 
+      // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: client-side product add on an unpaid booking — incrementing Invoice.amount in lockstep with the new InvoiceItem. The trigger trg_recompute_invoice_amount also handles this on commit, but the explicit increment keeps the row internally consistent mid-transaction (other queries in the same tx see the right amount). PENDING invoice, no payment yet, no allocation needed.
       await tx.invoice.update({
         where: { id: invoiceId },
         data: { amount: { increment: new Prisma.Decimal(total) } },

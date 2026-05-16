@@ -23,7 +23,8 @@
     "dog-universe/no-getmonth-on-date-casa": "error",
     "dog-universe/no-money-tofixed": "error",
     "dog-universe/no-direct-payment-create": "error",
-    "dog-universe/no-prisma-date-without-helper": "error"
+    "dog-universe/no-prisma-date-without-helper": "error",
+    "dog-universe/no-direct-invoice-mutation": "error"
   },
   "overrides": [
     {
@@ -36,7 +37,8 @@
         "dog-universe/no-getmonth-on-date-casa": "off",
         "dog-universe/no-money-tofixed": "off",
         "dog-universe/no-direct-payment-create": "off",
-        "dog-universe/no-prisma-date-without-helper": "off"
+        "dog-universe/no-prisma-date-without-helper": "off",
+        "dog-universe/no-direct-invoice-mutation": "off"
       }
     },
     {
@@ -47,7 +49,8 @@
         "dog-universe/no-getmonth-on-date-casa": "off",
         "dog-universe/no-money-tofixed": "off",
         "dog-universe/no-direct-payment-create": "off",
-        "dog-universe/no-prisma-date-without-helper": "off"
+        "dog-universe/no-prisma-date-without-helper": "off",
+        "dog-universe/no-direct-invoice-mutation": "off"
       }
     },
     {
@@ -58,7 +61,8 @@
         "dog-universe/no-getmonth-on-date-casa": "off",
         "dog-universe/no-money-tofixed": "off",
         "dog-universe/no-direct-payment-create": "off",
-        "dog-universe/no-prisma-date-without-helper": "off"
+        "dog-universe/no-prisma-date-without-helper": "off",
+        "dog-universe/no-direct-invoice-mutation": "off"
       }
     },
     {

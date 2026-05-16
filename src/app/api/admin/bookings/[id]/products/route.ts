@@ -124,6 +124,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       // Invoice.amount = SUM(items.total) après INSERT/UPDATE/DELETE sur InvoiceItem.
       // NE PAS écrire `amount` manuellement (drift garanti).
       // Bump de version uniquement pour optimistic lock.
+      // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: optimistic-lock version bump only, no money field touched ; Invoice.amount is recomputed by the InvoiceItem trigger.
       await tx.invoice.update({
         where: { id: invoiceId },
         data: { version: { increment: 1 } },

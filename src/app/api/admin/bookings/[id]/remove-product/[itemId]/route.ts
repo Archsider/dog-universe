@@ -33,6 +33,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     // Note: le trigger PG `trg_recompute_invoice_amount` recompute déjà
     // Invoice.amount = SUM(items.total) après DELETE sur InvoiceItem.
     // NE PAS écrire `amount` manuellement (drift garanti).
+    // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: optimistic-lock version bump only ; Invoice.amount recomputed by InvoiceItem DELETE trigger.
     await tx.invoice.update({
       where: { id: booking.invoice!.id },
       data: { version: { increment: 1 } },

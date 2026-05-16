@@ -1,9 +1,16 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  // React + JSX transform for .tsx component tests. The plugin is only
+  // active in vitest runs (no Next build dependency).
+  plugins: [react()],
   test: {
     globals: true,
+    // .tsx component tests need a DOM ; pick happy-dom (faster than jsdom)
+    // via the `@vitest-environment` directive in the test file itself.
+    // Node-only tests keep the default 'node' env.
     environment: 'node',
     // Les tests E2E Playwright vivent dans /e2e et ne doivent pas être ramassés par vitest.
     exclude: ['node_modules', 'dist', '.next', 'e2e/**', '.claude/**'],

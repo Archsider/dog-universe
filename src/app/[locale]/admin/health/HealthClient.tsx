@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { RefreshCw, AlertTriangle, CheckCircle2, Clock, MessageSquare, Loader2, Activity, ShieldAlert, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { MigrationsHealthCard } from '@/components/admin/MigrationsHealthCard';
 
 interface InvariantResult {
   key: string;
@@ -192,6 +193,10 @@ export default function HealthClient({
           </div>
         </div>
       </div>
+
+      {/* DB migrations diff — surfaces pending migrations the operator must
+          execute manually on Supabase. Source : audit Hashimoto Q3. */}
+      <MigrationsHealthCard isFr={isFr} />
 
       {/* Quick stats strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

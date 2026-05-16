@@ -123,6 +123,7 @@ export async function tryAutoMerge(args: AutoMergeArgs): Promise<AutoMergeRespon
 
           if (existingContiguous.invoice) {
             if (existingContiguous.invoice.status === 'PENDING') {
+              // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: auto-merge consolidates a contiguous PENDING invoice's amount when its items get regenerated. PENDING means no payments yet, so allocation re-run is unnecessary. TODO Module 5+ : route through `mergeInvoices()` helper.
               await tx.invoice.update({
                 where: { id: existingContiguous.invoice.id },
                 data: { amount: mergedTotal },

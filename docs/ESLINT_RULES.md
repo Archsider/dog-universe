@@ -120,6 +120,54 @@ and the paymentMethod whitelist diverged between Site A and Site B.
 
 ---
 
+## 5. `no-direct-invoice-mutation`
+
+**Forbids** : `prisma.invoice.update / updateMany / upsert` (and same on
+`tx.*` / `db.*`) when the `data` (or `update` / `create` slot for upsert)
+payload mutates any of the **money-bearing fields** :
+`paidAmount`, `amount`, `status`, `paidAt`, `version`.
+
+**Why** : `recordPayment()` from `@/lib/payment-allocation` is the single
+canonical path that flips these fields in lockstep with the allocation
+algorithm + cache invalidation + cross-role gate + SMS OPS. A direct
+bypass silently breaks invariant #5 (`allocated_sum_vs_paid`) within
+seconds — only the hourly invariant cron catches it. Source : audit
+2026-05-16 Kleppmann I3.
+
+**Fix** :
+
+```diff
+- await prisma.invoice.update({
+-   where: { id },
+-   data: { paidAmount: 100, status: 'PAID', paidAt: new Date() },
+- });
++ await recordPayment({
++   invoiceId: id,
++   amount: 100,
++   paymentMethod: 'CASH',
++   paymentDate: new Date(),
++ });
+```
+
+For non-payment status mutations (cancel, reset), extract the logic to
+`src/lib/billing/<name>.ts` — the directory is whitelisted at rule level.
+
+**Auto-whitelisted files** (own the money path):
+- `src/lib/payment-allocation.ts`
+- `src/lib/payments.ts` (legacy money path module)
+- `src/lib/services/booking-admin/` (booking state machine, coordinates
+  with money path in tx)
+- `src/lib/services/booking-admin.service.ts`
+- `src/lib/billing/`, `src/lib/billing.ts`
+
+**Escape hatch** : version-only bumps (optimistic lock without money
+change), invoice rebuilds where items are regenerated above + amount
+seeded for mid-tx consistency, and merge flows that combine paid
+amounts from two invoices. All require an explicit `-- OK:` justification
+inline.
+
+---
+
 ## 4. `no-prisma-date-without-helper`
 
 **Forbids** : `new Date()` (with no arguments, or with `Date.now()`) as

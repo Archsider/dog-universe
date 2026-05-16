@@ -207,6 +207,7 @@ export async function POST(request: NextRequest) {
         })),
       });
 
+      // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: merge flow rebuilds the target invoice from scratch (items deleted + recreated above) ; the trigger would set amount but we also seed paidAmount from the combined source+target sum + derive status. recordPayment is not applicable here (we're merging existing paid amounts, not recording a new payment). TODO Module 5+ : extract `mergeInvoices()` service into src/lib/billing/.
       await tx.invoice.update({
         where: { id: target.invoice.id },
         data: {
@@ -231,6 +232,7 @@ export async function POST(request: NextRequest) {
           total: item.total,
         })),
       });
+      // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: merge flow re-link source invoice to target booking + reseed amount from regenerated items (already deleted + recreated above). Same exception as the previous merge branch.
       await tx.invoice.update({
         where: { id: source.invoice.id },
         data: { bookingId: target.id, amount: newTotal },
@@ -252,6 +254,7 @@ export async function POST(request: NextRequest) {
         targetPaid >= newTotal ? 'PAID'
         : targetPaid > 0 ? 'PARTIALLY_PAID'
         : 'PENDING';
+      // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: merge flow regenerates target invoice items from new merged breakdown ; reseed amount + derive status from existing paidAmount. Same exception as the other merge branches.
       await tx.invoice.update({
         where: { id: target.invoice.id },
         data: {
