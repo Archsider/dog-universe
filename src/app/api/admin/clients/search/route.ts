@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { logger } from '@/lib/logger';
 import { notDeleted } from '@/lib/prisma-soft';
@@ -15,10 +15,8 @@ import { notDeleted } from '@/lib/prisma-soft';
  * Auth: ADMIN | SUPERADMIN.
  */
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const q = (request.nextUrl.searchParams.get('q') ?? '').trim();
 

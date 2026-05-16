@@ -3,7 +3,7 @@
 // POST  — crée ou upsert un flag.
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { invalidateFlagCache } from '@/lib/feature-flags';
 
@@ -19,13 +19,9 @@ const upsertSchema = z.object({
   userWhitelist:  z.array(z.string().min(1).max(64)).max(500).optional(),
 });
 
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
 export async function GET() {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') return forbidden();
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const flags = await prisma.featureFlag.findMany({
     orderBy: { key: 'asc' },
@@ -35,8 +31,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') return forbidden();
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   let body: unknown;
   try { body = await request.json(); }
