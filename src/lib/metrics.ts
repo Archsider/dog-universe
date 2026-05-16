@@ -9,6 +9,7 @@ import {
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
 import { cacheReadThrough } from '@/lib/cache';
 import { notDeleted } from '@/lib/prisma-soft';
+import { casablancaYMD } from '@/lib/dates-casablanca';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -236,8 +237,11 @@ async function computeRevenueByCategoryProrata(
   const total =
     result.boarding + result.taxi + result.grooming + result.croquettes + result.other;
   if (total === 0) {
-    const year = start.getFullYear();
-    const month = start.getMonth() + 1;
+    // Casa-anchored : `start` est `startOfMonthCasa(now)` quand appelé
+    // depuis /admin/{dashboard,analytics}/page.tsx — typé à 23:00 UTC le
+    // dernier jour du mois précédent. `start.getMonth()+1` retournerait
+    // ce mois précédent sur runtime UTC Vercel. Voir docs/BUSINESS_RULES.md §6.
+    const { year, month } = casablancaYMD(start);
     const summary = await prisma.monthlyRevenueSummary.findFirst({
       where: { year, month },
       select: {
@@ -316,8 +320,16 @@ export async function revenueByCategoryProrata(
   start: Date,
   end: Date,
 ): Promise<CategoryBreakdown> {
-  const year = start.getFullYear();
-  const month = start.getMonth() + 1;
+  // Casa-anchored — bug #12 du système TZ. `start` est `startOfMonthCasa(now)`
+  // quand appelé depuis dashboard/analytics, typé à 23:00 UTC le dernier
+  // jour du mois précédent. `start.getMonth()+1` retournait ce mois
+  // précédent sur runtime UTC, polluait la cache key `revenue:YYYY:MM` et
+  // déclenchait une lecture MV pour le mauvais mois.
+  // Conséquence visible sur /admin/analytics section "Performance par
+  // activité — 2026" qui affichait avril au lieu de mai. Symétrie avec
+  // l'invalidation côté payment-allocation.ts (PR #96).
+  // Voir docs/BUSINESS_RULES.md §6.
+  const { year, month } = casablancaYMD(start);
   return cacheReadThrough(
     `revenue:${year}:${month}`,
     600,
