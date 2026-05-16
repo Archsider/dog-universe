@@ -20,15 +20,18 @@
 // directement avec les filtres — pas de duplication algorithm.
 
 import { prisma } from '@/lib/prisma';
-import { cacheGet, cacheSet } from '@/lib/cache';
+import { cacheGet, cacheSet, tryAcquireFlag } from '@/lib/cache';
 import { withSpan } from '@/lib/observability';
 import { logger } from '@/lib/logger';
+import { casablancaYMD, currentMonthCasa } from '@/lib/dates-casablanca';
 import * as Sentry from '@sentry/nextjs';
 
 export const MV_REFRESH_REDIS_KEY = 'mv:last_refresh:monthly_revenue_mv';
 export const MV_REFRESH_TTL_SECONDS = 7 * 86_400; // 7 days
 export const MV_STALENESS_MS = 2 * 3_600 * 1_000; // 2h
 export const DRIFT_TOLERANCE = 0.01; // 1 cent MAD
+export const MV_REFRESH_DEBOUNCE_KEY = 'mv:refresh:debounce:monthly_revenue';
+export const MV_REFRESH_DEBOUNCE_SECONDS = 60;
 
 export interface MonthlyRevenueRow {
   category: string;
@@ -197,5 +200,50 @@ export async function markMVRefreshed(when: Date = new Date()): Promise<void> {
   }
 }
 
+/**
+ * Schedule a background `REFRESH MATERIALIZED VIEW CONCURRENTLY
+ * monthly_revenue_mv` when `paymentDate` falls in the current Casa
+ * calendar month. Called from `recordPayment()` so the dashboard CA
+ * reflects fresh payments instantly instead of waiting up to 2h for the
+ * hourly cron refresh.
+ *
+ * Fail-safe systémique :
+ *   - Past-month payment   → no-op (cron handles backfills)
+ *   - Redis down / flag held → no-op (cron is the safety net)
+ *   - waitUntil absent (local dev / tests) → no-op
+ *   - REFRESH throws       → swallowed + logged (cron retries hourly)
+ *
+ * Debounced via Redis NX EX 60s so a burst of N payments triggers at
+ * most one REFRESH per minute (the operation itself takes ~seconds on
+ * a small dataset but is still wasteful to spam).
+ */
+export async function scheduleMVRefreshIfCurrentMonth(paymentDate: Date): Promise<void> {
+  try {
+    const { year: py, month: pm } = casablancaYMD(paymentDate);
+    const { year: cy, month: cm } = currentMonthCasa();
+    if (py !== cy || pm !== cm) return;
+
+    const acquired = await tryAcquireFlag(MV_REFRESH_DEBOUNCE_KEY, MV_REFRESH_DEBOUNCE_SECONDS);
+    if (!acquired) return;
+
+    const { waitUntil } = await import('@vercel/functions').catch(() => ({ waitUntil: null }));
+    if (typeof waitUntil !== 'function') return;
+    waitUntil(refreshMonthlyRevenueMv());
+  } catch {
+    // Best-effort scheduling — never block recordPayment.
+  }
+}
+
+async function refreshMonthlyRevenueMv(): Promise<void> {
+  try {
+    await prisma.$executeRawUnsafe('REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue_mv');
+    await markMVRefreshed();
+  } catch (err) {
+    logger.warn('monthly-revenue', 'background MV refresh failed (cron will catch up)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 // Exported for unit tests.
-export const __test = { computeDrift, packResult };
+export const __test = { computeDrift, packResult, refreshMonthlyRevenueMv };
