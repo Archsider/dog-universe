@@ -1224,6 +1224,18 @@ compute_payment_by_category(year, month)    ← PG function, source unique
 
 Tolérance partout : **0.01 MAD** (1 centime).
 
+### Auto-refresh MV sur paiement mois courant (depuis 2026-05-17)
+
+`recordPayment()` appelle `scheduleMVRefreshIfCurrentMonth(paymentDate)`
+après commit. Si `paymentDate` tombe dans le mois Casa courant → schedule
+un `REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue_mv` via
+`waitUntil()` + `markMVRefreshed()`. Debounce Redis NX EX **60s**
+(`mv:refresh:debounce:monthly_revenue`) — burst de N paiements ⇒ max 1
+REFRESH/minute. Fail-safe systémique : Redis down / waitUntil absent /
+REFRESH throw → no-op, `recordPayment` jamais bloqué. Le cron horaire
+reste le filet de sécurité. Élimine le lag jusqu'à 2h sur `/admin/billing`
+visible auparavant après chaque paiement.
+
 ### Fichiers canoniques
 
 ```
