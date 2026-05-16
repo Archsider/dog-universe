@@ -612,6 +612,81 @@ Exemple : `src/app/[locale]/admin/billing/format-month.ts` (extrait de `BillingC
 
 ---
 
+## /ADMIN — DASHBOARD "COMMANDANT" (depuis 2026-05-16)
+
+Cockpit opérationnel, **zéro chiffre financier**. Les KPIs argent restent
+sur `/admin/billing` et `/admin/analytics`. Décision Mehdi : dashboard =
+ce qui est actionnable maintenant, pas un état financier.
+
+### Architecture
+
+```
+src/app/[locale]/admin/dashboard/
+  page.tsx                  — orchestrateur 1 seul Promise.all via loadDashboardSnapshot()
+  loading.tsx               — skeleton screens (pas spinner)
+  _lib/
+    queries.ts              — DashboardSnapshot + 10 section loaders en parallèle
+    helpers.ts              — occupancyLevel/Percent, nextSevenCasaDays, upcomingBirthdays
+    whatsapp.ts             — buildWhatsAppUrl + buildLongStayMessage + buildInactiveClientMessage
+    labels.ts               — FR/EN dictionaries
+  _components/
+    PensionActuelleCard.tsx — barres occupation chiens/chats + couleur ≥70/≥90
+    AValiderCard.tsx        — compteur PENDING + CTA, empty state vert si 0
+    AujourdhuiCard.tsx      — 3 colonnes check-in/check-out/pet-taxi + empty 🌙
+    Capacity7DaysChart.tsx  — 2 mini-graphs séparés chiens + chats (inline SVG bars)
+    UpcomingCards.tsx       — Arrivées + Départs J→J+7 côte à côte
+    BirthdaysCard.tsx       — 🎂 sans âge (décision UX : neutre pour vieux animaux)
+    VaccinesCard.tsx        — expirations dans 30 jours
+    LongStaysCard.tsx       — IN_PROGRESS > 21j + CTA WhatsApp "Contacter →"
+    InactiveClientsCard.tsx — 6+ mois inactifs + CTA WhatsApp "Relancer →"
+    CriticalInvariantsCard.tsx — uniquement si invariants:last:* critical > 0
+    Skeletons.tsx           — ZoneNow/Week/Alerts skeletons
+```
+
+### 3 zones structurelles
+
+| Zone | Cartes | Objectif |
+|---|---|---|
+| **1 — Maintenant** | Pension actuelle / À valider / Aujourd'hui | Action immédiate |
+| **2 — Cette semaine** | Capacité 7j / Arrivées-Départs / Anniversaires | Anticipation J→J+7 |
+| **3 — Alertes & rappels** | Invariants / Vaccins / Longue durée / Inactifs | Intelligence proactive |
+
+Zone 3 n'est rendue que si **au moins une carte a du contenu** (zero-state global = section invisible).
+
+### Règles métier durcies
+
+- **IN_PROGRESS strict** pour "Pension actuelle" (état physique du kennel)
+- **Activité client** = `max(Booking.startDate, Payment.paymentDate)` ; seuil inactif = 180 j Casa
+- **Anniversaires** : fenêtre 7j Casa, exclure walk-ins, **pas d'âge affiché**
+- **Vaccins** : `Vaccination.nextDueDate IN [today, today+30j]`, status='CONFIRMED', exclure walk-ins
+- **Longue durée** : `Booking{status='IN_PROGRESS', startDate < today-21j}` strict ; cap 5
+- **WhatsApp deep links** : `wa.me/<phone>?text=<encoded>`, fail-silent si phone manquant
+- **Casa partout** : `startOfTodayCasa()`, `casablancaYMD()` — interdit `.getMonth()` sur Date
+
+### Suppressions de cette refonte
+
+- `src/app/[locale]/admin/dashboard/RevenueChartWrapper.tsx`
+- `sections/DashboardActivity.tsx` (chart 12 mois Recharts)
+- `sections/DashboardCheckInOut.tsx` (remplacé par AujourdhuiCard 3 colonnes)
+- `sections/DashboardKpiList.tsx`, `DashboardLowerSections.tsx`, `SectionSkeleton.tsx`
+- `_components/{AlertBanners,ClientInsights,MainKpis,ServiceRevenues}.tsx`
+- Toutes les imports de `billedByCategory`, `totalCashCollected`, `cashByMonth` retirées de cette route
+
+### Tests
+
+`_lib/__tests__/helpers.test.ts` (24) + `whatsapp.test.ts` (12) = 36 tests.
+- Boundary timezone Casa (00:30 Casa rolls day)
+- Year wrap des anniversaires (Dec 31 → Jan)
+- WhatsApp URL encoding + normalize phone (8+ digits min)
+- Occupancy thresholds <70 / 70-89 / ≥90
+
+### Lien financier footer
+
+Discret en bas de page : "📊 Voir l'analyse financière complète →
+/admin/billing". Si Mehdi veut un chiffre absolu, c'est là.
+
+---
+
 ## SIDEBAR ADMIN
 
 `src/components/layout/AdminSidebar.tsx` — props :
