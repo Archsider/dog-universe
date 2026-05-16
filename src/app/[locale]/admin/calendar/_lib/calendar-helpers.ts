@@ -25,6 +25,9 @@ export interface CalendarBooking {
   taxiReturnEnabled?: boolean;
   taxiReturnDate?: string | null;
   taxiReturnTime?: string | null;
+  /** Walk-in marker — fantôme booking created by /api/admin/walkin-invoice. */
+  isWalkIn?: boolean;
+  source?: string | null;
 }
 
 export interface TaxiDayEntry {

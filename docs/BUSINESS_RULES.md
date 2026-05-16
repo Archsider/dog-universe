@@ -557,6 +557,35 @@ Quand le client revient 3 mois plus tard et veut un compte portail :
   exemple confirmation taxi vétérinaire) ? Aujourd'hui la policy SMS
   catégorie OPS envoie quand même (seul COMPTA est skip). À valider.
 
+### 8.bis Facture walk-in paid-on-the-spot (depuis 2026-05-16)
+
+**Cas distinct** : transaction encaissée immédiatement (boutique
+croquettes, toilettage rapide, etc.). Pas un séjour. L'endpoint
+`POST /api/admin/walkin-invoice` (ADMIN/SUPERADMIN) crée en une
+seule transaction :
+- Un `Booking` fantôme : `status='COMPLETED'`, `isWalkIn=true`,
+  `source='WALKIN'`, `startDate=endDate=paymentDate`. ServiceType
+  cosmétique (BOARDING par défaut — il n'y a pas d'enum WALKIN).
+- Une `Invoice` liée, avec `clientDisplayName` override si client
+  anonyme.
+- N `InvoiceItem` (multi-lignes, DISCOUNT négatif autorisé).
+- Un `Payment` via `recordPayment(trustedAmount: true)` post-commit.
+
+**Client anonyme** : id null → résout vers l'user lazy-created
+`walkin-anonymous@dog-universe.local` (single row partagé, `isWalkIn:
+true`). L'override `Invoice.clientDisplayName` permet de différencier
+visuellement chaque transaction même si elles partagent le même
+client générique.
+
+**Idempotency-Key OBLIGATOIRE** (pas back-compat). Replay → renvoie
+l'invoice existante via `Booking.idempotencyKey = 'walkin:<key>'`.
+
+**Sur le calendrier** : badge violet `🛒 Walk-in` distinct des
+chips status standard, et exclus du compteur "petsToday" (pas
+physiquement dans le kennel).
+
+Cf. CLAUDE.md "WALK-IN UI" pour la spec complète et les tests.
+
 ---
 
 ## 9. RGPD — anonymisation et purge
@@ -680,3 +709,6 @@ correspondante + cite la PR dans le changelog ci-dessous.
   `eslint-plugin-dog-universe` avec 4 règles `error` qui empêchent la
   réintroduction des familles de bugs TZ / Decimal / payment-bypass /
   prisma-new-Date.
+- **2026-05-16** : ajout §8.bis "Facture walk-in paid-on-the-spot"
+  (PR WALKIN UI). Endpoint `POST /api/admin/walkin-invoice` + modal 3
+  étapes sur `/admin/billing` + badge violet calendrier.
