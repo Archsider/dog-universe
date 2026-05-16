@@ -3,8 +3,8 @@
 import { useRef, useState } from 'react';
 import { Upload, ExternalLink, FileText, File, Trash2, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { PROOF_PREFIX } from './constants';
-import type { PetDocument, VaccinationLabels } from './vaccination-types';
+import { PROOF_PREFIX } from '../constants';
+import type { PetDocument, VaccinationLabels } from '../vaccination-types';
 
 interface Props {
   petId: string;
