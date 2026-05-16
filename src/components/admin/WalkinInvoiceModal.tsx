@@ -96,6 +96,11 @@ export default function WalkinInvoiceModal({ locale }: Props) {
   // Submit
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Confirmation screen toggle — clicking "Encaisser" on step 3 flips this to
+  // true and the body shows a read-only recap. Mehdi has to click "Confirmer"
+  // a second time to actually fire the POST. Source : audit Wroblewski O1 —
+  // money mutations must never be one-click reachable from a typo Tab-Enter.
+  const [confirming, setConfirming] = useState(false);
 
   // Reset when modal closes — fresh state on reopen.
   useEffect(() => {
@@ -110,6 +115,7 @@ export default function WalkinInvoiceModal({ locale }: Props) {
       setNotes('');
       setSubmitting(false);
       setError(null);
+      setConfirming(false);
     }
   }, [open]);
 
@@ -266,7 +272,7 @@ export default function WalkinInvoiceModal({ locale }: Props) {
                   onUpdate={updateItem}
                 />
               )}
-              {step === 3 && (
+              {step === 3 && !confirming && (
                 <Step3Payment
                   fr={fr}
                   paymentDate={paymentDate}
@@ -278,6 +284,20 @@ export default function WalkinInvoiceModal({ locale }: Props) {
                   total={total}
                 />
               )}
+              {step === 3 && confirming && (
+                <ConfirmStep
+                  fr={fr}
+                  total={total}
+                  paymentMethod={paymentMethod}
+                  paymentDate={paymentDate}
+                  clientLabel={
+                    clientMode === 'existing'
+                      ? (fr ? 'Client existant sélectionné' : 'Existing client selected')
+                      : anonName.trim() || (fr ? 'Anonyme' : 'Anonymous')
+                  }
+                  itemCount={items.length}
+                />
+              )}
 
               {error && (
                 <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -286,12 +306,17 @@ export default function WalkinInvoiceModal({ locale }: Props) {
               )}
             </div>
 
-            {/* Footer nav */}
+            {/* Footer nav. On the confirm screen, "Back" exits the confirm
+                view (returns to the editable form) and the primary CTA
+                becomes "Confirm & cash in" which fires the POST. */}
             <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#F0D98A]/30 bg-[#FBF5E0]/30">
-              {step > 1 ? (
+              {(step > 1 || confirming) ? (
                 <button
                   type="button"
-                  onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3)}
+                  onClick={() => {
+                    if (confirming) setConfirming(false);
+                    else setStep((s) => (s - 1) as 1 | 2 | 3);
+                  }}
                   disabled={submitting}
                   className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-charcoal hover:bg-[#F5EAD0]/50"
                 >
@@ -315,15 +340,28 @@ export default function WalkinInvoiceModal({ locale }: Props) {
                     {fr ? 'Suivant' : 'Next'}
                     <ArrowRight className="h-4 w-4" />
                   </button>
+                ) : !confirming ? (
+                  // First click on step 3 : open the read-only recap. We
+                  // intentionally do NOT call submit() here — money mutations
+                  // need an explicit second click on the recap screen.
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(true)}
+                    disabled={!step1Valid || !step2Valid || !step3Valid || submitting}
+                    className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-[#C4974A] text-white text-sm font-medium hover:bg-[#9A7235] disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {fr ? 'Encaisser' : 'Cash in'}
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
                 ) : (
                   <button
                     type="button"
                     onClick={submit}
-                    disabled={!step1Valid || !step2Valid || !step3Valid || submitting}
+                    disabled={submitting}
                     className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                    {fr ? 'Encaisser' : 'Cash in'}
+                    {fr ? 'Confirmer et encaisser' : 'Confirm & cash in'}
                   </button>
                 )}
               </div>
@@ -625,6 +663,67 @@ function Step3Payment({
           {fr ? 'À encaisser' : 'To collect'}
         </p>
         <p className="text-2xl font-bold text-emerald-700 tabular-nums">{formatMAD(total)}</p>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// ConfirmStep — read-only recap shown after step 3, before POST. Source
+// audit Wroblewski O1 : money mutations must never be one-click reachable
+// from a typo Tab-Enter. The CTA on this screen carries the final intent.
+// ────────────────────────────────────────────────────────────────────
+function ConfirmStep({
+  fr, total, paymentMethod, paymentDate, clientLabel, itemCount,
+}: {
+  fr: boolean;
+  total: number;
+  paymentMethod: PaymentMethod;
+  paymentDate: string;
+  clientLabel: string;
+  itemCount: number;
+}) {
+  return (
+    <div className="space-y-4" data-testid="walkin-confirm-step">
+      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+        <p className="text-sm font-semibold text-amber-900">
+          {fr ? "Vous êtes sur le point d'encaisser :" : 'You are about to cash in:'}
+        </p>
+      </div>
+
+      <ul className="space-y-2.5 text-sm">
+        <li className="flex items-baseline justify-between border-b border-[#F0D98A]/30 pb-2">
+          <span className="text-gray-500">{fr ? 'Montant total' : 'Total amount'}</span>
+          <span className="text-lg font-bold text-emerald-700 tabular-nums" data-testid="walkin-confirm-total">
+            {formatMAD(total)}
+          </span>
+        </li>
+        <li className="flex items-baseline justify-between border-b border-[#F0D98A]/30 pb-2">
+          <span className="text-gray-500">{fr ? 'Mode paiement' : 'Payment method'}</span>
+          <span className="font-medium text-charcoal" data-testid="walkin-confirm-method">
+            {fr ? METHOD_LABELS[paymentMethod].fr : METHOD_LABELS[paymentMethod].en}
+          </span>
+        </li>
+        <li className="flex items-baseline justify-between border-b border-[#F0D98A]/30 pb-2">
+          <span className="text-gray-500">{fr ? 'Client' : 'Client'}</span>
+          <span className="font-medium text-charcoal truncate ml-3" data-testid="walkin-confirm-client">{clientLabel}</span>
+        </li>
+        <li className="flex items-baseline justify-between border-b border-[#F0D98A]/30 pb-2">
+          <span className="text-gray-500">{fr ? 'Date' : 'Date'}</span>
+          <span className="font-medium text-charcoal tabular-nums">{paymentDate}</span>
+        </li>
+        <li className="flex items-baseline justify-between">
+          <span className="text-gray-500">{fr ? 'Lignes facturées' : 'Invoiced lines'}</span>
+          <span className="font-medium text-charcoal tabular-nums">{itemCount}</span>
+        </li>
+      </ul>
+
+      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+        <p className="text-xs text-red-700 leading-relaxed">
+          {fr
+            ? "Cette action crée une facture payée immédiatement et ne peut pas être annulée automatiquement."
+            : 'This action creates an immediately-paid invoice and cannot be automatically undone.'}
+        </p>
       </div>
     </div>
   );
