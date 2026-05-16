@@ -2,9 +2,8 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { subMonths } from 'date-fns';
-import { startOfMonthCasa, endOfMonthCasa, currentMonthCasa } from '@/lib/dates-casablanca';
+import { startOfMonthCasa, endOfMonthCasa, currentMonthCasa, casablancaYMD } from '@/lib/dates-casablanca';
 import {
-  totalCashCollected,
   cashByMonth,
   billedByCategory,
   volumeByCategory,
@@ -14,6 +13,7 @@ import {
   inferItemCategory,
 } from '@/lib/metrics';
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
+import { getMonthlyRevenueByCategory } from '@/lib/billing/monthly-revenue';
 import { computeMonthlyRevenueByCategory, allocateBetweenItems } from '@/lib/accounting';
 import { toNumber } from '@/lib/decimal';
 // AnalyticsCharts is a 'use client' component that already lazy-loads its
@@ -47,6 +47,10 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
   const thisMonthEnd   = endOfMonthCasa(now);
   const lastMonthStart = startOfMonthCasa(subMonths(now, 1));
   const lastMonthEnd   = endOfMonthCasa(subMonths(now, 1));
+  // Casa year/month for the canonical Sémantique B helper. `casablancaYMD`
+  // reads the Casa calendar from a Date, so it stays correct under any
+  // runtime TZ (e.g. Vercel UTC). See docs/BUSINESS_RULES.md §6.
+  const { year: lastYearForMonth, month: lastMonthNum } = casablancaYMD(lastMonthStart);
 
   const [
     thisAmt,
@@ -61,8 +65,10 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
     avgNightsData,
     categoryItems,
   ] = await Promise.all([
-    totalCashCollected(thisMonthStart, thisMonthEnd),
-    totalCashCollected(lastMonthStart, lastMonthEnd),
+    // Sémantique B canonical : cash basis pure (paymentDate-anchored,
+    // category prorata via PG function compute_payment_by_category).
+    getMonthlyRevenueByCategory(currentYear, currentMonthNum).then(r => r.totalAllCategories),
+    getMonthlyRevenueByCategory(lastYearForMonth, lastMonthNum).then(r => r.totalAllCategories),
     billedByCategory(thisMonthStart, thisMonthEnd),
     billedByCategory(lastMonthStart, lastMonthEnd),
     volumeByCategory(thisMonthStart, thisMonthEnd),
