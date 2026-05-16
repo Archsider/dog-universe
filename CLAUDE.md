@@ -1458,8 +1458,16 @@ Voir [`docs/wave-1-cleanup-sql.md`](./docs/wave-1-cleanup-sql.md) — à exécut
 
 Le projet Vercel `archsiders-projects/dog-universe-2btg` échoue à chaque push depuis des mois (DATABASE_URL inaccessible, `ENETUNREACH` sur le pooler IPv6). Aucun impact prod (le vrai projet est `dog-universe`). Action : aller sur https://vercel.com/archsiders-projects/dog-universe-2btg/settings → tout en bas → **Delete Project**. Supprime le badge rouge permanent sur chaque PR.
 
-### 🔧 DETTE TECHNIQUE — Migration Rollback Check (CI rouge, non bloquant prod)
-La CI `migration-rollback-check.yml` échoue depuis `20260511_invoice_sequence` (PR antérieure). La migration crée une séquence Postgres qui dépend de la table `Invoice` ; lors du dry-run `up → down → up` sur DB vierge, la séquence ne peut pas être recréée dans l'ordre attendu. **N'affecte pas la prod** (la table Invoice existe en réel). À fixer dans une PR dédiée — soit en ajustant le `down.sql` de cette migration, soit en marquant la séquence comme dépendante de la table dans le bootstrap two-pass du workflow. Tous les autres rollback checks passent.
+### ✅ Migration Rollback Check — résolu 2026-05-17 (PR cleanup-quick-wins-may17)
+
+CI `migration-rollback-check.yml` réécrit avec stratégie `down → up` au lieu de `up → down`. Le workflow bootstrap d'abord le schema canonique via `prisma db push` + baseline toutes les migrations comme appliquées, puis teste pour chaque migration récente (< 14j avec down.sql actionnable) que la séquence `down → up` produit le même schema (modulo `\restrict/\unrestrict` PG version markers filtrés).
+
+Liste d'exclusions `COSMETIC_DRIFT_EXCLUSIONS` documentée dans le workflow pour 18 migrations dont le round-trip est **fonctionnellement équivalent mais produit un pg_dump différent** :
+- **ADD COLUMN** : column ordering — `prisma db push` positionne par schema.prisma, ALTER TABLE ADD COLUMN ajoute en fin de table. Cosmétique only.
+- **MV / functions / triggers / sequences** : pas représentés dans schema.prisma → `prisma db push` ne les crée pas → drift attendu sur les snapshots.
+- **FK ON UPDATE/DELETE clauses** : différences entre Prisma `@relation` defaults et migration SQL explicites.
+
+Toute nouvelle migration doit soit passer le round-trip, soit être ajoutée à `COSMETIC_DRIFT_EXCLUSIONS` avec justification, soit porter le marker `-- @rollback: not-applicable` dans son `down.sql`.
 
 ### ✅ Migrations 20260510 exécutées (2026-05-12)
 - `prisma/migrations/20260510_product_upsell/migration.sql` — colonnes `targetSpecies`/`targetAge`/`imageUrl`/`weight`/`supplier` sur `Product` + CHECK + index. ✅
