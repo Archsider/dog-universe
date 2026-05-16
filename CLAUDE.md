@@ -1451,6 +1451,12 @@ Rollback via `down.sql` disponible. Sans ce champ, `Booking.isWalkIn` reste `fal
 **Vérification** : `/admin/health` (SUPERADMIN) affiche désormais une carte "Pool Postgres" verte si OK / rouge si jamais la config drift. Endpoint backend `/api/admin/health` retourne `{ dbPool: { pooled, via, warning } }`.
 **Runbook** : si besoin de changer un jour, voir `docs/PGBOUNCER.md`.
 
+### 🟡 Read replicas — scaffolding livré, routing OFF par défaut (2026-05-17)
+**État** : `src/lib/prisma-read.ts` exporte `prismaRead`, un client Prisma read-only qui pointe vers `READ_DATABASE_URL` si la variable est définie, sinon fallback transparent (référence identique) sur le client `prisma` write principal. Zéro changement de comportement sans config.
+**Activation** : provisionner une read replica Supabase Pro, set `READ_DATABASE_URL` sur Vercel, migrer route-par-route (RSC pages GET dashboard/analytics/listings) via PRs séparées. Tout write/mutation reste sur `prisma`.
+**Rollback** : supprimer l'env var → fallback instantané sur write client. Aucune migration de code.
+**Runbook complet** : `docs/READ_REPLICA.md` (stratégie, routes éligibles, lag, monitoring, tests staging).
+
 ### 🟡 Gaps de consistency restants (non bloquants)
 - **Auth guards dupliqués** : 32 routes admin utilisent encore le pattern `if (!session?.user || session.user.role !== ...)` au lieu de `requireRole(['ADMIN', 'SUPERADMIN'])` (`src/lib/auth-guards.ts`). Migration manuelle recommandée — chaque route doit être testée individuellement.
 - **`notDeleted()` non utilisé** : 99 occurrences de `deletedAt: null` inline. Helper existe dans `src/lib/prisma-soft.ts` mais pas adopté.
