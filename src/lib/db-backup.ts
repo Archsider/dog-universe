@@ -106,8 +106,9 @@ export async function runDbBackup(options: { rotate?: boolean } = {}): Promise<B
       prisma.invoiceSequence.findMany({ take: 1_000 }),
       prisma.loyaltyGrade.findMany({ take: 50_000 }),
       prisma.loyaltyBenefitClaim.findMany({ take: 100_000 }),
-      // Notification croissance non bornée — cap à 10k.
-      prisma.notification.findMany({ take: 10_000, orderBy: { createdAt: 'desc' } }),
+      // Notification croissance non bornée — cap à 100k (10k saturait à
+      // chaque backup ; perte silencieuse de l'historique notifs ancien).
+      prisma.notification.findMany({ take: 100_000, orderBy: { createdAt: 'desc' } }),
       prisma.adminNote.findMany({ take: 50_000 }),
       prisma.actionLog.findMany({ take: 50_000, orderBy: { createdAt: 'desc' } }),
       prisma.bookingItem.findMany({ take: 200_000 }),
@@ -135,6 +136,20 @@ export async function runDbBackup(options: { rotate?: boolean } = {}): Promise<B
     actionLogs, bookingItems, bookingPets, boardingDetails, taxiDetails, vaccinations,
     reviews, addonRequests, heartbeats, appMigrations,
   ] = rows;
+
+  // Saturation guard: if the Notification cap is reached the dump silently
+  // loses older history. Log a structured warning so /admin/health surfaces
+  // it before the next backup window.
+  if (Array.isArray(notifications) && notifications.length >= 100_000) {
+    console.warn(JSON.stringify({
+      level: 'warn',
+      service: 'db-backup',
+      message: 'Notification cap saturated — older rows excluded from dump',
+      count: notifications.length,
+      cap: 100_000,
+      timestamp: new Date().toISOString(),
+    }));
+  }
 
   const tables = {
     User: users,
