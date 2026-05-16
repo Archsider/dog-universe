@@ -28,17 +28,33 @@ Files:
 
 ## Required environment variables
 
-| Var | Required | Purpose |
-| --- | --- | --- |
-| `SENTRY_WEBHOOK_SECRET` | yes (prod) | HMAC-SHA256 secret matching the Sentry integration |
-| `ANTHROPIC_API_KEY` | recommended | If absent → all events stored as `unclassified` and admin is notified |
-| `GITHUB_TOKEN` | for GH issue creation | PAT with `repo` (or `public_repo`) scope |
-| `GUARDIAN_GITHUB_REPO` | for GH issue creation | Format: `owner/name` |
-| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | recommended | Idempotency flag (fail-open if missing) |
+The Guardian uses a **feature toggle** to gate its env requirements at boot.
 
-All variables are optional in dev (the app boots fine without them); the
-endpoint will simply 500 if `SENTRY_WEBHOOK_SECRET` is missing when a real
-Sentry call comes in.
+| Var | Required when | Purpose |
+| --- | --- | --- |
+| `AI_GUARDIAN_ENABLED` | always (defaults to off) | Master switch. Set to `1` or `true` to enable. When **on**, the 4 vars below become hard requirements at boot. When **off**, they're warnings only. |
+| `SENTRY_WEBHOOK_SECRET` | Guardian ON, prod | HMAC-SHA256 secret matching the Sentry integration |
+| `ANTHROPIC_API_KEY` | Guardian ON, prod | If absent → all events stored as `unclassified` and admin is notified |
+| `GITHUB_TOKEN` | Guardian ON, prod | PAT with `repo` (or `public_repo`) scope |
+| `GUARDIAN_GITHUB_REPO` | Guardian ON, prod | Format: `owner/name` |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | always (other features need them) | Idempotency flag for Guardian (fail-open if missing) |
+
+### Boot-check behaviour (since 2026-05-17, WIN 5)
+
+`src/lib/boot-checks.ts` enforces the toggle :
+
+- **`AI_GUARDIAN_ENABLED=true` in prod + missing any of the 4 vars** →
+  `BOOT_CHECK_FAILED` thrown at `register()`, deploy fails. Defeats the
+  "feature on but silent" failure mode the audit Reilly M1 flagged.
+- **`AI_GUARDIAN_ENABLED=true` in dev + missing vars** → warning only
+  (non-blocking, dev experience preserved).
+- **`AI_GUARDIAN_ENABLED` unset / off** → all Guardian vars stay
+  optional. Operator sees a warning per missing var ("set
+  `AI_GUARDIAN_ENABLED=true` to enable") so they know what to set if
+  they want to flip the feature on later.
+
+Accepted truthy values for `AI_GUARDIAN_ENABLED` : `1`, `true`, `TRUE`,
+`True` (case-insensitive). Anything else = disabled.
 
 ## Sentry setup
 

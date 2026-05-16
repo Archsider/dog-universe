@@ -21,10 +21,10 @@ const REQUIRED_VARS: RequiredVar[] = [
 ];
 
 // Vars whose absence silently DEGRADES a feature without breaking the app
-// (BullMQ → direct fallback, Sentry → no error reporting, Guardian → no
-// auto-issues, Anthropic → manual vaccination entry). We refuse to hard-fail
-// because some deployments may legitimately disable these features, but we
-// emit a structured warning so the operator knows the feature is off.
+// (BullMQ → direct fallback, Sentry → no error reporting, Anthropic →
+// manual vaccination entry). We refuse to hard-fail because some
+// deployments may legitimately disable these features, but we emit a
+// structured warning so the operator knows the feature is off.
 const OPTIONAL_VARS: RequiredVar[] = [
   { name: 'UPSTASH_REDIS_HOST', minLength: 5 },     // BullMQ TCP
   { name: 'UPSTASH_REDIS_PASSWORD', minLength: 5 }, // BullMQ TCP
@@ -33,11 +33,26 @@ const OPTIONAL_VARS: RequiredVar[] = [
   // DSN. We don't validate either here — a deliberate "no env var" deploy
   // still works via the fallback. If the hardcoded fallback is ever removed,
   // re-add a check on at least one of the two names.
-  { name: 'SENTRY_WEBHOOK_SECRET', minLength: 10 }, // AI Guardian webhook
-  { name: 'ANTHROPIC_API_KEY', minLength: 10 },     // Vaccination AI + Guardian classify
-  { name: 'GITHUB_TOKEN', minLength: 10 },          // Guardian auto-issue
-  { name: 'GUARDIAN_GITHUB_REPO', minLength: 5 },   // Guardian target repo
+  { name: 'ANTHROPIC_API_KEY', minLength: 10 },     // Vaccination AI extraction
 ];
+
+// AI Guardian env vars — required ONLY when AI_GUARDIAN_ENABLED=true.
+// Source : audit 2026-05-16 Reilly M1. Without this gate, a prod deploy
+// with AI_GUARDIAN_ENABLED=true but missing ANTHROPIC_API_KEY would fail
+// silently (Sentry webhook hits classify() → throws → events persist as
+// "pending" and never get classified or auto-issued).
+const GUARDIAN_VARS: RequiredVar[] = [
+  { name: 'SENTRY_WEBHOOK_SECRET', minLength: 10 },
+  { name: 'ANTHROPIC_API_KEY', minLength: 10 },
+  { name: 'GITHUB_TOKEN', minLength: 10 },
+  { name: 'GUARDIAN_GITHUB_REPO', minLength: 5 },
+];
+
+function isGuardianEnabled(): boolean {
+  const raw = process.env.AI_GUARDIAN_ENABLED;
+  if (!raw) return false;
+  return raw === '1' || raw.toLowerCase() === 'true';
+}
 
 function validate(v: RequiredVar): string | null {
   const raw = process.env[v.name];
@@ -64,6 +79,24 @@ export function assertProductionEnv(): void {
   for (const v of OPTIONAL_VARS) {
     const err = validate(v);
     if (err) warnings.push(err);
+  }
+
+  // AI Guardian : if the feature is toggled on, its env vars become hard
+  // requirements. Without them, a Sentry webhook would silently fail to
+  // classify events and never auto-create GitHub issues. Source : audit
+  // 2026-05-16 Reilly M1.
+  if (isGuardianEnabled()) {
+    for (const v of GUARDIAN_VARS) {
+      const err = validate(v);
+      if (err) errors.push(`AI_GUARDIAN_ENABLED=true requires ${v.name} (${err})`);
+    }
+  } else {
+    // Feature off : downgrade to warnings so the operator knows which keys
+    // are missing if they want to flip it on later.
+    for (const v of GUARDIAN_VARS) {
+      const err = validate(v);
+      if (err) warnings.push(`${err} (AI Guardian off — set AI_GUARDIAN_ENABLED=true to enable)`);
+    }
   }
 
   // TLS / HTTPS guards — required in prod. Refusing http:// for NEXTAUTH_URL
