@@ -118,10 +118,15 @@ export const GET = defineCron({
         });
         const adminNotesThisWeek = adminNotes.map(n => n.content);
 
-        // Fetch stay photos uploaded this week
+        // Fetch stay photos uploaded this week.
+        // Defense in depth: while the parent booking is already filtered
+        // deletedAt:null at line 52, the relation guard here ensures any
+        // future refactor (e.g. parallel non-prefiltered loader) cannot
+        // leak photos from a soft-deleted booking into the weekly email.
         const stayPhotos = await prisma.stayPhoto.findMany({
           where: {
             bookingId: booking.id,
+            booking: { deletedAt: null },
             createdAt: { gte: sevenDaysAgo },
           },
           select: { url: true },

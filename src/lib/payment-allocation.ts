@@ -39,6 +39,7 @@ import { allocatePayments } from '@/lib/payments';
 import { cacheDel } from '@/lib/cache';
 import { toNumber } from '@/lib/decimal';
 import { casablancaYMD } from '@/lib/dates-casablanca';
+import { scheduleMVRefreshIfCurrentMonth } from '@/lib/billing/monthly-revenue';
 
 type PrismaLike = typeof prisma | Prisma.TransactionClient;
 
@@ -184,6 +185,14 @@ export async function recordPayment(
   // See docs/BUSINESS_RULES.md §6.
   const { year: yyyy, month: mm } = casablancaYMD(paymentDate);
   await cacheDel(`revenue:${yyyy}:${mm}`);
+
+  // ── MV refresh for current-month payments (fail-safe + debounced) ──────
+  // Without this, the dashboard CA on /admin/billing can lag up to 2h
+  // behind reality (until the hourly refresh cron fires). The helper is
+  // fully fail-safe : if Redis is down, if @vercel/functions is absent,
+  // if REFRESH throws → recordPayment still returns ok. The hourly cron
+  // is the canonical safety net.
+  await scheduleMVRefreshIfCurrentMonth(paymentDate);
 
   return { ok: true, paymentId: payment.id };
 }
