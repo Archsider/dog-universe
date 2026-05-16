@@ -304,6 +304,10 @@ const optionalTrimmedString = (max: number) =>
     .transform(v => (v == null || v === '' ? null : v));
 
 // Création d'un pet (client) — schéma complet
+// .strict() — rejette tout champ non whitelisté (ex: ownerId, deletedAt)
+// pour empêcher un client de transférer/réassigner un pet via injection
+// de payload (IDOR). Tout nouveau champ d'écriture doit être ajouté ici
+// explicitement.
 export const petCreateSchema = z.object({
   name: z.string().min(1, 'name required').max(100).transform(v => v.trim()),
   species: speciesSchema,
@@ -326,13 +330,15 @@ export const petCreateSchema = z.object({
   lastAntiparasiticDate: z.string().optional().nullable(),
   antiparasiticProduct: optionalTrimmedString(200),
   antiparasiticNotes: optionalTrimmedString(1000),
-});
+}).strict();
 
 // Update pet — toutes les props optionnelles (partial)
+// .strict() preserved through .partial().extend() — IDOR guard: blocks
+// `ownerId`, `deletedAt`, `createdAt`, `id`, … and any unknown field.
 export const petUpdateSchema = petCreateSchema.partial().extend({
   // Admin-only override : durée antiparasitaire forcée
   antiparasiticDurationDays: z.number().int().positive().optional().nullable(),
-});
+}).strict();
 
 // ─── Vaccinations ──────────────────────────────────────────────────────────
 

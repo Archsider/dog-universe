@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
 import { isPaidExceedsCheckViolation, PAID_EXCEEDS_PAYLOAD } from '@/lib/billing-errors';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
+import { cacheDel } from '@/lib/cache';
+import { casablancaYMD } from '@/lib/dates-casablanca';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -96,7 +98,12 @@ export async function PATCH(request: Request, { params }: Params) {
     if (items.length === 0) {
       return NextResponse.json({ error: 'INVALID_ITEMS' }, { status: 400 });
     }
-    const VALID_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER'] as const;
+    // DISCOUNT included — without it, editing a walk-in invoice that
+    // contains a discount line (created via POST /api/admin/walkin-invoice)
+    // would fail validation on re-upload of the same items. Sign rules
+    // mirror /api/admin/walkin-invoice : DISCOUNT ⇒ unitPrice < 0 ;
+    // everything else ⇒ unitPrice >= 0.
+    const VALID_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER', 'DISCOUNT'] as const;
     for (const item of items as { description: unknown; quantity: unknown; unitPrice: unknown; category?: unknown }[]) {
       if (typeof item.description !== 'string' || !item.description.trim()) {
         return NextResponse.json({ error: 'INVALID_ITEM_DESCRIPTION' }, { status: 400 });
@@ -104,11 +111,20 @@ export async function PATCH(request: Request, { params }: Params) {
       if (typeof item.quantity !== 'number' || item.quantity <= 0 || !Number.isInteger(item.quantity)) {
         return NextResponse.json({ error: 'INVALID_ITEM_QUANTITY' }, { status: 400 });
       }
-      if (typeof item.unitPrice !== 'number' || item.unitPrice < 0) {
+      if (typeof item.unitPrice !== 'number' || !Number.isFinite(item.unitPrice)) {
         return NextResponse.json({ error: 'INVALID_ITEM_PRICE' }, { status: 400 });
       }
       if (item.category !== undefined && (typeof item.category !== 'string' || !VALID_CATEGORIES.includes(item.category as typeof VALID_CATEGORIES[number]))) {
         return NextResponse.json({ error: 'INVALID_ITEM_CATEGORY' }, { status: 400 });
+      }
+      // Sign refinement : DISCOUNT lines MUST be negative ; all other
+      // categories MUST be >= 0. Symmetric to walkin-invoice/route.ts.
+      const isDiscount = item.category === 'DISCOUNT';
+      if (isDiscount && (item.unitPrice as number) >= 0) {
+        return NextResponse.json({ error: 'DISCOUNT_REQUIRES_NEGATIVE_PRICE' }, { status: 400 });
+      }
+      if (!isDiscount && (item.unitPrice as number) < 0) {
+        return NextResponse.json({ error: 'INVALID_ITEM_PRICE' }, { status: 400 });
       }
     }
 
@@ -255,8 +271,47 @@ export async function DELETE(_req: Request, { params }: Params) {
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
+  // ── Sémantique B / cancel-invoice path enforcement ────────────────────
+  // Hard DELETE is allowed ONLY for fully-clean PENDING invoices with no
+  // payments. Any invoice that has received money MUST go through the
+  // canonical cancel path (POST /api/admin/invoices/[id]/cancel) which
+  // owns the BookingItem unlink, refund opt-in, audit trail and notif —
+  // hard delete would lose all of that and silently drop revenue from
+  // the MV without invalidating downstream caches consistently.
+  const paidAmountNum = Number(invoice.paidAmount);
+  if (paidAmountNum > 0) {
+    return NextResponse.json(
+      {
+        error: 'INVOICE_HAS_PAYMENTS',
+        message: 'This invoice has received payments. Use POST /api/admin/invoices/[id]/cancel instead of DELETE.',
+        cancelEndpoint: `/api/admin/invoices/${id}/cancel`,
+        paidAmount: paidAmountNum,
+      },
+      { status: 409 },
+    );
+  }
+  if (invoice.status !== 'PENDING') {
+    return NextResponse.json(
+      {
+        error: 'INVOICE_NOT_DELETABLE',
+        message: `Only PENDING invoices with paidAmount=0 can be hard-deleted. Status=${invoice.status}. Use POST /api/admin/invoices/[id]/cancel for cancellation.`,
+        cancelEndpoint: `/api/admin/invoices/${id}/cancel`,
+      },
+      { status: 409 },
+    );
+  }
+
   // onDelete: Cascade on InvoiceItem and Payment handles related records
   await prisma.invoice.delete({ where: { id } });
+
+  // ── Sémantique B cache invalidation (fail-open) ─────────────────────────
+  // Even on a paidAmount=0 PENDING invoice, the MV / revenue cache might
+  // have observed it via the previous tick. Stamp the Casa-month key for
+  // the periodDate (preferred — billing month source of truth) and fall
+  // back to issuedAt for legacy invoices without periodDate.
+  const monthAnchor = invoice.periodDate ?? invoice.issuedAt;
+  const { year, month } = casablancaYMD(monthAnchor);
+  await cacheDel(`revenue:${year}:${month}`);
 
   // P0-4: audit log on invoice deletion
   await logAction({
