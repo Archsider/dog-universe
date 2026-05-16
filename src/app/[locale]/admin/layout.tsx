@@ -1,4 +1,3 @@
-import { auth } from '../../../../auth';
 import { redirect } from 'next/navigation';
 import { unstable_cache } from 'next/cache';
 import { AdminSidebar } from '@/components/layout/AdminSidebar';
@@ -7,6 +6,7 @@ import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { SessionWatcher } from '@/components/shared/SessionWatcher';
 import { prisma } from '@/lib/prisma';
 import { notDeleted } from '@/lib/prisma-soft';
+import { getCachedAuth } from '@/lib/cached-auth';
 
 // Global counts (same value for every admin) — wrapped in unstable_cache
 // with a shared tag so any booking/claim mutation can invalidate via
@@ -32,7 +32,10 @@ interface LayoutProps {
 
 export default async function AdminLayout({ children, params }: LayoutProps) {
   const { locale } = await params;
-  const session = await auth();
+  // getCachedAuth wraps auth() with React.cache() — child admin pages can
+  // re-import the same helper and reuse the resolved session for free
+  // within the same RSC render. See src/lib/cached-auth.ts.
+  const session = await getCachedAuth();
   if (!session?.user) redirect(`/${locale}/auth/login`);
   if ((session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) redirect(`/${locale}/client/dashboard`);
 

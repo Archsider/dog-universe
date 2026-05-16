@@ -12,7 +12,16 @@ import { SENTRY_DSN } from './src/lib/sentry-dsn';
 
 Sentry.init({
   dsn: SENTRY_DSN,
-  tracesSampleRate: 0.1,
+  // Dynamic sampling — see sentry.server.config.ts for rationale (10x scale prep).
+  // Edge runtime hosts middleware + edge route handlers. /api/cron/* routes can
+  // surface here through middleware traces, so we still bump them to 1.0.
+  tracesSampler: (samplingContext) => {
+    const url = (samplingContext.attributes?.['http.url'] as string | undefined)
+      ?? (samplingContext.normalizedRequest?.url as string | undefined)
+      ?? '';
+    if (typeof url === 'string' && url.includes('/api/cron/')) return 1.0;
+    return 0.1;
+  },
   enabled: process.env.NODE_ENV === 'production',
 
   // RGPD : pas d'envoi de PII (IP, headers, cookies)

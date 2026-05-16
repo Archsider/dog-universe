@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import {
   computeUptimePercent,
@@ -13,6 +14,30 @@ import {
 // page be served from the edge cache and keeps load away from the DB.
 export const revalidate = 60;
 export const runtime = 'nodejs';
+
+// Cached heartbeat loader — 30s TTL is well below the 5-min cron tick so
+// new pings still surface fast, but at 10x traffic this collapses all
+// /status hits in the same window into a single DB query. The page is
+// public and the underlying findMany scans up to 10k heartbeats (30 days
+// of data) which is non-trivial under load. Tag `status` lets cron jobs
+// or admin actions force a refresh via `revalidateTag('status')`.
+const getHeartbeatSnapshot = unstable_cache(
+  async (sinceMs: number): Promise<{ rows: HeartbeatRow[]; ok: boolean }> => {
+    try {
+      const rows = await prisma.heartbeat.findMany({
+        where: { timestamp: { gte: new Date(sinceMs) } },
+        orderBy: { timestamp: 'desc' },
+        select: { timestamp: true, status: true, latencyMs: true, dbStatus: true, redisStatus: true },
+        take: 10_000,
+      });
+      return { rows, ok: true };
+    } catch {
+      return { rows: [], ok: false };
+    }
+  },
+  ['public-status-heartbeats'],
+  { tags: ['status'], revalidate: 30 },
+);
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   ok: { bg: '#16a34a', text: '#fff', label: 'Tous les systèmes opérationnels' },
@@ -98,18 +123,14 @@ export default async function StatusPage() {
   const since7d = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
   const since24h = new Date(now.getTime() - 24 * 3600 * 1000);
 
-  let rows: HeartbeatRow[] = [];
-  let dbReachable = true;
-  try {
-    rows = await prisma.heartbeat.findMany({
-      where: { timestamp: { gte: since30d } },
-      orderBy: { timestamp: 'desc' },
-      select: { timestamp: true, status: true, latencyMs: true, dbStatus: true, redisStatus: true },
-      take: 10_000,
-    });
-  } catch {
-    dbReachable = false;
-  }
+  // unstable_cache requires JSON-serialisable args ; pass the cutoff as a
+  // number rather than a Date and round to the nearest minute so transient
+  // millisecond drift between requests in the same window still hits the
+  // cache (rather than producing a fresh key per request).
+  const sinceMs = Math.floor(since30d.getTime() / 60_000) * 60_000;
+  const snapshot = await getHeartbeatSnapshot(sinceMs);
+  const rows: HeartbeatRow[] = snapshot.rows;
+  const dbReachable = snapshot.ok;
 
   const current = latestStatus(rows);
   const consecutiveKO = countConsecutiveFailures(rows);

@@ -2,6 +2,7 @@
 // Server component fetches initial snapshot ; client component polls every 60s
 // + manual refresh button.
 import { redirect } from 'next/navigation';
+import { unstable_cache } from 'next/cache';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { runAllInvariantChecks } from '@/lib/health-invariants';
@@ -12,6 +13,19 @@ import { getDedupBlockedCount } from '@/lib/cache';
 import HealthClient from './HealthClient';
 
 export const dynamic = 'force-dynamic';
+
+// runAllInvariantChecks scans the full Invoice / InvoiceItem / Payment
+// tables to compute drift. At 10x scale that can take several hundred ms
+// per run, and HealthClient polls every 60s. 30s cache is conservative
+// enough that a critical invariant still surfaces within one polling
+// cycle, while collapsing all hits in the same window into one DB sweep.
+// Mutation paths can call `revalidateTag('admin-health')` to force a
+// refresh after a known-impactful action.
+const getCachedInvariants = unstable_cache(
+  async () => runAllInvariantChecks(),
+  ['admin-health-invariants'],
+  { tags: ['admin-health'], revalidate: 30 },
+);
 
 /** SMS pipeline KPIs for the past 24h:
  *   - sent24h:        rows in SmsLog with status='SENT' (delivered)
@@ -70,7 +84,7 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
   }
 
   const [invariants, cronRuns, dlqCount, smsStats] = await Promise.all([
-    runAllInvariantChecks(),
+    getCachedInvariants(),
     Promise.all(CRON_NAMES.map(async (name) => ({ name, lastRun: await getCronLastRun(name) }))),
     (async () => {
       if (!isBullMQConfigured()) return null;
