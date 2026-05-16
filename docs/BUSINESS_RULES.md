@@ -679,6 +679,7 @@ semaines. Chacune correspond désormais à une règle ESLint maison
 | `no-money-tofixed` | Perte de précision Decimal (Rita 120,10 vs 120,105) | docs/ESLINT_RULES.md §2 |
 | `no-direct-payment-create` | Bypass de `recordPayment` (cache CA, cross-role, SMS OPS, dedup) | docs/ESLINT_RULES.md §3 |
 | `no-prisma-date-without-helper` | `new Date()` dans une query Prisma sur colonne date | docs/ESLINT_RULES.md §4 |
+| `no-direct-invoice-mutation` | `prisma.invoice.update` direct sur `paidAmount`/`amount`/`status`/`paidAt`/`version` | docs/ESLINT_RULES.md §5 |
 
 **Règle d'usage** :
 - **Ne JAMAIS** désactiver une règle au niveau `.eslintrc.json` pour

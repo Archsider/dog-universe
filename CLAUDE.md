@@ -714,6 +714,7 @@ ces dernières semaines.
 | `no-money-tofixed` | `.toFixed()` sur Decimal perd la précision (cas Rita 120,10 vs 120,105) |
 | `no-direct-payment-create` | `prisma.payment.create()` bypass de `recordPayment` (cache CA, cross-role, SMS OPS) |
 | `no-prisma-date-without-helper` | `new Date()` dans une query Prisma sur colonne date |
+| `no-direct-invoice-mutation` | `prisma.invoice.update` direct sur `paidAmount`/`amount`/`status`/`paidAt`/`version` — bypass de `recordPayment` (livré 2026-05-17, audit Kleppmann I3) |
 
 ### Pattern d'escape
 

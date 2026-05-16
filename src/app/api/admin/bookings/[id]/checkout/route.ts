@@ -141,6 +141,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         // Note: le trigger PG `trg_recompute_invoice_amount` recompute déjà
         // Invoice.amount = SUM(items.total) après les mutations sur InvoiceItem.
         // NE PAS écrire `amount` manuellement (drift garanti).
+        // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: optimistic-lock version bump only, no money field touched ; trigger trg_recompute_invoice_amount already handles amount.
         await tx.invoice.update({
           where: { id: booking.invoice.id },
           data: {

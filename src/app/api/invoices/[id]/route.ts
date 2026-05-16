@@ -160,6 +160,7 @@ export async function PATCH(request: Request, { params }: Params) {
       // Note: le trigger PG `trg_recompute_invoice_amount` recompute déjà
       // Invoice.amount = SUM(items.total) après les mutations sur InvoiceItem.
       // NE PAS écrire `amount` manuellement (drift garanti).
+      // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: full invoice edit (admin PATCH /api/invoices/[id]) — items regenerated above, status flipped to CANCELLED or reset to PENDING + paidAt cleared. This is the canonical "edit invoice" path that owns its own status mutations. TODO Module 5+ : extract `editInvoice()` service into src/lib/billing/.
       await tx.invoice.update({
         where: { id },
         data: {

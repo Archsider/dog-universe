@@ -107,6 +107,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       // Invoice.amount = SUM(items.total) après UPDATE sur InvoiceItem.
       // NE PAS écrire `amount` manuellement (drift garanti).
       if (totalDelta !== 0) {
+        // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: optimistic-lock version bump only ; Invoice.amount recomputed by InvoiceItem UPDATE trigger.
         await tx.invoice.update({
           where: { id: booking.invoice!.id },
           data: { version: { increment: 1 } },
