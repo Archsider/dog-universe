@@ -613,6 +613,7 @@
 - `([userId, read]) // Hot path : compteur de notifications non lues`
 - `([type, createdAt]) // Hot path : dedup batch par type sur fenêtre récente (cron reminders/birthday)`
 - `([deletedAt]) // soft-delete filter on client + admin queries`
+- `([userId, type, createdAt(sort: Desc)], name: "Notification_user_type_date_idx") // Hot path : cron per-user dedup (reminders, overdue, review-requests…)`
 
 ---
 
@@ -705,6 +706,7 @@
 **Indexes :**
 - `([createdAt])`
 - `([userId])`
+- `([entityType, entityId, createdAt(sort: Desc)], name: "ActionLog_entity_createdAt_idx") // Hot path : slide-over panel History section`
 
 ---
 
