@@ -140,6 +140,9 @@ model Vaccination {
 
   @@index([petId])
   @@index([status])
+  // Partial index "Vaccination_nextDueDate_confirmed_idx" on (nextDueDate)
+  // WHERE status='CONFIRMED' — managed via SQL migration 20260518_perf_indexes
+  // (Prisma cannot express partial indexes). Hot path: dashboard "Vaccins".
 }
 
 model PetDocument {
@@ -211,6 +214,9 @@ model Booking {
   @@index([status, startDate]) // Hot path : cron reminders + capacity overlap
   @@index([status, endDate]) // Hot path : cron reminders end + capacity overlap
   @@index([isWalkIn]) // Walk-in filter on Today view + billing exclusions
+  // Partial index "Booking_capacity_partial_idx" on (status,startDate,endDate)
+  // WHERE isOpenEnded=false AND deletedAt IS NULL — managed via SQL migration
+  // 20260518_perf_indexes (Prisma cannot express partial indexes).
 }
 
 // ── TimeProposal ────────────────────────────────────────────────────────
@@ -561,6 +567,7 @@ model Notification {
   @@index([userId, read]) // Hot path : compteur de notifications non lues
   @@index([type, createdAt]) // Hot path : dedup batch par type sur fenêtre récente (cron reminders/birthday)
   @@index([deletedAt]) // soft-delete filter on client + admin queries
+  @@index([userId, type, createdAt(sort: Desc)], name: "Notification_user_type_date_idx") // Hot path : cron per-user dedup (reminders, overdue, review-requests…)
 }
 
 model LoyaltyGrade {
@@ -626,6 +633,7 @@ model ActionLog {
 
   @@index([createdAt])
   @@index([userId])
+  @@index([entityType, entityId, createdAt(sort: Desc)], name: "ActionLog_entity_createdAt_idx") // Hot path : slide-over panel History section
 }
 
 model Setting {
