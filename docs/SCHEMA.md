@@ -3,7 +3,7 @@
 > Généré automatiquement depuis `prisma/schema.prisma`. Ne pas éditer à la main.
 > Régénérer avec `node scripts/generate-schema-doc.mjs` (ou `npm run db:doc`).
 
-**35 modèles** · **5 enums** · 2026-05-13
+**37 modèles** · **7 enums** · 2026-05-16
 
 ## Sommaire
 
@@ -13,6 +13,7 @@
 - [Vaccination](#vaccination)
 - [PetDocument](#petdocument)
 - [Booking](#booking)
+- [TimeProposal](#timeproposal)
 - [BookingPet](#bookingpet)
 - [BookingItem](#bookingitem)
 - [BoardingDetail](#boardingdetail)
@@ -31,6 +32,7 @@
 - [Setting](#setting)
 - [StayPhoto](#stayphoto)
 - [Review](#review)
+- [EndStayReport](#endstayreport)
 - [RescheduleRequest](#reschedulerequest)
 - [AddonRequest](#addonrequest)
 - [PasswordResetToken](#passwordresettoken)
@@ -44,6 +46,8 @@
 - [SmsLog](#smslog)
 
 ### Enums
+- [TimeProposalScope](#enum-timeproposalscope)
+- [TimeProposalStatus](#enum-timeproposalstatus)
 - [BookingStatus](#enum-bookingstatus)
 - [BookingServiceType](#enum-bookingservicetype)
 - [PaymentMethod](#enum-paymentmethod)
@@ -95,6 +99,8 @@
 
 - `adminNotes` → `AdminNote[]`
 - `reviewedClaims` → `LoyaltyBenefitClaim[]`
+- `endStayReportsReceived` → `EndStayReport[]`
+- `endStayReportsSent` → `EndStayReport[]`
 
 **Indexes :**
 - `([deletedAt])`
@@ -250,6 +256,8 @@
 | `review` | `Review?` | — |  |
 | `rescheduleRequest` | `RescheduleRequest?` | — |  |
 | `addonRequests` | `AddonRequest[]` | — |  |
+| `endStayReports` | `EndStayReport[]` | — |  |
+| `timeProposals` | `TimeProposal[]` | — |  |
 
 **Relations**
 
@@ -264,8 +272,42 @@
 - `([serviceType])`
 - `([deletedAt])`
 - `([status, startDate]) // Hot path : cron reminders + capacity overlap`
-- `([status, endDate])   // Hot path : cron reminders end + capacity overlap`
-- `([isWalkIn])          // Walk-in filter on Today view + billing exclusions`
+- `([status, endDate]) // Hot path : cron reminders end + capacity overlap`
+- `([isWalkIn]) // Walk-in filter on Today view + billing exclusions`
+
+---
+
+## TimeProposal
+
+| Champ | Type | Attributs | Commentaire |
+|---|---|---|---|
+| `id` | `String` | PK · default=`cuid(` |  |
+| `bookingId` | `String` | — |  |
+| `scope` | `TimeProposalScope` | — |  |
+| `time` | `String` | — | "HH:MM" canonical 24h Casa |
+| `status` | `TimeProposalStatus` | default=`PENDING` |  |
+| `proposedBy` | `String` | — | userId of the proposer |
+| `proposedByRole` | `String` | — | 'CLIENT' | 'ADMIN' | 'SUPERADMIN' |
+| `proposedAt` | `DateTime` | default=`now(` |  |
+| `proposalNote` | `String?` | — | short free-text (FR/EN) shown to receiver |
+| `respondedBy` | `String?` | — |  |
+| `respondedByRole` | `String?` | — | 'CLIENT' | 'ADMIN' | 'SUPERADMIN' |
+| `respondedAt` | `DateTime?` | — |  |
+| `responseNote` | `String?` | — | rejection reason / counter-proposal note |
+| `publicToken` | `String?` | UNIQUE |  |
+| `publicTokenExpiresAt` | `DateTime?` | — |  |
+| `createdAt` | `DateTime` | default=`now(` |  |
+| `updatedAt` | `DateTime` | — |  |
+
+**Relations**
+
+- `booking` → `Booking`
+
+**Indexes :**
+- `([bookingId, scope])`
+- `([bookingId, scope, status]) // Hot path : getConfirmedTime, getCurrentProposal`
+- `([status]) // List PENDING for admin alerts`
+- `([publicToken]) // Email link lookup`
 
 ---
 
@@ -547,7 +589,7 @@
 |---|---|---|---|
 | `id` | `String` | PK · default=`cuid(` |  |
 | `userId` | `String` | — |  |
-| `type` | `String` | — | "BOOKING_CONFIRMATION" | "BOOKING_VALIDATION" | "BOOKING_REFUSAL" | "STAY_REMINDER" | "INVOICE_AVAILABLE" | "ADMIN_MESSAGE" | "STAY_PHOTO" | "STAY_PHOTO_ADDED" | "LOYALTY_UPDATE" | "WEEKLY_PET_REPORT" |
+| `type` | `String` | — | "BOOKING_CONFIRMATION" | "BOOKING_VALIDATION" | "BOOKING_REFUSAL" | "STAY_REMINDER" | "INVOICE_AVAILABLE" | "ADMIN_MESSAGE" | "STAY_PHOTO" | "STAY_PHOTO_ADDED" | "LOYALTY_UPDATE" | "WEEKLY_PET_REPORT" | "END_STAY_REPORT" |
 | `titleFr` | `String` | — |  |
 | `titleEn` | `String` | — |  |
 | `titleAr` | `String?` | — | nullable: legacy rows pre-2026-05-05 have no AR translation (fallback to EN at render time) |
@@ -557,6 +599,8 @@
 | `metadata` | `String?` | — | JSON string e.g. {"bookingId":"..."} |
 | `read` | `Boolean` | default=`false` |  |
 | `createdAt` | `DateTime` | default=`now(` |  |
+| `deletedAt` | `DateTime?` | — |  |
+| `deletedBy` | `String?` | — |  |
 
 **Relations**
 
@@ -568,6 +612,7 @@
 - `([createdAt])`
 - `([userId, read]) // Hot path : compteur de notifications non lues`
 - `([type, createdAt]) // Hot path : dedup batch par type sur fenêtre récente (cron reminders/birthday)`
+- `([deletedAt]) // soft-delete filter on client + admin queries`
 
 ---
 
@@ -711,6 +756,34 @@
 **Indexes :**
 - `([clientId])`
 - `([createdAt])`
+
+---
+
+## EndStayReport
+
+> second send unless the operator explicitly chooses "Renvoyer".
+
+| Champ | Type | Attributs | Commentaire |
+|---|---|---|---|
+| `id` | `String` | PK · default=`cuid(` |  |
+| `bookingId` | `String` | — |  |
+| `clientId` | `String` | — |  |
+| `formData` | `String` | — | JSON: { sections: [{key, checked: [], freeText}], closingNote } |
+| `finalMessage` | `String` | — | The exact text body sent in the Notification.messageFr |
+| `sentAt` | `DateTime` | default=`now(` |  |
+| `sentBy` | `String` | — | userId of the admin who clicked send |
+| `version` | `Int` | default=`1` | 1 = manual template ; 2+ reserved for AI workflow |
+
+**Relations**
+
+- `booking` → `Booking`
+- `client` → `User`
+- `sender` → `User`
+
+**Indexes :**
+- `([bookingId])`
+- `([clientId])`
+- `([sentAt])`
 
 ---
 
@@ -968,6 +1041,20 @@
 ---
 
 ## Enums
+
+### enum TimeProposalScope
+
+- `ARRIVAL // Booking arrival time`
+- `TAXI_GO // BoardingDetail.taxiGoTime`
+- `TAXI_RETURN // BoardingDetail.taxiReturnTime`
+
+### enum TimeProposalStatus
+
+- `PENDING // awaiting response from the other party`
+- `ACCEPTED // confirmed time — source of truth`
+- `REJECTED // refused with a reason ; admin must propose a new one`
+- `SUPERSEDED // newer proposal replaced this one (audit history)`
+- `CANCELLED // proposer withdrew before any response`
 
 ### enum BookingStatus
 

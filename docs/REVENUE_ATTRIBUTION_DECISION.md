@@ -1,257 +1,217 @@
-# Décision — Attribution des paiements aux catégories de service
+# Revenue Attribution — Sémantique A → Sémantique B
 
-**Statut :** ✅ ACTIVE depuis 2026-05-15 (Sémantique A + A1 retenues)
-**Auteur :** Claude (audit 2026-05-15 sur facture DU-2026-0030 Kabbaj Rita)
-**Validation :** Mehdi 2026-05-15 — A1 (acceptation bougement chiffres passés, aucun CA ventilé jamais transmis au comptable)
-**Implémentation :** voir `src/lib/accounting.ts` (commentaire d'en-tête) +
-`prisma/migrations/20260515_revenue_mv_semantic_a/` + tests
-`src/lib/__tests__/billing.test.ts` (régression Rita figée).
-**Impact :** comptable + déclaratif fisc Maroc + KPIs `/admin/dashboard` + `/admin/analytics`
+> Date du pivot : **2026-05-17**.
+> Decided by : Mehdi (owner) + claude.
+> Status : **DECIDED — Sémantique B in force**.
+> Supersedes : Sémantique A (2026-05-15 → 2026-05-17, 2 jours en prod).
+> Rollback : 30 secondes via le bloc commenté de `prisma/migrations/20260517_revenue_mv_semantic_b/migration.sql`.
 
 ---
 
-## 1. Cas reproductible — DU-2026-0030 (Kabbaj Rita)
+## TL;DR
 
-### Données
-
-**InvoiceItems** (ordre `id asc` = ordre de création) :
-
-| # | Item | Total MAD | category |
-|---|---|---:|---|
-| 0 | Pension Mamy (chien) | 840.00 | OTHER |
-| 1 | Toilettage Mamy (petit) | 100.00 | GROOMING |
-
-**Payments** (triés par `paymentDate asc`) :
-
-| # | Date | Montant | Méthode |
-|---|---|---:|---|
-| 0 | 29/04/2026 | 900.00 MAD | CASH (acompte au dépôt) |
-| 1 | 06/05/2026 | 40.00 MAD | CASH (solde au retrait) |
-
-**Total facturé = 940 MAD. Total encaissé = 940 MAD. Statut : PAID.**
-
-### Que voit Mehdi sur `/admin/dashboard` ?
-
-> "Détail Toilettage : 40 MAD encaissés en mai" — alors que le toilettage (100 MAD) a été intégralement réglé.
+Dog Universe attribue désormais chaque `Payment.amount` au **mois de
+`Payment.paymentDate`** (Casa), avec une catégorisation au prorata des
+`InvoiceItem.allocatedAmount` de la facture parente. Une seule formule,
+implémentée dans la PG function `compute_payment_by_category`, cachée
+dans la MV `monthly_revenue_mv`, consommée via le helper
+`getMonthlyRevenueByCategory()` (point d'entrée canonique unique, garanti
+par la règle ESLint `dog-universe/no-direct-revenue-computation`).
 
 ---
 
-## 2. Cause racine architecturale
-
-**`Payment` n'a aucun lien vers `InvoiceItem`.** Pas de `lineItemId`, pas de table d'allocation. Donc tout calcul "encaissé par catégorie ce mois" repose sur une CONVENTION d'allocation choisie unilatéralement par le code, sans trace en DB.
-
-### Pire : le projet a déjà DEUX conventions différentes en parallèle
-
-| Endroit | Algorithme | Résultat sur Rita en mai |
-|---|---|---:|
-| `src/lib/accounting.ts` → `computeMonthlyRevenueByCategory` | **FIFO séquentiel** (Payment date asc, Item id asc) | Toilettage = **40.00** |
-| `src/lib/accounting.ts` → `allocateBetweenItems` (drill-down Analytics) | Idem FIFO séquentiel | Toilettage = **40.00** |
-| `prisma/migrations/20260509_monthly_revenue_mv` → `monthly_revenue_mv` | **Pro-rata par item** (`item.total × payment.amount / invoice.amount`) | Toilettage = **4.26** |
-
-`metrics.ts` lit en priorité `monthly_revenue_mv` (pré-agrégé) avec fallback live sur la fonction JS. **Selon que la MV ait été refresh ou pas pour le mois courant, Mehdi voit 4.26 OU 40 MAD pour le même fait financier.** C'est la racine du non-déterminisme.
-
-### Trace du calcul FIFO actuel sur Rita
+## 1. Avant — Sémantique A (paid-clôture)
 
 ```
-itemRemaining = [840 (Pension), 100 (Toilettage)]
-itemIdx = 0
-
-Payment 1 (900 MAD, 29/04 — PAS dans mai):
-  isThisMonth = false
-  → consume 840 of slot[0] (Pension): itemRemaining[0] = 0, itemIdx = 1
-  → consume 60 of slot[1] (Toilettage): itemRemaining[1] = 40
-  → no result update (date hors mois cible)
-
-Payment 2 (40 MAD, 06/05 — DANS mai):
-  isThisMonth = true
-  → consume 40 of slot[1] (Toilettage): itemRemaining[1] = 0
-  → result['grooming'] += 40
+Revenue(invoice, M) =
+  invoice.amount  si  invoice.status = PAID
+                  ET  last(invoice.payments).paymentDate ∈ M
+  0               sinon
 ```
 
-**Le 40 MAD est attribué à Toilettage purement parce que :**
-1. Le payment d'avril a "consommé" 840 MAD de Pension + 60 MAD de Toilettage en cumulant FIFO
-2. Au moment du payment de mai, l'item "courant" dans la file FIFO était Toilettage avec 40 MAD restants
+**Problèmes constatés en prod (avril-mai 2026) :**
 
-**Si l'admin avait inversé l'ordre de saisie** (Toilettage avant Pension), le résultat aurait été :
-```
-Payment 1 (900, avril): consume Toilettage 100 + Pension 800
-Payment 2 (40, mai): consume Pension 40 → result['other'] += 40
-```
-→ "0 MAD Toilettage en mai, 40 MAD Other en mai"
-
-**Même réalité financière, deux résultats différents selon l'ordre de création des items en DB.** Voilà l'arbitrarité.
-
----
-
-## 3. Trois sémantiques candidates
-
-### Sémantique A — "Encaissé du mois = facture clôturée ce mois"
-
-> "Une facture intégralement payée bascule en CA le jour de son dernier payment, par item à 100% de son `total`."
-
-**Règle de calcul** :
-- Si `Invoice.status = PAID` ET `lastPayment.paymentDate ∈ [monthStart, monthEnd]` :
-  - Pour chaque item : ajouter `item.total` au bucket de sa catégorie (ce mois)
-- Si la facture n'est pas encore PAID : 0 contribution (acompte = pas encore CA réparti)
-- Pour les `PARTIALLY_PAID` non clôturées : exclues des KPIs encaissés (cohérent avec "caisse close" comptable)
-
-**Résultat Rita en mai** : Pension 840 + Toilettage 100 = **940 MAD basculés intégralement en mai** (mois de la dernière encaisse). Avril = 0.
-
-**Avantages** :
-- Déterministe, indépendant de l'ordre de saisie
-- Comptablement défendable : on enregistre la vente quand elle est intégralement payée
-- 1 facture = 1 mois → simple à expliquer au comptable
-- Pas de migration DB requise
-
-**Inconvénients** :
-- Brutal pour les longs séjours qui se règlent à cheval sur 2 mois : tout bascule sur le mois du paiement final
-- Acompte de 900 MAD en avril ne génère AUCUN CA avril dans le détail par catégorie (mais reste visible dans "encaissé brut" via Payment direct)
-- `PARTIALLY_PAID` masquent le CA en cours (peuvent être réglées 3 mois plus tard, distort la saisonnalité observée)
-
-### Sémantique B — "Encaissé du mois = pro-rata par item du payment du mois"
-
-> "Chaque payment est ventilé prorata sur tous les items de la facture selon leur poids `item.total / invoice.amount`."
-
-**Règle de calcul** : c'est ce que fait déjà `monthly_revenue_mv` aujourd'hui.
-
-**Résultat Rita en mai** : Toilettage = 40 × 100/940 = **4.26 MAD**, Pension = 40 × 840/940 = **35.74 MAD**.
-
-**Avantages** :
-- Lisse les revenus dans le temps (chaque payment contribue à toutes les catégories)
-- Symétrique : si les items ont les mêmes poids, l'attribution est équitable
-- Implémentable en SQL pur (déjà dans la MV)
-
-**Inconvénients** :
-- Produit des **centimes fractionnaires** difficiles à expliquer ("Toilettage = 4.26 MAD ce mois ?")
-- N'a aucun sens métier réel : Mehdi ne pense pas "j'ai encaissé 4.26 de toilettage" — il pense "le toilettage est fait, payé, point"
-- Sensible aux arrondis (déjà tronqué à `numeric(14,2)` côté MV → drift Σ items ≠ Σ payments si beaucoup de ratios)
-
-### Sémantique C — "Encaissé du mois = allocation strictement modélisée"
-
-> "Une nouvelle table `PaymentAllocation { paymentId, lineItemId, amount }` capture l'attribution explicite faite par l'utilisateur ou par défaut FIFO, et tous les calculs lisent cette table."
-
-**Règle de calcul** :
-- Migration : créer `PaymentAllocation`, backfill avec FIFO sur 10 ans de données
-- À chaque nouveau payment : créer N rows d'allocation (UI ou défaut FIFO)
-- Tous les KPIs lisent les rows d'allocation, pas une formule à la volée
-
-**Résultat Rita en mai** : dépend de l'allocation effectuée à la saisie. Si Mehdi décide "le payment de mai paie Toilettage", c'est explicite et stocké → 100 MAD Toilettage en mai. S'il dit "ça paie le solde Pension", c'est 40 MAD Other en mai.
-
-**Avantages** :
-- Précis comptablement (exact à l'unité)
-- Auditable (qui a alloué quoi quand)
-- Permet des allocations métier complexes (avoirs, remises ciblées, splits manuels)
-
-**Inconvénients** :
-- Migration DB importante : nouvelle table + colonnes, backfill irréversible
-- Charge cognitive UI : Mehdi doit allouer chaque payment → friction sur le flow caisse
-- Complexité de tous les `PaymentModal` à augmenter (ou un défaut FIFO s'il skip → on retombe dans le problème actuel)
-- Refacto de toutes les routes payment + allocateBetweenItems + computeMonthlyRevenueByCategory + MV
-- Coût élevé (estimation 3-5 jours de dev + tests)
-
----
-
-## 4. Recommandation argumentée
-
-**👉 Sémantique A.**
-
-**Pourquoi A et pas B :**
-- B produit des centimes fractionnaires impossibles à défendre devant le comptable
-- B est le statu quo de la MV → Mehdi voit déjà des chiffres bizarres ("4.26 grooming" en silence)
-- B n'a aucune réalité métier : un toilettage est fait OU pas, payé OU pas
-
-**Pourquoi A et pas C :**
-- L'effort C ne se justifie pas à l'échelle 500 clients / 1 facture/jour
-- L'allocation explicite ajoute une étape UI à un flow déjà chargé pour Mehdi solo
-- Le gain de précision est inutile pour un usage interne (KPIs + déclaratif). Si jamais le fisc demande un contrôle, A produit une justification simple et défendable
-
-**Pourquoi A est défendable au comptable / fisc :**
-- Marocain : la TVA est calculée à l'encaissement (régime simplifié). Bascule complète au dernier payment = aligné avec le fait générateur fiscal
-- Une facture = un événement comptable atomique. Pas de fractionnement partiel
-- Si Mehdi est jamais audité, la phrase à dire est : "Le CA par catégorie correspond aux factures clôturées ce mois". Court, simple, testable.
-
----
-
-## 5. Plan de patch (si A validé)
-
-### Fichiers à modifier
-
-| Fichier | Changement |
-|---|---|
-| `src/lib/accounting.ts` | Réécrire `computeMonthlyRevenueByCategory` — pour chaque facture, si `lastPayment.date ∈ [monthStart, monthEnd]` → ajouter `item.total` par catégorie ; sinon 0 |
-| `src/lib/accounting.ts` | Réécrire `allocateBetweenItems` (drill-down Analytics) — même logique : item à 100% si la facture est clôturée ce mois |
-| `prisma/migrations/20260515_revenue_mv_rewrite/migration.sql` | Nouvelle migration : `DROP MATERIALIZED VIEW monthly_revenue_mv` + CREATE avec la nouvelle sémantique (joindre sur `MAX(p.paymentDate) PER invoice` puis filtrer par mois) |
-| `src/lib/metrics.ts` | Vérifier que `revenueByCategoryProrata` lit bien la nouvelle MV. Renommer en `revenueByCategoryClosed` pour éviter la confusion (l'ancien nom suggère "prorata") |
-| `src/lib/__tests__/billing.test.ts` | Adapter les tests existants à la nouvelle sémantique |
-| `src/lib/__tests__/billing.test.ts` | **AJOUTER un test régression Rita** : reproduire DU-2026-0030 et asserter que pour mai, `grooming = 100` (pas 40, pas 4.26). Asserter aussi que pour avril, `grooming = 0`. |
-| `src/app/[locale]/admin/dashboard/page.tsx` | Aucun changement : appelle `billedByCategory` qui re-route automatiquement |
-| `src/app/[locale]/admin/analytics/page.tsx` | Aucun changement structurel ; vérifier que le drill-down par item est cohérent avec la nouvelle MV |
-| `docs/SCHEMA.md` | Documenter la sémantique A en haut de la section "Comptabilité" |
-
-### Migration des données existantes
-
-**Aucune.** A ne change pas la structure DB. Les KPIs des mois passés vont **bouger** au prochain refresh de la MV — voir §6.
-
-### Tests
-
-- Test régression Rita (cas réel) — fige la sémantique
-- Tests existants `billing.test.ts` à adapter (les valeurs attendues changent)
-- Test "facture PARTIALLY_PAID exclue" — vérifie qu'une facture pas encore close ne pollue pas le KPI
-- Test "long séjour avril → mai, payé en juin" → tout en juin, 0 en avril/mai
-
-### CI
-
-`migration-rollback-check.yml` exigera un `down.sql` qui restaure l'ancienne MV. Marker `@rollback: not-applicable` si on accepte qu'un rollback ramène les anciens KPIs (cohérent avec le rollback de l'application).
-
----
-
-## 6. Impact sur les chiffres passés (CRITIQUE — à valider explicitement)
-
-**Si on bascule sur la sémantique A, les chiffres CA mensuels par catégorie des 10 dernières années VONT BOUGER au prochain refresh de la MV.**
-
-Exemples d'impact :
-- Une facture payée à cheval sur 2 mois bascule entièrement sur le 2ème mois → le 1er mois perd ce CA, le 2ème en gagne le total
-- Les `PARTIALLY_PAID` sortent des KPIs "encaissé" tant qu'elles ne sont pas closes → certains mois auront moins de CA visible
-- Le total annuel reste **identique** (le CA est juste re-réparti dans le temps)
-
-**Trois stratégies possibles** :
-
-**A1 — Acceptation pure** : on refresh, les chiffres bougent, on documente. Risque : Mehdi a peut-être déjà déclaré certains CA mensuels au comptable basés sur l'ancienne sémantique. Si oui, divergence cumulative défendable mais inconfortable.
-
-**A2 — Snapshot mensuel figé** : pour chaque mois clos (ex: mois M-2 et antérieurs), on snapshot la valeur actuelle dans une table `MonthlyRevenueArchive { year, month, category, total, frozenAt }`. Les KPIs lisent l'archive pour le passé, le calcul live pour le mois courant et M-1. Plus complexe mais préserve l'historique déclaré.
-
-**A3 — Migration progressive** : la nouvelle sémantique ne s'applique qu'aux factures créées à partir d'une date pivot (ex: 2026-06-01). Les factures antérieures gardent leur calcul actuel via un flag. Plus de complexité long terme mais zéro impact sur le passé.
-
-**👉 Recommandation : A1 si pas de déclaration faite, A2 sinon.**
-
-À toi de me dire :
-- Est-ce que tu as déjà transmis au comptable des CA mensuels par catégorie sur 2025/2026 ?
-- Si oui, sur quelle période ? On bascule sur A2 sur cette période.
-- Si non, on fait A1 et c'est plus simple.
-
----
-
-## 7. Endroits qui font le même type d'agrégation (cohérence)
-
-Pour assurer qu'**aucun** dashboard n'utilise une autre formule en parallèle :
-
-| Endroit | Source | Action |
+| # | Problème | Conséquence |
 |---|---|---|
-| `/admin/dashboard` "Détail par service" | `billedByCategory` → MV | ✓ basculé automatiquement |
-| `/admin/analytics` "Performance par activité" | `billedByCategory` → MV | ✓ basculé automatiquement |
-| `/admin/analytics` drill-down items | `allocateBetweenItems` (JS) | ⚠️ à réécrire pour cohérence avec A |
-| `/admin/billing` mois courant | `getMonthlyInvoicesWhere` (filtre, pas allocation) | ✓ pas de changement requis |
-| `/api/admin/invoices/export` CSV | `getMonthlyInvoicesWhere` (filtre) | ✓ pas de changement requis |
-| Cron `refresh-monthly-revenue` | `monthly_revenue_mv` | ✓ basculé automatiquement |
-| Tests `billing.test.ts` | `computeMonthlyRevenueByCategory` (JS) | ⚠️ à adapter |
+| A | Facture acompte avril 900 MAD + solde mai 40 MAD → 100% sur mai | Avril sous-déclaré, mai sur-déclaré |
+| B | Facture CANCELLED full-paid comptée comme PAID dans la MV | CA fantôme |
+| C | "Total Facturé" (page billing, accrual) ≠ "Total Encaissé" (dashboard, cash) | Mehdi devait expliquer 4 chiffres au comptable |
+| D | Extrait bancaire ≠ CA dashboard | Déclaration fiscale faite manuellement à partir des relevés |
+
+**Pourquoi A a été choisi initialement (historique 2026-05-15) :**
+simplicité algorithmique — une seule décision par invoice, pas de
+prorata, pas de split. Tradeoff acceptable au démarrage, insoutenable
+dès qu'un acompte traverse une frontière de mois.
 
 ---
 
-## 8. Ce que j'attends de toi
+## 2. Après — Sémantique B (cash basis pure)
 
-1. **Confirmes-tu la sémantique A ?** (ou demandes-tu B ou C avec une raison)
-2. **As-tu déjà transmis des CA mensuels par catégorie au comptable ?** (détermine A1 vs A2)
-3. **Y a-t-il un scénario métier qu'aucune des trois sémantiques ne couvre ?** (ex: avoir partiel, remise rétroactive)
-4. **OK pour figer la régression sur le cas Rita comme test canonique ?** (oui par défaut)
+```
+Pour chaque Payment p :
+  monthBucket(p) = mois Casa de p.paymentDate
 
-Une fois validé, je code en une PR atomique, format Constat | Cause | Patch | Risks | Verify, avec tests + migration + commentaires en haut de chaque endpoint touché.
+  Pour chaque category c apparaissant dans p.invoice.items :
+    revenue(monthBucket(p), c) +=
+      p.amount * (sum(items.allocatedAmount où category=c) / sum(items.allocatedAmount))
+
+Exclusion : Invoice CANCELLED AND paidAmount = 0  →  rien à compter.
+Inclusion : Invoice CANCELLED AND paidAmount > 0  →  revenu acquis
+  (refund éventuel = Payment négatif si remboursement physique).
+```
+
+**Avantages :**
+
+1. **Match comptable** : la déclaration fiscale est faite sur la base
+   d'encaissement. Sémantique B retourne directement le bon chiffre.
+2. **Match bancaire** : la somme des `Payment` d'un mois Casa doit
+   égaler les crédits du même mois sur l'extrait bancaire (modulo timing
+   chèques + virements pas encore crédités). Invariant horaire #11.
+3. **Découplage prix-facture / encaissement** : une remise post-facturation
+   ne décale plus le CA du mois ; elle affecte juste l'allocated du mois
+   du paiement résiduel.
+4. **Une seule formule, un seul caller** : helper TS canonique →
+   `getMonthlyRevenueByCategory(year, month)` ; PG function unique →
+   `compute_payment_by_category(year, month)`. ESLint rule #6 interdit
+   tout bypass.
+
+**Inconvénients (assumés) :**
+
+- **Comparaisons month-over-month plus volatiles** : un client qui
+  paie en retard de 2 mois fait gonfler le mois M+2. Acceptable car
+  c'est exactement ce qu'attend le comptable.
+- **Recalculs historiques sur ajustement** : si Mehdi annule un Payment
+  postérieur, le mois cible change. Compensé par l'invariant #12 qui
+  surface immédiatement le drift MV vs PG function.
+
+---
+
+## 3. Architecture
+
+```
+┌───────────────────────────────┐
+│  compute_payment_by_category  │  ← PG function (SQL pure)
+│  (year, month)                │     UNIQUE source de vérité
+└──────────┬──────────────┬─────┘
+           │              │
+           │              │
+    CREATE MV         live path
+    (cache)           (fallback)
+           │              │
+           ▼              ▼
+  ┌────────────────┐  ┌──────────────────────────────┐
+  │ monthly_       │  │ src/lib/billing/              │
+  │ revenue_mv     │  │ monthly-revenue.ts            │
+  └────────┬───────┘  │  getMonthlyRevenueByCategory  │
+           │          └──────────┬───────────────────┘
+           │                     │
+           │                     │  ESLint rule
+           │                     │  no-direct-revenue-
+           │                     │  computation
+           │                     │
+           ▼                     ▼
+  ┌─────────────────────────────────────────────┐
+  │ Consommateurs : dashboard / analytics /     │
+  │ billing / invariants horaires / CSV         │
+  └─────────────────────────────────────────────┘
+```
+
+**Fraîcheur MV** : cron `/api/cron/refresh-monthly-revenue` (horaire)
+fait `REFRESH CONCURRENTLY` puis stamp Redis `mv:last_refresh:monthly_revenue_mv`
+**uniquement en cas de succès**. Le helper TS lit ce stamp : si < 2h →
+fast path MV + drift check async via `waitUntil()` ; si > 2h ou absent →
+slow path live + alert sync sur drift.
+
+**Invariants horaires de garde** :
+- `#11 payment_attribution_drift` — `SUM(Payment current month) == SUM(MV current month)` (tolérance 0.01 MAD)
+- `#12 revenue_helper_vs_live` — `MV(year, month) == compute_payment_by_category(year, month)` par catégorie
+
+Tout drift critical → SMS SUPERADMIN (dedup 24h) + ActionLog
+`INVARIANT_VIOLATION_DETECTED`.
+
+---
+
+## 4. Procédure de déploiement (réalisée 2026-05-17)
+
+1. **Étape 0 (hors-tx, manuel)** :
+   ```sql
+   REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue_mv;
+   ```
+   Sert de point de comparaison frais pour l'archive.
+
+2. **Étape 1 (migration SQL)** :
+   ```bash
+   node scripts/db-migrate.mjs  # applique 20260517_revenue_mv_semantic_b
+   ```
+   Crée l'archive `monthly_revenue_mv_v1_archive_20260517` (RENAME), la
+   PG function, la nouvelle MV, les index, stamp `_app_migrations`.
+
+3. **Étape 2 (rapport d'impact)** :
+   ```bash
+   node scripts/semantic-b-impact-report.mjs
+   ```
+   Génère `docs/SEMANTIC_B_MIGRATION_IMPACT.md` avec le diff par mois.
+   À envoyer au comptable pour validation.
+
+4. **Étape 3 (vérification)** :
+   - Visiter `/admin/health` → invariants #11 #12 verts (count = 0)
+   - Visiter `/admin/guardian/invariants` → idem
+   - Vérifier 3 cas pivots prod (Anas, Benjamin, Rita) sur le dashboard
+
+5. **Étape 4 (cleanup, à J+30)** :
+   ```sql
+   DROP MATERIALIZED VIEW IF EXISTS monthly_revenue_mv_v1_archive_20260517;
+   ```
+
+---
+
+## 5. Rollback (30 s)
+
+Voir bloc commenté en bas de
+`prisma/migrations/20260517_revenue_mv_semantic_b/migration.sql`. Résumé :
+
+```sql
+BEGIN;
+DROP MATERIALIZED VIEW IF EXISTS monthly_revenue_mv;
+ALTER MATERIALIZED VIEW monthly_revenue_mv_v1_archive_20260517
+  RENAME TO monthly_revenue_mv;
+DROP FUNCTION IF EXISTS compute_payment_by_category(INT, INT);
+DELETE FROM "_app_migrations" WHERE name = '20260517_revenue_mv_semantic_b';
+COMMIT;
+```
+
+L'archive est conservée 30 jours pour permettre ce rollback. Aucun
+changement de schema applicatif (pas de colonne ajoutée à `Payment`
+ou `InvoiceItem`) → rollback purement structurel, jamais une perte de
+données.
+
+---
+
+## 6. Cas pivots prod (test régression hardcodé)
+
+Verrouillés dans `src/lib/__tests__/business-regression.test.ts §1`,
+bloquants en CI :
+
+| Facture | Sémantique A | Sémantique B |
+|---|---|---|
+| Anas Chekroun DU-2026-0023 (résa avril, payé mai) | 100% mai | **100% mai** ✓ |
+| Benjamin Boksenbaum DU-2026-0033 (résa avril, payé mai) | 100% mai | **100% mai** ✓ |
+| Imane Berrada DU-2026-0028 (résa+payée avril) | 100% avril | **100% avril** ✓ |
+| Rita Kabbaj DU-2026-0030 (900 avril + 40 mai) | 100% mai | **900 avril + 40 mai** ✓ |
+| Alexandra Bon DU-2026-0024 (1000 avril + 940 mai) | 100% mai | **1000 avril + 940 mai** ✓ |
+| Marie Lagarde DU-2026-0052 (CANCELLED, paid=0) | 0 CA | **0 CA** ✓ |
+
+Tout changement futur de la formule → ces tests cassent → la PR ne merge
+pas.
+
+---
+
+## 7. Liens
+
+- Migration : `prisma/migrations/20260517_revenue_mv_semantic_b/`
+- Helper canonique : `src/lib/billing/monthly-revenue.ts`
+- ESLint rule : `eslint-rules/rules/no-direct-revenue-computation.js`
+- Invariants : `src/lib/health-invariants.ts` (#11 #12)
+- Crons refresh : `src/app/api/cron/refresh-monthly-revenue/route.ts` + `refresh-revenue-mv/route.ts`
+- Script impact : `scripts/semantic-b-impact-report.mjs`
+- Doc règles métier : `docs/BUSINESS_RULES.md` §1

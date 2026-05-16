@@ -2,6 +2,7 @@ import { revalidateTag } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { log } from '@/lib/logger';
 import { defineCron } from '@/lib/cron-runner';
+import { markMVRefreshed } from '@/lib/billing/monthly-revenue';
 
 export const maxDuration = 60;
 
@@ -26,6 +27,8 @@ export const GET = defineCron({
       await prisma.$executeRawUnsafe(
         'REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue_mv',
       );
+      // Stamp Redis ONLY after a successful REFRESH (Sémantique B contract).
+      await markMVRefreshed();
       revalidateTag('admin-counts');
       await log('info', 'cron-refresh-revenue-mv', 'refreshed monthly_revenue_mv (daily)');
       return { mode: 'concurrent', refreshedAt: new Date().toISOString() };
@@ -34,6 +37,7 @@ export const GET = defineCron({
         await prisma.$executeRawUnsafe(
           'REFRESH MATERIALIZED VIEW monthly_revenue_mv',
         );
+        await markMVRefreshed();
         revalidateTag('admin-counts');
         await log('warn', 'cron-refresh-revenue-mv', 'fallback non-concurrent refresh', {
           error: err instanceof Error ? err.message : String(err),

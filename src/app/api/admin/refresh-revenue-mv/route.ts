@@ -3,6 +3,7 @@ import { revalidateTag } from 'next/cache';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { log, logger } from '@/lib/logger';
+import { markMVRefreshed } from '@/lib/billing/monthly-revenue';
 
 /**
  * POST /api/admin/refresh-revenue-mv
@@ -30,6 +31,8 @@ export async function POST() {
     await prisma.$executeRawUnsafe(
       'REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue_mv',
     );
+    // Stamp Redis ONLY after a successful REFRESH (Sémantique B contract).
+    await markMVRefreshed();
     revalidateTag('admin-counts');
     await log('info', 'admin-refresh-mv', 'manual refresh ok', {
       userId: session.user.id,
@@ -40,6 +43,7 @@ export async function POST() {
       await prisma.$executeRawUnsafe(
         'REFRESH MATERIALIZED VIEW monthly_revenue_mv',
       );
+      await markMVRefreshed();
       revalidateTag('admin-counts');
       await log('warn', 'admin-refresh-mv', 'fallback non-concurrent refresh', {
         userId: session.user.id,

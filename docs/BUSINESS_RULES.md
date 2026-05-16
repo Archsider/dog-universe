@@ -12,7 +12,7 @@
 
 ## Sommaire
 
-1. [Calcul du CA mensuel par catégorie (Sémantique A)](#1-calcul-du-ca-mensuel-par-catégorie-sémantique-a)
+1. [Calcul du CA mensuel par catégorie (Sémantique B)](#1-calcul-du-ca-mensuel-par-catégorie-sémantique-b)
 2. [Loyalty — grades fidélité](#2-loyalty--grades-fidélité)
 3. [Capacités de la pension](#3-capacités-de-la-pension)
 4. [Allocation des paiements aux items](#4-allocation-des-paiements-aux-items)
@@ -24,73 +24,76 @@
 
 ---
 
-## 1. Calcul du CA mensuel par catégorie (Sémantique A)
+## 1. Calcul du CA mensuel par catégorie (Sémantique B)
+
+> **Pivot 2026-05-17** : abandon de Sémantique A (paid-clôture, 2026-05-15 → 2026-05-17).
+> Décision détaillée : [`docs/REVENUE_ATTRIBUTION_DECISION.md`](./REVENUE_ATTRIBUTION_DECISION.md).
+> Impact comptable : [`docs/SEMANTIC_B_MIGRATION_IMPACT.md`](./SEMANTIC_B_MIGRATION_IMPACT.md) (généré par `scripts/semantic-b-impact-report.mjs`).
 
 ### Règle métier (français clair)
 
-Une facture compte dans le CA d'un mois **uniquement si** :
-- elle est **intégralement payée** (somme des paiements ≥ montant facture,
-  tolérance 1 centime pour les arrondis), ET
-- son **dernier paiement** est tombé dans ce mois.
+**Cash basis pure.** Chaque `Payment.amount` est attribué au mois Casa
+de sa `paymentDate` — peu importe la date de la facture, du séjour, ou
+de l'émission.
 
-Quand ces deux conditions sont réunies, **chaque ligne de la facture
-contribue à 100 % de son total** au bucket de sa catégorie (Pension /
-Toilettage / Pet Taxi / Croquettes / Autre). Sinon zéro contribution.
+Pour la catégorie : chaque paiement est **réparti au prorata** des
+`InvoiceItem.allocatedAmount` de la facture parente.
 
-**Une facture = un seul mois.** Jamais répartie sur deux mois. Si le
-client paie en deux fois sur deux mois différents, **tout bascule sur le
-mois du dernier paiement** (logique "caisse close").
+```
+revenue(month, category) +=
+  payment.amount * (sum(items.allocatedAmount où category=C) / sum(all items.allocatedAmount))
+```
+
+**Exclusion** : facture `CANCELLED` avec `paidAmount = 0` → ignorée
+totalement.
+**Inclusion** : facture `CANCELLED` avec `paidAmount > 0` → conservée
+(revenu acquis ; un éventuel remboursement physique est un `Payment`
+négatif séparé, pas un effacement rétroactif).
 
 ### Règle technique
 
-- Fonction pure : `src/lib/accounting.ts:189` `computeMonthlyRevenueByCategory(payments, items, monthStart, monthEnd)`
-- Gate : `src/lib/accounting.ts:174` `isInvoiceClosedInMonth(payments, items, monthStart, monthEnd)`
-- Tolérance arrondi : `src/lib/accounting.ts:53` `FULL_PAID_TOLERANCE = 0.01 MAD`
-- Materialized view miroir : `prisma/migrations/20260515_revenue_mv_semantic_a/migration.sql`
-- Lecture optimisée (MV first, JS fallback) : `src/lib/metrics.ts` `revenueByCategoryProrata`
-- Doc de décision détaillée : [`docs/REVENUE_ATTRIBUTION_DECISION.md`](./REVENUE_ATTRIBUTION_DECISION.md)
+- **PG function (source de vérité)** : `compute_payment_by_category(year, month)` — voir `prisma/migrations/20260517_revenue_mv_semantic_b/migration.sql`
+- **Materialized view (cache)** : `monthly_revenue_mv` (refresh horaire + daily)
+- **Helper TS canonique** : `src/lib/billing/monthly-revenue.ts` — `getMonthlyRevenueByCategory(year, month)`
+- **Pure TS twin (tests)** : `src/lib/billing/payment-attribution.ts` — `attributePaymentsToCategoryMonth(invoice)`
+- **Garde ESLint** : règle `dog-universe/no-direct-revenue-computation` interdit `prisma.payment.aggregate({_sum: amount, where: paymentDate})` hors du helper canonique
+- **Invariants horaires** : `#11 payment_attribution_drift` + `#12 revenue_helper_vs_live` (voir `src/lib/health-invariants.ts`)
+- **Cron refresh** : `/api/cron/refresh-monthly-revenue` (horaire) + `/api/cron/refresh-revenue-mv` (daily 02h UTC). Tous deux appellent `markMVRefreshed()` UNIQUEMENT après un REFRESH réussi (si throw → pas de stamp → staleness signal préservé)
 
-### Exemple prod — Rita (DU-2026-0030)
+### Architecture fast / slow path
 
-| Ligne | Catégorie | Montant |
-|---|---|---:|
-| Pension Mamy | (OTHER → BOARDING via description) | 840 MAD |
-| Toilettage Mamy | GROOMING | 100 MAD |
-| **Total facture** | | **940 MAD** |
+```
+fast path (MV fresh < 2h)  →  read MV     +  waitUntil(drift check async)
+slow path (MV stale > 2h)  →  computeLive +  sync drift alert (Sentry)
+```
 
-| Paiement | Date | Montant |
-|---|---|---:|
-| Acompte au dépôt | 29 avril 2026 | 900 MAD |
-| Solde au retrait | 6 mai 2026 | 40 MAD |
+Fraîcheur lue depuis Redis key `mv:last_refresh:monthly_revenue_mv` (TTL
+7j). En cas de Redis down → traité comme stale → fallback computeLive.
 
-**Verdict Sémantique A** :
-- Avril : 0 MAD partout. L'acompte ne bascule pas tant que la facture
-  n'est pas clôturée.
-- Mai : **840 MAD boarding + 100 MAD grooming**. Le dernier paiement
-  ferme la facture le 6 mai → tout bascule en mai.
+### Exemples prod (6 cas pivots verrouillés en CI)
 
-**Pas 40 MAD grooming en mai** (ancien comportement FIFO buggé,
-corrigé PR #87).
+| Facture | Paiements | Sémantique B |
+|---|---|---|
+| Anas Chekroun DU-0023 | 700 mai (résa avril) | 100% mai |
+| Benjamin Boksenbaum DU-0033 | 480 mai (résa avril) | 100% mai |
+| Imane Berrada DU-0028 | 950 avril | 100% avril |
+| Rita Kabbaj DU-0030 | 900 avril + 40 mai | Split prorata sur les 2 mois |
+| Alexandra Bon DU-0024 | 1000 avril + 940 mai | Split prorata sur les 2 mois |
+| Marie Lagarde DU-0052 | CANCELLED, 0 paid | Exclu — 0 CA |
 
 ### Pièges / "ne JAMAIS faire"
 
-- ❌ Ne JAMAIS attribuer un acompte au mois où il est tombé. Tant que
-  la facture n'est pas clôturée, **rien** n'est ventilé.
-- ❌ Ne JAMAIS faire de prorata par item (pondération `item.total /
-  invoice.amount`). Produit des centimes fractionnaires impossibles à
-  défendre au comptable.
-- ❌ Ne JAMAIS ajouter une logique alternative dans une nouvelle route :
-  passer toujours par `computeMonthlyRevenueByCategory` ou
-  `monthly_revenue_mv` (les deux doivent rester identiques).
-- ❌ Ne JAMAIS modifier `FULL_PAID_TOLERANCE` sans aligner aussi la MV
-  (constante `0.01` dans le SQL).
+- ❌ Ne JAMAIS faire un `prisma.payment.aggregate({_sum: {amount: true}, where: {paymentDate: ...}})` hors du helper canonique → la règle ESLint #6 bloque le merge
+- ❌ Ne JAMAIS coder un fallback "paid-clôture" pour rester "comme avant" : Sémantique B est la nouvelle source de vérité
+- ❌ Ne JAMAIS écrire dans la MV directement — passer par REFRESH (déclenché par cron ou bouton SUPERADMIN `/admin/refresh-revenue-mv`)
+- ❌ Ne JAMAIS modifier la formule en TS sans modifier la PG function en parallèle (les 7 tests régression hardcoded prod cassent immédiatement sinon)
+- ❌ Ne JAMAIS faire `markMVRefreshed()` AVANT le REFRESH — sinon une staleness fantôme est stampée alors que la MV n'est pas à jour
 
 ### Tests régression
 
-- `src/lib/__tests__/business-regression.test.ts` describe "REGRESSION
-  — Rita case (DU-2026-0030) sous Sémantique A"
-- `src/lib/__tests__/billing.test.ts` — suite complète Sémantique A
-- `src/lib/__tests__/accounting.test.ts` — gate `isInvoiceClosedInMonth`
+- `src/lib/__tests__/business-regression.test.ts` §1 — 8 it() canoniques Sémantique B (les 6 cas pivots prod + CANCELLED full-paid + sumAttributionsForMonth)
+- `src/lib/billing/__tests__/monthly-revenue.test.ts` — 11 tests helper TS (fast/slow path, Redis stamping, drift math)
+- `eslint-rules/__tests__/no-direct-revenue-computation.test.js` — 7 valid / 4 invalid cases pour la règle de garde
 
 ---
 
