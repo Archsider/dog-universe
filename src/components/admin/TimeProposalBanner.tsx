@@ -112,7 +112,7 @@ export function TimeProposalBanner({ bookingId, scope, current, confirmed, open,
                 : `Client proposed ${current.time} for ${scopeLabel}`}
             </p>
             {current.proposalNote && (
-              <p className="text-xs text-amber-700 italic mt-0.5">"{current.proposalNote}"</p>
+              <p className="text-xs text-amber-700 italic mt-0.5">&laquo;&nbsp;{current.proposalNote}&nbsp;&raquo;</p>
             )}
           </div>
         </div>
@@ -168,7 +168,7 @@ export function TimeProposalBanner({ bookingId, scope, current, confirmed, open,
                 : `Waiting for client — you proposed ${current.time} for ${scopeLabel}`}
             </p>
             {current.proposalNote && (
-              <p className="text-xs text-blue-700 italic mt-0.5">"{current.proposalNote}"</p>
+              <p className="text-xs text-blue-700 italic mt-0.5">&laquo;&nbsp;{current.proposalNote}&nbsp;&raquo;</p>
             )}
           </div>
         </div>

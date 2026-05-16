@@ -335,6 +335,65 @@ export async function createBookingTx(args: CreateBookingTxArgs) {
         });
       }
 
+      // Auto-create PENDING TimeProposal rows for each scope where the
+      // requester provided a time. The proposal is "from the client" so
+      // admin sees it on the booking detail and can either accept or
+      // counter-propose. Source : architecture 2026-05-17.
+      //
+      // When admin creates the booking directly (isAdmin), we still mark
+      // proposer as CLIENT with role 'CLIENT' for the booking's clientId
+      // — semantically "this is what was requested" ; admin then has the
+      // banner UI to confirm or change.
+      const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+      const proposalRows: Array<{
+        id: string;
+        bookingId: string;
+        scope: 'ARRIVAL' | 'TAXI_GO' | 'TAXI_RETURN';
+        time: string;
+        status: 'PENDING';
+        proposedBy: string;
+        proposedByRole: 'CLIENT';
+      }> = [];
+      function genId(prefix: string) {
+        return `tp_${prefix}_${booking.id.slice(0, 12)}_${Date.now().toString(36)}`;
+      }
+      if (args.arrivalTime && TIME_RE.test(args.arrivalTime)) {
+        proposalRows.push({
+          id: genId('arr'),
+          bookingId: booking.id,
+          scope: 'ARRIVAL',
+          time: args.arrivalTime,
+          status: 'PENDING',
+          proposedBy: args.clientId,
+          proposedByRole: 'CLIENT',
+        });
+      }
+      if (args.taxiGoEnabled && args.taxiGoTime && TIME_RE.test(args.taxiGoTime)) {
+        proposalRows.push({
+          id: genId('txgo'),
+          bookingId: booking.id,
+          scope: 'TAXI_GO',
+          time: args.taxiGoTime,
+          status: 'PENDING',
+          proposedBy: args.clientId,
+          proposedByRole: 'CLIENT',
+        });
+      }
+      if (args.taxiReturnEnabled && args.taxiReturnTime && TIME_RE.test(args.taxiReturnTime)) {
+        proposalRows.push({
+          id: genId('txret'),
+          bookingId: booking.id,
+          scope: 'TAXI_RETURN',
+          time: args.taxiReturnTime,
+          status: 'PENDING',
+          proposedBy: args.clientId,
+          proposedByRole: 'CLIENT',
+        });
+      }
+      if (proposalRows.length > 0) {
+        await tx.timeProposal.createMany({ data: proposalRows });
+      }
+
       return booking;
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 },
