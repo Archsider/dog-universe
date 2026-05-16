@@ -12,6 +12,7 @@ import { BookingError } from '../booking-errors';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { ServiceType } from './constants';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 type Booking = NonNullable<Awaited<ReturnType<typeof loadBooking>>>;
 
@@ -35,6 +36,20 @@ export interface EditDatesArgs {
 }
 
 export async function editDates(args: EditDatesArgs) {
+  return withSpan(
+    'booking.admin.editDates',
+    {
+      bookingId: args.booking.id,
+      serviceType: args.booking.serviceType,
+      newStartDate: args.newStartStr,
+      newEndDate: args.newEndStr,
+      forcePaidInvoice: args.forcePaidInvoice,
+    },
+    () => editDatesImpl(args),
+  );
+}
+
+async function editDatesImpl(args: EditDatesArgs) {
   const { booking, newStartStr, newEndStr, forcePaidInvoice, actorId } = args;
 
   if (!newStartStr || !newEndStr) {

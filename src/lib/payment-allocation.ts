@@ -40,6 +40,7 @@ import { cacheDel } from '@/lib/cache';
 import { toNumber } from '@/lib/decimal';
 import { casablancaYMD } from '@/lib/dates-casablanca';
 import { scheduleMVRefreshIfCurrentMonth } from '@/lib/billing/monthly-revenue';
+import { withSpan } from '@/lib/observability';
 
 type PrismaLike = typeof prisma | Prisma.TransactionClient;
 
@@ -106,6 +107,22 @@ export type RecordPaymentResult =
  * the caller's responsibility (see header for the rationale).
  */
 export async function recordPayment(
+  input: RecordPaymentInput,
+  options: RecordPaymentOptions = {},
+): Promise<RecordPaymentResult> {
+  return withSpan(
+    'billing.payment.record',
+    {
+      invoiceId: input.invoiceId,
+      amount: Number(input.amount),
+      paymentMethod: input.paymentMethod,
+      trustedAmount: options.trustedAmount === true,
+    },
+    () => recordPaymentImpl(input, options),
+  );
+}
+
+async function recordPaymentImpl(
   input: RecordPaymentInput,
   options: RecordPaymentOptions = {},
 ): Promise<RecordPaymentResult> {
