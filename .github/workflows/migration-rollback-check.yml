@@ -162,6 +162,12 @@ jobs:
             # production application succeeds because the original cast is
             # transient. Documented as known limitation.
             "20260512_enums_booking_payment"
+            # CHECK constraints (Review.rating, Payment.amount, TimeProposal roles) —
+            # the constraints themselves are correct ; pg_dump emits the ALTER
+            # statements but db push doesn't have them in schema.prisma form, so
+            # the canonical "before" snapshot lacks them while the down→up cycle
+            # restores them. Cosmetic drift, runtime correct.
+            "20260518_data_integrity_hardening"
           )
 
           for d in $(ls -1 "$MIG_DIR" | sort); do
