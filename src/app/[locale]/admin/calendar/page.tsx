@@ -30,6 +30,7 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
   lastDay.setHours(23, 59, 59, 999);
   // String format for taxi date comparisons (stored as "YYYY-MM-DD" strings)
   const firstDayStr = `${year}-${String(month).padStart(2, '0')}-01`;
+  // eslint-disable-next-line dog-universe/no-getmonth-on-date-casa -- OK: `new Date(year, month, 0)` is the JS idiom for "last day of month <year>-<month>" — the value comes from a Casa-anchored (year, month) tuple already extracted via casablancaYMD upstream, so the resulting .getDate() is the calendar day count, not a TZ projection.
   const lastDayStr = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
 
   const bookings = await prisma.booking.findMany({

@@ -3,6 +3,7 @@
     "next/core-web-vitals",
     "next/typescript"
   ],
+  "plugins": ["dog-universe"],
   "rules": {
     "@typescript-eslint/no-explicit-any": "error",
     "@typescript-eslint/consistent-type-assertions": ["warn", {
@@ -18,23 +19,46 @@
           "message": "Direct sendSMS/sendAdminSMS calls bypass the SmsLog dedup and cause duplicate messages to the client. Use `sendSmsNow` from '@/lib/notify-now' instead. See ADR-0007."
         }
       ]
-    }]
+    }],
+    "dog-universe/no-getmonth-on-date-casa": "error",
+    "dog-universe/no-money-tofixed": "error",
+    "dog-universe/no-direct-payment-create": "error",
+    "dog-universe/no-prisma-date-without-helper": "error"
   },
   "overrides": [
     {
-      "files": ["**/__tests__/**/*", "**/*.test.ts", "**/*.test.tsx", "e2e/**/*"],
+      "files": ["**/__tests__/**/*", "**/*.test.ts", "**/*.test.tsx", "**/*.test.js", "e2e/**/*"],
       "rules": {
         "@typescript-eslint/no-explicit-any": "off",
         "@typescript-eslint/no-non-null-assertion": "off",
         "@typescript-eslint/consistent-type-assertions": "off",
-        "no-restricted-imports": "off"
+        "no-restricted-imports": "off",
+        "dog-universe/no-getmonth-on-date-casa": "off",
+        "dog-universe/no-money-tofixed": "off",
+        "dog-universe/no-direct-payment-create": "off",
+        "dog-universe/no-prisma-date-without-helper": "off"
       }
     },
     {
-      "files": ["scripts/**/*"],
+      "files": ["scripts/**/*", "prisma/**/*"],
       "rules": {
         "@typescript-eslint/no-explicit-any": "off",
-        "no-restricted-imports": "off"
+        "no-restricted-imports": "off",
+        "dog-universe/no-getmonth-on-date-casa": "off",
+        "dog-universe/no-money-tofixed": "off",
+        "dog-universe/no-direct-payment-create": "off",
+        "dog-universe/no-prisma-date-without-helper": "off"
+      }
+    },
+    {
+      "files": ["eslint-rules/**/*"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "no-restricted-imports": "off",
+        "dog-universe/no-getmonth-on-date-casa": "off",
+        "dog-universe/no-money-tofixed": "off",
+        "dog-universe/no-direct-payment-create": "off",
+        "dog-universe/no-prisma-date-without-helper": "off"
       }
     },
     {

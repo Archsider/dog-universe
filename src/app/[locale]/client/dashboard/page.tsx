@@ -11,6 +11,7 @@ import { formatDateShort, formatMAD } from '@/lib/utils';
 import { RebookButton } from '@/components/client/RebookButton';
 import { waLink } from '@/lib/whatsapp';
 import { notDeleted } from '@/lib/prisma-soft';
+import { startOfTodayCasa } from '@/lib/dates-casablanca';
 
 type Params = { locale: string };
 
@@ -32,7 +33,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         clientId: session.user.id,
         deletedAt: null,
         status: { in: ['PENDING', 'CONFIRMED'] },
-        startDate: { gte: new Date() },
+        startDate: { gte: startOfTodayCasa() },
       },
       include: {
         bookingPets: { include: { pet: true } },

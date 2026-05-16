@@ -107,6 +107,7 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.5.15",
+    "eslint-plugin-dog-universe": "file:eslint-rules",
     "pg": "^8.13.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",

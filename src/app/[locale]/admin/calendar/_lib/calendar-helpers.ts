@@ -1,3 +1,9 @@
+/* eslint-disable dog-universe/no-getmonth-on-date-casa --
+ * OK: client-side UI / calendar grid helpers. These operate either on
+ * <input type="date"> values (already local-time) or on (year, month, day)
+ * primitives previously extracted via casablancaYMD upstream. The Vercel UTC
+ * runtime is not in scope here — the browser is.
+ */
 // Shared types + constants + pure helpers for the admin calendar grid.
 // Centralised so each section file imports the same shape.
 

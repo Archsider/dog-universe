@@ -275,8 +275,8 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
     // If capacity is tight, the admin sees a warning but the booking proceeds.
     let capacityWarning: string | null = null;
     if (isOpenEnded && serviceType === 'BOARDING') {
-      const windowEnd = new Date(startDate);
-      windowEnd.setDate(windowEnd.getDate() + WALKIN_DEFAULT_WINDOW_DAYS);
+      // Add fixed-day-as-ms to avoid Date.setDate() ±1h drift at Casa midnight.
+      const windowEnd = new Date(new Date(startDate).getTime() + WALKIN_DEFAULT_WINDOW_DAYS * 86_400_000);
       const { checkBoardingCapacity } = await import('@/lib/capacity');
       const cap = await checkBoardingCapacity({
         petIds: resolvedPetIds,
@@ -384,7 +384,8 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
         if (existingInvoice) {
           invoiceNumber = existingInvoice.invoiceNumber;
         } else {
-          const year = new Date().getFullYear();
+          const { casablancaYMD } = await import('@/lib/dates-casablanca');
+          const year = casablancaYMD().year;
           for (let attempt = 0; attempt < 5; attempt++) {
             const count = await prisma.invoice.count();
             const candidate = `DU-${year}-${String(count + 1 + attempt).padStart(4, '0')}`;

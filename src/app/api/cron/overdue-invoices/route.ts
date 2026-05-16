@@ -35,8 +35,10 @@ export const GET = defineCron({
     // matches what a Moroccan operator expects (an UTC-anchored midnight would
     // shift the overdue threshold by one hour).
     const startOfToday = getCasaStartOfDay(now);
-    const startOfTomorrow = new Date(startOfToday);
-    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+    // Tomorrow midnight Casa = startOfToday + 24h. setDate() on the Casa
+    // Date is safe in principle but adding a fixed-day-as-ms keeps us out
+    // of any browser/runtime Date arithmetic quirks.
+    const startOfTomorrow = new Date(startOfToday.getTime() + 86_400_000);
 
     let sent = 0;
     let skipped = 0;
@@ -44,10 +46,8 @@ export const GET = defineCron({
     const errors: string[] = [];
 
     for (const reminder of REMINDERS) {
-      const windowEnd = new Date(startOfTomorrow);
-      windowEnd.setDate(windowEnd.getDate() - reminder.minDays);
-      const windowStart = new Date(startOfTomorrow);
-      windowStart.setDate(windowStart.getDate() - reminder.maxDays);
+      const windowEnd = new Date(startOfTomorrow.getTime() - reminder.minDays * 86_400_000);
+      const windowStart = new Date(startOfTomorrow.getTime() - reminder.maxDays * 86_400_000);
 
       const invoices = await prisma.invoice.findMany({
         where: {
@@ -69,8 +69,7 @@ export const GET = defineCron({
       if (invoices.length === 0) continue;
 
       // Déduplication 24h via notifications INVOICE_OVERDUE existantes.
-      const last24h = new Date(now);
-      last24h.setHours(last24h.getHours() - 24);
+      const last24h = new Date(now.getTime() - 24 * 3600 * 1000);
       const existing = await prisma.notification.findMany({
         where: {
           userId: { in: invoices.map(i => i.client.id) },

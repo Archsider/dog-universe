@@ -176,7 +176,8 @@ export async function POST(request: Request) {
     // appels concurrents ne reçoivent le même seq (verrou de row PG).
     // Retry max 5× sur P2002 si jamais une facture legacy (hors séquence)
     // collisionne avec le seq calculé.
-    const year = resolvedIssuedAt ? resolvedIssuedAt.getFullYear() : new Date().getFullYear();
+    const { casablancaYMD } = await import('@/lib/dates-casablanca');
+    const year = resolvedIssuedAt ? casablancaYMD(resolvedIssuedAt).year : casablancaYMD().year;
     let invoiceNumber = '';
     for (let attempt = 0; attempt < 5; attempt++) {
       const seqRow = await prisma.$queryRaw<{ lastSeq: number }[]>`

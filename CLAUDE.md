@@ -600,6 +600,7 @@ Tests dans `src/lib/__tests__/pet-profile.test.ts`.
 - **Prisma** : toujours utiliser l'instance singleton de `src/lib/prisma.ts`
 - **Migrations** : si DB locale inaccessible, créer le SQL manuellement dans `prisma/migrations/YYYYMMDD_nom/migration.sql` et fournir le SQL à exécuter sur Supabase
 - **Zéro TypeScript errors** : toujours vérifier avec `npx tsc --noEmit` avant commit
+- **Zéro lint errors** : `npm run lint` doit passer (les 4 règles `dog-universe/*` sont `error`, bloquent CI — voir GARDE-FOUS ESLINT)
 - **Formatage monétaire** : toujours `formatMAD()` de `src/lib/utils`
 - **Dates** : `formatDate()` ou `formatDateShort()` de `src/lib/utils`
 
@@ -684,6 +685,52 @@ Zone 3 n'est rendue que si **au moins une carte a du contenu** (zero-state globa
 
 Discret en bas de page : "📊 Voir l'analyse financière complète →
 /admin/billing". Si Mehdi veut un chiffre absolu, c'est là.
+
+---
+
+## GARDE-FOUS ESLINT (depuis 2026-05-16, Module 4-B)
+
+Plugin local `eslint-plugin-dog-universe` (linké via `file:./eslint-rules`
+dans `package.json`) — **4 règles `error` qui bloquent la CI** pour
+empêcher la réintroduction silencieuse des 4 familles de bugs chassés
+ces dernières semaines.
+
+| Règle | Famille de bug |
+|---|---|
+| `no-getmonth-on-date-casa` | `.getMonth()` sur Vercel UTC retourne le mois précédent à minuit Casa |
+| `no-money-tofixed` | `.toFixed()` sur Decimal perd la précision (cas Rita 120,10 vs 120,105) |
+| `no-direct-payment-create` | `prisma.payment.create()` bypass de `recordPayment` (cache CA, cross-role, SMS OPS) |
+| `no-prisma-date-without-helper` | `new Date()` dans une query Prisma sur colonne date |
+
+### Pattern d'escape
+
+```ts
+// eslint-disable-next-line dog-universe/no-getmonth-on-date-casa -- OK: <reason>
+const m = d.getMonth();
+```
+
+La justification après `-- OK:` est **convention obligatoire** : un
+reviewer doit voir au premier coup d'œil pourquoi le site est safe.
+
+### Fichiers exempts (file-level overrides dans `.eslintrc.json`)
+
+- `**/__tests__/**`, `**/*.test.{ts,tsx,js}`, `e2e/**` — fixtures de RuleTester + tests métier qui doivent mentionner les patterns interdits
+- `scripts/**`, `prisma/**` — outillage hors runtime production
+- `eslint-rules/**` — le plugin lui-même (fixtures de tests)
+- `src/lib/dates-casablanca.ts` + `src/lib/__tests__/dates-casablanca.test.ts` — implémentation et tests des helpers Casa (auto-whitelisté par la règle, pas via override)
+- `src/lib/payment-allocation.ts` — implémentation canonique de `recordPayment` (auto-whitelisté par la règle)
+
+### Fichiers entièrement client-side exemptés par `/* eslint-disable dog-universe/no-getmonth-on-date-casa */` au top
+
+(Browser TZ = Casa pour Mehdi local — la règle ne s'applique pas à l'UI navigateur)
+
+- Tous les `'use client'` qui font du calendar grid / chart axis / date picker UI
+- Cf. liste complète dans `docs/ESLINT_RULES.md`
+
+### Ajouter une nouvelle règle
+
+Voir `docs/ESLINT_RULES.md` "Adding a new rule". Pattern : `RuleTester`
+de `eslint` + parser `@typescript-eslint/parser` + vitest auto-pick.
 
 ---
 
