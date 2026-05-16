@@ -200,7 +200,10 @@ export type EmailTemplateName =
   | 'weekly_pet_report'
   | 'invoice_overdue_30'
   | 'invoice_overdue_60'
-  | 'review_request';
+  | 'review_request'
+  | 'booking_time_proposed'
+  | 'booking_time_confirmed'
+  | 'booking_cancelled';
 
 export type EmailPet = { name?: string | null; species?: string | null; gender?: string | null };
 

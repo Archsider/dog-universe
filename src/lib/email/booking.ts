@@ -202,6 +202,68 @@ export const bookingTemplates: Record<string, EmailTemplateBuilder> = {
     };
   },
 
+  // ── Time confirmation lifecycle (TimeProposal entity, 2026-05-17) ─────────
+  booking_time_proposed: ({ d }) => ({
+    subjectFr: '⏰ Nouvelle heure proposée pour votre réservation — Dog Universe',
+    subjectEn: '⏰ New time proposed for your booking — Dog Universe',
+    bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Pour votre réservation <strong>${d.bookingRef}</strong>, nous vous proposons <strong>${d.time}</strong> pour <strong>${d.scopeLabel}</strong>.</p>
+        ${d.note ? `<p style="background: #FBF5E0; border-left: 3px solid #C4974A; padding: 10px; color: #6B7280; font-size: 14px;"><em>Note : ${d.note}</em></p>` : ''}
+        <p>Merci de cliquer sur le lien ci-dessous pour <strong>accepter</strong> cette heure ou nous indiquer un créneau qui vous convient mieux :</p>
+        <p style="text-align: center; margin: 25px 0;">
+          <a href="${d.acceptUrl}" style="background: #16a34a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;">Accepter ${d.time}</a>
+        </p>
+        <p style="color: #6B7280; font-size: 13px; text-align: center;">Ou répondez via WhatsApp si ce créneau ne vous convient pas.</p>
+        <p>À bientôt,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+    bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>For your booking <strong>${d.bookingRef}</strong>, we propose <strong>${d.time}</strong> for <strong>${d.scopeLabel}</strong>.</p>
+        ${d.note ? `<p style="background: #FBF5E0; border-left: 3px solid #C4974A; padding: 10px; color: #6B7280; font-size: 14px;"><em>Note: ${d.note}</em></p>` : ''}
+        <p>Please click the link below to <strong>accept</strong> this time or let us know if you prefer a different slot:</p>
+        <p style="text-align: center; margin: 25px 0;">
+          <a href="${d.acceptUrl}" style="background: #16a34a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;">Accept ${d.time}</a>
+        </p>
+        <p style="color: #6B7280; font-size: 13px; text-align: center;">Or reply via WhatsApp if this slot does not suit you.</p>
+        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
+      `,
+  }),
+
+  booking_time_confirmed: ({ d }) => ({
+    subjectFr: '✅ Heure confirmée — Dog Universe',
+    subjectEn: '✅ Time confirmed — Dog Universe',
+    bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Votre <strong>${d.scopeLabel}</strong> est désormais confirmée à <strong style="color: #16a34a;">${d.time}</strong> pour la réservation <strong>${d.bookingRef}</strong>.</p>
+        <p>À très bientôt,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+    bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Your <strong>${d.scopeLabel}</strong> is now confirmed at <strong style="color: #16a34a;">${d.time}</strong> for booking <strong>${d.bookingRef}</strong>.</p>
+        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
+      `,
+  }),
+
+  booking_cancelled: ({ d }) => ({
+    subjectFr: 'ℹ️ Votre réservation a été annulée — Dog Universe',
+    subjectEn: 'ℹ️ Your booking has been cancelled — Dog Universe',
+    bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Votre réservation <strong>${d.bookingRef}</strong> a été annulée par notre équipe.</p>
+        ${d.reason ? `<p style="background: #FEF2F2; border-left: 3px solid #DC2626; padding: 10px;"><strong>Motif :</strong> ${d.reason}</p>` : ''}
+        <p>Pour toute question ou pour proposer une nouvelle date, contactez-nous via WhatsApp.</p>
+        <p>Cordialement,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+    bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Your booking <strong>${d.bookingRef}</strong> has been cancelled by our team.</p>
+        ${d.reason ? `<p style="background: #FEF2F2; border-left: 3px solid #DC2626; padding: 10px;"><strong>Reason:</strong> ${d.reason}</p>` : ''}
+        <p>For any question or to propose a new date, contact us via WhatsApp.</p>
+        <p>Best regards,<br><strong>The Dog Universe Team</strong></p>
+      `,
+  }),
+
   admin_stay_reminder: ({ d }) => ({
     subjectFr: `📋 Rappel séjour demain — ${d.petName} (${d.clientName}) — Dog Universe`,
     subjectEn: `📋 Stay reminder tomorrow — ${d.petName} (${d.clientName}) — Dog Universe`,

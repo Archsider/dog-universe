@@ -42,9 +42,9 @@ vi.mock('@/lib/log', () => ({
   logAction: vi.fn(async () => undefined),
   LOG_ACTIONS: { BOOKING_CANCELLED: 'BOOKING_CANCELLED' },
 }));
-const notifMock = vi.fn(async () => undefined);
+const notifMock: any = vi.fn(async () => undefined);
 vi.mock('@/lib/notifications', () => ({
-  createBookingCancelledNotification: (...a: any[]) => notifMock(...a),
+  createBookingCancelledNotification: (...a: any[]) => (notifMock as any)(...a),
 }));
 
 beforeEach(() => {

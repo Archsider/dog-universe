@@ -877,6 +877,163 @@ physiquement dans le kennel).
 
 ---
 
+## CYCLE DE VIE RÉSERVATION — TIME PROPOSAL + CANCEL (depuis 2026-05-17)
+
+Système classe mondiale pour la négociation de l'heure (arrivée pension +
+addons taxi) entre admin et client, et la cancellation explicite avec
+cascade. Source : audit produit 2026-05-17 — confusion "j'ai confirmé
+la résa" vs "j'ai confirmé l'heure".
+
+### Entité `TimeProposal`
+
+```prisma
+enum TimeProposalScope  { ARRIVAL | TAXI_GO | TAXI_RETURN }
+enum TimeProposalStatus { PENDING | ACCEPTED | REJECTED | SUPERSEDED | CANCELLED }
+
+model TimeProposal {
+  id              String              @id @default(cuid())
+  bookingId       String
+  scope           TimeProposalScope
+  time            String              // "HH:MM" Casa
+  status          TimeProposalStatus  @default(PENDING)
+  proposedBy      String              // userId
+  proposedByRole  String              // 'CLIENT' | 'ADMIN' | 'SUPERADMIN'
+  proposalNote    String?
+  respondedBy/At/ByRole/Note (response trail)
+  publicToken / publicTokenExpiresAt  // HMAC pour acceptation client par email
+  booking         Booking             @relation(...)
+}
+```
+
+**Source de vérité** = dernière `TimeProposal ACCEPTED` par `(bookingId,
+scope)`. `Booking.arrivalTime` + `BoardingDetail.taxiGo/ReturnTime` gardent
+leur sémantique "originally requested" pour audit produit.
+
+### State machine
+
+```
+PENDING ──admin/client accept──>  ACCEPTED  (terminal-positive)
+   │
+   ├──admin/client reject──────>  REJECTED  (terminal-negative + reason)
+   │
+   ├──new proposal created─────>  SUPERSEDED (historique préservé)
+   │
+   └──cascade booking cancel──>   SUPERSEDED (cleanup auto)
+```
+
+Un seul PENDING vivant à la fois par `(bookingId, scope)`. Toute nouvelle
+proposition supersede la précédente atomiquement (updateMany).
+
+### Service layer (`src/lib/time-proposals.ts`)
+
+- `createProposal(input)` : crée + supersede PENDING précédente. HMAC
+  `publicToken` émis seulement si proposeur ADMIN/SUPERADMIN (le client
+  recevra le lien email). 14j TTL.
+- `acceptProposal` / `rejectProposal` : flip PENDING → terminal + clear
+  publicToken (email link returns 410 Gone après).
+- `supersedePendingForBooking(bookingId)` : cascade hook appelée par le
+  cancel flow.
+- `getConfirmedTime(bookingId, scope)` / `getCurrentProposal(...)` :
+  read helpers.
+- `verifyTimeProposalToken(token)` : HMAC SHA-256 + timingSafeEqual.
+- Secret : `TIME_PROPOSAL_TOKEN_SECRET` (fallback `NEXTAUTH_SECRET`).
+
+### API routes
+
+| Route | Auth | Body | Description |
+|---|---|---|---|
+| `POST /api/admin/bookings/[id]/time-proposals` | ADMIN+ | `{action: 'propose'\|'accept'\|'reject', ...}` | Discriminated body |
+| `POST /api/admin/bookings/[id]/cancel` | ADMIN+ | `{reason: ≥10 chars, silent?}` | Cancel + cascade |
+| `POST /api/time-proposals/[token]/accept` | publicToken | — | Client accepte via lien email |
+| `POST /api/time-proposals/[token]/reject` | publicToken | `{note: ≥10 chars}` | Client refuse via lien email |
+
+Toutes les routes : `withSpan` instrumented, ADMIN cross-role gate
+(ADMIN ne peut pas toucher SUPERADMIN-owned), version-lock 409 sur
+cancel, server errors surfaced dans le toast (debug future-proof).
+
+### Composants UI
+
+- `src/components/admin/TimeProposalBanner.tsx` (~280 LoC) : 5 états
+  visuels (no proposal / client PENDING / admin PENDING / ACCEPTED /
+  idle). Inline propose form avec timepicker + note. Un banner par
+  scope applicable (ARRIVAL toujours pour BOARDING ; TAXI_GO/RETURN
+  quand addon enabled).
+- `src/components/admin/CancelBookingModal.tsx` (~120 LoC) : AlertDialog
+  avec textarea reason ≥ 10 chars + checkbox silencieux + bandeau
+  cascade. Compteur en temps réel `{n}/10 caractères minimum`.
+- `src/app/[locale]/time-proposals/[token]/page.tsx` + `PublicProposalClient.tsx` :
+  page publique HMAC-protected (pas de login). UI accept/reject avec
+  motif. Graceful 410/expiré.
+
+### Intégration `ReservationActions.tsx`
+
+- Nouveau bouton "Annuler la réservation" rouge dédié (visible si
+  status ∈ {PENDING, CONFIRMED, IN_PROGRESS, WAITLIST, PENDING_EXTENSION})
+- `patchStatus` intercepte CANCELLED/REJECTED → ouvre le CancelBookingModal
+  au lieu d'échouer silencieusement sur l'API qui exige une raison
+- Toast d'erreur surface le code serveur (`CAPACITY_EXCEEDED`,
+  `VERSION_CONFLICT`, `CANCELLATION_REASON_REQUIRED`) au lieu d'un
+  générique "Update error" — debug future-proof
+
+### Auto-création initial proposal
+
+`src/lib/services/booking-client.service.ts` `createBookingTx` : si le
+demandeur fournit `arrivalTime` (ou `taxiGoTime`/`taxiReturnTime` avec
+addon enabled), une `TimeProposal PENDING` est créée auto **dans la
+même transaction Serializable** avec `proposedByRole='CLIENT'`. L'admin
+voit immédiatement sur la fiche "Le client a proposé HH:MM" et peut
+accepter ou contre-proposer.
+
+### Notifications + Email
+
+- 3 nouveaux types `Notification` : `BOOKING_TIME_PROPOSED`,
+  `BOOKING_TIME_CONFIRMED`, `BOOKING_CANCELLED`
+- 3 nouveaux templates email FR/EN : `booking_time_proposed` (avec
+  CTA "Accepter [time]" pointant vers `/time-proposals/[token]`),
+  `booking_time_confirmed`, `booking_cancelled`
+- Helpers `createTimeProposedNotification` / `createTimeConfirmedNotification` /
+  `createBookingCancelledNotification` dans `src/lib/notifications/booking.ts`
+- Helpers admin-side `notifyAdminsBookingTimeAccepted/Rejected` dans
+  `src/lib/notifications/booking-admin-notif.ts` (lazy-imported par
+  les routes publiques)
+
+### Migration data
+
+`prisma/migrations/20260517_time_proposals/migration.sql` :
+- Crée enums + table + 4 indexes + trigger updatedAt
+- **Backfill retroactif** : toutes les réservations existantes avec
+  `arrivalTime` non-null → `TimeProposal ACCEPTED` avec note "Retro-
+  migration: pre-2026-05-17 booking — time considered confirmed by
+  legacy convention". Idem pour les addon taxis avec `enabled=true`.
+  IDs déterministes (`tp_legacy_arr_<bookingId>`) → idempotent.
+- → **Aucun bandeau orange spam** sur les ~50 résas legacy en cours
+  après deploy.
+
+`down.sql` : DROP table + enums + DELETE _app_migrations row. Le re-up
+régénère la backfill depuis les colonnes source.
+
+### Tests (41 nouveaux, 1421 total)
+
+- `src/lib/__tests__/time-proposals.test.ts` (18) : service layer
+  (state machine + HMAC + role-aware emit + supersede cascade)
+- `src/app/api/admin/bookings/[id]/time-proposals/__tests__/route.test.ts` (9) :
+  propose/accept/reject + cross-role + supersede
+- `src/app/api/admin/bookings/[id]/cancel/__tests__/route.test.ts` (6) :
+  cancel + cascade count + silent mode + cross-role + terminal status
+- `src/app/api/time-proposals/[token]/__tests__/route.test.ts` (8) :
+  HMAC tamper rejection + expired + already-resolved 410
+
+### Garde-fous Module 4-B respectés
+
+- Pas de `prisma.payment.create` (paths money path canonique inchangés)
+- Pas de `prisma.invoice.update` direct sur money fields
+- Pas de `new Date()` dans Prisma where (toutes les dates passées
+  via params explicites)
+- Pas de `.getMonth()` Casa-derived
+- Pas de `.toFixed()` sur money
+
+---
+
 ## SIDEBAR ADMIN
 
 `src/components/layout/AdminSidebar.tsx` — props :
