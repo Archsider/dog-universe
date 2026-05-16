@@ -663,6 +663,19 @@ Zone 3 n'est rendue que si **au moins une carte a du contenu** (zero-state globa
 - **Longue durée** : `Booking{status='IN_PROGRESS', startDate < today-21j}` strict ; cap 5
 - **WhatsApp deep links** : `wa.me/<phone>?text=<encoded>`, fail-silent si phone manquant
 - **Casa partout** : `startOfTodayCasa()`, `casablancaYMD()` — interdit `.getMonth()` sur Date
+- **Pet Taxi today** : pivot sur `TaxiTrip` (pas `Booking.serviceType='PET_TAXI'`).
+  Filtre `TaxiTrip.date = casablancaYMD(today)` en string YYYY-MM-DD (le
+  champ est `String?` en DB) + `status NOT IN TAXI_TERMINAL_STATUSES` +
+  `booking.status IN ('CONFIRMED','IN_PROGRESS')` + `booking.deletedAt IS
+  NULL`. Capture **standalone + addon GO + addon RETURN** d'un coup. Sans
+  ce pivot la query rate tous les bookings BOARDING avec addon taxi (bug
+  livré PR #98, fix PR #101 — même cause racine que driver dashboard PR
+  #68). Badge UI : ALLER (vert) / RETOUR (bleu) / COURSE (violet).
+- **`TAXI_TERMINAL_STATUSES`** : `ARRIVED_AT_PENSION | ARRIVED_AT_CLIENT
+  | COMPLETED | CANCELLED | REJECTED | NO_SHOW`. Reste alignée avec
+  `HISTORY_TERMINAL_STATUSES` de `taxi-history.service.ts` (any new
+  terminal added there should also be added here ; the lists exist
+  separately to avoid an import cycle).
 
 ### Suppressions de cette refonte
 

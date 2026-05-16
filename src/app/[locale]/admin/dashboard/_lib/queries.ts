@@ -41,12 +41,21 @@ export interface TodayMovement {
 }
 
 export interface TodayTaxi {
+  /** Stable per-trip key — multiple trips can share a booking (OUTBOUND + RETURN). */
+  tripId: string;
   bookingId: string;
+  /** OUTBOUND = aller (pickup chez client → dépose à la pension). RETURN = retour
+   *  (pickup pension → dépose client). STANDALONE = course one-off (`Booking.serviceType=PET_TAXI`). */
+  tripType: 'OUTBOUND' | 'RETURN' | 'STANDALONE';
   clientName: string;
   petName: string;
+  /** From `TaxiTrip.address` first (source of truth per-trip) ; falls back to
+   *  TaxiDetail.pickupAddress for STANDALONE legacy rows that never got their
+   *  TaxiTrip.address backfilled. */
   pickupAddress: string | null;
   dropoffAddress: string | null;
-  arrivalTime: string | null;
+  /** Scheduled time in HH:MM — comes from TaxiTrip.time, not booking.arrivalTime. */
+  time: string | null;
 }
 
 export interface TodaySnapshot {
@@ -194,10 +203,30 @@ async function loadPending(): Promise<PendingSnapshot> {
   return { count };
 }
 
+// TaxiTrip statuses that mean "done for today" — excluded from the dashboard
+// widget. Anything else (PLANNED, EN_ROUTE_TO_CLIENT, ON_SITE_CLIENT,
+// ANIMAL_ON_BOARD, EN_ROUTE_TO_DESTINATION, …) is considered active.
+// Kept in sync with `HISTORY_TERMINAL_STATUSES` from
+// src/lib/services/taxi-history.service.ts — the same "is this trip done?"
+// definition is reused, so adding a new terminal there auto-flows here.
+const TAXI_TERMINAL_STATUSES = [
+  'ARRIVED_AT_PENSION',
+  'ARRIVED_AT_CLIENT',
+  'COMPLETED',
+  'CANCELLED',
+  'REJECTED',
+  'NO_SHOW',
+] as const;
+
 async function loadToday(): Promise<TodaySnapshot> {
   const todayStart = startOfTodayCasa();
   const todayEnd = endOfTodayCasa();
-  const [checkInsRaw, checkOutsRaw, taxiRaw] = await Promise.all([
+  // TaxiTrip.date is a `String?` stored as YYYY-MM-DD — compare as string,
+  // not as a Date object (no UTC vs Casa drift possible).
+  const { year, month, day } = casablancaYMD(todayStart);
+  const todayYmd = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+  const [checkInsRaw, checkOutsRaw, taxiTripsRaw] = await Promise.all([
     prisma.booking.findMany({
       where: {
         serviceType: 'BOARDING',
@@ -228,21 +257,40 @@ async function loadToday(): Promise<TodaySnapshot> {
       },
       take: 20,
     }),
-    prisma.booking.findMany({
+    // Pivot on TaxiTrip (NOT on Booking.serviceType='PET_TAXI'). Pre-PR #98
+    // the dashboard counted only standalone PET_TAXI bookings and missed
+    // every BOARDING-with-taxi-addon. Marie Lagarde (RETOUR) and the
+    // Kabli pets (ALLER) were addon trips on BOARDING bookings → the
+    // widget said "0 course" while Mehdi had 2 (then 3) scheduled.
+    // Same fix shape as PR #68 for the driver dashboard.
+    prisma.taxiTrip.findMany({
       where: {
-        serviceType: 'PET_TAXI',
-        status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
-        startDate: { gte: todayStart, lte: todayEnd },
-        deletedAt: null,
+        date: todayYmd,
+        status: { notIn: [...TAXI_TERMINAL_STATUSES] },
+        booking: {
+          status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+          deletedAt: null,
+        },
       },
       select: {
         id: true,
-        arrivalTime: true,
-        client: { select: { name: true } },
-        bookingPets: { select: { pet: { select: { name: true } } } },
-        taxiDetail: { select: { pickupAddress: true, dropoffAddress: true } },
+        tripType: true,
+        time: true,
+        address: true,
+        booking: {
+          select: {
+            id: true,
+            client: { select: { name: true } },
+            bookingPets: { select: { pet: { select: { name: true } } } },
+            // Fallback for STANDALONE legacy rows where TaxiTrip.address was
+            // never populated. Schema has TaxiDetail (1-to-1 with Booking
+            // when standalone) and BoardingDetail (1-to-1 when addon).
+            taxiDetail: { select: { pickupAddress: true, dropoffAddress: true } },
+            boardingDetail: { select: { taxiGoAddress: true, taxiReturnAddress: true } },
+          },
+        },
       },
-      orderBy: { arrivalTime: 'asc' },
+      orderBy: { time: 'asc' },
       take: 20,
     }),
   ]);
@@ -261,14 +309,39 @@ async function loadToday(): Promise<TodaySnapshot> {
     primaryPetSpecies: primarySpeciesOf(b.bookingPets),
     arrivalTime: null,
   }));
-  const taxiRuns: TodayTaxi[] = taxiRaw.map((b) => ({
-    bookingId: b.id,
-    clientName: b.client.name ?? '',
-    petName: b.bookingPets[0]?.pet?.name ?? '',
-    pickupAddress: b.taxiDetail?.pickupAddress ?? null,
-    dropoffAddress: b.taxiDetail?.dropoffAddress ?? null,
-    arrivalTime: b.arrivalTime,
-  }));
+  const taxiRuns: TodayTaxi[] = taxiTripsRaw.map((t) => {
+    const tt = t.tripType as 'OUTBOUND' | 'RETURN' | 'STANDALONE';
+    const b = t.booking;
+    // Address resolution depends on tripType :
+    //  - OUTBOUND : pickup = chez client, dropoff = pension
+    //  - RETURN   : pickup = pension, dropoff = chez client
+    //  - STANDALONE : pickup = source, dropoff = destination
+    // Source of truth : `TaxiTrip.address`. Fallback chains exist for
+    // pre-Wave-1 rows that may have an empty address on the trip itself.
+    let pickup: string | null = null;
+    let dropoff: string | null = null;
+    if (tt === 'STANDALONE') {
+      pickup = t.address ?? b.taxiDetail?.pickupAddress ?? null;
+      dropoff = b.taxiDetail?.dropoffAddress ?? null;
+    } else if (tt === 'OUTBOUND') {
+      pickup = t.address ?? b.boardingDetail?.taxiGoAddress ?? null;
+      dropoff = null; // = pension, implicit
+    } else {
+      // RETURN
+      pickup = null; // = pension, implicit
+      dropoff = t.address ?? b.boardingDetail?.taxiReturnAddress ?? null;
+    }
+    return {
+      tripId: t.id,
+      bookingId: b.id,
+      tripType: tt,
+      clientName: b.client.name ?? '',
+      petName: b.bookingPets[0]?.pet?.name ?? '',
+      pickupAddress: pickup,
+      dropoffAddress: dropoff,
+      time: t.time ?? null,
+    };
+  });
   return { checkIns, checkOuts, taxiRuns };
 }
 
