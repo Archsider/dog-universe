@@ -1,5 +1,9 @@
-'use client';
-
+// Server Component (was 'use client' but no interactivity — only static markup
+// with <a> tags + a static OpenStreetMap <img>). BookingTaxiSection.tsx (RSC)
+// imports this directly, so converting saves one client boundary cross there.
+// EditTaxiAddonSection is a Client Component that also imports this, but RSC
+// children rendered inside CC trees are still fine — Next.js handles the
+// boundary correctly.
 import { MapPin, Navigation, Search } from 'lucide-react';
 
 interface Props {

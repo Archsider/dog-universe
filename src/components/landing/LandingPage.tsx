@@ -1,5 +1,8 @@
-'use client';
-
+// Server Component (was 'use client' but no interactivity — only static markup +
+// next-intl translations + a single client child LanguageSwitcher). Converting
+// to RSC removes the entire LandingPage module from the client bundle on the
+// public landing route, which is the highest-leverage place to save bytes
+// (every anon visitor hits it).
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import Image from 'next/image';

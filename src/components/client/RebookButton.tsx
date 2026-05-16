@@ -1,5 +1,7 @@
-'use client';
-
+// Server Component (was 'use client' but no interactivity — just a Link + text).
+// Both call sites (client/dashboard/page.tsx and BookingRebookCard) are Server
+// Components, so rendering this server-side removes a client boundary cross
+// and ships zero JS for this button.
 import Link from 'next/link';
 import { formatMAD } from '@/lib/utils';
 import type { Decimal } from '@prisma/client/runtime/library';
