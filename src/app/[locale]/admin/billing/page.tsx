@@ -5,6 +5,7 @@ import { getMonthlyInvoicesWhere } from '@/lib/billing';
 import { safeClientWhere } from '@/lib/queries/safe-where';
 import { toNumber } from '@/lib/decimal';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModalLazy';
+import WalkinInvoiceModal from '@/components/admin/WalkinInvoiceModalLazy';
 import RecomputeAllocationsButton from '@/components/admin/RecomputeAllocationsButton';
 import { MonthNavigator, CsvDownloadButton } from './BillingClient';
 import { formatMonthLabel } from './format-month';
@@ -164,6 +165,7 @@ export default async function AdminBillingPage(props: PageProps) {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <RecomputeAllocationsButton locale={locale} />
+          <WalkinInvoiceModal locale={locale} />
           <CreateStandaloneInvoiceModal locale={locale} />
           <CsvDownloadButton href={csvHref} filename={csvFilename} locale={locale} />
         </div>

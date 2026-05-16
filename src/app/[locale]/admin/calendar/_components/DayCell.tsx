@@ -75,27 +75,41 @@ export function DayCell({
                 ? 'Arrival day'
                 : "Jour d'arrivée"
               : undefined;
+          // Walk-in fantôme bookings get their own purple chip — they
+          // represent a paid-on-the-spot transaction, not a stay. Marker
+          // overrides the STATUS_CHIP color so the operator distinguishes
+          // them at a glance from real boardings.
+          const isWalkInChip = b.isWalkIn === true || b.source === 'WALKIN';
+          const chipClass = isWalkInChip
+            ? 'bg-purple-100 text-purple-800 border-purple-200'
+            : (STATUS_CHIP[b.status] ?? 'bg-gray-100 text-gray-600 border-gray-200');
+          const walkInTitle = isWalkInChip
+            ? (isEn ? 'Walk-in invoice' : 'Facture walk-in')
+            : title;
           return (
             <div
               key={b.id}
               className={cn(
                 'text-[10px] leading-tight px-1.5 py-0.5 rounded border flex items-center gap-1 overflow-hidden',
-                STATUS_CHIP[b.status] ?? 'bg-gray-100 text-gray-600 border-gray-200',
-                isDeparture && 'border-dashed',
+                chipClass,
+                isDeparture && !isWalkInChip && 'border-dashed',
               )}
-              title={title}
+              title={walkInTitle}
             >
-              {isArrival && <span className="text-[9px] flex-shrink-0">→</span>}
-              {b.serviceType === 'PET_TAXI' ? (
+              {isArrival && !isWalkInChip && <span className="text-[9px] flex-shrink-0">→</span>}
+              {isWalkInChip ? (
+                <span className="text-[9px] flex-shrink-0" aria-hidden="true">🛒</span>
+              ) : b.serviceType === 'PET_TAXI' ? (
                 <Car className="h-2.5 w-2.5 flex-shrink-0" />
               ) : (
                 <PawPrint className="h-2.5 w-2.5 flex-shrink-0" />
               )}
               <span className="truncate font-medium">
-                {petName}
-                {extra}
+                {isWalkInChip
+                  ? (isEn ? 'Walk-in' : 'Walk-in')
+                  : `${petName}${extra}`}
               </span>
-              {isDeparture && (
+              {isDeparture && !isWalkInChip && (
                 <span className="ml-auto text-[9px] flex-shrink-0">↩</span>
               )}
             </div>

@@ -76,6 +76,8 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
     taxiReturnEnabled: b.boardingDetail?.taxiReturnEnabled ?? false,
     taxiReturnDate: b.boardingDetail?.taxiReturnDate ?? null,
     taxiReturnTime: b.boardingDetail?.taxiReturnTime ?? null,
+    isWalkIn: b.isWalkIn,
+    source: b.source,
   }));
 
   // Stats — "today's boarders" = IN_PROGRESS uniquement (animal physiquement
@@ -86,6 +88,10 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
   const todayBoardings = serialized.filter((b) => {
     if (b.serviceType !== 'BOARDING') return false;
     if (b.status !== 'IN_PROGRESS') return false;
+    // Walk-in fantôme bookings carry serviceType='BOARDING' for storage
+    // shape consistency but represent shop sales / quick services — they
+    // are never physically in the kennel.
+    if (b.isWalkIn) return false;
     const start = new Date(b.startDate);
     start.setHours(0, 0, 0, 0);
     return start <= today;

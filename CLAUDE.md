@@ -734,6 +734,135 @@ de `eslint` + parser `@typescript-eslint/parser` + vitest auto-pick.
 
 ---
 
+## WALK-IN UI — FACTURE PAID-ON-THE-SPOT (depuis 2026-05-16)
+
+Permet à Mehdi de saisir toutes ses factures walk-in (boutique +
+services courts non réservés) avec création atomique d'une **résa
+fantôme + facture + paiement** en une seule action. Cible : saisir
+les factures historiques notées papier pour avoir le vrai CA réel.
+
+### Endpoint
+
+`POST /api/admin/walkin-invoice` — ADMIN / SUPERADMIN. Header
+`Idempotency-Key` **obligatoire** (replays inside 24h renvoient
+l'invoice existante via `Booking.idempotencyKey = "walkin:<key>"`).
+
+**Body** :
+```ts
+{
+  clientId?: string | null,             // null = anonyme
+  clientName?: string | null,           // si anonyme, override clientDisplayName
+  paymentDate?: string,                 // ISO, défaut now()
+  paymentMethod: 'CASH' | 'CARD' | 'CHECK' | 'TRANSFER',
+  items: Array<{
+    category: 'BOARDING' | 'PET_TAXI' | 'GROOMING' | 'PRODUCT' | 'OTHER' | 'DISCOUNT',
+    description: string,                // ≤ 200 chars
+    quantity: number,                   // 1 ≤ q ≤ 9999
+    unitPrice: number,                  // DISCOUNT exige < 0, sinon ≥ 0
+  }>,                                   // 1 ≤ N ≤ 50
+  notes?: string | null,                // ≤ 2000 chars
+}
+```
+
+**Validation Zod** : refine cross-champ DISCOUNT ↔ unitPrice + total
+net > 0 + au moins 1 item non-DISCOUNT si DISCOUNT présent.
+
+**Flow atomique** (Prisma `$transaction`) :
+1. Resolve `clientId` → l'id fourni OU find-or-create lazy de l'user
+   générique `walkin-anonymous@dog-universe.local` (single row partagé)
+2. Allocate invoice number via `InvoiceSequence` (`INSERT ... ON
+   CONFLICT DO UPDATE RETURNING lastSeq`)
+3. Créer fantôme `Booking` : `status='COMPLETED'`, `serviceType='BOARDING'`
+   (cosmétique), `isWalkIn=true`, `source='WALKIN'`,
+   `startDate=endDate=paymentDate`, `idempotencyKey='walkin:<key>'`
+4. Créer `Invoice` : `bookingId`, `clientDisplayName` override si anonyme
+   + nom libre, `periodDate=paymentDate`, status PENDING
+5. `createMany` des `InvoiceItem`s avec mapping `category`
+6. Commit la transaction
+
+**Post-commit** (hors tx) :
+- `recordPayment({ trustedAmount: true })` — total correct par
+  construction, overpayment guard redondant. Helper Module 4-A reste
+  l'unique path d'insertion Payment (cf. règle ESLint
+  `no-direct-payment-create`).
+- `sendSmsNow({ to: 'ADMIN' })` — pattern Site B
+- `logAction(INVOICE_CREATED_WALKIN)` — audit trail
+- Cache `revenue:YYYY:MM` invalidé par `recordPayment` automatiquement
+
+### Idempotency
+
+Header obligatoire — pas de back-compat avec absence. Replay :
+`tryAcquireIdempotency` retourne `{ acquired: false }` → on lookup
+`Booking.idempotencyKey = 'walkin:<key>'` et on renvoie
+`{ replay: true, invoiceId, invoiceNumber }` sans rejouer la
+transaction. Si la première tentative a crashé mid-tx (acquired vrai
+mais aucun booking) → on laisse passer pour permettre re-création.
+
+### Frontend
+
+`src/components/admin/WalkinInvoiceModal.tsx` (~500L) — modal 3 étapes
+lazy-loadé sur `/admin/billing` à côté de "Créer une facture" :
+
+1. **Client** : switch existant (autocomplete via `ClientSearchSelect`)
+   / anonyme (nom libre optionnel)
+2. **Items** : multi-lignes (add/remove dynamique), catégorie +
+   description + qty + unitPrice par ligne, total live calculé. DISCOUNT
+   auto-normalise le signe du `unitPrice` (négatif). Validation client
+   bloque "Suivant" si invalide.
+3. **Paiement** : datepicker (default `todayCasaYmd()` via
+   `casablancaYMD(new Date())` — règle Module 4-B respectée), 4 boutons
+   radio méthodes, textarea notes optionnelles, total à encaisser en
+   bandeau vert.
+
+Submit → `POST /api/admin/walkin-invoice` avec `Idempotency-Key`
+généré côté client (`crypto.randomUUID()` strip dashes, fallback
+ts+random). Success → `setOpen(false)` + `router.refresh()` + event
+`'toast'` dispatched sur `window`.
+
+### Badge calendrier WALKIN
+
+`CalendarBooking` shape étendu avec `isWalkIn?: boolean` + `source?:
+string | null`. `DayCell.tsx` : chip violet `🛒 Walk-in` à la place
+du chip status standard quand `isWalkIn=true || source='WALKIN'`. Le
+`petsToday` count du header calendar **exclut les walk-ins** (pas
+physiquement dans le kennel).
+
+### Pas de migration DB requise
+
+- `Booking.source` est déjà `String?` → on écrit `'WALKIN'` directement
+- `Booking.isWalkIn` existe déjà (PR #75)
+- `Invoice.clientDisplayName/Phone/Email` existent déjà (override
+  pattern pour anonymes)
+- `walkin-anonymous@dog-universe.local` lazily créé au runtime via
+  find-or-create — pas de seed nécessaire
+
+### Tests
+
+`src/app/api/admin/walkin-invoice/__tests__/route.test.ts` — 11 tests :
+- 403 si non-admin
+- 400 si Idempotency-Key absent
+- 400 si body malformé (Zod)
+- 400 si total ≤ 0
+- Happy path single-item : crée Booking + Invoice + Item + Payment,
+  appelle recordPayment(trustedAmount=true), envoie SMS OPS,
+  logAction
+- Multi-items : sums correctly
+- DISCOUNT line : total net respecté
+- Rejet DISCOUNT-only (pas de positive item)
+- Anonyme : lazy-create walkin-generic user, réutilise sur 2ᵉ call
+- Idempotency replay : même key → même invoice sans re-créer
+- Payment failure : surface 500 + invoice id pour recovery manuelle
+
+### Garde-fous Module 4-B respectés
+
+- `casablancaYMD()` pour year/month/day partout (pas `.getMonth()`)
+- `formatMAD()` pour display (pas `.toFixed()`)
+- `recordPayment()` unique path Payment (pas
+  `prisma.payment.create()`)
+- Aucun `new Date()` dans une query Prisma (date params explicites)
+
+---
+
 ## SIDEBAR ADMIN
 
 `src/components/layout/AdminSidebar.tsx` — props :
