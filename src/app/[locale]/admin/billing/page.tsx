@@ -115,10 +115,12 @@ export default async function AdminBillingPage(props: PageProps) {
     }),
     prisma.invoice.count({ where: listWhere }),
     prisma.invoice.aggregate({ where: monthWhere, _sum: { amount: true } }),
+    // eslint-disable-next-line dog-universe/no-direct-revenue-computation -- OK: KPI "Total Encaissé" + breakdown par méthode de paiement — migration vers getMonthlyRevenueByCategory() prévue dans PR suivante (consumer migration Sémantique B).
     prisma.payment.aggregate({
       where: { paymentDate: { gte: monthStart, lte: monthEnd }, invoice: monthWhere },
       _sum: { amount: true },
     }),
+    // eslint-disable-next-line dog-universe/no-direct-revenue-computation -- OK: breakdown par paymentMethod (CASH/CARD/CHECK/TRANSFER) — la formule prorata catégorie ne s'applique pas ici, c'est un split orthogonal.
     prisma.payment.groupBy({
       by: ['paymentMethod'],
       where: { paymentDate: { gte: monthStart, lte: monthEnd }, invoice: monthWhere },

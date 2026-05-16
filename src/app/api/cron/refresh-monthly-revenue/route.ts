@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { log } from '@/lib/logger';
 import { defineCron } from '@/lib/cron-runner';
+import { markMVRefreshed } from '@/lib/billing/monthly-revenue';
 
 export const maxDuration = 60;
 
@@ -27,6 +28,10 @@ export const GET = defineCron({
       await prisma.$executeRawUnsafe(
         'REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue_mv',
       );
+      // Stamp Redis ONLY after a successful REFRESH. If the REFRESH throws,
+      // markMVRefreshed is skipped → staleness signal persists → readers
+      // fall back to live compute (Sémantique B fast/slow path contract).
+      await markMVRefreshed();
       await log('info', 'cron-refresh-mv', 'refreshed monthly_revenue_mv');
       return { refreshedAt: new Date().toISOString() };
     } catch (err) {
@@ -36,6 +41,7 @@ export const GET = defineCron({
         await prisma.$executeRawUnsafe(
           'REFRESH MATERIALIZED VIEW monthly_revenue_mv',
         );
+        await markMVRefreshed();
         await log('warn', 'cron-refresh-mv', 'fallback non-concurrent refresh', {
           error: err instanceof Error ? err.message : String(err),
         });

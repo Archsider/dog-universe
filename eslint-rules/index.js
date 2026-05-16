@@ -15,5 +15,6 @@ module.exports = {
     'no-direct-payment-create': require('./rules/no-direct-payment-create'),
     'no-prisma-date-without-helper': require('./rules/no-prisma-date-without-helper'),
     'no-direct-invoice-mutation': require('./rules/no-direct-invoice-mutation'),
+    'no-direct-revenue-computation': require('./rules/no-direct-revenue-computation'),
   },
 };

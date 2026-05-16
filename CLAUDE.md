@@ -1174,6 +1174,140 @@ l'UI → plus besoin de SQL manuel pour les futurs cas.
 
 ---
 
+## SÉMANTIQUE B — CASH BASIS PURE (depuis 2026-05-17)
+
+Pivot fondamental : abandon de Sémantique A (paid-clôture, vécue 2 jours en
+prod) pour Sémantique B (cash basis pure). Source : audit Mehdi 2026-05-17
+— Sémantique A ne matchait ni l'extrait bancaire, ni la déclaration
+fiscale comptable, ni le "Total Encaissé" déjà affiché sur `/admin/facturation`.
+
+### Règle métier
+
+**Chaque `Payment.amount` tombe dans le mois Casa de sa `paymentDate`**,
+peu importe la date de facture / séjour / émission. Catégorisation au
+prorata des `InvoiceItem.allocatedAmount` de la facture parente.
+
+```
+revenue(month, category) +=
+  payment.amount * (sum(items.allocatedAmount où category=C) / total allocated)
+```
+
+- **Exclu** : `Invoice CANCELLED + paidAmount = 0` (rien à compter)
+- **Conservé** : `Invoice CANCELLED + paidAmount > 0` (revenu acquis ;
+  refund éventuel = `Payment` négatif séparé)
+
+### Architecture (un seul caller, une seule formule)
+
+```
+compute_payment_by_category(year, month)    ← PG function, source unique
+                ↓
+       monthly_revenue_mv (cache)            ← REFRESH horaire + daily
+                ↓
+   getMonthlyRevenueByCategory(year, month)  ← helper TS canonique
+                ↓
+  Consommateurs : dashboard / analytics /
+  billing / invariants / exports CSV
+```
+
+### Fast / slow path
+
+`src/lib/billing/monthly-revenue.ts` — décide via Redis key
+`mv:last_refresh:monthly_revenue_mv` (TTL 7j, stampée par le cron
+**uniquement après REFRESH success**) :
+
+- **Fast** (MV fresh < 2h) : lit la MV + `waitUntil()` schedule drift
+  check async (compare MV vs computeLive en background). Drift > 0.01
+  MAD → Sentry warning + log.
+- **Slow** (MV stale > 2h OU Redis miss) : appelle `computeLive` (=
+  `prisma.$queryRaw` sur la PG function) + drift alert sync avant
+  return.
+
+Tolérance partout : **0.01 MAD** (1 centime).
+
+### Fichiers canoniques
+
+```
+prisma/migrations/20260517_revenue_mv_semantic_b/
+  migration.sql              — RENAME archive + CREATE function + MV + index
+  down.sql                   — rollback 30s
+
+src/lib/billing/
+  monthly-revenue.ts         — getMonthlyRevenueByCategory() + markMVRefreshed()
+  payment-attribution.ts     — pure TS twin (tests + cross-check potentiel)
+
+src/lib/health-invariants.ts
+  checkPaymentAttributionDrift   — #11 : Σ(Payment month) == Σ(MV month)
+  checkRevenueHelperVsLive       — #12 : MV == compute_payment_by_category (live)
+
+src/app/api/cron/
+  refresh-monthly-revenue/route.ts   — horaire, stamp Redis APRÈS success
+  refresh-revenue-mv/route.ts        — daily 02h UTC, idem
+
+src/app/api/admin/refresh-revenue-mv/route.ts  — manual SUPERADMIN trigger
+
+eslint-rules/rules/no-direct-revenue-computation.js  — règle #6 (error CI)
+
+scripts/semantic-b-impact-report.mjs  — diff Sémantique A vs B par mois,
+                                        écrit docs/SEMANTIC_B_MIGRATION_IMPACT.md
+```
+
+### Garde ESLint (règle #6 — bloque la CI)
+
+`dog-universe/no-direct-revenue-computation` interdit tout
+`prisma.payment.aggregate({ _sum: { amount: true }, where: { paymentDate: ... } })`
+hors du helper canonique. Whitelistés : `src/lib/billing/*`, `src/lib/payment-allocation.ts`,
+`src/lib/health-invariants.ts`.
+
+Escape hatch :
+```ts
+// eslint-disable-next-line dog-universe/no-direct-revenue-computation -- OK: <raison>
+```
+
+### Procédure de déploiement (réalisée 2026-05-17)
+
+```
+Étape 0 (manuel, hors-tx) :
+  REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue_mv;
+  → garantit un point de comparaison frais pour l'archive
+
+Étape 1 : node scripts/db-migrate.mjs
+  → applique 20260517_revenue_mv_semantic_b/migration.sql
+
+Étape 2 : node scripts/semantic-b-impact-report.mjs
+  → génère docs/SEMANTIC_B_MIGRATION_IMPACT.md (diff par mois)
+
+Étape 3 : vérification /admin/health
+  → invariants #11 + #12 verts (count = 0)
+
+Étape 4 : surveillance 72h → drop archive après 30j
+  DROP MATERIALIZED VIEW monthly_revenue_mv_v1_archive_20260517;
+```
+
+### Rollback (30 s)
+
+Voir bloc commenté en bas de `migration.sql`. RENAME archive →
+monthly_revenue_mv + DROP nouvelle MV + DROP function +
+DELETE _app_migrations. Aucune perte de données — pas de colonne
+applicative ajoutée.
+
+### Tests régression (43 it() bloquants en CI)
+
+- `src/lib/__tests__/business-regression.test.ts` §1 — 8 it() Sémantique B
+  (Anas, Benjamin, Imane, Rita, Alexandra, Marie + CANCELLED full-paid +
+  sumAttributionsForMonth)
+- `src/lib/billing/__tests__/monthly-revenue.test.ts` — 11 it() helper TS
+- `eslint-rules/__tests__/no-direct-revenue-computation.test.js` — 7 valid / 4 invalid
+
+### Pièges / "ne JAMAIS faire"
+
+- ❌ `prisma.payment.aggregate({_sum: amount, where: paymentDate})` hors helper → ESLint #6 bloque
+- ❌ Coder un fallback "paid-clôture" pour rester compatible Sémantique A
+- ❌ Modifier la formule TS sans modifier la PG function en parallèle (les 8 tests pivot prod cassent)
+- ❌ Stamper Redis AVANT le REFRESH (créerait un faux "fresh" sur une MV pas à jour)
+- ❌ Écrire dans la MV directement (toujours passer par REFRESH)
+
+---
+
 ## SIDEBAR ADMIN
 
 `src/components/layout/AdminSidebar.tsx` — props :

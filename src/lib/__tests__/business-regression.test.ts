@@ -28,60 +28,197 @@ import { computeMonthlyRevenueByCategory, allocateBetweenItems } from '@/lib/acc
 import { casablancaDateOnly } from '@/lib/dates-casablanca';
 import { calculateSuggestedGrade } from '@/lib/loyalty';
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
+import {
+  attributePaymentsToCategoryMonth,
+  sumAttributionsForMonth,
+  type AttributionInvoice,
+} from '@/lib/billing/payment-attribution';
 
 // =============================================================================
-// CASE 1 — Rita (DU-2026-0030)
+// CASE 1 — Sémantique B (cash basis pure) — 6 cas pivots prod
 // =============================================================================
-// Sémantique A (PR #87) : facture 940 MAD (Pension 840 OTHER + Toilettage
-// 100 GROOMING), 2 paiements (900 MAD le 29/04 + 40 MAD le 06/05). Le bug
-// d'origine : ancien algo FIFO attribuait 40 MAD à Toilettage en mai
-// (= reliquat du payment de mai après que celui d'avril ait consommé toute
-// la Pension + 60 MAD de Toilettage). Sémantique A corrige : facture
-// clôturée en mai → 100% des items basculent en mai (Toilettage = 100, pas
-// 40). Avril = 0 partout.
+// Pivot 2026-05-17 : abandon de Sémantique A (paid-clôture). Chaque
+// Payment.amount tombe dans le mois Casa de sa paymentDate, peu importe
+// la date de facture/séjour. La catégorie est attribuée au prorata des
+// InvoiceItem.allocatedAmount du parent Invoice.
 //
-// SI CE TEST CASSE : Sémantique A a régressé. Drill src/lib/accounting.ts.
-describe('REGRESSION — Rita case (DU-2026-0030) sous Sémantique A', () => {
-  const APRIL_START = new Date('2026-04-01T00:00:00Z');
-  const APRIL_END = new Date('2026-04-30T23:59:59.999Z');
-  const MAY_START = new Date('2026-05-01T00:00:00Z');
-  const MAY_END = new Date('2026-05-31T23:59:59.999Z');
-  const ritaPayments = [
-    { amount: 900, paymentDate: new Date('2026-04-29') },
-    { amount: 40, paymentDate: new Date('2026-05-06') },
-  ];
-  const ritaItems = [
-    // Pension Mamy — DB row a category='OTHER' mais la description contient
-    // "Pension" donc l'inférence catégorie (categoryKey) renvoie BOARDING.
-    { category: 'OTHER', total: 840, description: 'Pension Mamy (chien)' },
-    { category: 'GROOMING', total: 100, description: 'Toilettage Mamy (petit)' },
-  ];
+// Ces 6 cas sont des factures réelles de prod choisies pour couvrir tous
+// les angles : 100%-avril, 100%-mai, résa-avril-payée-mai, split entre
+// 2 mois, CANCELLED full-paid (refund acté), CANCELLED zéro paiement.
+//
+// SI L'UN DE CES TESTS CASSE : Sémantique B a régressé. Drill
+// src/lib/billing/payment-attribution.ts puis vérifier que le PG twin
+// `compute_payment_by_category` correspond.
+//
+// Source de vérité runtime : PG function dans
+// prisma/migrations/20260517_revenue_mv_semantic_b/migration.sql.
+// Ces tests valident le pure TS twin (payment-attribution.ts) qui DOIT
+// rester aligné avec elle.
+describe('REGRESSION — Sémantique B (cash basis pure) — cas pivots prod', () => {
 
-  it('Mai 2026 → Toilettage 100 MAD (PAS 40 — fix Rita), Pension 840', () => {
-    const may = computeMonthlyRevenueByCategory(ritaPayments, ritaItems, MAY_START, MAY_END);
-    expect(may.boarding).toBe(840);
-    expect(may.grooming).toBe(100);
-    expect(may.other).toBe(0);
+  // -----------------------------------------------------------------
+  // 1.1 — Anas Chekroun DU-2026-0023 : résa avril, payé 100% en mai
+  // -----------------------------------------------------------------
+  it('Anas DU-0023 : résa avril, payé mai → 100% en mai', () => {
+    const inv: AttributionInvoice = {
+      status: 'PAID',
+      paidAmount: 700,
+      items: [{ category: 'BOARDING', allocatedAmount: 700 }],
+      payments: [{ amount: 700, paymentDate: new Date('2026-05-02T11:00:00Z') }],
+    };
+    const buckets = attributePaymentsToCategoryMonth(inv);
+    expect(buckets['2026-05']).toEqual({ boarding: 700 });
+    expect(buckets['2026-04']).toBeUndefined();
   });
 
-  it('Avril 2026 → 0 partout (acompte ne bascule plus rien en avril)', () => {
-    const april = computeMonthlyRevenueByCategory(
-      ritaPayments,
-      ritaItems,
-      APRIL_START,
-      APRIL_END,
-    );
-    expect(april.boarding).toBe(0);
-    expect(april.grooming).toBe(0);
+  // -----------------------------------------------------------------
+  // 1.2 — Benjamin Boksenbaum DU-2026-0033 : résa avril, payé 100% mai
+  // -----------------------------------------------------------------
+  it('Benjamin DU-0033 : résa avril, payé mai → 100% en mai', () => {
+    const inv: AttributionInvoice = {
+      status: 'PAID',
+      paidAmount: 480,
+      items: [{ category: 'BOARDING', allocatedAmount: 480 }],
+      payments: [{ amount: 480, paymentDate: new Date('2026-05-04T10:00:00Z') }],
+    };
+    const buckets = attributePaymentsToCategoryMonth(inv);
+    expect(buckets['2026-05']).toEqual({ boarding: 480 });
+    expect(buckets['2026-04']).toBeUndefined();
   });
 
-  it('Conservation : Σ(avril, mai) = invoice.amount = 940 MAD', () => {
-    const a = computeMonthlyRevenueByCategory(ritaPayments, ritaItems, APRIL_START, APRIL_END);
-    const m = computeMonthlyRevenueByCategory(ritaPayments, ritaItems, MAY_START, MAY_END);
+  // -----------------------------------------------------------------
+  // 1.3 — Imane Berrada DU-2026-0028 : résa+payée 100% en avril
+  // -----------------------------------------------------------------
+  it('Imane DU-0028 : résa avril, payé avril → 100% en avril', () => {
+    const inv: AttributionInvoice = {
+      status: 'PAID',
+      paidAmount: 950,
+      items: [
+        { category: 'BOARDING', allocatedAmount: 850 },
+        { category: 'PET_TAXI', allocatedAmount: 100 },
+      ],
+      payments: [{ amount: 950, paymentDate: new Date('2026-04-18T09:00:00Z') }],
+    };
+    const buckets = attributePaymentsToCategoryMonth(inv);
+    expect(buckets['2026-04']).toEqual({ boarding: 850, pet_taxi: 100 });
+    expect(buckets['2026-05']).toBeUndefined();
+  });
+
+  // -----------------------------------------------------------------
+  // 1.4 — Rita Kabbaj DU-2026-0030 : split 900 avril + 40 mai (PIVOT)
+  // -----------------------------------------------------------------
+  // Sémantique A : 100% mai (clôture mai). Sémantique B : split réel.
+  it('Rita DU-0030 : 900 avril + 40 mai → split CASH-correct entre les 2 mois', () => {
+    const inv: AttributionInvoice = {
+      status: 'PAID',
+      paidAmount: 940,
+      items: [
+        { category: 'BOARDING', allocatedAmount: 840 },
+        { category: 'GROOMING', allocatedAmount: 100 },
+      ],
+      payments: [
+        { amount: 900, paymentDate: new Date('2026-04-29T15:00:00Z') },
+        { amount: 40, paymentDate: new Date('2026-05-06T11:00:00Z') },
+      ],
+    };
+    const buckets = attributePaymentsToCategoryMonth(inv);
+    // Prorata sur 900 : 900 * (840/940) = 804.26 boarding, 900 * (100/940) = 95.74 grooming
+    expect(buckets['2026-04'].boarding).toBeCloseTo(804.26, 2);
+    expect(buckets['2026-04'].grooming).toBeCloseTo(95.74, 2);
+    // Prorata sur 40 : 40 * (840/940) = 35.74 boarding, 40 * (100/940) = 4.26 grooming
+    expect(buckets['2026-05'].boarding).toBeCloseTo(35.74, 2);
+    expect(buckets['2026-05'].grooming).toBeCloseTo(4.26, 2);
+    // Conservation : Σ = 940 MAD (modulo 0.01 d'arrondi)
     const total =
-      (a.boarding + a.taxi + a.grooming + a.croquettes + a.other) +
-      (m.boarding + m.taxi + m.grooming + m.croquettes + m.other);
-    expect(total).toBe(940);
+      buckets['2026-04'].boarding + buckets['2026-04'].grooming +
+      buckets['2026-05'].boarding + buckets['2026-05'].grooming;
+    expect(total).toBeCloseTo(940, 1);
+  });
+
+  // -----------------------------------------------------------------
+  // 1.5 — Alexandra Bon DU-2026-0024 : split 1000 avril + 940 mai
+  // -----------------------------------------------------------------
+  it('Alexandra DU-0024 : 1000 avril + 940 mai → split CASH par mois Casa', () => {
+    const inv: AttributionInvoice = {
+      status: 'PAID',
+      paidAmount: 1940,
+      items: [{ category: 'BOARDING', allocatedAmount: 1940 }],
+      payments: [
+        { amount: 1000, paymentDate: new Date('2026-04-22T14:00:00Z') },
+        { amount: 940, paymentDate: new Date('2026-05-09T10:00:00Z') },
+      ],
+    };
+    const buckets = attributePaymentsToCategoryMonth(inv);
+    expect(buckets['2026-04']).toEqual({ boarding: 1000 });
+    expect(buckets['2026-05']).toEqual({ boarding: 940 });
+  });
+
+  // -----------------------------------------------------------------
+  // 1.6 — Marie Lagarde DU-2026-0052 : CANCELLED + paidAmount=0 → 0 CA
+  // -----------------------------------------------------------------
+  it('Marie DU-0052 : CANCELLED avec paidAmount=0 → exclu (0 CA)', () => {
+    const inv: AttributionInvoice = {
+      status: 'CANCELLED',
+      paidAmount: 0,
+      items: [{ category: 'PRODUCT', allocatedAmount: 0 }],
+      payments: [],
+    };
+    const buckets = attributePaymentsToCategoryMonth(inv);
+    expect(Object.keys(buckets)).toHaveLength(0);
+  });
+
+  // -----------------------------------------------------------------
+  // 1.7 — CANCELLED avec paidAmount > 0 → CONSERVÉ (revenu acquis)
+  // -----------------------------------------------------------------
+  // Décision (a) Mehdi : un refund éventuel est un Payment négatif
+  // séparé, pas un effacement rétroactif du revenu.
+  it('CANCELLED full-paid → kept (revenu acquis, refund = Payment négatif)', () => {
+    const inv: AttributionInvoice = {
+      status: 'CANCELLED',
+      paidAmount: 500,
+      items: [{ category: 'BOARDING', allocatedAmount: 500 }],
+      payments: [{ amount: 500, paymentDate: new Date('2026-05-10T10:00:00Z') }],
+    };
+    const buckets = attributePaymentsToCategoryMonth(inv);
+    expect(buckets['2026-05']).toEqual({ boarding: 500 });
+  });
+
+  // -----------------------------------------------------------------
+  // 1.8 — Agrégation multi-factures sur 1 mois (sumAttributionsForMonth)
+  // -----------------------------------------------------------------
+  it('sumAttributionsForMonth : agrège correctement plusieurs factures', () => {
+    const invs: AttributionInvoice[] = [
+      // Anas mai
+      {
+        status: 'PAID',
+        paidAmount: 700,
+        items: [{ category: 'BOARDING', allocatedAmount: 700 }],
+        payments: [{ amount: 700, paymentDate: new Date('2026-05-02T11:00:00Z') }],
+      },
+      // Benjamin mai
+      {
+        status: 'PAID',
+        paidAmount: 480,
+        items: [{ category: 'BOARDING', allocatedAmount: 480 }],
+        payments: [{ amount: 480, paymentDate: new Date('2026-05-04T10:00:00Z') }],
+      },
+      // Rita mai (40 MAD résiduel)
+      {
+        status: 'PAID',
+        paidAmount: 940,
+        items: [
+          { category: 'BOARDING', allocatedAmount: 840 },
+          { category: 'GROOMING', allocatedAmount: 100 },
+        ],
+        payments: [
+          { amount: 900, paymentDate: new Date('2026-04-29T15:00:00Z') },
+          { amount: 40, paymentDate: new Date('2026-05-06T11:00:00Z') },
+        ],
+      },
+    ];
+    const may = sumAttributionsForMonth(invs, '2026-05');
+    expect(may.boarding).toBeCloseTo(700 + 480 + 35.74, 2);
+    expect(may.grooming).toBeCloseTo(4.26, 2);
   });
 });
 

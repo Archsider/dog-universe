@@ -27,6 +27,7 @@ export { categoryKey };
 // Base = Payment.amount. Use for cash KPIs and cash-over-time charts only.
 
 export async function totalCashCollected(start: Date, end: Date): Promise<number> {
+  // eslint-disable-next-line dog-universe/no-direct-revenue-computation -- OK: legacy Sémantique A KPI ; migration vers getMonthlyRevenueByCategory().totalAllCategories prévue dans PR suivante (consumer migration).
   const result = await prisma.payment.aggregate({
     where: {
       paymentDate: { gte: start, lte: end },
