@@ -24,19 +24,12 @@ export { inferItemCategory } from '@/lib/category';
 export { categoryKey };
 
 // ── Cash family ───────────────────────────────────────────────────────────────
-// Base = Payment.amount. Use for cash KPIs and cash-over-time charts only.
-
-export async function totalCashCollected(start: Date, end: Date): Promise<number> {
-  // eslint-disable-next-line dog-universe/no-direct-revenue-computation -- OK: legacy Sémantique A KPI ; migration vers getMonthlyRevenueByCategory().totalAllCategories prévue dans PR suivante (consumer migration).
-  const result = await prisma.payment.aggregate({
-    where: {
-      paymentDate: { gte: start, lte: end },
-      invoice: { status: { in: ['PAID', 'PARTIALLY_PAID'] } },
-    },
-    _sum: { amount: true },
-  });
-  return toNumber(result._sum.amount);
-}
+// Base = Payment.amount. Sémantique B canonical path for cash totals is
+// `getMonthlyRevenueByCategory(year, month).totalAllCategories` from
+// `@/lib/billing/monthly-revenue`. The standalone `totalCashCollected`
+// helper was retired 2026-05-17 (PR consumer-migration Sémantique B) —
+// callers now read the canonical helper directly so the dashboard, the
+// MV, and the comptable's bank statement always speak the same number.
 
 export type MonthlyEntry = {
   month: number; // 0–11
@@ -57,8 +50,9 @@ export type MonthlyEntry = {
 //   - 1 facture = 1 mois, indépendant de l'ordre des items
 //
 // `MonthlyEntry.total` reste la SOMME des buckets ventilés — pour le brut
-// encaissé (somme Payment.amount sans filtre invoice-close) voir
-// `totalCashCollected()` dans le même fichier.
+// encaissé d'un mois unique passer par
+// `getMonthlyRevenueByCategory(year, month).totalAllCategories` de
+// `@/lib/billing/monthly-revenue` (Sémantique B canonical helper).
 export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
   const yearStart = new Date(year, 0, 1);
   const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
@@ -179,7 +173,7 @@ export type CategoryBreakdown = {
 // Une facture contribue UNIQUEMENT si elle est intégralement payée (somme
 // payments ≥ amount, tolérance 1 centime) ET que son dernier payment tombe
 // dans [start, end]. Sinon elle contribue 0 à la ventilation (les KPIs
-// "brut encaissé" la voient toujours, via totalCashCollected).
+// "brut encaissé" la voient toujours, via `getMonthlyRevenueByCategory`).
 //
 // La fenêtre de requête englobe les 3 cas comptables (caisse, sans-payment,
 // manuel) via `getMonthlyInvoicesWhere`. La cap take=2000 protège du DoS /
