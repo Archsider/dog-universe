@@ -1,7 +1,7 @@
 // GET /api/admin/bookings/[id]/detail — admin only.
 // Returns BookingDetail shape for the side panel (client-side navigation between bookings).
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
 import { getPricingSettings } from '@/lib/pricing';
@@ -17,13 +17,8 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  if (
-    !session?.user ||
-    (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')
-  ) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const { id } = await params;
 

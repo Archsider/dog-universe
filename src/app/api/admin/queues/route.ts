@@ -1,7 +1,7 @@
 // Queue stats API — SUPERADMIN only.
 // Returns job counts + recent failed jobs for each managed queue.
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { isBullMQConfigured, getBullMQConnection } from '@/lib/redis-bullmq';
 import { getEmailQueue, getSmsQueue, getDlqQueue, QUEUE_EMAIL, QUEUE_SMS, QUEUE_DLQ } from '@/lib/queues/index';
 import type { Queue } from 'bullmq';
@@ -31,10 +31,8 @@ async function getQueueStats(queue: Queue, name: string) {
 }
 
 export async function GET() {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   if (!isBullMQConfigured()) {
     return NextResponse.json({ configured: false, queues: [] });
@@ -55,10 +53,8 @@ export async function GET() {
 
 // Allow SUPERADMIN to retry a specific failed job
 export async function POST(request: Request) {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   if (!isBullMQConfigured()) {
     return NextResponse.json({ error: 'Redis not configured' }, { status: 503 });
