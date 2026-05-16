@@ -7,6 +7,61 @@
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### 2026-05-16 — Session "Cockpit & garde-fous" (PRs #98 → #101, 4 mergées)
+
+Session focalisée produit : refonte complète du dashboard admin en cockpit zéro-finance + outillage anti-régression machine-enforced + livraison de la WALKIN UI complète + fix d'un bug pet taxi né de la refonte. 4 PRs mergées, 0 ouverte au bouclage.
+
+**PRs livrées :**
+
+1. **#98 `feat(dashboard)` — Refonte `/admin` en cockpit "Commandant" (zéro chiffre financier)**
+   - Décision produit Mehdi : le dashboard `/admin` n'affiche plus **aucun KPI argent**. C'est un cockpit opérationnel pour l'action immédiate. Les KPIs financiers restent sur `/admin/billing` et `/admin/analytics` (séparation des modes mentaux).
+   - **3 zones structurelles** : (1) *Maintenant* — Pension actuelle IN_PROGRESS strict + À valider + Aujourd'hui 3-cols ; (2) *Cette semaine* — Capacité 7j 2 mini-graphs SVG chiens/chats + Arrivées/Départs J→J+7 + Anniversaires (sans âge — décision UX neutre pour les vieux animaux) ; (3) *Alertes & rappels* — Invariants critiques + Vaccins 30j + Longue durée > 21j + Inactifs 6+ mois.
+   - **CTA WhatsApp** sur les cartes "Longue durée" et "Clients inactifs" → `wa.me/<phone>?text=<encoded>` avec message pré-rempli FR/EN. `firstNameOf()` extrait le prénom pour personnaliser.
+   - **Architecture** : 1 seul `Promise.all` côté server via `loadDashboardSnapshot()` (10 loaders parallèles). Helpers purs (`occupancyLevel`, `nextSevenCasaDays`, `upcomingBirthdays`, `buildWhatsAppUrl`) tous testables sans DOM/DB.
+   - **Suppressions** : 10 fichiers obsolètes (DashboardActivity.tsx chart 12 mois Recharts, MainKpis, ServiceRevenues, ClientInsights, AlertBanners, KpiList, LowerSections, CheckInOut, SectionSkeleton, RevenueChartWrapper).
+   - **36 tests** nouveaux (helpers + WhatsApp) — boundary timezone Casa, year-wrap anniversaires, WhatsApp URL encoding, occupancy thresholds.
+
+2. **#99 `feat(eslint)` — Module 4-B : plugin maison `eslint-plugin-dog-universe` (4 garde-fous error)**
+   - Plugin local linké via `file:./eslint-rules` dans `package.json`. 4 règles `error` qui bloquent la CI :
+     - `no-getmonth-on-date-casa` : interdit `.getMonth()/.getFullYear()/.getDate()/.getDay()/.getHours()/.getMinutes()` (auto-whitelist `dates-casablanca.ts`)
+     - `no-money-tofixed` : interdit `.toFixed()` sur expressions money (heuristique nom + suffixes `MAD`/`Amount`/`Price`)
+     - `no-direct-payment-create` : interdit `prisma.payment.create()` et cousins (auto-whitelist `payment-allocation.ts`)
+     - `no-prisma-date-without-helper` : interdit `new Date()` dans Prisma `where` sur colonnes date — détecte direct equality, opérateurs (`gte/lte/lt/gt/in`), nesting `AND/OR`, relation filters (`some/every/none`)
+   - **Migration 80 violations** : 9 serveurs migrés (vrais bugs TZ — crons birthday/contract-reminders/overdue-invoices/review-requests + 4 API routes), 5 money.toFixed légitimes (controlled inputs + CSV cells) inline-disabled avec justification `-- OK:`, 16 fichiers client UI file-level-disabled (browser TZ = Casa naturel).
+   - **Convention escape** : `// eslint-disable-next-line dog-universe/<rule> -- OK: <one-line>` — justification obligatoire après `-- OK:`.
+   - **37 tests** via `RuleTester` d'eslint (auto-pick par vitest depuis `.test.js`).
+   - **Docs** : `docs/ESLINT_RULES.md` neuf (~200L), `BUSINESS_RULES.md §10`, `CLAUDE.md` section GARDE-FOUS ESLINT.
+
+3. **#100 `feat(walkin)` — UI complète pour facture paid-on-the-spot (boutique + services courts)**
+   - **Endpoint `POST /api/admin/walkin-invoice`** (ADMIN/SUPERADMIN, `Idempotency-Key` **obligatoire** pas back-compat). Création atomique en `$transaction` : Booking fantôme (`status=COMPLETED`, `isWalkIn=true`, `source='WALKIN'`, `startDate=endDate=paymentDate`, `idempotencyKey='walkin:<key>'`) + Invoice (`clientDisplayName` override si anonyme) + N `InvoiceItem`s.
+   - **Post-commit** : `recordPayment({ trustedAmount: true })` (path canonique Module 4-A) + `sendSmsNow({ to: 'ADMIN' })` + `logAction(INVOICE_CREATED_WALKIN)` + cache `revenue:YYYY:MM` invalidé.
+   - **Client anonyme** : lazy find-or-create de l'user générique `walkin-anonymous@dog-universe.local` (single row partagé). Le nom libre fournit l'override `Invoice.clientDisplayName` pour différencier les transactions.
+   - **Replay idempotency** : `Booking.idempotencyKey = 'walkin:<key>'` permet de re-renvoyer l'invoice existante sans rejouer la tx. Garantit qu'un retry réseau ne double-encaisse jamais.
+   - **Frontend** : `WalkinInvoiceModal.tsx` (~500L) lazy-loadée sur `/admin/billing`. 3 étapes (Client existant/anonyme → Items multi-lignes avec DISCOUNT auto-normalise signe + total live → Paiement datepicker `todayCasaYmd()` + 4 boutons radio méthodes + notes). `Idempotency-Key` généré côté client via `crypto.randomUUID()`.
+   - **Badge calendrier** : chip violet `🛒 Walk-in` sur `DayCell.tsx` quand `isWalkIn=true || source='WALKIN'`. Exclus du compteur `petsToday` (pas physiquement dans le kennel).
+   - **Pas de migration DB** — `Booking.source/isWalkIn`, `Invoice.clientDisplayName/Phone/Email` existent déjà.
+   - **11 tests** : 403/400 guards + happy path + multi-items + DISCOUNT + anonyme lazy-create + idempotency replay + payment failure recovery.
+   - **Module 4-B respecté** : `casablancaYMD()`, `formatMAD()`, `recordPayment()`, pas de `new Date()` dans Prisma — la CI bloquerait sinon.
+
+4. **#101 `fix(dashboard)` — Widget Pet Taxi : pivot sur TaxiTrip (capture standalone + addons)**
+   - Mehdi voyait "0 course" sur `/admin` malgré 3 trajets planifiés le 16 mai (Mozart RETOUR + 2× Kabli ALLER). Diag SQL confirmé : A=3 BoardingDetail avec addon, B=3 TaxiTrip planifiés, C=0 sur la query dashboard livrée PR #98.
+   - **Cause racine** : `loadToday()` filtrait `Booking.serviceType='PET_TAXI'` → ratait tous les BOARDING avec addon. Famille de bugs identique à driver dashboard PR #68.
+   - **Fix** : pivot direct sur `TaxiTrip` avec `date: todayYmd` (string YYYY-MM-DD via `casablancaYMD()` — règle Module 4-B respectée), `status: { notIn: TAXI_TERMINAL_STATUSES }` (denylist future-proof vs allowlist), `booking.status in ['CONFIRMED','IN_PROGRESS'] + deletedAt: null`.
+   - **`TodayTaxi` shape étendu** : `tripId` (key stable), `tripType: 'OUTBOUND' | 'RETURN' | 'STANDALONE'`, `time` depuis TaxiTrip (pas booking.arrivalTime), `pickup/dropoffAddress` direction-aware avec fallback chain.
+   - **UI** : badge couleur par direction — ALLER (vert) / RETOUR (bleu) / COURSE (violet).
+   - **Adjustement vs spec** : utilisé `notIn TAXI_TERMINAL_STATUSES` au lieu de l'allowlist `IN ('PLANNED','EN_ROUTE','PICKED_UP')` — les vrais statuts mid-flight sont plus nombreux (`EN_ROUTE_TO_CLIENT`, `ON_SITE_CLIENT`, `ANIMAL_ON_BOARD`, etc.) et l'allowlist en raterait. Validé par Mehdi.
+   - **8 tests régression** : 6 obligatoires (BOARDING+GO / BOARDING+RETURN / standalone / sans addon / terminal status / deletedAt) + 2 bonus (date string format + scénario Mehdi 3-trip).
+
+**Décisions clés livrées :**
+- **Dashboard = cockpit, pas état financier**. Séparation stricte mode mental opérationnel / mode mental comptable.
+- **Garde-fous ESLint machine-enforced**. Plus jamais de TZ drift / Decimal precision loss / payment-bypass / Prisma-new-Date silencieux. Le compilateur est désormais le gardien.
+- **Walk-in invoice = transaction atomique avec idempotency obligatoire**. Pattern Stripe sur la money mutation : un retry réseau côté Mehdi ne double-encaisse jamais.
+- **Pet Taxi today pivot sur TaxiTrip** (pas Booking.serviceType). Source de vérité unifiée pour les trips (standalone + addons capturés ensemble).
+
+**Stats session** : 4 PRs, 4 mergées, +56 tests (1338 total), 1 nouveau plugin ESLint local, 1 nouvelle feature complète (WALKIN UI), 1 refonte UX majeure (dashboard).
+
+---
+
 ### 2026-05-14 — Session GPS + SMS + CI + Wave 1 (PRs #67 → #75)
 
 Session marathon : 9 PRs ouvertes (7 mergées, 2 ouvertes au bouclage), 3 ADR (0006/0007/0008), +123 tests, +1 module de cleanup SQL pour les données existantes corrompues.
