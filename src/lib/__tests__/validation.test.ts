@@ -157,3 +157,53 @@ describe('adminBookingCreateSchema — date range', () => {
     expect(r.success).toBe(false);
   });
 });
+
+// ─── petUpdateSchema — IDOR strict guard (Bug 2 hard-bugs-may17) ──────
+//
+// petUpdateSchema must be .strict() so that a malicious client can't
+// transfer / reassign a pet via injection of `ownerId` (or any other
+// unmodeled field) in the PATCH body. Pre-fix, the schema accepted
+// unknown keys silently — they were filtered downstream by the explicit
+// `data.{field}` mapping in the route handler, but any future drift of
+// that handler would re-expose the vulnerability. .strict() at the
+// schema makes the contract enforced by Zod itself.
+
+import { petCreateSchema, petUpdateSchema } from '@/lib/validation';
+
+describe('petUpdateSchema — strict IDOR guard', () => {
+  const validBase = {
+    name: 'Max',
+    species: 'DOG' as const,
+    dateOfBirth: '2020-05-12',
+  };
+
+  it('accepts a whitelisted partial update', () => {
+    const r = petUpdateSchema.safeParse({ name: 'Athena' });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects ownerId injection (IDOR — pet transfer attempt)', () => {
+    const r = petUpdateSchema.safeParse({ name: 'Max', ownerId: 'someone-else-cuid' });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      // Zod ZodIssue code for unknown keys is 'unrecognized_keys'.
+      const codes = r.error.issues.map(i => i.code);
+      expect(codes).toContain('unrecognized_keys');
+    }
+  });
+
+  it('rejects deletedAt injection (soft-delete bypass attempt)', () => {
+    const r = petUpdateSchema.safeParse({ deletedAt: null });
+    expect(r.success).toBe(false);
+  });
+
+  it('rejects id injection (renaming attempt)', () => {
+    const r = petUpdateSchema.safeParse({ id: 'forged-cuid', name: 'Rex' });
+    expect(r.success).toBe(false);
+  });
+
+  it('petCreateSchema is also strict (parity with update)', () => {
+    const r = petCreateSchema.safeParse({ ...validBase, ownerId: 'evil' });
+    expect(r.success).toBe(false);
+  });
+});
