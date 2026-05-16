@@ -19,6 +19,7 @@ import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacit
 import { logger } from '@/lib/logger';
 import { ServiceType } from './constants';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 type BookingWithDetails = Awaited<ReturnType<typeof loadBookingWithDetails>>;
 
@@ -45,6 +46,14 @@ export interface ApproveExtensionMergeArgs {
 }
 
 export async function approveExtensionMerge(args: ApproveExtensionMergeArgs) {
+  return withSpan(
+    'booking.admin.approveExtensionMerge',
+    { bookingId: args.bookingId },
+    () => approveExtensionMergeImpl(args),
+  );
+}
+
+async function approveExtensionMergeImpl(args: ApproveExtensionMergeArgs) {
   const { bookingId, actorId } = args;
 
   const booking = await loadBookingWithDetails(bookingId);
@@ -160,6 +169,14 @@ export interface RejectExtensionMergeArgs {
 }
 
 export async function rejectExtensionMerge(args: RejectExtensionMergeArgs) {
+  return withSpan(
+    'booking.admin.rejectExtensionMerge',
+    { bookingId: args.bookingId },
+    () => rejectExtensionMergeImpl(args),
+  );
+}
+
+async function rejectExtensionMergeImpl(args: RejectExtensionMergeArgs) {
   const { bookingId, actorId } = args;
   const booking = await loadBookingWithDetails(bookingId);
   if (!booking) throw new BookingError('NOT_FOUND', { message: 'Booking not found', status: 404 });
@@ -215,6 +232,19 @@ export interface ApplyExtensionArgs {
 }
 
 export async function applyExtension(args: ApplyExtensionArgs) {
+  return withSpan(
+    'booking.admin.applyExtension',
+    {
+      bookingId: args.booking.id,
+      newEndDate: args.newEndDateStr,
+      isApproval: args.isApproval,
+      forcePaidInvoice: args.forcePaidInvoice,
+    },
+    () => applyExtensionImpl(args),
+  );
+}
+
+async function applyExtensionImpl(args: ApplyExtensionArgs) {
   const { booking, newEndDateStr, forcePaidInvoice, actorId, isApproval } = args;
 
   if (booking.serviceType !== ServiceType.BOARDING) {

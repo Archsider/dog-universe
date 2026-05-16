@@ -17,6 +17,7 @@ import { logAction } from '@/lib/log';
 import { BookingError } from './booking-errors';
 import { taxiDescription } from '@/lib/invoice-descriptions';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 // ────────────────────────────────────────────────────────────────────────────
 // patchBoardingDetail
@@ -41,6 +42,17 @@ export interface PatchBoardingDetailArgs {
  *  - Reallocate payments
  */
 export async function patchBoardingDetail(args: PatchBoardingDetailArgs) {
+  return withSpan(
+    'booking.admin.patchBoardingDetail',
+    {
+      bookingId: args.bookingId,
+      patchKeys: Object.keys(args.patch).join(','),
+    },
+    () => patchBoardingDetailImpl(args),
+  );
+}
+
+async function patchBoardingDetailImpl(args: PatchBoardingDetailArgs) {
   const { bookingId, patch, actorId } = args;
 
   const booking = await prisma.booking.findFirst({
@@ -279,6 +291,14 @@ export interface AddBookingItemsArgs {
  * them as InvoiceItems then recompute totals + reallocate payments.
  */
 export async function addBookingItems(args: AddBookingItemsArgs) {
+  return withSpan(
+    'booking.admin.addItems',
+    { bookingId: args.bookingId, itemCount: args.rawItems.length },
+    () => addBookingItemsImpl(args),
+  );
+}
+
+async function addBookingItemsImpl(args: AddBookingItemsArgs) {
   const { bookingId, rawItems, actorId } = args;
 
   const booking = await prisma.booking.findFirst({
@@ -418,6 +438,14 @@ export interface RejectExtensionRequestArgs {
  * remains inline in the route — different deletion semantics.
  */
 export async function rejectExtensionRequest(args: RejectExtensionRequestArgs) {
+  return withSpan(
+    'booking.admin.rejectExtensionRequest',
+    { bookingId: args.bookingId },
+    () => rejectExtensionRequestImpl(args),
+  );
+}
+
+async function rejectExtensionRequestImpl(args: RejectExtensionRequestArgs) {
   const { bookingId, actorId } = args;
 
   const booking = await prisma.booking.findFirst({

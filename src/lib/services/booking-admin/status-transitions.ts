@@ -30,6 +30,7 @@ import {
 import { sendEmailNow, sendSmsNow, sendSmsRespectful } from '@/lib/notify-now';
 import { ServiceType } from './constants';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 type BookingForStatus = {
   id: string;
@@ -84,6 +85,14 @@ export interface NoShowInvoiceHandlingArgs {
 }
 
 export async function handleNoShowInvoice(args: NoShowInvoiceHandlingArgs) {
+  return withSpan(
+    'booking.admin.handleNoShowInvoice',
+    { bookingId: args.bookingId, previousStatus: args.previousStatus },
+    () => handleNoShowInvoiceImpl(args),
+  );
+}
+
+async function handleNoShowInvoiceImpl(args: NoShowInvoiceHandlingArgs) {
   const { bookingId, actorId, previousStatus } = args;
   if (previousStatus === 'NO_SHOW') return;
 
@@ -166,6 +175,19 @@ export interface RunStatusSideEffectsArgs {
 }
 
 export async function runStatusSideEffects(args: RunStatusSideEffectsArgs) {
+  return withSpan(
+    'booking.admin.runStatusSideEffects',
+    {
+      bookingId: args.booking.id,
+      serviceType: args.booking.serviceType,
+      newStatus: args.newStatus,
+      previousStatus: args.booking.status,
+    },
+    () => runStatusSideEffectsImpl(args),
+  );
+}
+
+async function runStatusSideEffectsImpl(args: RunStatusSideEffectsArgs) {
   const { booking, newStatus, actorId } = args;
   const userLang = booking.client.language || 'fr';
   const pets = booking.bookingPets.map(bp => bp.pet);

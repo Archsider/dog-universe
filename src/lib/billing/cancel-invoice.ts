@@ -28,6 +28,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { recordPayment } from '@/lib/payment-allocation';
 import { toNumber } from '@/lib/decimal';
+import { withSpan } from '@/lib/observability';
 
 const REASON_MIN = 10;
 const REASON_MAX = 2000;
@@ -65,6 +66,18 @@ export type CancelInvoiceResult =
   | { ok: false; error: CancelInvoiceError; detail?: Record<string, unknown> };
 
 export async function cancelInvoice(input: CancelInvoiceInput): Promise<CancelInvoiceResult> {
+  return withSpan(
+    'billing.invoice.cancel',
+    {
+      invoiceId: input.invoiceId,
+      actorRole: input.actorRole,
+      refundExisting: input.refundExisting === true,
+    },
+    () => cancelInvoiceImpl(input),
+  );
+}
+
+async function cancelInvoiceImpl(input: CancelInvoiceInput): Promise<CancelInvoiceResult> {
   // ── 1. Input validation ──────────────────────────────────────────────
   const reason = (input.reason ?? '').trim();
   if (reason.length < REASON_MIN || reason.length > REASON_MAX) {

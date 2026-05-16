@@ -19,6 +19,7 @@ import { gzipSync } from 'node:zlib';
 import { prisma } from '@/lib/prisma';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { withSpan } from '@/lib/observability';
 import {
   uploadBackupBuffer,
   listBackupObjects,
@@ -64,6 +65,14 @@ export class BackupError extends Error {
  * pass when the caller only wants a quick on-demand snapshot.
  */
 export async function runDbBackup(options: { rotate?: boolean } = {}): Promise<BackupRunResult> {
+  return withSpan(
+    'infra.db-backup.run',
+    { rotate: options.rotate !== false },
+    () => runDbBackupImpl(options),
+  );
+}
+
+async function runDbBackupImpl(options: { rotate?: boolean } = {}): Promise<BackupRunResult> {
   const rotate = options.rotate !== false;
   const startedAt = Date.now();
 
