@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { enqueueSms } from '@/lib/queues';
 import { defineCron } from '@/lib/cron-runner';
+import { casablancaYMD, startOfDayCasa } from '@/lib/dates-casablanca';
 
 export const maxDuration = 60;
 
@@ -13,13 +14,15 @@ export const GET = defineCron({
   name: 'birthday-notifications',
   period: 'daily',
   fn: async ({ now }) => {
-    const month = now.getMonth() + 1; // 1-12
-    const day = now.getDate();
+    // Casa-anchored : on Vercel UTC, reading `now.getMonth()/getDate()` at
+    // 00:30 Casablanca (= 23:30 UTC the previous day) would return yesterday's
+    // values and silently fire birthday notifs on the wrong calendar day.
+    const { year, month, day } = casablancaYMD(now);
 
     // Leap year edge case: pets born on Feb 29 only have a real birthday every 4 years.
     // In non-leap years, we send their birthday notification on Feb 28 instead.
     const isLeapYear = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
-    const includeFeb29 = month === 2 && day === 28 && !isLeapYear(now.getFullYear());
+    const includeFeb29 = month === 2 && day === 28 && !isLeapYear(year);
 
     // Prisma doesn't have MONTH()/DAY() helpers — use raw query.
     // JOIN avec User pour ramener nom + téléphone owner en 1 seule requête (évite N+1 ensuite).
@@ -66,7 +69,7 @@ export const GET = defineCron({
 
     // Batch dedup: load all PET_BIRTHDAY notifications created today for these owners
     // in a single query, then check in-memory — avoids N findFirst calls.
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayStart = startOfDayCasa(now);
     const ownerIds = Array.from(new Set(pets.map(p => p.ownerId)));
     const existingBirthdayNotifs = await prisma.notification.findMany({
       where: {
@@ -90,7 +93,7 @@ export const GET = defineCron({
     const results = await Promise.all(pets.map(async (pet) => {
       if (alreadySentKeys.has(`${pet.ownerId}:${pet.id}`)) return null;
 
-      const age = now.getFullYear() - new Date(pet.dateOfBirth).getFullYear();
+      const age = year - casablancaYMD(new Date(pet.dateOfBirth)).year;
       const speciesFr = pet.species === 'DOG' ? 'chien' : 'chat';
       const speciesEn = pet.species === 'DOG' ? 'dog' : 'cat';
 

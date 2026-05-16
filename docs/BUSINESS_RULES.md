@@ -638,6 +638,34 @@ Un client demande l'anonymisation le 15 mai 2026.
 
 ---
 
+## 10. Garde-fous ESLint (Module 4-B)
+
+Quatre familles de bugs ont été chassées en production ces dernières
+semaines. Chacune correspond désormais à une règle ESLint maison
+(plugin `eslint-plugin-dog-universe`, livré en `error` → bloque la CI).
+
+| Règle | Famille de bug | Documentation |
+|---|---|---|
+| `no-getmonth-on-date-casa` | TZ drift (`.getMonth()` sur Vercel UTC retourne le mois précédent en Casa) | docs/ESLINT_RULES.md §1 |
+| `no-money-tofixed` | Perte de précision Decimal (Rita 120,10 vs 120,105) | docs/ESLINT_RULES.md §2 |
+| `no-direct-payment-create` | Bypass de `recordPayment` (cache CA, cross-role, SMS OPS, dedup) | docs/ESLINT_RULES.md §3 |
+| `no-prisma-date-without-helper` | `new Date()` dans une query Prisma sur colonne date | docs/ESLINT_RULES.md §4 |
+
+**Règle d'usage** :
+- **Ne JAMAIS** désactiver une règle au niveau `.eslintrc.json` pour
+  faire passer un commit. Soit on fixe, soit on disable inline avec
+  une justification d'une ligne (convention `-- OK: <reason>`).
+- Tests, `scripts/`, `prisma/`, et `eslint-rules/` sont les seuls
+  contextes globalement whitelistés (fixtures de RuleTester, migrations
+  SQL maison, etc.).
+- Toute nouvelle PR doit produire `npm run lint` au vert.
+
+**Comment ajouter une 5ᵉ règle** : voir docs/ESLINT_RULES.md "Adding a
+new rule". Pattern : `RuleTester` de `eslint` + parser
+`@typescript-eslint/parser` + vitest auto-pick.
+
+---
+
 ## Mise à jour de ce document
 
 **Quand** : à chaque PR qui modifie une règle métier listée ici.
@@ -648,3 +676,7 @@ correspondante + cite la PR dans le changelog ci-dessous.
 
 - **2026-05-15** : création initiale (Module 3, PR #92). 9 sections.
   Tous helpers cités au commit `2faad61` (post-merge Module 2).
+- **2026-05-16** : ajout §10 "Garde-fous ESLint" (Module 4-B). Plugin
+  `eslint-plugin-dog-universe` avec 4 règles `error` qui empêchent la
+  réintroduction des familles de bugs TZ / Decimal / payment-bypass /
+  prisma-new-Date.

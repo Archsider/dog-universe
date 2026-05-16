@@ -147,7 +147,9 @@ export async function GET(request: Request) {
       escapeCsv(inv.issuedAt.toISOString().slice(0, 10)),
       escapeCsv(paymentDateStr),
       escapeCsv(lastPayment ? PAYMENT_LABELS[lastPayment.paymentMethod] ?? lastPayment.paymentMethod : ''),
+      // eslint-disable-next-line dog-universe/no-money-tofixed -- OK: CSV cells need a raw "12.34" decimal string for spreadsheet parsing ; a localized "12,34 MAD" would break Excel SUM formulas.
       escapeCsv(inv.amount.toFixed(2)),
+      // eslint-disable-next-line dog-universe/no-money-tofixed -- OK: same — raw decimal cell for spreadsheet arithmetic.
       escapeCsv(inv.paidAmount.toFixed(2)),
       escapeCsv(remaining.toFixed(2)),
       escapeCsv(inv.status === 'PAID' ? 'Payée' : inv.status === 'CANCELLED' ? 'Annulée' : inv.status === 'PARTIALLY_PAID' ? 'Partiel' : 'En attente'),

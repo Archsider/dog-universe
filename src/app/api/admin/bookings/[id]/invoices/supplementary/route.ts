@@ -74,7 +74,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
         throw new Error('NOTHING_TO_INVOICE');
       }
 
-      const year = new Date().getFullYear();
+      const { casablancaYMD } = await import('@/lib/dates-casablanca');
+      const year = casablancaYMD().year;
       const invoiceNumber = await allocateInvoiceNumber(tx, year);
       if (!invoiceNumber) throw new Error('SEQUENCE_FAILED');
 

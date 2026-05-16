@@ -94,6 +94,7 @@ export default function PaymentModal({
   // Recompute remaining from live payments (may differ from paidAmount prop after actions)
   const livePaid = payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = Math.max(0, invoiceAmount - livePaid);
+  // eslint-disable-next-line dog-universe/no-money-tofixed -- OK: controlled <input> value needs a raw "12.34" string, not a localized "12,34 MAD" formatMAD output. The Decimal was already projected to number at the prop boundary.
   const [inputAmount, setInputAmount] = useState(paidAmount > 0 ? (invoiceAmount - paidAmount).toFixed(2) : invoiceAmount.toFixed(2));
 
   const fetchPayments = useCallback(async () => {
@@ -212,6 +213,7 @@ export default function PaymentModal({
               <div className="grid grid-cols-3 divide-x divide-ivory-200 bg-ivory-50 rounded-xl overflow-hidden text-center">
                 <div className="p-3">
                   <p className="text-xs text-gray-400 mb-0.5">{isFr ? 'Total facture' : 'Invoice total'}</p>
+                  {/* eslint-disable-next-line dog-universe/no-money-tofixed -- OK: split layout keeps the "MAD" unit in a smaller span for visual alignment in the 3-col KPI strip ; formatMAD would inline the unit. */}
                   <p className="font-bold text-charcoal text-sm">{invoiceAmount.toFixed(2)} <span className="text-xs font-normal">MAD</span></p>
                 </div>
                 <div className="p-3">

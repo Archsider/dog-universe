@@ -181,6 +181,7 @@ export default function LandingPage({ locale }: LandingPageProps) {
 
       <footer className="border-t border-[#F0D98A]/30 mt-4">
         <div className="max-w-6xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-neutral-500">
+          {/* eslint-disable-next-line dog-universe/no-getmonth-on-date-casa -- OK: copyright year display, no business logic. */}
           <span>© {new Date().getFullYear()} Dog Universe — Marrakech</span>
           <div className="flex items-center gap-4">
             <Link href={`/${locale}/privacy`} className="hover:text-charcoal transition-colors">

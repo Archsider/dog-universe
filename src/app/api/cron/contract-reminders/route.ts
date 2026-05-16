@@ -16,9 +16,12 @@ export const GET = defineCron({
       take: 500,
     });
 
-    // Limite : 1 rappel max par client tous les 7 jours.
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    // Limite : 1 rappel max par client tous les 7 jours. Casa-anchored : on
+    // UTC Vercel, `new Date().setDate(d.getDate() - 7)` would silently shift
+    // the cutoff by ±1h around Casa midnight.
+    const { addDays } = await import('date-fns');
+    const { startOfDayCasa } = await import('@/lib/dates-casablanca');
+    const sevenDaysAgo = startOfDayCasa(addDays(new Date(), -7));
 
     // Batch dedup: load all CONTRACT_REMINDER notifications sent in the last 7 days
     // for these clients in a single query, then check in-memory — avoids N findFirst calls.

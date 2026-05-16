@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { cacheReadThrough } from '@/lib/cache';
 import { getCapacityLimits } from '@/lib/capacity';
 import { getCasaStartOfDay, getCasaEndOfDay } from '@/lib/timezone';
+import { casablancaYMD } from '@/lib/dates-casablanca';
 
 // Edge / CDN caching — public route, varies on query string by default
 export const revalidate = 60;
@@ -83,7 +84,10 @@ async function computeAvailability(
 
   // Build per-day availability
   const days: DayAvailability[] = [];
-  const daysInMonth = end.getDate();
+  // `end` is end-of-month Casa projected to UTC ; reading `.getDate()` on
+  // it returns the next-month-1 day in UTC on Vercel. Use the Casa
+  // projection to get the real day-count of the requested calendar month.
+  const daysInMonth = casablancaYMD(end).day;
 
   for (let d = 1; d <= daysInMonth; d++) {
     const day = new Date(year, monthNum - 1, d);

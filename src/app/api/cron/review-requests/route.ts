@@ -17,8 +17,7 @@ export const GET = defineCron({
   name: 'review-requests',
   period: 'daily',
   fn: async ({ now }) => {
-    const since = new Date(now);
-    since.setHours(since.getHours() - 24);
+    const since = new Date(now.getTime() - 24 * 3600 * 1000);
 
     // Bookings COMPLETED dans les 24h sans avis existant
     const completedBookings = await prisma.booking.findMany({
