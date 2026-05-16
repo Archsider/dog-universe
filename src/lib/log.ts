@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { logger } from '@/lib/logger';
+import { scrubSensitive } from './log-scrubber';
 
 interface LogActionData {
   userId?: string;
@@ -12,13 +13,19 @@ interface LogActionData {
 
 export async function logAction(data: LogActionData): Promise<void> {
   try {
+    // Scrub sensitive keys (password, token, secret, api_key, …) BEFORE
+    // JSON.stringify. Defence-in-depth : a caller who accidentally passes
+    // { password } in details would otherwise persist it in clear inside
+    // ActionLog, which ends up in backups + RGPD exports.
+    // Source : audit 2026-05-16 Hunt F1.
+    const scrubbed = data.details ? scrubSensitive(data.details) : undefined;
     await prisma.actionLog.create({
       data: {
         userId: data.userId,
         action: data.action,
         entityType: data.entityType,
         entityId: data.entityId,
-        details: data.details ? JSON.stringify(data.details) : undefined,
+        details: scrubbed ? JSON.stringify(scrubbed) : undefined,
         ipAddress: data.ipAddress,
       },
     });

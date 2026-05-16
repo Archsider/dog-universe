@@ -15,6 +15,8 @@
  * Vercel autodetects this format and indexes the fields.
  */
 
+import { scrubSensitive } from './log-scrubber';
+
 async function getRequestId(): Promise<string | undefined> {
   try {
     // Dynamic import keeps `next/headers` out of Edge / client bundles.
@@ -48,7 +50,10 @@ function emit(
     timestamp: new Date().toISOString(),
   };
   if (extra) {
-    for (const [k, v] of Object.entries(extra)) {
+    // Scrub sensitive keys before serialization — same defence as logAction.
+    // Source : audit 2026-05-16 Hunt F1.
+    const safeExtra = scrubSensitive(extra);
+    for (const [k, v] of Object.entries(safeExtra)) {
       entry[k] = v instanceof Error ? serializeError(v) : v;
     }
   }
