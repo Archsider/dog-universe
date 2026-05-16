@@ -392,3 +392,28 @@ export async function createBookingCancelledNotification(args: {
     metadata: { bookingId: args.bookingId, reason: args.reason },
   });
 }
+
+export async function createInvoiceCancelledNotification(args: {
+  userId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  reason: string;
+  amount: number;
+}) {
+  const msg = NOTIFICATION_MESSAGES.INVOICE_CANCELLED({
+    invoiceNumber: args.invoiceNumber,
+    amount: String(args.amount),
+    reason: args.reason,
+  });
+  return createNotification({
+    userId: args.userId,
+    type: 'INVOICE_CANCELLED',
+    ...msg,
+    metadata: {
+      invoiceId: args.invoiceId,
+      invoiceNumber: args.invoiceNumber,
+      amount: String(args.amount),
+      reason: args.reason,
+    },
+  });
+}
