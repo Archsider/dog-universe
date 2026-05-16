@@ -136,22 +136,37 @@ export function AujourdhuiCard({ locale, snapshot, labels }: Props) {
           </p>
           {taxiRuns.length > 0 && (
             <ul className="space-y-1.5">
-              {taxiRuns.slice(0, 3).map((t) => (
-                <li key={t.bookingId}>
-                  <Link
-                    href={`/${locale}/admin/reservations/${t.bookingId}`}
-                    className="text-xs text-gray-600 hover:text-[#C4974A] flex items-center gap-1.5"
-                  >
-                    {t.arrivalTime && (
-                      <span className="text-purple-600 font-medium tabular-nums w-10">{t.arrivalTime}</span>
-                    )}
-                    <span className="truncate">
-                      {t.petName}
-                      <span className="text-gray-400"> · {t.clientName}</span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
+              {taxiRuns.slice(0, 3).map((t) => {
+                // Direction badge for the operator : ALLER (pickup chez
+                // client → pension), RETOUR (pension → client), COURSE
+                // (standalone, hors-pension).
+                const tripBadge =
+                  t.tripType === 'OUTBOUND'
+                    ? { fr: 'ALLER',  en: 'GO',     class: 'bg-emerald-100 text-emerald-700' }
+                    : t.tripType === 'RETURN'
+                      ? { fr: 'RETOUR', en: 'RETURN', class: 'bg-blue-100 text-blue-700' }
+                      : { fr: 'COURSE', en: 'TRIP',   class: 'bg-purple-100 text-purple-700' };
+                const label = locale === 'en' ? tripBadge.en : tripBadge.fr;
+                return (
+                  <li key={t.tripId}>
+                    <Link
+                      href={`/${locale}/admin/reservations/${t.bookingId}`}
+                      className="text-xs text-gray-600 hover:text-[#C4974A] flex items-center gap-1.5"
+                    >
+                      {t.time && (
+                        <span className="text-purple-600 font-medium tabular-nums w-10">{t.time}</span>
+                      )}
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${tripBadge.class} flex-shrink-0`}>
+                        {label}
+                      </span>
+                      <span className="truncate">
+                        {t.petName}
+                        <span className="text-gray-400"> · {t.clientName}</span>
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
