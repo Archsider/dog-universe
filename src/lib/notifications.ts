@@ -37,6 +37,9 @@ export {
   promoteWaitlistedBooking,
   notifyAdminsAddonRequest,
   notifyAdminsProductOrder,
+  createTimeProposedNotification,
+  createTimeConfirmedNotification,
+  createBookingCancelledNotification,
 } from './notifications/booking';
 
 export {

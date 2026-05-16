@@ -309,3 +309,86 @@ export async function notifyAdminsProductOrder(args: {
   });
   return createAdminNotifications({ type: 'PRODUCT_ORDER', ...msg, metadata: { bookingId: args.bookingId } });
 }
+
+// ── Time confirmation (TimeProposal lifecycle, 2026-05-17) ──────────────
+
+const SCOPE_LABEL: Record<string, { fr: string; en: string }> = {
+  ARRIVAL:      { fr: 'arrivée à la pension', en: 'arrival at the pension' },
+  TAXI_GO:      { fr: 'taxi aller', en: 'taxi (outbound)' },
+  TAXI_RETURN:  { fr: 'taxi retour', en: 'taxi (return)' },
+};
+
+export async function createTimeProposedNotification(args: {
+  userId: string;
+  bookingId: string;
+  scope: 'ARRIVAL' | 'TAXI_GO' | 'TAXI_RETURN';
+  proposedTime: string;
+  publicToken: string;
+  proposalNote: string | null;
+}) {
+  const label = SCOPE_LABEL[args.scope];
+  const msg = NOTIFICATION_MESSAGES.BOOKING_TIME_PROPOSED({
+    scopeLabelFr: label.fr,
+    scopeLabelEn: label.en,
+    time: args.proposedTime,
+    note: args.proposalNote ?? '',
+  });
+  return createNotification({
+    userId: args.userId,
+    type: 'BOOKING_TIME_PROPOSED',
+    ...msg,
+    metadata: {
+      bookingId: args.bookingId,
+      scope: args.scope,
+      proposedTime: args.proposedTime,
+      publicToken: args.publicToken,
+    },
+  });
+}
+
+export async function createTimeConfirmedNotification(args: {
+  userId: string;
+  bookingId: string;
+  scope: 'ARRIVAL' | 'TAXI_GO' | 'TAXI_RETURN';
+  confirmedTime: string;
+}) {
+  const label = SCOPE_LABEL[args.scope];
+  const msg = NOTIFICATION_MESSAGES.BOOKING_TIME_CONFIRMED({
+    scopeLabelFr: label.fr,
+    scopeLabelEn: label.en,
+    time: args.confirmedTime,
+  });
+  return createNotification({
+    userId: args.userId,
+    type: 'BOOKING_TIME_CONFIRMED',
+    ...msg,
+    metadata: {
+      bookingId: args.bookingId,
+      scope: args.scope,
+      confirmedTime: args.confirmedTime,
+    },
+  });
+}
+
+export async function createBookingCancelledNotification(args: {
+  userId: string;
+  bookingId: string;
+  reason: string;
+}) {
+  // Fetch the booking ref for the message. Best-effort — fall back to id.
+  const b = await prisma.booking.findFirst({
+    where: notDeleted({ id: args.bookingId }),
+    select: { id: true, invoice: { select: { invoiceNumber: true } } },
+  });
+  const bookingRef = b?.invoice?.invoiceNumber ?? args.bookingId.slice(0, 8);
+  const msg = NOTIFICATION_MESSAGES.BOOKING_CANCELLED({
+    bookingRef,
+    reason: args.reason,
+  });
+  return createNotification({
+    userId: args.userId,
+    type: 'BOOKING_CANCELLED',
+    ...msg,
+    metadata: { bookingId: args.bookingId, reason: args.reason },
+  });
+}

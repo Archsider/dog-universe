@@ -322,4 +322,33 @@ export const NOTIFICATION_MESSAGES: Record<string, MessageFactory> = {
     messageEn: `${clientName} ordered ${productName} × ${quantity} for ${petNames}`,
     messageAr: `${clientName} طلب ${productName} × ${quantity} لـ ${petNames}`,
   }),
+
+  // ── Time confirmation (TimeProposal lifecycle) ──────────────────────────
+
+  BOOKING_TIME_PROPOSED: ({ scopeLabelFr, scopeLabelEn, time, note }) => ({
+    titleFr: 'Heure proposée par l’équipe',
+    titleEn: 'Time proposed by the team',
+    titleAr: 'الوقت المقترح من قبل الفريق',
+    messageFr: `Nous vous proposons ${time} pour ${scopeLabelFr}. ${note ? `Note : ${note}. ` : ''}Cliquez sur le lien dans votre email pour accepter ou nous contacter via WhatsApp.`,
+    messageEn: `We propose ${time} for ${scopeLabelEn}. ${note ? `Note: ${note}. ` : ''}Click the email link to accept or reach us via WhatsApp.`,
+    messageAr: `نقترح ${time} لـ ${scopeLabelEn}. ${note ? `${note}. ` : ''}اضغط على الرابط في بريدك الإلكتروني لقبوله أو تواصل معنا.`,
+  }),
+
+  BOOKING_TIME_CONFIRMED: ({ scopeLabelFr, scopeLabelEn, time }) => ({
+    titleFr: 'Heure confirmée',
+    titleEn: 'Time confirmed',
+    titleAr: 'تم تأكيد الوقت',
+    messageFr: `Votre ${scopeLabelFr} est désormais confirmée à ${time}.`,
+    messageEn: `Your ${scopeLabelEn} is now confirmed at ${time}.`,
+    messageAr: `تم تأكيد ${scopeLabelEn} على الساعة ${time}.`,
+  }),
+
+  BOOKING_CANCELLED: ({ bookingRef, reason }) => ({
+    titleFr: 'Réservation annulée',
+    titleEn: 'Booking cancelled',
+    titleAr: 'تم إلغاء الحجز',
+    messageFr: `Votre réservation ${bookingRef} a été annulée par l’équipe.${reason ? ` Motif : ${reason}` : ''}`,
+    messageEn: `Your booking ${bookingRef} has been cancelled by the team.${reason ? ` Reason: ${reason}` : ''}`,
+    messageAr: `تم إلغاء حجزك ${bookingRef} من قبل الفريق.${reason ? ` السبب: ${reason}` : ''}`,
+  }),
 };
