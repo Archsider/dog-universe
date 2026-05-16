@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, ArrowRight, Settings2, Check, X, UserX } from 'lucide-react';
+import { Loader2, ArrowRight, Settings2, Check, X, UserX, Ban } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { CancelBookingModal } from '@/components/admin/CancelBookingModal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,6 +69,10 @@ export default function ReservationActions({ booking, locale }: Props) {
   const [loadingNoShow, setLoadingNoShow] = useState(false);
   const [showForce, setShowForce] = useState(false);
   const [noShowConfirmOpen, setNoShowConfirmOpen] = useState(false);
+  // Source : audit 2026-05-17 — the "Forcer un statut Annulé" silently
+  // failed because the API requires a reason ≥ 10 chars that the inline
+  // flow didn't send. We open a dedicated modal instead.
+  const [cancelOpen, setCancelOpen] = useState(false);
   const router = useRouter();
   const isFr = locale === 'fr';
 
@@ -77,12 +82,20 @@ export default function ReservationActions({ booking, locale }: Props) {
   const actionLabel = nextStatus ? ACTION_LABELS[pipeline]?.[currentStatus] : null;
   const isPendingExtension = currentStatus === 'PENDING_EXTENSION';
   const canMarkNoShow = currentStatus === 'CONFIRMED' || currentStatus === 'IN_PROGRESS';
+  const canCancel = currentStatus === 'PENDING' || currentStatus === 'CONFIRMED' || currentStatus === 'IN_PROGRESS' || currentStatus === 'WAITLIST' || currentStatus === 'PENDING_EXTENSION';
 
   const handleNoShow = () => {
     setNoShowConfirmOpen(true);
   };
 
   const patchStatus = async (status: string, setLoading: (v: boolean) => void) => {
+    // Intercept CANCELLED / REJECTED : the API requires a reason ≥ 10 chars
+    // that this inline flow can't collect. Defer to the dedicated modal.
+    // Source : audit 2026-05-17 — was the root cause of the silent failure.
+    if (status === 'CANCELLED' || status === 'REJECTED') {
+      setCancelOpen(true);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/admin/bookings/${booking.id}`, {
@@ -99,13 +112,24 @@ export default function ReservationActions({ booking, locale }: Props) {
         });
         return;
       }
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        // Surface the server's error code so the operator can debug
+        // (e.g. CANCELLATION_REASON_REQUIRED, CAPACITY_EXCEEDED) instead
+        // of a generic toast.
+        const body = await res.json().catch(() => ({}));
+        const serverErr = typeof body.error === 'string' ? body.error : `HTTP ${res.status}`;
+        toast({
+          title: isFr ? `Erreur : ${serverErr}` : `Error: ${serverErr}`,
+          variant: 'destructive',
+        });
+        return;
+      }
       setCurrentStatus(status);
       setForceStatus(status);
       toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
       router.refresh();
     } catch {
-      toast({ title: isFr ? 'Erreur lors de la mise à jour' : 'Update error', variant: 'destructive' });
+      toast({ title: isFr ? 'Erreur réseau' : 'Network error', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -301,6 +325,26 @@ export default function ReservationActions({ booking, locale }: Props) {
           </AlertDialog>
         </>
       )}
+
+      {/* Annuler la réservation — bouton dédié, raison obligatoire via modal.
+          Source : audit 2026-05-17 + WIN 1 cleanup PR. */}
+      {canCancel && (
+        <Button
+          onClick={() => setCancelOpen(true)}
+          variant="outline"
+          className="w-full flex items-center gap-2 border-red-300 text-red-700 hover:bg-red-50"
+        >
+          <Ban className="h-4 w-4" />
+          {isFr ? 'Annuler la réservation' : 'Cancel the booking'}
+        </Button>
+      )}
+
+      <CancelBookingModal
+        bookingId={booking.id}
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        locale={locale}
+      />
 
       {/* Section forçage manuel (secondaire) */}
       <div>

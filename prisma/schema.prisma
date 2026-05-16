@@ -11,7 +11,7 @@ datasource db {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
-  name         String   // Auto-synced = `${firstName} ${lastName}` — kept for legacy callers
+  name         String // Auto-synced = `${firstName} ${lastName}` — kept for legacy callers
   firstName    String
   lastName     String
   phone        String?
@@ -33,7 +33,7 @@ model User {
   anonymizedAt DateTime?
 
   // Historical baseline (for pre-existing clients before the app)
-  historicalStays    Int    @default(0)
+  historicalStays    Int     @default(0)
   historicalSpendMAD Decimal @default(0) @db.Decimal(10, 2)
   historicalNote     String?
 
@@ -41,67 +41,67 @@ model User {
 
   // 2FA TOTP
   totpSecret     String?
-  totpEnabled    Boolean  @default(false)
+  totpEnabled    Boolean   @default(false)
   totpVerifiedAt DateTime?
   lastTotpToken  String?
   lastTotpUsedAt DateTime?
 
-  pets          Pet[]
-  bookings      Booking[]
-  invoices      Invoice[]
-  notifications Notification[]
-  loyaltyGrade  LoyaltyGrade?
-  actionLogs    ActionLog[]
-  adminNotes    AdminNote[]    @relation("NoteAuthor")
-  passwordResets PasswordResetToken[]
-  contract      ClientContract?
-  benefitClaims    LoyaltyBenefitClaim[]
-  reviewedClaims   LoyaltyBenefitClaim[] @relation("ClaimReviewer")
-  revenueSummaries MonthlyRevenueSummary[]
-  reviews          Review[]
-  endStayReportsReceived EndStayReport[] @relation("EndStayReportClient")
-  endStayReportsSent     EndStayReport[] @relation("EndStayReportSender")
+  pets                   Pet[]
+  bookings               Booking[]
+  invoices               Invoice[]
+  notifications          Notification[]
+  loyaltyGrade           LoyaltyGrade?
+  actionLogs             ActionLog[]
+  adminNotes             AdminNote[]             @relation("NoteAuthor")
+  passwordResets         PasswordResetToken[]
+  contract               ClientContract?
+  benefitClaims          LoyaltyBenefitClaim[]
+  reviewedClaims         LoyaltyBenefitClaim[]   @relation("ClaimReviewer")
+  revenueSummaries       MonthlyRevenueSummary[]
+  reviews                Review[]
+  endStayReportsReceived EndStayReport[]         @relation("EndStayReportClient")
+  endStayReportsSent     EndStayReport[]         @relation("EndStayReportSender")
 
   @@index([deletedAt])
   @@index([role, isWalkIn]) // Hot path: admin pages filter by role='CLIENT' AND isWalkIn=false
 }
 
 model Pet {
-  id          String   @id @default(cuid())
-  ownerId     String
-  name        String
-  species     String   // "DOG" | "CAT"
-  breed       String?
-  dateOfBirth DateTime?
-  gender      String?  // "MALE" | "FEMALE"
-  photoUrl    String?
+  id                        String    @id @default(cuid())
+  ownerId                   String
+  name                      String
+  species                   String // "DOG" | "CAT"
+  breed                     String?
+  dateOfBirth               DateTime?
+  gender                    String? // "MALE" | "FEMALE"
+  photoUrl                  String?
   // Identification
-  isNeutered      Boolean?
-  microchipNumber String?
-  tattooNumber    String?
-  weight          Float?   // kg
+  isNeutered                Boolean?
+  microchipNumber           String?
+  tattooNumber              String?
+  weight                    Float? // kg
   // Vet info
-  vetName         String?
-  vetPhone        String?
+  vetName                   String?
+  vetPhone                  String?
   // Health
-  allergies         String?
-  currentMedication String?
+  allergies                 String?
+  currentMedication         String?
   // Behavior: "SOCIABLE" | "TOLERANT" | "MONITOR" | "REACTIVE"
-  behaviorWithDogs   String?
-  behaviorWithCats   String?
-  behaviorWithHumans String?
+  behaviorWithDogs          String?
+  behaviorWithCats          String?
+  behaviorWithHumans        String?
   // Notes
-  notes             String?
+  notes                     String?
   // Anti-parasitic treatment
-  lastAntiparasiticDate    DateTime?
-  antiparasiticProduct     String?
-  antiparasiticNotes       String?
-  antiparasiticDurationDays Int?    // Admin-only override (days). Null = use product default.
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime? // Soft-delete — null = active, non-null = archived
+  lastAntiparasiticDate     DateTime?
+  antiparasiticProduct      String?
+  antiparasiticNotes        String?
+  antiparasiticDurationDays Int? // Admin-only override (days). Null = use product default.
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  deletedAt                 DateTime? // Soft-delete — null = active, non-null = archived
 
-  owner         User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner         User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   vaccinations  Vaccination[]
   documents     PetDocument[]
   bookingPets   BookingPet[]
@@ -112,11 +112,11 @@ model Pet {
 }
 
 model PetWeightEntry {
-  id          String   @id @default(cuid())
-  petId       String
-  weightKg    Float
-  measuredAt  DateTime @default(now())
-  note        String?
+  id         String   @id @default(cuid())
+  petId      String
+  weightKg   Float
+  measuredAt DateTime @default(now())
+  note       String?
 
   pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
 
@@ -133,7 +133,7 @@ model Vaccination {
   comment          String?
   status           String    @default("CONFIRMED") // "CONFIRMED" | "DRAFT"
   isAutoDetected   Boolean   @default(false)
-  sourceDocumentId String?   // PetDocument.id reference (informational, no FK)
+  sourceDocumentId String? // PetDocument.id reference (informational, no FK)
   createdAt        DateTime  @default(now())
 
   pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
@@ -157,54 +157,122 @@ model PetDocument {
 }
 
 model Booking {
-  id          String   @id @default(cuid())
-  clientId    String
-  serviceType BookingServiceType   // "BOARDING" | "PET_TAXI"
-  status      BookingStatus   @default(PENDING) // "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "CANCELLED" | "REJECTED" | "COMPLETED" | "NO_SHOW" | "WAITLIST" | "PENDING_EXTENSION"
-  startDate   DateTime
-  endDate     DateTime?
-  isOpenEnded Boolean  @default(false) // séjour à durée indéterminée — endDate fixé au checkout
-  isWalkIn    Boolean  @default(false) // saisie admin walk-in — indépendant de User.isWalkIn (client peut rejoindre le portail plus tard)
-  arrivalTime String?
-  notes              String?
-  cancellationReason String?
-  totalPrice         Decimal  @default(0) @db.Decimal(10, 2)
-  source             String?  // "ONLINE" | "MANUAL" — null = legacy / unknown
+  id                        String             @id @default(cuid())
+  clientId                  String
+  serviceType               BookingServiceType // "BOARDING" | "PET_TAXI"
+  status                    BookingStatus      @default(PENDING) // "PENDING" | "CONFIRMED" | "AT_PICKUP" | "IN_PROGRESS" | "CANCELLED" | "REJECTED" | "COMPLETED" | "NO_SHOW" | "WAITLIST" | "PENDING_EXTENSION"
+  startDate                 DateTime
+  endDate                   DateTime?
+  isOpenEnded               Boolean            @default(false) // séjour à durée indéterminée — endDate fixé au checkout
+  isWalkIn                  Boolean            @default(false) // saisie admin walk-in — indépendant de User.isWalkIn (client peut rejoindre le portail plus tard)
+  arrivalTime               String?
+  notes                     String?
+  cancellationReason        String?
+  totalPrice                Decimal            @default(0) @db.Decimal(10, 2)
+  source                    String? // "ONLINE" | "MANUAL" — null = legacy / unknown
   // Boarding stay extension request (from client)
-  hasExtensionRequest       Boolean   @default(false)
+  hasExtensionRequest       Boolean            @default(false)
   extensionRequestedEndDate DateTime?
   extensionRequestNote      String?
   // For PENDING_EXTENSION bookings: links back to the original booking being extended
   extensionForBookingId     String?
-  idempotencyKey String?   @unique // deterministic key: userId:startDate:endDate:petId1:petId2…
-  deletedAt   DateTime?
-  version     Int      @default(0) // optimistic concurrency lock
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  idempotencyKey            String?            @unique // deterministic key: userId:startDate:endDate:petId1:petId2…
+  deletedAt                 DateTime?
+  version                   Int                @default(0) // optimistic concurrency lock
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
 
-  client         User           @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  bookingPets    BookingPet[]
-  bookingItems   BookingItem[]
-  boardingDetail BoardingDetail?
-  taxiDetail     TaxiDetail?
-  taxiTrips      TaxiTrip[]
-  invoice        Invoice?
-  stayPhotos     StayPhoto[]
-  review         Review?
+  client            User               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  bookingPets       BookingPet[]
+  bookingItems      BookingItem[]
+  boardingDetail    BoardingDetail?
+  taxiDetail        TaxiDetail?
+  taxiTrips         TaxiTrip[]
+  invoice           Invoice?
+  stayPhotos        StayPhoto[]
+  review            Review?
   rescheduleRequest RescheduleRequest?
   addonRequests     AddonRequest[]
   endStayReports    EndStayReport[]
+  timeProposals     TimeProposal[]
 
   @@index([clientId])
   @@index([status])
   @@index([startDate])
   @@index([endDate])
   @@index([createdAt])
+  // --- TimeProposal relation backing the booking lifecycle time-confirmation
+  // and counter-proposal workflow. The latest ACCEPTED proposal per scope is
+  // the source of truth for the displayed time ; the booking columns
+  // (arrivalTime, taxiGoTime, taxiReturnTime) keep their "originally
+  // requested" semantics.
   @@index([serviceType])
   @@index([deletedAt])
   @@index([status, startDate]) // Hot path : cron reminders + capacity overlap
-  @@index([status, endDate])   // Hot path : cron reminders end + capacity overlap
-  @@index([isWalkIn])          // Walk-in filter on Today view + billing exclusions
+  @@index([status, endDate]) // Hot path : cron reminders end + capacity overlap
+  @@index([isWalkIn]) // Walk-in filter on Today view + billing exclusions
+}
+
+// ── TimeProposal ────────────────────────────────────────────────────────
+// Captures the negotiation of arrival / taxi addon times between admin
+// and client. Each proposal is one half of a bidirectional dialogue ;
+// the latest ACCEPTED row per (bookingId, scope) is the confirmed
+// time. Original `Booking.arrivalTime` (and BoardingDetail.taxiGoTime /
+// .taxiReturnTime) preserve the "originally requested" value for audit.
+//
+// See src/lib/time-proposals.ts for the service layer.
+//
+// Source : audit produit Mehdi 2026-05-17 — client claimed "10am confirmed"
+// while admin had only confirmed the booking, not the time slot.
+
+enum TimeProposalScope {
+  ARRIVAL // Booking arrival time
+  TAXI_GO // BoardingDetail.taxiGoTime
+  TAXI_RETURN // BoardingDetail.taxiReturnTime
+}
+
+enum TimeProposalStatus {
+  PENDING // awaiting response from the other party
+  ACCEPTED // confirmed time — source of truth
+  REJECTED // refused with a reason ; admin must propose a new one
+  SUPERSEDED // newer proposal replaced this one (audit history)
+  CANCELLED // proposer withdrew before any response
+}
+
+model TimeProposal {
+  id        String             @id @default(cuid())
+  bookingId String
+  scope     TimeProposalScope
+  time      String // "HH:MM" canonical 24h Casa
+  status    TimeProposalStatus @default(PENDING)
+
+  // Who proposed
+  proposedBy     String // userId of the proposer
+  proposedByRole String // 'CLIENT' | 'ADMIN' | 'SUPERADMIN'
+  proposedAt     DateTime @default(now())
+  proposalNote   String? // short free-text (FR/EN) shown to receiver
+
+  // Who responded (null while PENDING)
+  respondedBy     String?
+  respondedByRole String? // 'CLIENT' | 'ADMIN' | 'SUPERADMIN'
+  respondedAt     DateTime?
+  responseNote    String? // rejection reason / counter-proposal note
+
+  // Public token for client to accept/reject via email link (no auth).
+  // HMAC-signed by `TIME_PROPOSAL_TOKEN_SECRET`. Cleared once the proposal
+  // is no longer PENDING (defence-in-depth — link returns 410 Gone).
+  publicToken          String?   @unique
+  publicTokenExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, scope])
+  @@index([bookingId, scope, status]) // Hot path : getConfirmedTime, getCurrentProposal
+  @@index([status]) // List PENDING for admin alerts
+  @@index([publicToken]) // Email link lookup
 }
 
 model BookingPet {
@@ -224,8 +292,8 @@ model BookingPet {
 model BookingItem {
   id            String       @id @default(cuid())
   bookingId     String
-  productId     String?      // optional link to Product catalogue (decrement stock on add/restore on delete)
-  invoiceItemId String?      // set once the line has been billed (main or supplementary invoice)
+  productId     String? // optional link to Product catalogue (decrement stock on add/restore on delete)
+  invoiceItemId String? // set once the line has been billed (main or supplementary invoice)
   description   String
   quantity      Int          @default(1)
   unitPrice     Decimal      @db.Decimal(10, 2)
@@ -233,8 +301,8 @@ model BookingItem {
   category      ItemCategory @default(OTHER)
   version       Int          @default(0) // H9 — optimistic lock against concurrent product mutations
 
-  booking     Booking      @relation(fields: [bookingId],     references: [id], onDelete: Cascade)
-  product     Product?     @relation(fields: [productId],     references: [id], onDelete: SetNull)
+  booking     Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  product     Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
   invoiceItem InvoiceItem? @relation(fields: [invoiceItemId], references: [id], onDelete: SetNull)
 
   @@index([bookingId])
@@ -243,13 +311,13 @@ model BookingItem {
 }
 
 model BoardingDetail {
-  id              String  @id @default(cuid())
-  bookingId       String  @unique
-  includeGrooming Boolean @default(false)
-  groomingSize    String? // "SMALL" | "LARGE"
-  groomingPrice   Decimal @default(0) @db.Decimal(10, 2)
-  groomingStatus  String? // "PLANNED" | "IN_PROGRESS" | "DONE" — null si pas de toilettage
-  pricePerNight   Decimal @default(0) @db.Decimal(10, 2)
+  id                String  @id @default(cuid())
+  bookingId         String  @unique
+  includeGrooming   Boolean @default(false)
+  groomingSize      String? // "SMALL" | "LARGE"
+  groomingPrice     Decimal @default(0) @db.Decimal(10, 2)
+  groomingStatus    String? // "PLANNED" | "IN_PROGRESS" | "DONE" — null si pas de toilettage
+  pricePerNight     Decimal @default(0) @db.Decimal(10, 2)
   // Pet taxi addon
   taxiGoEnabled     Boolean @default(false)
   taxiGoDate        String?
@@ -269,20 +337,20 @@ model BoardingDetail {
 }
 
 model TaxiDetail {
-  id        String @id @default(cuid())
-  bookingId String @unique
+  id        String  @id @default(cuid())
+  bookingId String  @unique
   taxiType  String // "STANDARD" | "VET" | "AIRPORT"
   price     Decimal @db.Decimal(10, 2)
 
   // Geocoded pickup / dropoff coordinates — used for geofencing alerts
   // (notify client when driver approaches pickup). Optional: legacy
   // bookings without coords skip alerts silently.
-  pickupLat       Float?
-  pickupLng       Float?
-  pickupAddress   String?
-  dropoffLat      Float?
-  dropoffLng      Float?
-  dropoffAddress  String?
+  pickupLat      Float?
+  pickupLng      Float?
+  pickupAddress  String?
+  dropoffLat     Float?
+  dropoffLng     Float?
+  dropoffAddress String?
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }
@@ -291,24 +359,24 @@ model TaxiDetail {
 // Replaces the flat taxiGoStatus/taxiReturnStatus columns on BoardingDetail
 // and provides the TaxiStatusHistory log.
 model TaxiTrip {
-  id        String   @id @default(cuid())
-  bookingId String
-  tripType  String   // "OUTBOUND" | "RETURN" | "STANDALONE"
-  status    String   @default("PLANNED")
+  id                     String    @id @default(cuid())
+  bookingId              String
+  tripType               String // "OUTBOUND" | "RETURN" | "STANDALONE"
+  status                 String    @default("PLANNED")
   // Scheduling metadata (mirrors BoardingDetail for addons; from TaxiDetail for standalone)
-  date      String?
-  time      String?
-  address   String?
-  taxiType  String?  // "STANDARD" | "VET" | "AIRPORT" — STANDALONE only
+  date                   String?
+  time                   String?
+  address                String?
+  taxiType               String? // "STANDARD" | "VET" | "AIRPORT" — STANDALONE only
   // NOTE: TaxiTrip.price was removed (2026-05-11) — sourced from
   // TaxiDetail.price (STANDALONE) or BoardingDetail.taxiAddonPrice (addon).
   // GPS tracking — controlled per-trip by admin
-  trackingActive Boolean @default(false)
-  trackingToken  String? @unique  // public token (HMAC-signed), allows client tracking without auth
+  trackingActive         Boolean   @default(false)
+  trackingToken          String?   @unique // public token (HMAC-signed), allows client tracking without auth
   trackingTokenExpiresAt DateTime? // hard expiry: token returns 410 Gone past this point
-  distanceKm     Float   @default(0) // cumulative trip distance (haversine, incremented on each GPS push)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  distanceKm             Float     @default(0) // cumulative trip distance (haversine, incremented on each GPS push)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   booking   Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   history   TaxiStatusHistory[]
@@ -322,7 +390,7 @@ model TaxiStatusHistory {
   taxiTripId String
   status     String
   timestamp  DateTime @default(now())
-  updatedBy  String   // userId admin or "MIGRATION"
+  updatedBy  String // userId admin or "MIGRATION"
   createdAt  DateTime @default(now())
 
   taxiTrip TaxiTrip @relation(fields: [taxiTripId], references: [id], onDelete: Cascade)
@@ -335,9 +403,9 @@ model TaxiLocation {
   taxiTripId String
   latitude   Float
   longitude  Float
-  heading    Float?   // direction en degrés (0-360)
-  speed      Float?   // km/h
-  accuracy   Float?   // précision GPS en mètres
+  heading    Float? // direction en degrés (0-360)
+  speed      Float? // km/h
+  accuracy   Float? // précision GPS en mètres
   createdAt  DateTime @default(now())
 
   taxiTrip TaxiTrip @relation(fields: [taxiTripId], references: [id], onDelete: Cascade)
@@ -347,26 +415,26 @@ model TaxiLocation {
 }
 
 model Invoice {
-  id            String   @id @default(cuid())
-  bookingId     String?  @unique
-  clientId      String
-  invoiceNumber String   @unique
-  amount        Decimal  @db.Decimal(10, 2)
-  paidAmount    Decimal  @default(0) @db.Decimal(10, 2) // Calculé = SUM(payments.amount), mis à jour par allocatePayments()
-  status        InvoiceStatus   @default(PENDING) // "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED"
-  serviceType   String?  // "BOARDING" | "PET_TAXI" | "GROOMING" | "PRODUCT_SALE" | null (legacy)
-  pdfUrl        String?
+  id                        String        @id @default(cuid())
+  bookingId                 String?       @unique
+  clientId                  String
+  invoiceNumber             String        @unique
+  amount                    Decimal       @db.Decimal(10, 2)
+  paidAmount                Decimal       @default(0) @db.Decimal(10, 2) // Calculé = SUM(payments.amount), mis à jour par allocatePayments()
+  status                    InvoiceStatus @default(PENDING) // "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED"
+  serviceType               String? // "BOARDING" | "PET_TAXI" | "GROOMING" | "PRODUCT_SALE" | null (legacy)
+  pdfUrl                    String?
   notes                     String?
-  supplementaryForBookingId String?  // set on extension-surcharge invoices (bookingId=null) — replaces fragile notes pattern
-  clientDisplayName  String?  // overrides client.name on this invoice (Jordan / passage client)
-  clientDisplayPhone String?  // overrides client.phone on this invoice
-  clientDisplayEmail String?  // overrides client.email on this invoice
-  periodDate    DateTime?  // = booking.startDate — used for revenue bucketing by month
-  issuedAt      DateTime @default(now())
-  paidAt        DateTime?
-  version       Int      @default(0) // optimistic concurrency lock
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  supplementaryForBookingId String? // set on extension-surcharge invoices (bookingId=null) — replaces fragile notes pattern
+  clientDisplayName         String? // overrides client.name on this invoice (Jordan / passage client)
+  clientDisplayPhone        String? // overrides client.phone on this invoice
+  clientDisplayEmail        String? // overrides client.email on this invoice
+  periodDate                DateTime? // = booking.startDate — used for revenue bucketing by month
+  issuedAt                  DateTime      @default(now())
+  paidAt                    DateTime?
+  version                   Int           @default(0) // optimistic concurrency lock
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
 
   client   User          @relation(fields: [clientId], references: [id], onDelete: Restrict)
   booking  Booking?      @relation(fields: [bookingId], references: [id])
@@ -430,7 +498,7 @@ model InvoiceItem {
   quantity        Int          @default(1)
   unitPrice       Decimal      @db.Decimal(10, 2)
   total           Decimal      @db.Decimal(10, 2)
-  allocatedAmount Decimal      @default(0) @db.Decimal(10, 2)   // Montant alloué par allocatePayments()
+  allocatedAmount Decimal      @default(0) @db.Decimal(10, 2) // Montant alloué par allocatePayments()
   status          String       @default("PENDING") // "PENDING" | "PARTIAL" | "PAID"
   category        ItemCategory @default(OTHER)
   // Lien optionnel vers le produit du stock. Quand `productId` est non null,
@@ -449,14 +517,14 @@ model InvoiceItem {
 }
 
 model Payment {
-  id            String   @id @default(cuid())
+  id            String        @id @default(cuid())
   invoiceId     String
-  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  amount        Decimal  @db.Decimal(10, 2)
-  paymentMethod PaymentMethod   // "CASH" | "CARD" | "CHECK" | "TRANSFER"
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount        Decimal       @db.Decimal(10, 2)
+  paymentMethod PaymentMethod // "CASH" | "CARD" | "CHECK" | "TRANSFER"
   paymentDate   DateTime
   notes         String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime      @default(now())
 
   @@index([invoiceId])
   @@index([paymentDate])
@@ -465,18 +533,18 @@ model Payment {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  type      String   // "BOOKING_CONFIRMATION" | "BOOKING_VALIDATION" | "BOOKING_REFUSAL" | "STAY_REMINDER" | "INVOICE_AVAILABLE" | "ADMIN_MESSAGE" | "STAY_PHOTO" | "STAY_PHOTO_ADDED" | "LOYALTY_UPDATE" | "WEEKLY_PET_REPORT" | "END_STAY_REPORT"
+  type      String // "BOOKING_CONFIRMATION" | "BOOKING_VALIDATION" | "BOOKING_REFUSAL" | "STAY_REMINDER" | "INVOICE_AVAILABLE" | "ADMIN_MESSAGE" | "STAY_PHOTO" | "STAY_PHOTO_ADDED" | "LOYALTY_UPDATE" | "WEEKLY_PET_REPORT" | "END_STAY_REPORT"
   titleFr   String
   titleEn   String
-  titleAr   String?  // nullable: legacy rows pre-2026-05-05 have no AR translation (fallback to EN at render time)
+  titleAr   String? // nullable: legacy rows pre-2026-05-05 have no AR translation (fallback to EN at render time)
   messageFr String
   messageEn String
-  messageAr String?  // nullable: same as titleAr
-  metadata  String?  // JSON string e.g. {"bookingId":"..."}
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  messageAr String? // nullable: same as titleAr
+  metadata  String? // JSON string e.g. {"bookingId":"..."}
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now())
   // Soft-delete for ADMIN_MESSAGE / END_STAY_REPORT only (admin-initiated
   // messages sent to client by mistake — wrong owner, wrong content). The
   // client view filters `deletedAt: null`; admin reservation page keeps
@@ -510,20 +578,20 @@ model LoyaltyGrade {
 }
 
 model LoyaltyBenefitClaim {
-  id          String   @id @default(cuid())
-  clientId    String
-  grade       String   // grade at time of claim
-  benefitKey  String   // e.g. "grooming_discount_10", "free_grooming", "pet_taxi_ride"
-  benefitLabelFr String
-  benefitLabelEn String
-  status      String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  id              String    @id @default(cuid())
+  clientId        String
+  grade           String // grade at time of claim
+  benefitKey      String // e.g. "grooming_discount_10", "free_grooming", "pet_taxi_ride"
+  benefitLabelFr  String
+  benefitLabelEn  String
+  status          String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
   rejectionReason String?
-  reviewedBy  String?  // admin user id
-  reviewedAt  DateTime?
-  claimedAt   DateTime @default(now())
+  reviewedBy      String? // admin user id
+  reviewedAt      DateTime?
+  claimedAt       DateTime  @default(now())
 
-  client   User          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  reviewer User?         @relation("ClaimReviewer", fields: [reviewedBy], references: [id])
+  client   User  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("ClaimReviewer", fields: [reviewedBy], references: [id])
 
   @@index([clientId])
   @@index([status])
@@ -533,7 +601,7 @@ model LoyaltyBenefitClaim {
 
 model AdminNote {
   id         String   @id @default(cuid())
-  entityType String   // "CLIENT" | "PET"
+  entityType String // "CLIENT" | "PET"
   entityId   String
   content    String
   createdBy  String
@@ -550,7 +618,7 @@ model ActionLog {
   action     String
   entityType String?
   entityId   String?
-  details    String?  // JSON string
+  details    String? // JSON string
   ipAddress  String?
   createdAt  DateTime @default(now())
 
@@ -584,7 +652,7 @@ model Review {
   booking   Booking  @relation(fields: [bookingId], references: [id])
   clientId  String
   client    User     @relation(fields: [clientId], references: [id])
-  rating    Int      // 1-5
+  rating    Int // 1-5
   comment   String?
   createdAt DateTime @default(now())
 
@@ -607,18 +675,18 @@ model Review {
 // over time (e.g. interim update + final report) but the UI gates a
 // second send unless the operator explicitly chooses "Renvoyer".
 model EndStayReport {
-  id            String   @id @default(cuid())
-  bookingId     String
-  clientId      String
-  formData      String   // JSON: { sections: [{key, checked: [], freeText}], closingNote }
-  finalMessage  String   // The exact text body sent in the Notification.messageFr
-  sentAt        DateTime @default(now())
-  sentBy        String   // userId of the admin who clicked send
-  version       Int      @default(1) // 1 = manual template ; 2+ reserved for AI workflow
+  id           String   @id @default(cuid())
+  bookingId    String
+  clientId     String
+  formData     String // JSON: { sections: [{key, checked: [], freeText}], closingNote }
+  finalMessage String // The exact text body sent in the Notification.messageFr
+  sentAt       DateTime @default(now())
+  sentBy       String // userId of the admin who clicked send
+  version      Int      @default(1) // 1 = manual template ; 2+ reserved for AI workflow
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   client  User    @relation("EndStayReportClient", fields: [clientId], references: [id])
-  sender  User    @relation("EndStayReportSender", fields: [sentBy],   references: [id])
+  sender  User    @relation("EndStayReportSender", fields: [sentBy], references: [id])
 
   @@index([bookingId])
   @@index([clientId])
@@ -654,11 +722,11 @@ model AddonRequest {
   id          String    @id @default(cuid())
   bookingId   String
   petId       String?
-  serviceType String    // 'PET_TAXI' | 'TOILETTAGE' | 'AUTRE' | 'GROOMING' | 'TAXI_GO' | 'TAXI_RETURN' | 'PRODUCT' | 'OTHER'
+  serviceType String // 'PET_TAXI' | 'TOILETTAGE' | 'AUTRE' | 'GROOMING' | 'TAXI_GO' | 'TAXI_RETURN' | 'PRODUCT' | 'OTHER'
   description String
-  requestedBy String    // userId of the client who made the request
+  requestedBy String // userId of the client who made the request
   status      String    @default("PENDING") // PENDING | APPROVED | REJECTED
-  reason      String?   // rejection reason
+  reason      String? // rejection reason
   resolvedBy  String?
   resolvedAt  DateTime?
   createdAt   DateTime  @default(now())
@@ -685,14 +753,14 @@ model PasswordResetToken {
 }
 
 model ClientContract {
-  id          String   @id @default(cuid())
-  clientId    String   @unique
-  signedAt    DateTime @default(now())
-  pdfUrl      String?  // Deprecated: legacy public URL. Use storageKey + createSignedUrl() instead.
-  storageKey  String   // e.g. contracts/{clientId}.pdf
-  ipAddress   String?
-  version     String   @default("1.0")
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  clientId   String   @unique
+  signedAt   DateTime @default(now())
+  pdfUrl     String? // Deprecated: legacy public URL. Use storageKey + createSignedUrl() instead.
+  storageKey String // e.g. contracts/{clientId}.pdf
+  ipAddress  String?
+  version    String   @default("1.0")
+  createdAt  DateTime @default(now())
 
   client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
 }
@@ -700,27 +768,27 @@ model ClientContract {
 // Catalogue produits — vendus à la carte sur les séjours walk-in.
 // Stock décrémenté à la création d'un InvoiceItem produit.
 model Product {
-  id            String   @id @default(cuid())
-  name          String
-  brand         String?
-  reference     String?
-  category      String?
-  description   String?
-  price         Decimal  @db.Decimal(10, 2)
-  costPrice     Decimal? @db.Decimal(10, 2)
-  stock         Int      @default(0)
+  id                String   @id @default(cuid())
+  name              String
+  brand             String?
+  reference         String?
+  category          String?
+  description       String?
+  price             Decimal  @db.Decimal(10, 2)
+  costPrice         Decimal? @db.Decimal(10, 2)
+  stock             Int      @default(0)
   lowStockThreshold Int?
-  available     Boolean  @default(true)
-  isArchived    Boolean  @default(false)
-  version       Int      @default(0)
+  available         Boolean  @default(true)
+  isArchived        Boolean  @default(false)
+  version           Int      @default(0)
   // Upsell targeting (20260510_product_upsell)
-  targetSpecies String   @default("BOTH") // 'DOG' | 'CAT' | 'BOTH'
-  targetAge     String   @default("ALL")  // 'PUPPY' | 'JUNIOR' | 'ADULT' | 'SENIOR' | 'ALL'
-  imageUrl      String?
-  weight        String?
-  supplier      String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  targetSpecies     String   @default("BOTH") // 'DOG' | 'CAT' | 'BOTH'
+  targetAge         String   @default("ALL") // 'PUPPY' | 'JUNIOR' | 'ADULT' | 'SENIOR' | 'ALL'
+  imageUrl          String?
+  weight            String?
+  supplier          String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   invoiceItems InvoiceItem[]
   bookingItems BookingItem[]
@@ -735,7 +803,7 @@ model Product {
 model MonthlyRevenueSummary {
   id              String   @id @default(cuid())
   year            Int
-  month           Int      // 1–12
+  month           Int // 1–12
   boardingRevenue Decimal  @default(0) @db.Decimal(10, 2)
   groomingRevenue Decimal  @default(0) @db.Decimal(10, 2)
   taxiRevenue     Decimal  @default(0) @db.Decimal(10, 2)
@@ -750,7 +818,6 @@ model MonthlyRevenueSummary {
   @@unique([year, month])
   @@index([year])
 }
-
 
 // Numérotation atomique des factures par année.
 // `lastSeq` est incrémenté via `INSERT ... ON CONFLICT DO UPDATE RETURNING`,
@@ -770,11 +837,11 @@ model GuardianEvent {
   projectSlug     String?
   title           String
   culprit         String?
-  level           String?  // 'fatal' | 'error' | 'warning' | 'info' | 'debug'
-  classification  String   // 'transient' | 'bug_code' | 'data_corruption' | 'infra' | 'spam' | 'unclassified'
-  severity        Int      // 1..5
-  action          String   // 'github_issue' | 'notify_admin' | 'silence' | 'unclassified'
-  reason          String?  // courte explication produite par le classifier (ou message d'erreur)
+  level           String? // 'fatal' | 'error' | 'warning' | 'info' | 'debug'
+  classification  String // 'transient' | 'bug_code' | 'data_corruption' | 'infra' | 'spam' | 'unclassified'
+  severity        Int // 1..5
+  action          String // 'github_issue' | 'notify_admin' | 'silence' | 'unclassified'
+  reason          String? // courte explication produite par le classifier (ou message d'erreur)
   githubIssueUrl  String?
   occurrencesSeen Int      @default(1)
   createdAt       DateTime @default(now())
@@ -788,12 +855,12 @@ model GuardianEvent {
 // La page publique /status lit cette table pour calculer l'uptime et tracer
 // la latence DB.
 model Heartbeat {
-  id           String   @id @default(cuid())
-  timestamp    DateTime @default(now())
-  status       String   // "ok" | "degraded" | "down"
-  latencyMs    Int
-  dbStatus     String   // "ok" | "down"
-  redisStatus  String   // "ok" | "down"
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  status      String // "ok" | "degraded" | "down"
+  latencyMs   Int
+  dbStatus    String // "ok" | "down"
+  redisStatus String // "ok" | "down"
 
   @@index([timestamp(sort: Desc)])
 }
@@ -804,9 +871,9 @@ model FeatureFlag {
   key            String   @id
   description    String   @default("")
   enabled        Boolean  @default(false) // kill-switch global
-  rolloutPercent Int      @default(0)     // 0-100, sticky bucketing par hash(userId+key)
-  targetRoles    String[] @default([])    // ['CLIENT','ADMIN','SUPERADMIN'] ; [] = pas de filtre
-  userWhitelist  String[] @default([])    // userIds explicites (bypass rollout)
+  rolloutPercent Int      @default(0) // 0-100, sticky bucketing par hash(userId+key)
+  targetRoles    String[] @default([]) // ['CLIENT','ADMIN','SUPERADMIN'] ; [] = pas de filtre
+  userWhitelist  String[] @default([]) // userIds explicites (bypass rollout)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -816,8 +883,8 @@ model FeatureFlag {
 // never deliver the same SMS twice within the 24h dedup window.
 model SmsLog {
   id          String   @id @default(cuid())
-  phone       String   // phone number or 'ADMIN'
-  contentHash String   // SHA-256(phone + '\x00' + message)
+  phone       String // phone number or 'ADMIN'
+  contentHash String // SHA-256(phone + '\x00' + message)
   sentAt      DateTime @default(now())
   status      String   @default("SENT") // SENT | FAILED | SKIPPED
   bookingId   String?

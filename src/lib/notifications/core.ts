@@ -35,7 +35,9 @@ export type NotificationType =
   | 'INVOICE_OVERDUE'           // client receives when an invoice is unpaid at J+30 then J+60
   | 'REVIEW_REQUEST'            // client receives after a completed stay to submit a review
   | 'END_STAY_REPORT'           // client receives at checkout — structured narrative report (see EndStayReport table)
-  | 'PRODUCT_ORDER';            // admin receives when a client orders a product on an active booking
+  | 'PRODUCT_ORDER'             // admin receives when a client orders a product on an active booking
+  | 'BOOKING_TIME_PROPOSED'     // client receives when admin proposes a specific time (arrival / taxi go / taxi return)
+  | 'BOOKING_TIME_CONFIRMED';   // client receives when a time proposal is accepted (by either side)
 
 export interface CreateNotificationData {
   userId: string;

@@ -13,7 +13,9 @@
 import { auth } from '../../../../../../auth';
 import { redirect, notFound } from 'next/navigation';
 import { toNumber } from '@/lib/decimal';
+import { prisma } from '@/lib/prisma';
 import ReservationActions from './ReservationActions';
+import { TimeProposalBanner, type ProposalSummary } from '@/components/admin/TimeProposalBanner';
 import type { TaxiTripData } from '@/components/shared/TaxiTimeline';
 import StayPhotosSection from './StayPhotosSection';
 import AdminMessageSection from './AdminMessageSection';
@@ -56,6 +58,39 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
 
   const data = await loadAdminBookingDetail(id);
   if (!data) notFound();
+
+  // Time proposal state per scope — fetched in parallel for the banner.
+  // Source : architecture proposal 2026-05-17.
+  const timeProposalsRaw = await prisma.timeProposal.findMany({
+    where: { bookingId: id, status: { in: ['PENDING', 'ACCEPTED'] } },
+    select: {
+      id: true, scope: true, time: true, status: true,
+      proposedByRole: true, proposalNote: true, responseNote: true,
+      respondedAt: true,
+    },
+    orderBy: [{ status: 'asc' }, { proposedAt: 'desc' }],
+  });
+  const proposalByScope: Record<'ARRIVAL' | 'TAXI_GO' | 'TAXI_RETURN', { current: ProposalSummary | null; confirmed: ProposalSummary | null }> = {
+    ARRIVAL: { current: null, confirmed: null },
+    TAXI_GO: { current: null, confirmed: null },
+    TAXI_RETURN: { current: null, confirmed: null },
+  };
+  for (const p of timeProposalsRaw) {
+    const summary: ProposalSummary = {
+      id: p.id,
+      scope: p.scope,
+      time: p.time,
+      status: p.status,
+      proposedByRole: p.proposedByRole as 'CLIENT' | 'ADMIN' | 'SUPERADMIN',
+      proposalNote: p.proposalNote,
+      responseNote: p.responseNote,
+    };
+    if (p.status === 'PENDING' && !proposalByScope[p.scope].current) {
+      proposalByScope[p.scope].current = summary;
+    } else if (p.status === 'ACCEPTED' && !proposalByScope[p.scope].confirmed) {
+      proposalByScope[p.scope].confirmed = summary;
+    }
+  }
 
   const {
     booking,
@@ -205,6 +240,51 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
               cancelReason: labels.cancelReason,
             }}
           />
+
+          {/* Time confirmation negotiation — one banner per applicable
+              scope (arrival + taxi addons when enabled). Source : audit
+              produit 2026-05-17 + architecture TimeProposal entity. */}
+          {(() => {
+            const isOpen = !['COMPLETED','CANCELLED','REJECTED','NO_SHOW'].includes(booking.status);
+            const showArrival = booking.serviceType === 'BOARDING';
+            const bd = booking.boardingDetail;
+            const showTaxiGo = bd?.taxiGoEnabled === true;
+            const showTaxiReturn = bd?.taxiReturnEnabled === true;
+            return (
+              <div className="space-y-2">
+                {showArrival && (
+                  <TimeProposalBanner
+                    bookingId={booking.id}
+                    scope="ARRIVAL"
+                    current={proposalByScope.ARRIVAL.current}
+                    confirmed={proposalByScope.ARRIVAL.confirmed}
+                    open={isOpen}
+                    locale={locale}
+                  />
+                )}
+                {showTaxiGo && (
+                  <TimeProposalBanner
+                    bookingId={booking.id}
+                    scope="TAXI_GO"
+                    current={proposalByScope.TAXI_GO.current}
+                    confirmed={proposalByScope.TAXI_GO.confirmed}
+                    open={isOpen}
+                    locale={locale}
+                  />
+                )}
+                {showTaxiReturn && (
+                  <TimeProposalBanner
+                    bookingId={booking.id}
+                    scope="TAXI_RETURN"
+                    current={proposalByScope.TAXI_RETURN.current}
+                    confirmed={proposalByScope.TAXI_RETURN.confirmed}
+                    open={isOpen}
+                    locale={locale}
+                  />
+                )}
+              </div>
+            );
+          })()}
 
           <ReservationActions
             booking={{
