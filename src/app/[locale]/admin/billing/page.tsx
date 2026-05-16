@@ -16,6 +16,7 @@ import { BillingInvoicesTable } from './BillingInvoicesTable';
 import { BillingStatusFilters } from './BillingStatusFilters';
 import { MONTH_NAMES_FR_LC, parseMonth, monthBounds, makeBuildQS } from './billing-utils';
 import { casablancaYMD } from '@/lib/dates-casablanca';
+import { getMonthlyRevenueByCategory } from '@/lib/billing/monthly-revenue';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -103,8 +104,14 @@ export default async function AdminBillingPage(props: PageProps) {
   };
   const orderBy = sort ? orderByMap[sort] : { issuedAt: 'desc' as const };
   const monthWhere = monthDateFilter;
+  // Casa year/month for the Sémantique B helper. selectedMonth is "YYYY-MM"
+  // so parsing is deterministic — no TZ ambiguity possible. See
+  // docs/BUSINESS_RULES.md §1 (Sémantique B canonical helper).
+  const [selectedYearStr, selectedMonthStr] = selectedMonth.split('-');
+  const selectedYearNum = parseInt(selectedYearStr, 10);
+  const selectedMonthNum = parseInt(selectedMonthStr, 10);
 
-  const [invoices, invoiceCount, billedAgg, collectedAgg, methodGrouped] = await Promise.all([
+  const [invoices, invoiceCount, billedAgg, collectedTotal, methodGrouped] = await Promise.all([
     prisma.invoice.findMany({
       where: listWhere,
       include: {
@@ -115,21 +122,24 @@ export default async function AdminBillingPage(props: PageProps) {
     }),
     prisma.invoice.count({ where: listWhere }),
     prisma.invoice.aggregate({ where: monthWhere, _sum: { amount: true } }),
-    // eslint-disable-next-line dog-universe/no-direct-revenue-computation -- OK: KPI "Total Encaissé" + breakdown par méthode de paiement — migration vers getMonthlyRevenueByCategory() prévue dans PR suivante (consumer migration Sémantique B).
-    prisma.payment.aggregate({
-      where: { paymentDate: { gte: monthStart, lte: monthEnd }, invoice: monthWhere },
-      _sum: { amount: true },
-    }),
-    // eslint-disable-next-line dog-universe/no-direct-revenue-computation -- OK: breakdown par paymentMethod (CASH/CARD/CHECK/TRANSFER) — la formule prorata catégorie ne s'applique pas ici, c'est un split orthogonal.
+    // KPI "Total Encaissé" — Sémantique B canonical (cash basis pure).
+    // Reads the MV via getMonthlyRevenueByCategory which excludes only
+    // CANCELLED + paidAmount = 0 ; aligns with the comptable's bank
+    // statement and the dashboard "Total Encaissé".
+    getMonthlyRevenueByCategory(selectedYearNum, selectedMonthNum).then(r => r.totalAllCategories),
+    // eslint-disable-next-line dog-universe/no-direct-revenue-computation -- OK PERMANENT: split orthogonal par paymentMethod (CASH/CARD/CHECK/TRANSFER). La formule prorata catégorie de Sémantique B ne s'applique pas — c'est une autre dimension d'analyse. Filtre aligné avec helper canonique : exclusion CANCELLED+0 uniquement.
     prisma.payment.groupBy({
       by: ['paymentMethod'],
-      where: { paymentDate: { gte: monthStart, lte: monthEnd }, invoice: monthWhere },
+      where: {
+        paymentDate: { gte: monthStart, lte: monthEnd },
+        invoice: { NOT: { AND: [{ status: 'CANCELLED' }, { paidAmount: 0 }] } },
+      },
       _sum: { amount: true }, _count: { id: true },
     }),
   ]);
 
   const kpiTotalBilled = toNumber(billedAgg._sum.amount ?? 0);
-  const kpiCollected = toNumber(collectedAgg._sum.amount ?? 0);
+  const kpiCollected = collectedTotal;
   const kpiRemaining = Math.max(0, kpiTotalBilled - kpiCollected);
   const paymentMethodStats = methodGrouped
     .filter(g => (g._count.id ?? 0) > 0)
