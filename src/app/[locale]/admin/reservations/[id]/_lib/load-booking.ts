@@ -134,6 +134,9 @@ export async function loadAdminBookingDetail(id: string) {
   ] = await Promise.all([
     prisma.invoice.findFirst({
       where: {
+        // Exclude CANCELLED so admin doesn't see ghost cards after a
+        // cancel (source : audit produit 2026-05-17, cas DU-2026-0052).
+        status: { not: 'CANCELLED' },
         OR: [
           { supplementaryForBookingId: id },
           // legacy fallback for rows created before the FK column was added
