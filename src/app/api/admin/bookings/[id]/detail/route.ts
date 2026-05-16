@@ -73,9 +73,12 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // Supplementary invoice (extension surcharge)
+  // Supplementary invoice (extension surcharge) — exclude CANCELLED so the
+  // slide-over panel doesn't show ghost cards after an admin cancel.
+  // Source : audit produit 2026-05-17 (Mehdi / Marie Lagarde DU-2026-0052).
   const supplementaryInvoice = await prisma.invoice.findFirst({
     where: {
+      status: { not: 'CANCELLED' },
       OR: [
         { supplementaryForBookingId: id },
         { clientId: booking.clientId, notes: `EXTENSION_SURCHARGE:${id}` },

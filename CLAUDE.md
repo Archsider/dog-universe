@@ -1034,6 +1034,146 @@ régénère la backfill depuis les colonnes source.
 
 ---
 
+## ANNULATION DE FACTURE (depuis 2026-05-17)
+
+Système d'annulation explicite de factures avec helper canonique +
+endpoint dédié + UI bouton + cascade unlink BookingItem. Source : audit
+produit 2026-05-17 (cas Marie Lagarde DU-2026-0052, croquettes 740 MAD
+en doublon, facture fantôme bloquée sans moyen UI de supprimer).
+
+### Service canonique `src/lib/billing/cancel-invoice.ts`
+
+Whitelisté par la règle ESLint `no-direct-invoice-mutation` (fichier
+sous `src/lib/billing/`). Owns la transition PENDING/PAID → CANCELLED.
+
+```ts
+cancelInvoice({
+  invoiceId, reason: string (≥ 10 chars), actorId, actorRole,
+  refundExisting?, paymentMethodForRefund?,
+}) → { ok, invoiceNumber, previousStatus, bookingItemsUnlinked, refundPaymentId }
+```
+
+**Garde-fous** :
+- Idempotency : refuse `ALREADY_CANCELLED` (409)
+- Cross-role : ADMIN ne peut cancel qu'une invoice CLIENT-owned
+  (SUPERADMIN unrestricted)
+- Refund opt-in : si `paidAmount > 0`, exige `refundExisting=true` +
+  `paymentMethodForRefund` explicite (rejette `PAID_INVOICE_REQUIRES_
+  REFUND` sinon)
+- Optimistic-lock guard sur `version` (rejette `VERSION_CONFLICT`)
+- Audit note appendée dans `Invoice.notes` (FR daté + role acteur)
+- Pas de side effect notif/log (caller fait → route handler)
+
+**Cascade** : `BookingItem.invoiceItemId = null` pour tous les
+BookingItem qui pointaient sur l'invoice. Sémantique : ils
+redeviennent "unbilled" et peuvent être re-rattachés à une autre
+invoice plus tard.
+
+### Helper `getSupplementLabel(items, locale)`
+
+Label dynamique pour les factures supplémentaires (remplace le
+hardcoded "Supplément prolongation" qui était trompeur quand le
+supplément contenait des produits — cas Mehdi 740 MAD de croquettes
+classées en "Supplément prolongation").
+
+| Contenu | FR | EN |
+|---|---|---|
+| BOARDING uniquement | Supplément prolongation | Extension surcharge |
+| PRODUCT uniquement | Facture produits supplémentaires | Additional products invoice |
+| GROOMING uniquement | Facture toilettage supplémentaire | Additional grooming invoice |
+| Mixte / autre | Facture supplémentaire | Supplementary invoice |
+
+### Endpoint API
+
+`POST /api/admin/invoices/[id]/cancel` ADMIN+. Body Zod strict :
+
+```ts
+{
+  reason: string (≥ 10),
+  refundExisting?: boolean,
+  paymentMethodForRefund?: 'CASH' | 'CARD' | 'CHECK' | 'TRANSFER',
+  silent?: boolean,  // skip client notification
+}
+```
+
+Map erreurs → HTTP :
+- `INVOICE_NOT_FOUND` → 404
+- `ALREADY_CANCELLED` → 409
+- `CROSS_ROLE_FORBIDDEN` → 403
+- `INVALID_REASON` / `PAID_INVOICE_REQUIRES_REFUND` → 400
+
+Side effects post-commit :
+- Notification client `INVOICE_CANCELLED` (sauf silent)
+- Email FR/EN/AR `invoice_cancelled` (avec mention refund si paid)
+- ActionLog `INVOICE_CANCELLED` avec `bookingItemsUnlinked` +
+  `paidAmount` + `silent` flag
+
+### UI
+
+`src/components/admin/CancelInvoiceModal.tsx` (~200L) — AlertDialog
+avec :
+- Champ raison textarea + compteur live ≥ 10 chars
+- Si `paidAmount > 0` : panneau refund avec checkbox obligatoire + 4
+  boutons radio méthode (CASH/CARD/CHECK/TRANSFER)
+- Checkbox silencieux (pour data-cleanup admin uniquement)
+- Toast erreur surface le code serveur
+
+`src/components/admin/InvoiceCancelButton.tsx` — wrapper client pour
+intégrer dans des Server Components (BookingInvoiceSection). Affiche
+un badge "Annulée" rouge si déjà CANCELLED.
+
+`BookingInvoiceSection.tsx` : bouton "Annuler" rouge sur les 2 cards
+(facture principale + supplément). Label supplément utilise le helper
+dynamique si `itemCategories` est fourni.
+
+### Filtre dans les loaders
+
+Tous les loaders qui affichent le supplément côté admin/client
+filtrent `status != 'CANCELLED'` :
+- `src/app/[locale]/admin/reservations/[id]/_lib/load-booking.ts`
+- `src/app/api/admin/bookings/[id]/detail/route.ts`
+- `src/app/[locale]/client/bookings/[id]/page.tsx` (déjà en place)
+
+→ Les factures annulées disparaissent visuellement du dashboard
+booking detail, gardent leur trace en DB pour audit/RGPD.
+
+### Tests (20 nouveaux)
+
+`src/lib/billing/__tests__/cancel-invoice.test.ts` (14) — state
+machine + reason validation + idempotency + cross-role gate + refund
+opt-in + note append + helper getSupplementLabel par catégorie
+
+`src/app/api/admin/invoices/[id]/cancel/__tests__/route.test.ts` (6) —
+403 non-admin, 400 body, happy path + audit + notif, silent skip
+notif, error→HTTP mapping (404/409/403/400), refund forward
+
+### Garde-fous Module 4-B respectés
+
+- ✅ `prisma.invoice.update` direct uniquement dans `cancel-invoice.ts`
+  (whitelisté par la règle `no-direct-invoice-mutation`)
+- ✅ Pas de `prisma.payment.create` (utilise `recordPayment` quand
+  refund implémenté en V2)
+- ✅ Pas de `new Date()` dans Prisma where
+- ✅ Pas de `.toFixed()` sur money (formatMAD partout)
+
+### SQL manuel fix Marie Lagarde DU-2026-0052
+
+```sql
+UPDATE "Invoice" SET status = 'CANCELLED', notes = COALESCE(notes||E'\n','')
+  || '[Annulé manuel 2026-05-17] Doublon avec DU-2026-0040 (croquettes
+  facturées 2 fois)', "version" = "version"+1, "updatedAt" = NOW()
+WHERE "invoiceNumber" = 'DU-2026-0052' AND status != 'CANCELLED';
+
+UPDATE "BookingItem" SET "invoiceItemId" = NULL
+WHERE "invoiceItemId" IN (SELECT id FROM "InvoiceItem" WHERE "invoiceId" =
+  (SELECT id FROM "Invoice" WHERE "invoiceNumber" = 'DU-2026-0052'));
+```
+
+Une fois la PR mergée : Mehdi peut utiliser le bouton "Annuler" dans
+l'UI → plus besoin de SQL manuel pour les futurs cas.
+
+---
+
 ## SIDEBAR ADMIN
 
 `src/components/layout/AdminSidebar.tsx` — props :

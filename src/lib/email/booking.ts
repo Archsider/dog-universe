@@ -264,6 +264,25 @@ export const bookingTemplates: Record<string, EmailTemplateBuilder> = {
       `,
   }),
 
+  invoice_cancelled: ({ d }) => ({
+    subjectFr: `ℹ️ Facture ${d.invoiceNumber} annulée — Dog Universe`,
+    subjectEn: `ℹ️ Invoice ${d.invoiceNumber} cancelled — Dog Universe`,
+    bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientName},</h2>
+        <p>Votre facture <strong>${d.invoiceNumber}</strong> d'un montant de <strong>${d.amount} MAD</strong> a été <strong style="color: #DC2626;">annulée</strong> par notre équipe.</p>
+        ${d.reason ? `<p style="background: #FEF2F2; border-left: 3px solid #DC2626; padding: 10px;"><strong>Motif :</strong> ${d.reason}</p>` : ''}
+        ${d.wasPaid ? `<p>Le montant déjà encaissé sera comptabilisé en remboursement. Pour toute question, contactez-nous via WhatsApp.</p>` : ''}
+        <p>Cordialement,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+    bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientName},</h2>
+        <p>Your invoice <strong>${d.invoiceNumber}</strong> for <strong>${d.amount} MAD</strong> has been <strong style="color: #DC2626;">cancelled</strong> by our team.</p>
+        ${d.reason ? `<p style="background: #FEF2F2; border-left: 3px solid #DC2626; padding: 10px;"><strong>Reason:</strong> ${d.reason}</p>` : ''}
+        ${d.wasPaid ? `<p>The amount already paid will be refunded. For any question, contact us via WhatsApp.</p>` : ''}
+        <p>Best regards,<br><strong>The Dog Universe Team</strong></p>
+      `,
+  }),
+
   admin_stay_reminder: ({ d }) => ({
     subjectFr: `📋 Rappel séjour demain — ${d.petName} (${d.clientName}) — Dog Universe`,
     subjectEn: `📋 Stay reminder tomorrow — ${d.petName} (${d.clientName}) — Dog Universe`,

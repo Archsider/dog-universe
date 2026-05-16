@@ -351,4 +351,13 @@ export const NOTIFICATION_MESSAGES: Record<string, MessageFactory> = {
     messageEn: `Your booking ${bookingRef} has been cancelled by the team.${reason ? ` Reason: ${reason}` : ''}`,
     messageAr: `تم إلغاء حجزك ${bookingRef} من قبل الفريق.${reason ? ` السبب: ${reason}` : ''}`,
   }),
+
+  INVOICE_CANCELLED: ({ invoiceNumber, reason, amount }) => ({
+    titleFr: 'Facture annulée',
+    titleEn: 'Invoice cancelled',
+    titleAr: 'تم إلغاء الفاتورة',
+    messageFr: `Votre facture ${invoiceNumber} (${amount} MAD) a été annulée par l’équipe.${reason ? ` Motif : ${reason}` : ''}`,
+    messageEn: `Your invoice ${invoiceNumber} (${amount} MAD) has been cancelled by the team.${reason ? ` Reason: ${reason}` : ''}`,
+    messageAr: `تم إلغاء فاتورتك ${invoiceNumber} (${amount} درهم) من قبل الفريق.${reason ? ` السبب: ${reason}` : ''}`,
+  }),
 };

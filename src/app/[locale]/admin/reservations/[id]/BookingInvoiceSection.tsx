@@ -3,6 +3,8 @@ import { formatMAD } from '@/lib/utils';
 import { toNumber, type DecimalLike } from '@/lib/decimal';
 import CreateInvoiceFromBookingButton from './CreateInvoiceFromBookingButton';
 import PaymentModal from '@/app/[locale]/admin/billing/PaymentModalLazy';
+import { InvoiceCancelButton } from '@/components/admin/InvoiceCancelButton';
+import { getSupplementLabel, type ItemCategory } from '@/lib/billing/cancel-invoice';
 
 interface InvoiceData {
   id: string;
@@ -10,12 +12,11 @@ interface InvoiceData {
   status: string;
   amount: DecimalLike;
   paidAmount: DecimalLike;
-  // `version` is no longer used by the unified PaymentModal (the old
-  // CreateInvoiceButton used it for optimistic-concurrency on PATCH
-  // /api/invoices/[id] — a path that never actually recorded a Payment
-  // row). Kept optional in the type for backward compat with callers
-  // that still pass it, but the new modal ignores it.
   version?: number;
+  /** Item categories — used to compute the dynamic supplement label
+   *  ("Facture produits supplémentaires" vs "Supplément prolongation"
+   *  vs generic). Falls back to the static label when absent. */
+  itemCategories?: ItemCategory[];
 }
 
 interface BookingInvoiceSectionProps {
@@ -98,7 +99,7 @@ export default function BookingInvoiceSection({
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <PaymentModal
               invoiceId={invoice.id}
               currentStatus={invoice.status}
@@ -111,6 +112,16 @@ export default function BookingInvoiceSection({
             <Link href={`/${locale}/admin/billing?invoiceId=${invoice.id}`} className="text-xs text-gray-400 hover:text-gold-600">
               {locale === 'fr' ? 'Voir facturation' : 'View billing'}
             </Link>
+            <div className="ml-auto">
+              <InvoiceCancelButton
+                invoiceId={invoice.id}
+                invoiceNumber={invoice.invoiceNumber}
+                amount={toNumber(invoice.amount)}
+                paidAmount={toNumber(invoice.paidAmount)}
+                status={invoice.status}
+                locale={locale}
+              />
+            </div>
           </div>
         </div>
       ) : (
@@ -123,7 +134,20 @@ export default function BookingInvoiceSection({
       {supplementaryInvoice && (
         <div className="mt-4 pt-4 border-t border-[#F0D98A]/40 space-y-2">
           <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
-            {locale === 'fr' ? 'Supplément prolongation' : 'Extension surcharge'}
+            {(() => {
+              // Dynamic label : products-only supplements should not be
+              // labeled "Supplément prolongation". Falls back to the
+              // static label when itemCategories isn't provided. Source :
+              // audit Mehdi 2026-05-17.
+              const cats = supplementaryInvoice.itemCategories;
+              if (cats && cats.length > 0) {
+                return getSupplementLabel(
+                  cats.map((c) => ({ category: c })),
+                  locale === 'en' ? 'en' : locale === 'ar' ? 'ar' : 'fr',
+                );
+              }
+              return locale === 'fr' ? 'Supplément prolongation' : 'Extension surcharge';
+            })()}
           </p>
           <div className="flex items-center justify-between">
             <p className="font-mono text-sm font-semibold text-charcoal">{supplementaryInvoice.invoiceNumber}</p>
@@ -180,15 +204,27 @@ export default function BookingInvoiceSection({
               </span>
             </div>
           </div>
-          <PaymentModal
-            invoiceId={supplementaryInvoice.id}
-            currentStatus={supplementaryInvoice.status}
-            locale={locale}
-            invoiceAmount={toNumber(supplementaryInvoice.amount)}
-            paidAmount={toNumber(supplementaryInvoice.paidAmount)}
-            isWalkIn={isWalkInClient}
-            triggerVariant="full"
-          />
+          <div className="flex items-center gap-2 flex-wrap">
+            <PaymentModal
+              invoiceId={supplementaryInvoice.id}
+              currentStatus={supplementaryInvoice.status}
+              locale={locale}
+              invoiceAmount={toNumber(supplementaryInvoice.amount)}
+              paidAmount={toNumber(supplementaryInvoice.paidAmount)}
+              isWalkIn={isWalkInClient}
+              triggerVariant="full"
+            />
+            <div className="ml-auto">
+              <InvoiceCancelButton
+                invoiceId={supplementaryInvoice.id}
+                invoiceNumber={supplementaryInvoice.invoiceNumber}
+                amount={toNumber(supplementaryInvoice.amount)}
+                paidAmount={toNumber(supplementaryInvoice.paidAmount)}
+                status={supplementaryInvoice.status}
+                locale={locale}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

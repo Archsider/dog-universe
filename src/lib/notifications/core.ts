@@ -37,7 +37,8 @@ export type NotificationType =
   | 'END_STAY_REPORT'           // client receives at checkout — structured narrative report (see EndStayReport table)
   | 'PRODUCT_ORDER'             // admin receives when a client orders a product on an active booking
   | 'BOOKING_TIME_PROPOSED'     // client receives when admin proposes a specific time (arrival / taxi go / taxi return)
-  | 'BOOKING_TIME_CONFIRMED';   // client receives when a time proposal is accepted (by either side)
+  | 'BOOKING_TIME_CONFIRMED'    // client receives when a time proposal is accepted (by either side)
+  | 'INVOICE_CANCELLED';        // client receives when one of their invoices is cancelled by admin
 
 export interface CreateNotificationData {
   userId: string;

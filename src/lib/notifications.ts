@@ -40,6 +40,7 @@ export {
   createTimeProposedNotification,
   createTimeConfirmedNotification,
   createBookingCancelledNotification,
+  createInvoiceCancelledNotification,
 } from './notifications/booking';
 
 export {

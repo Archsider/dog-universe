@@ -203,7 +203,8 @@ export type EmailTemplateName =
   | 'review_request'
   | 'booking_time_proposed'
   | 'booking_time_confirmed'
-  | 'booking_cancelled';
+  | 'booking_cancelled'
+  | 'invoice_cancelled';
 
 export type EmailPet = { name?: string | null; species?: string | null; gender?: string | null };
 
