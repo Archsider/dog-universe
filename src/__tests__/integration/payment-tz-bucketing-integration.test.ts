@@ -118,7 +118,7 @@ describeIntegration('compute_payment_by_category — Casa TZ bucketing', () => {
     const paymentId = `p_${tag}`;
 
     await client.$executeRawUnsafe(
-      `INSERT INTO "User"(id, email, "firstName", "lastName", name, "passwordHash", role) VALUES ('${userId}', 'tz-test-${tag}@example.test', 'TZ', 'Test', 'TZ Test', 'e2e-placeholder-hash', 'CLIENT')`,
+      `INSERT INTO "User"(id, email, "firstName", "lastName", name, "passwordHash", role, "updatedAt") VALUES ('${userId}', 'tz-test-${tag}@example.test', 'TZ', 'Test', 'TZ Test', 'e2e-placeholder-hash', 'CLIENT', NOW())`,
     );
     await client.$executeRawUnsafe(
       `INSERT INTO "Booking"(id, "clientId", "startDate", "endDate", status, "serviceType", "totalPrice", "createdAt", "updatedAt") VALUES ('${bookingId}', '${userId}', '2026-05-01', '2026-05-03', 'COMPLETED', 'BOARDING', 240, NOW(), NOW())`,
@@ -161,7 +161,7 @@ describeIntegration('compute_payment_by_category — Casa TZ bucketing', () => {
     const paymentId = `p_${tag}`;
 
     await client.$executeRawUnsafe(
-      `INSERT INTO "User"(id, email, "firstName", "lastName", name, "passwordHash", role) VALUES ('${userId}', 'tz-test-${tag}@example.test', 'TZ', 'Test2', 'TZ Test 2', 'e2e-placeholder-hash', 'CLIENT')`,
+      `INSERT INTO "User"(id, email, "firstName", "lastName", name, "passwordHash", role, "updatedAt") VALUES ('${userId}', 'tz-test-${tag}@example.test', 'TZ', 'Test2', 'TZ Test 2', 'e2e-placeholder-hash', 'CLIENT', NOW())`,
     );
     await client.$executeRawUnsafe(
       `INSERT INTO "Booking"(id, "clientId", "startDate", "endDate", status, "serviceType", "totalPrice", "createdAt", "updatedAt") VALUES ('${bookingId}', '${userId}', '2026-05-30', '2026-06-01', 'COMPLETED', 'BOARDING', 120, NOW(), NOW())`,
