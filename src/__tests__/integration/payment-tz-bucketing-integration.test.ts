@@ -88,8 +88,11 @@ describeIntegration('compute_payment_by_category — Casa TZ bucketing', () => {
   let client: PrismaClient;
 
   beforeAll(async () => {
+    // connection_limit=1 ensures BEGIN/ROLLBACK and all INSERTs within a test
+    // use the same Postgres connection. Without this, Prisma's pool may route
+    // different statements to different connections, breaking transaction rollback.
     client = new PrismaClient({
-      datasources: { db: { url: INTEGRATION_URL } },
+      datasources: { db: { url: `${INTEGRATION_URL}?connection_limit=1` } },
     });
     // Create the PG function — prisma db push only creates tables, not functions.
     await client.$executeRawUnsafe(CREATE_FUNCTION_SQL);
