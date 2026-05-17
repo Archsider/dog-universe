@@ -21,6 +21,7 @@
 
 import { defineCron } from '@/lib/cron-runner';
 import { runAllInvariantChecks } from '@/lib/health-invariants';
+import { notDeleted } from '@/lib/prisma-soft';
 import { cacheSet, tryAcquireFlag } from '@/lib/cache';
 import { prisma } from '@/lib/prisma';
 import { sendSMS } from '@/lib/sms';
@@ -75,7 +76,7 @@ export const GET = defineCron({
 
     if (critical.length > 0) {
       const superadmins = await prisma.user.findMany({
-        where: { role: 'SUPERADMIN', deletedAt: null, phone: { not: null } },
+        where: notDeleted({ role: 'SUPERADMIN', phone: { not: null } }),
         select: { phone: true },
       });
       const phones = superadmins

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { sendSMS } from '@/lib/sms';
 import { tryAcquireFlag } from '@/lib/cache';
 import { countConsecutiveFailures } from '@/lib/heartbeat';
@@ -86,7 +87,7 @@ export const GET = defineCron({
           const flagAcquired = await tryAcquireFlag('heartbeat:alerted', ALERT_FLAG_TTL);
           if (flagAcquired) {
             const superadmins = await prisma.user.findMany({
-              where: { role: 'SUPERADMIN', deletedAt: null, phone: { not: null } },
+              where: notDeleted({ role: 'SUPERADMIN', phone: { not: null } }),
               select: { phone: true },
             });
             const message =
@@ -132,7 +133,7 @@ export const GET = defineCron({
       if (stale.length > 0) {
         staleCrons = stale.map((r) => r.name);
         const superadmins = await prisma.user.findMany({
-          where: { role: 'SUPERADMIN', deletedAt: null, phone: { not: null } },
+          where: notDeleted({ role: 'SUPERADMIN', phone: { not: null } }),
           select: { phone: true },
         });
         const message =
