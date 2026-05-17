@@ -113,6 +113,7 @@ export default function AdminMessageSection({ bookingId, locale, initialMessages
         messageFr: message.trim(),
         messageEn: message.trim(),
         createdAt: new Date().toISOString(),
+        // eslint-disable-next-line dog-universe/no-inline-deletedAt-null -- OK: client-side React state initializer, not a Prisma where filter
         deletedAt: null,
         deletedByName: null,
       };
