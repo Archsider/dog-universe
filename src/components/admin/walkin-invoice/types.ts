@@ -21,6 +21,13 @@ export interface WalkinItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  /**
+   * Catalog link — REQUIRED for `category='PRODUCT'`. The server-side Zod
+   * refinement `PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID` rejects PRODUCT rows
+   * without a productId. Set via `<ProductCatalogSearchSelect>` (either
+   * picking an existing catalog row or quick-creating a new one).
+   */
+  productId?: string | null;
 }
 
 export const CATEGORY_LABELS: Record<ItemCategory, { fr: string; en: string }> = {

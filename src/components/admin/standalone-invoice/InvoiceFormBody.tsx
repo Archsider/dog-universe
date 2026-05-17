@@ -37,6 +37,7 @@ interface InvoiceFormBodyProps {
   onAddItem: () => void;
   onRemoveItem: (i: number) => void;
   onUpdateItem: (i: number, field: keyof LineItem, value: string | number | undefined) => void;
+  onPatchItem?: (i: number, patch: Partial<LineItem>) => void;
   onAddPreset: (preset: QuickAddPreset) => void;
   // Notes
   notes: string;
@@ -55,7 +56,7 @@ interface InvoiceFormBodyProps {
 export function InvoiceFormBody({
   locale, clientId, onClientIdChange, walkInName, onWalkInNameChange, walkInPhone, onWalkInPhoneChange,
   preselectedClientId, preselectedClientName, clients, serviceType, onServiceTypeChange,
-  issuedAt, onIssuedAtChange, items, catalog, onAddItem, onRemoveItem, onUpdateItem, onAddPreset,
+  issuedAt, onIssuedAtChange, items, catalog, onAddItem, onRemoveItem, onUpdateItem, onPatchItem, onAddPreset,
   notes, onNotesChange, markPaid, paymentMethod, paidAt,
   onMarkPaidChange, onPaymentMethodChange, onPaidAtChange, error,
 }: InvoiceFormBodyProps) {
@@ -113,7 +114,7 @@ export function InvoiceFormBody({
       </div>
 
       {/* Line items editor */}
-      <LineItemsEditor items={items} catalog={catalog} locale={locale} onAddItem={onAddItem} onRemoveItem={onRemoveItem} onUpdateItem={onUpdateItem} onAddPreset={onAddPreset} />
+      <LineItemsEditor items={items} catalog={catalog} locale={locale} onAddItem={onAddItem} onRemoveItem={onRemoveItem} onUpdateItem={onUpdateItem} onPatchItem={onPatchItem} onAddPreset={onAddPreset} />
 
       {/* Notes */}
       <div>

@@ -15,11 +15,12 @@ import { getCachedAuth } from '@/lib/cached-auth';
 // cheap.
 const getGlobalAdminCounts = unstable_cache(
   async () => {
-    const [pendingCount, pendingClaimsCount] = await Promise.all([
+    const [pendingCount, pendingClaimsCount, catalogSuggestionsCount] = await Promise.all([
       prisma.booking.count({ where: notDeleted({ status: 'PENDING' }) }),
       prisma.loyaltyBenefitClaim.count({ where: { status: 'PENDING' } }),
+      prisma.productCatalogSuggestion.count({ where: { status: 'pending' } }),
     ]);
-    return { pendingCount, pendingClaimsCount };
+    return { pendingCount, pendingClaimsCount, catalogSuggestionsCount };
   },
   ['admin-global-counts'],
   { tags: ['admin-counts'], revalidate: 30 },
@@ -45,11 +46,11 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
       where: { userId: session.user.id, type: 'ADDON_REQUEST', read: false },
     }),
   ]);
-  const { pendingCount, pendingClaimsCount } = globalCounts;
+  const { pendingCount, pendingClaimsCount, catalogSuggestionsCount } = globalCounts;
 
   return (
     <div className="min-h-screen bg-ivory-50 flex">
-      <AdminSidebar pendingCount={pendingCount} pendingClaimsCount={pendingClaimsCount} addonRequestCount={addonRequestCount} userRole={session.user.role} />
+      <AdminSidebar pendingCount={pendingCount} pendingClaimsCount={pendingClaimsCount} addonRequestCount={addonRequestCount} catalogSuggestionsCount={catalogSuggestionsCount} userRole={session.user.role} />
       <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
         {/* Top bar */}
         <header className="sticky top-0 z-30 h-16 bg-white border-b border-ivory-200 flex items-center justify-between px-4 lg:px-6">

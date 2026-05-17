@@ -64,6 +64,7 @@
       "driver": "Driver Mode",
       "billing": "Billing",
       "products": "Products & Stock",
+      "catalog_suggestions": "Catalog suggestions",
       "analytics": "Analytics",
       "logs": "Logs",
       "settings": "Settings",

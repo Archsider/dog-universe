@@ -60,6 +60,10 @@ export default function WalkinInvoiceModal({ locale }: Props) {
           description: it.description.trim(),
           quantity: it.quantity,
           unitPrice: it.unitPrice,
+          // productId is REQUIRED by the server when category='PRODUCT'
+          // (Agent 1's Zod refinement). For other categories we omit it
+          // entirely so the body stays clean.
+          ...(it.category === 'PRODUCT' && it.productId ? { productId: it.productId } : {}),
         })),
         notes: form.notes.trim() || null,
       };

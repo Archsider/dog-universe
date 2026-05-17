@@ -23,14 +23,14 @@ export function todayCasaYmd(): string {
 }
 
 function makeInitialItem(): WalkinItem {
-  // Default to 'OTHER' (not 'PRODUCT') because the walk-in form does NOT
-  // bind a productId — the user types the description freely. Sending a
-  // PRODUCT item without productId now rejects at the API (Zod refine
-  // PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID) and at the DB (CHECK constraint).
-  // If the user wants a PRODUCT, they switch the category dropdown ; the
-  // submit-time validation will warn them to bind a real product when
-  // PRODUCT-category support lands in this form.
-  return { id: newItemId(), category: 'OTHER', description: '', quantity: 1, unitPrice: 0 };
+  // Default to 'OTHER' (not 'PRODUCT') so the user makes a deliberate PRODUCT
+  // choice via the smart-search input. Avoids the trap "PRODUCT default →
+  // free-text typed → no productId → 400 PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID
+  // at submit" — enforced server-side by Zod refine + DB CHECK constraint
+  // `InvoiceItem_product_category_has_productId` (Agent 1, PR #123).
+  // The ProductCatalogSearchSelect component (PR #124) binds productId
+  // when the user explicitly switches to PRODUCT.
+  return { id: newItemId(), category: 'OTHER', description: '', quantity: 1, unitPrice: 0, productId: null };
 }
 
 export interface UseWalkinFormResult {
@@ -130,6 +130,10 @@ export function useWalkinForm(open: boolean): UseWalkinFormResult {
     if (items.some((it) => !it.description.trim() || it.quantity <= 0)) return false;
     // Negative unitPrice only for DISCOUNT.
     if (items.some((it) => it.category === 'DISCOUNT' ? it.unitPrice >= 0 : it.unitPrice < 0)) return false;
+    // PRODUCT category MUST carry a productId — mirror of server Zod rule
+    // PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID (Agent 1). Without this we'd
+    // unblock the "Next" button just to crash at submit.
+    if (items.some((it) => it.category === 'PRODUCT' && !it.productId)) return false;
     // Net total must be strictly positive.
     if (total <= 0) return false;
     // If there's a DISCOUNT, at least one non-DISCOUNT item must exist.

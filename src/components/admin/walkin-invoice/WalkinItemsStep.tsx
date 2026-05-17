@@ -2,9 +2,13 @@
 
 // Step 2 — Multi-line items (description / qty / unit) with live total.
 // DISCOUNT lines auto-normalise the sign of `unitPrice` (negative).
+// PRODUCT category renders <ProductCatalogSearchSelect> instead of a free
+// text input, so the row always carries a productId by submission time
+// (server enforces PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID).
 
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, AlertCircle } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
+import ProductCatalogSearchSelect from '@/components/admin/ProductCatalogSearchSelect';
 import { CATEGORY_LABELS, type ItemCategory, type WalkinItem } from './types';
 
 interface Props {
@@ -23,12 +27,18 @@ export default function WalkinItemsStep({
     <div className="space-y-3">
       {items.map((it) => {
         const isDiscount = it.category === 'DISCOUNT';
+        const isProduct = it.category === 'PRODUCT';
+        const productMissing = isProduct && !it.productId;
         const lineTotal = Math.round(it.quantity * it.unitPrice * 100) / 100;
         return (
           <div
             key={it.id}
             className={`p-3 rounded-lg border ${
-              isDiscount ? 'border-red-200 bg-red-50/30' : 'border-[#F0D98A]/40 bg-white'
+              isDiscount
+                ? 'border-red-200 bg-red-50/30'
+                : productMissing
+                ? 'border-amber-200 bg-amber-50/30'
+                : 'border-[#F0D98A]/40 bg-white'
             }`}
           >
             <div className="grid grid-cols-12 gap-2 items-start">
@@ -40,11 +50,24 @@ export default function WalkinItemsStep({
                   value={it.category}
                   onChange={(e) => {
                     const next = e.target.value as ItemCategory;
-                    // When switching to/from DISCOUNT, normalise unitPrice sign.
+                    // Normalise sign for DISCOUNT.
                     let unit = it.unitPrice;
                     if (next === 'DISCOUNT' && unit >= 0) unit = -Math.abs(unit) || -1;
                     if (next !== 'DISCOUNT' && unit < 0) unit = Math.abs(unit);
-                    onUpdate(it.id, { category: next, unitPrice: unit });
+                    // Switching INTO PRODUCT : clear description so the user
+                    // immediately sees the empty smart-search input. Switching
+                    // OUT of PRODUCT : drop the productId so the row reverts
+                    // to free-text.
+                    const patch: Partial<WalkinItem> = { category: next, unitPrice: unit };
+                    if (it.category === 'PRODUCT' && next !== 'PRODUCT') {
+                      patch.productId = null;
+                    }
+                    if (it.category !== 'PRODUCT' && next === 'PRODUCT') {
+                      patch.productId = null;
+                      patch.description = '';
+                      patch.unitPrice = 0;
+                    }
+                    onUpdate(it.id, patch);
                   }}
                   className="w-full px-2 py-1.5 rounded-md border border-[#E2C048]/40 text-sm focus:outline-none focus:ring-2 focus:ring-[#C4974A]/40"
                 >
@@ -58,15 +81,32 @@ export default function WalkinItemsStep({
               <div className="col-span-12 md:col-span-5">
                 <label className="block text-[10px] font-medium text-gray-500 mb-1 uppercase">
                   {fr ? 'Description' : 'Description'}
+                  {isProduct && <span className="ml-1 text-emerald-600">· {fr ? 'lié au catalogue' : 'catalog-linked'}</span>}
                 </label>
-                <input
-                  type="text"
-                  value={it.description}
-                  onChange={(e) => onUpdate(it.id, { description: e.target.value })}
-                  placeholder={fr ? 'Ex : Croquettes Royal Canin 10kg' : 'E.g. Royal Canin 10kg'}
-                  className="w-full px-2 py-1.5 rounded-md border border-[#E2C048]/40 text-sm focus:outline-none focus:ring-2 focus:ring-[#C4974A]/40"
-                  maxLength={200}
-                />
+                {isProduct ? (
+                  <ProductCatalogSearchSelect
+                    locale={fr ? 'fr' : 'en'}
+                    value={{ productId: it.productId ?? null, description: it.description, price: it.unitPrice }}
+                    serverError={productMissing
+                      ? (fr ? 'Sélectionne un produit du catalogue ou crée-le.' : 'Pick a catalog product or create it.')
+                      : null}
+                    onChange={(sel) => onUpdate(it.id, {
+                      productId: sel.productId,
+                      description: sel.description,
+                      unitPrice: sel.price,
+                      category: 'PRODUCT',
+                    })}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={it.description}
+                    onChange={(e) => onUpdate(it.id, { description: e.target.value })}
+                    placeholder={fr ? 'Ex : Toilettage long' : 'E.g. Long grooming'}
+                    className="w-full px-2 py-1.5 rounded-md border border-[#E2C048]/40 text-sm focus:outline-none focus:ring-2 focus:ring-[#C4974A]/40"
+                    maxLength={200}
+                  />
+                )}
               </div>
               <div className="col-span-4 md:col-span-1">
                 <label className="block text-[10px] font-medium text-gray-500 mb-1 uppercase">
@@ -90,7 +130,8 @@ export default function WalkinItemsStep({
                   step="0.01"
                   value={it.unitPrice}
                   onChange={(e) => onUpdate(it.id, { unitPrice: parseFloat(e.target.value) || 0 })}
-                  className={`w-full px-2 py-1.5 rounded-md border text-sm tabular-nums focus:outline-none focus:ring-2 ${
+                  disabled={isProduct && !it.productId}
+                  className={`w-full px-2 py-1.5 rounded-md border text-sm tabular-nums focus:outline-none focus:ring-2 disabled:bg-gray-50 disabled:cursor-not-allowed ${
                     isDiscount ? 'border-red-300 text-red-700 focus:ring-red-300' : 'border-[#E2C048]/40 focus:ring-[#C4974A]/40'
                   }`}
                 />
@@ -137,6 +178,14 @@ export default function WalkinItemsStep({
       {total <= 0 && (
         <p className="text-xs text-red-600 text-right">
           {fr ? 'Le total doit être strictement positif.' : 'Total must be strictly positive.'}
+        </p>
+      )}
+      {items.some((it) => it.category === 'PRODUCT' && !it.productId) && (
+        <p className="text-xs text-amber-700 flex items-center gap-1 justify-end">
+          <AlertCircle className="h-3 w-3" />
+          {fr
+            ? 'Une ligne « Produit » n\'est pas liée au catalogue.'
+            : 'A "Product" line is missing a catalog link.'}
         </p>
       )}
     </div>
