@@ -27,7 +27,8 @@
     "dog-universe/no-direct-invoice-mutation": "error",
     "dog-universe/no-direct-revenue-computation": "error",
     "dog-universe/no-hardcoded-product-without-id": "error",
-    "dog-universe/no-naive-casa-timezone-cast": "error"
+    "dog-universe/no-naive-casa-timezone-cast": "error",
+    "dog-universe/no-inline-deletedAt-null": "warn"
   },
   "overrides": [
     {
@@ -44,7 +45,8 @@
         "dog-universe/no-direct-invoice-mutation": "off",
         "dog-universe/no-direct-revenue-computation": "off",
         "dog-universe/no-hardcoded-product-without-id": "off",
-        "dog-universe/no-naive-casa-timezone-cast": "off"
+        "dog-universe/no-naive-casa-timezone-cast": "off",
+        "dog-universe/no-inline-deletedAt-null": "off"
       }
     },
     {
@@ -59,7 +61,8 @@
         "dog-universe/no-direct-invoice-mutation": "off",
         "dog-universe/no-direct-revenue-computation": "off",
         "dog-universe/no-hardcoded-product-without-id": "off",
-        "dog-universe/no-naive-casa-timezone-cast": "off"
+        "dog-universe/no-naive-casa-timezone-cast": "off",
+        "dog-universe/no-inline-deletedAt-null": "off"
       }
     },
     {
@@ -74,7 +77,8 @@
         "dog-universe/no-direct-invoice-mutation": "off",
         "dog-universe/no-direct-revenue-computation": "off",
         "dog-universe/no-hardcoded-product-without-id": "off",
-        "dog-universe/no-naive-casa-timezone-cast": "off"
+        "dog-universe/no-naive-casa-timezone-cast": "off",
+        "dog-universe/no-inline-deletedAt-null": "off"
       }
     },
     {

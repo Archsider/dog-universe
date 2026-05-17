@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { startOfTodayCasa, endOfTodayCasa, casablancaYMD } from '@/lib/dates-casablanca';
+import { notDeleted } from '@/lib/prisma-soft';
 import { primarySpeciesOf, petNamesOf, type TodaySnapshot, type TodayMovement, type TodayTaxi } from '../shapes';
 
 // TaxiTrip statuses that mean "done for today" — excluded from the dashboard
@@ -27,12 +29,11 @@ export async function loadToday(): Promise<TodaySnapshot> {
 
   const [checkInsRaw, checkOutsRaw, taxiTripsRaw] = await Promise.all([
     prisma.booking.findMany({
-      where: {
+      where: notDeleted<Prisma.BookingWhereInput>({
         serviceType: 'BOARDING',
         status: { in: ['CONFIRMED', 'PENDING'] },
         startDate: { gte: todayStart, lte: todayEnd },
-        deletedAt: null,
-      },
+      }),
       select: {
         id: true,
         arrivalTime: true,
@@ -43,12 +44,11 @@ export async function loadToday(): Promise<TodaySnapshot> {
       take: 20,
     }),
     prisma.booking.findMany({
-      where: {
+      where: notDeleted<Prisma.BookingWhereInput>({
         serviceType: 'BOARDING',
         status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
         endDate: { gte: todayStart, lte: todayEnd },
-        deletedAt: null,
-      },
+      }),
       select: {
         id: true,
         client: { select: { name: true } },
@@ -66,10 +66,9 @@ export async function loadToday(): Promise<TodaySnapshot> {
       where: {
         date: todayYmd,
         status: { notIn: [...TAXI_TERMINAL_STATUSES] },
-        booking: {
+        booking: notDeleted<Prisma.BookingWhereInput>({
           status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
-          deletedAt: null,
-        },
+        }),
       },
       select: {
         id: true,

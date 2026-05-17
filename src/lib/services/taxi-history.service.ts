@@ -10,6 +10,7 @@
 // le cas ici : un trip peut bouger de statut pendant qu'on scrolle).
 
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export type TripType = 'OUTBOUND' | 'RETURN' | 'STANDALONE';
 
@@ -100,7 +101,7 @@ function buildWhere(filters: TaxiHistoryFilters) {
 
   // Client filter — passe par la booking relation. Inclut un guard
   // deletedAt: null pour cacher les courses des clients soft-deleted.
-  const bookingCondition: Record<string, unknown> = { deletedAt: null };
+  const bookingCondition: Record<string, unknown> = notDeleted();
   if (filters.clientId) {
     bookingCondition.clientId = filters.clientId;
   }

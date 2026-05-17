@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { cacheReadThrough, cacheDel, CacheKeys, CacheTTL } from '@/lib/cache';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export type NotificationType =
   | 'BOOKING_CONFIRMATION'
@@ -75,7 +77,7 @@ export async function createNotification(data: CreateNotificationData) {
 
 export async function createAdminNotifications(data: Omit<CreateNotificationData, 'userId'>) {
   const admins = await prisma.user.findMany({
-    where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+    where: notDeleted<Prisma.UserWhereInput>({ role: { in: ['ADMIN', 'SUPERADMIN'] } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
     select: { id: true },
   });
   return Promise.all(admins.map((admin) => createNotification({ ...data, userId: admin.id })));
@@ -88,7 +90,7 @@ export async function getUnreadCount(userId: string): Promise<number> {
     // `deletedAt: null` — soft-deleted ADMIN_MESSAGE / END_STAY_REPORT
     // disappear from the bell badge count even if they were still unread
     // at the moment the admin clicked "Supprimer".
-    () => prisma.notification.count({ where: { userId, read: false, deletedAt: null } }),
+    () => prisma.notification.count({ where: notDeleted({ userId, read: false }) }),
   );
 }
 

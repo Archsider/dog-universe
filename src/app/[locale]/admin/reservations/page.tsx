@@ -70,17 +70,16 @@ export default async function AdminReservationsPage(props: PageProps) {
 
   const [todayArrivalsCount, todayDeparturesCount, upcomingCount, inProgressCount] = await Promise.all([
     prisma.booking.count({
-      where: { deletedAt: null, status: 'CONFIRMED', startDate: { gte: todayStart, lte: todayEnd } },
+      where: notDeleted({ status: 'CONFIRMED', startDate: { gte: todayStart, lte: todayEnd } }),
     }),
     prisma.booking.count({
-      where: { deletedAt: null, status: 'IN_PROGRESS', endDate: { gte: todayStart, lte: todayEnd } },
+      where: notDeleted({ status: 'IN_PROGRESS', endDate: { gte: todayStart, lte: todayEnd } }),
     }),
     prisma.booking.count({
-      where: {
-        deletedAt: null,
+      where: notDeleted({
         status: { in: ['PENDING', 'CONFIRMED'] as BookingStatus[] },
         startDate: { gt: todayEnd, lte: weekEnd },
-      },
+      }),
     }),
     prisma.booking.count({ where: notDeleted({ status: 'IN_PROGRESS' }) }),
   ]);
@@ -96,12 +95,11 @@ export default async function AdminReservationsPage(props: PageProps) {
   // + departures filter: IN_PROGRESS, started by today, ending after today
   // (open-ended included via OR endDate=null).
   const presentBookings = await prisma.booking.count({
-    where: {
-      deletedAt: null,
+    where: notDeleted<Prisma.BookingWhereInput>({
       status: 'IN_PROGRESS',
       startDate: { lte: todayEnd },
       OR: [{ endDate: null }, { endDate: { gte: todayStart } }],
-    },
+    }),
   });
 
   const subtitle = (() => {
@@ -131,11 +129,10 @@ export default async function AdminReservationsPage(props: PageProps) {
         <ListView
           locale={locale}
           display={display}
-          where={{
-            deletedAt: null,
+          where={notDeleted({
             status: { in: ['PENDING', 'CONFIRMED'] as BookingStatus[] },
             startDate: { gt: todayEnd },
-          }}
+          })}
           orderBy={[{ startDate: 'asc' }]}
           initialFilter='ALL'
           locale_={locale}
@@ -145,7 +142,7 @@ export default async function AdminReservationsPage(props: PageProps) {
         <ListView
           locale={locale}
           display={display}
-          where={{ deletedAt: null, status: 'IN_PROGRESS' }}
+          where={notDeleted({ status: 'IN_PROGRESS' })}
           orderBy={[{ endDate: 'asc' }]}
           initialFilter='ALL'
           locale_={locale}
@@ -400,8 +397,7 @@ async function HistoryView({
   if (typeFilter === 'BOARDING' || typeFilter === 'PET_TAXI') typeWhere.serviceType = typeFilter;
   if (typeFilter === 'WALKIN') typeWhere.client = { isWalkIn: true };
 
-  const where: Prisma.BookingWhereInput = {
-    deletedAt: null,
+  const where: Prisma.BookingWhereInput = notDeleted<Prisma.BookingWhereInput>({
     ...statusWhere,
     ...typeWhere,
     ...(noInvoice && { invoice: null }),
@@ -409,7 +405,7 @@ async function HistoryView({
       { endDate: { gte: fromDate, lte: toDate } },
       { endDate: null, startDate: { gte: fromDate, lte: toDate } },
     ],
-  };
+  });
 
   const [bookings, stats] = await Promise.all([
     fetchListBookings(where, [{ endDate: 'desc' }, { startDate: 'desc' }]),

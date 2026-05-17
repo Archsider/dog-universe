@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { startOfTodayCasa, casablancaYMD } from '@/lib/dates-casablanca';
+import { notDeleted } from '@/lib/prisma-soft';
 import type { UpcomingSnapshot, UpcomingMovement } from '../shapes';
 
 export async function loadUpcoming(): Promise<UpcomingSnapshot> {
@@ -7,12 +9,11 @@ export async function loadUpcoming(): Promise<UpcomingSnapshot> {
   const horizon = new Date(start.getTime() + 7 * 86_400_000 - 1);
   const [arrivalsRaw, departuresRaw, totalArrivals, totalDepartures] = await Promise.all([
     prisma.booking.findMany({
-      where: {
+      where: notDeleted<Prisma.BookingWhereInput>({
         serviceType: 'BOARDING',
         status: { in: ['PENDING', 'CONFIRMED'] },
         startDate: { gte: start, lte: horizon },
-        deletedAt: null,
-      },
+      }),
       select: {
         id: true,
         startDate: true,
@@ -23,12 +24,11 @@ export async function loadUpcoming(): Promise<UpcomingSnapshot> {
       take: 3,
     }),
     prisma.booking.findMany({
-      where: {
+      where: notDeleted<Prisma.BookingWhereInput>({
         serviceType: 'BOARDING',
         status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
         endDate: { gte: start, lte: horizon },
-        deletedAt: null,
-      },
+      }),
       select: {
         id: true,
         endDate: true,
@@ -39,20 +39,18 @@ export async function loadUpcoming(): Promise<UpcomingSnapshot> {
       take: 3,
     }),
     prisma.booking.count({
-      where: {
+      where: notDeleted<Prisma.BookingWhereInput>({
         serviceType: 'BOARDING',
         status: { in: ['PENDING', 'CONFIRMED'] },
         startDate: { gte: start, lte: horizon },
-        deletedAt: null,
-      },
+      }),
     }),
     prisma.booking.count({
-      where: {
+      where: notDeleted<Prisma.BookingWhereInput>({
         serviceType: 'BOARDING',
         status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
         endDate: { gte: start, lte: horizon },
-        deletedAt: null,
-      },
+      }),
     }),
   ]);
 

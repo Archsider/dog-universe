@@ -18,5 +18,6 @@ module.exports = {
     'no-direct-revenue-computation': require('./rules/no-direct-revenue-computation'),
     'no-hardcoded-product-without-id': require('./rules/no-hardcoded-product-without-id'),
     'no-naive-casa-timezone-cast': require('./rules/no-naive-casa-timezone-cast'),
+    'no-inline-deletedAt-null': require('./rules/no-inline-deletedAt-null'),
   },
 };

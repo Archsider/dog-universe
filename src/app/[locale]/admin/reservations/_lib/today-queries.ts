@@ -1,6 +1,7 @@
 // Server-side query helpers for the Today view of /admin/reservations.
 // Pure data-loading layer — no rendering, no auth (caller handles that).
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
 import { getPricingSettings, type PricingSettings } from '@/lib/pricing';
 import { computeLiveTotal, CASA_TZ } from '@/lib/live-pricing';
@@ -133,37 +134,34 @@ export async function loadTodaySnapshot(now: Date = new Date()): Promise<TodaySn
   const [arrivalsRaw, departuresRaw, currentRaw, pendingRaw, upcomingRaw] = await Promise.all([
     // Arrivals today: confirmed, startDate is today, not yet checked-in
     prisma.booking.findMany({
-      where: {
-        deletedAt: null,
+      where: notDeleted({
         status: 'CONFIRMED',
         startDate: { gte: start, lte: end },
-      },
+      }),
       select: BOOKING_SELECT,
       orderBy: [{ arrivalTime: 'asc' }, { startDate: 'asc' }],
       take: 100,
     }),
     // Departures today: in progress, endDate is today (excludes open-ended)
     prisma.booking.findMany({
-      where: {
-        deletedAt: null,
+      where: notDeleted({
         status: 'IN_PROGRESS',
         endDate: { gte: start, lte: end },
-      },
+      }),
       select: BOOKING_SELECT,
       orderBy: [{ endDate: 'asc' }, { startDate: 'asc' }],
       take: 100,
     }),
     // Current stays: in progress, started but not departing today (incl. open-ended)
     prisma.booking.findMany({
-      where: {
-        deletedAt: null,
+      where: notDeleted<Prisma.BookingWhereInput>({
         status: 'IN_PROGRESS',
         startDate: { lte: end },
         OR: [
           { endDate: null },
           { endDate: { gt: end } },
         ],
-      },
+      }),
       select: BOOKING_SELECT,
       orderBy: [{ endDate: 'asc' }, { startDate: 'asc' }],
       take: 100,
@@ -177,11 +175,10 @@ export async function loadTodaySnapshot(now: Date = new Date()): Promise<TodaySn
     }),
     // Upcoming week: count by day (groupBy not friendly with dates, fetch & bucket)
     prisma.booking.findMany({
-      where: {
-        deletedAt: null,
+      where: notDeleted<Prisma.BookingWhereInput>({
         status: { in: ['PENDING', 'CONFIRMED'] },
         startDate: { gte: weekStart, lte: weekEnd },
-      },
+      }),
       select: { startDate: true },
       take: 500,
     }),
