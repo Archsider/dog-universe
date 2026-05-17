@@ -77,8 +77,8 @@ describeIntegration('recordPayment — real Postgres DB invariants', () => {
        VALUES ('${invoiceId}', '${bookingId}', '${userId}', 'IT-RP-${tag}', ${invoiceAmount}, 0, 'PENDING', NOW(), NOW(), NOW())`,
     );
     await client.$executeRawUnsafe(
-      `INSERT INTO "InvoiceItem"(id, "invoiceId", category, description, quantity, "unitPrice", total, "allocatedAmount", "updatedAt")
-       VALUES ('${itemId}', '${invoiceId}', 'BOARDING', 'Test boarding', 1, ${invoiceAmount}, ${invoiceAmount}, 0, NOW())`,
+      `INSERT INTO "InvoiceItem"(id, "invoiceId", category, description, quantity, "unitPrice", total, "allocatedAmount")
+       VALUES ('${itemId}', '${invoiceId}', 'BOARDING', 'Test boarding', 1, ${invoiceAmount}, ${invoiceAmount}, 0)`,
     );
 
     return { userId, bookingId, invoiceId, itemId };
@@ -233,7 +233,7 @@ describeIntegration('recordPayment — real Postgres DB invariants', () => {
     // Simulate what allocatePayments does for items
     await client.$executeRawUnsafe(
       `UPDATE "InvoiceItem"
-       SET "allocatedAmount" = 240, status = 'PAID', "updatedAt" = NOW()
+       SET "allocatedAmount" = 240, status = 'PAID'
        WHERE id = '${itemId}'`,
     );
 
@@ -267,7 +267,7 @@ describeIntegration('recordPayment — real Postgres DB invariants', () => {
     );
     await client.$executeRawUnsafe(
       `UPDATE "InvoiceItem"
-       SET "allocatedAmount" = 360, status = 'PAID', "updatedAt" = NOW()
+       SET "allocatedAmount" = 360, status = 'PAID'
        WHERE id = '${itemId}'`,
     );
 

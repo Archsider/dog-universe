@@ -75,8 +75,8 @@ describeIntegration('cancelInvoice — real Postgres DB invariants', () => {
        VALUES ('${invoiceId}', '${bookingId}', '${userId}', 'IT-CI-${tag}', ${amount}, 0, '${initialStatus}', 0, NOW(), NOW(), NOW())`,
     );
     await client.$executeRawUnsafe(
-      `INSERT INTO "InvoiceItem"(id, "invoiceId", category, description, quantity, "unitPrice", total, "allocatedAmount", "updatedAt")
-       VALUES ('${itemId}', '${invoiceId}', 'BOARDING', 'Test boarding cancel', 1, ${amount}, ${amount}, 0, NOW())`,
+      `INSERT INTO "InvoiceItem"(id, "invoiceId", category, description, quantity, "unitPrice", total, "allocatedAmount")
+       VALUES ('${itemId}', '${invoiceId}', 'BOARDING', 'Test boarding cancel', 1, ${amount}, ${amount}, 0)`,
     );
 
     return { userId, bookingId, invoiceId, itemId };
@@ -153,8 +153,8 @@ describeIntegration('cancelInvoice — real Postgres DB invariants', () => {
     // Create a BookingItem linked to the InvoiceItem (simulates the supplementary billing pattern)
     const bookingItemId = `bi_ci_${tag}`;
     await client.$executeRawUnsafe(
-      `INSERT INTO "BookingItem"(id, "bookingId", category, description, quantity, "unitPrice", total, "invoiceItemId", "updatedAt")
-       VALUES ('${bookingItemId}', '${bookingId}', 'BOARDING', 'Linked booking item', 1, 240, 240, '${itemId}', NOW())`,
+      `INSERT INTO "BookingItem"(id, "bookingId", category, description, quantity, "unitPrice", total, "invoiceItemId")
+       VALUES ('${bookingItemId}', '${bookingId}', 'BOARDING', 'Linked booking item', 1, 240, 240, '${itemId}')`,
     );
 
     // Verify it's linked

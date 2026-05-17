@@ -158,8 +158,8 @@ describeIntegration('compute_payment_by_category — monthly revenue semantics',
        VALUES ('${invoiceId}', '${bookingId}', '${userId}', 'IT-MR-${tag}', ${invoiceAmount}, ${paidAmount}, '${invoiceStatus}', NOW(), NOW(), NOW())`,
     );
     await client.$executeRawUnsafe(
-      `INSERT INTO "InvoiceItem"(id, "invoiceId", category, description, quantity, "unitPrice", total, "allocatedAmount", "updatedAt")
-       VALUES ('${itemId}', '${invoiceId}', '${category}', 'Test item ${category}', 1, ${invoiceAmount}, ${invoiceAmount}, ${paidAmount}, NOW())`,
+      `INSERT INTO "InvoiceItem"(id, "invoiceId", category, description, quantity, "unitPrice", total, "allocatedAmount")
+       VALUES ('${itemId}', '${invoiceId}', '${category}', 'Test item ${category}', 1, ${invoiceAmount}, ${invoiceAmount}, ${paidAmount})`,
     );
     await client.$executeRawUnsafe(
       `INSERT INTO "Payment"(id, "invoiceId", amount, "paymentDate", "paymentMethod", "createdAt")
@@ -325,7 +325,7 @@ describeIntegration('compute_payment_by_category — monthly revenue semantics',
     });
 
     const rows = await client.$queryRawUnsafe<Array<{ category: string; total: string }>>(
-      `SELECT category, total::text FROM compute_payment_by_category(2026, 5) WHERE category = 'taxi'`,
+      `SELECT category, total::text FROM compute_payment_by_category(2026, 5) WHERE category = 'pet_taxi'`,
     );
 
     const totalTaxi = rows.reduce((sum, r) => sum + Number(r.total), 0);
