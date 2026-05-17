@@ -285,112 +285,17 @@ export async function checkMonthlyRevenueMvFresh(): Promise<InvariantResult> {
   };
 }
 
-export async function checkJsVsMvCurrentMonth(): Promise<InvariantResult> {
-  // The JS allocator (computeMonthlyRevenueByCategory under Sémantique A)
-  // and the materialized view must agree for the current month. If they
-  // diverge, one of the two paths has drifted — Rita-style bug.
-  //
-  // Implementation (Bug A, 2026-05-15) : mirror the MV's source CTE
-  // exactly — exclude CANCELLED invoices, scope to those with ≥1 payment
-  // in the current month, no booking-derived path. The JS gate inside
-  // `computeMonthlyRevenueByCategory` (Sémantique A) does the rest.
-  //
-  // The previous implementation used `getMonthlyInvoicesWhere` (case 1
-  // ∪ case 2 ∪ case 3) which is intended for the "Total Facturé" KPI
-  // (includes booking-active invoices regardless of payment status).
-  // That asymmetry — JS scoping by booking, MV scoping by Payment —
-  // produced false-positive flags on CANCELLED full-paid invoices
-  // (counted by MV, ignored by JS). Both sides now read the same Payment-
-  // anchored source.
-  const { computeMonthlyRevenueByCategory } = await import('@/lib/accounting');
-  const { startOfMonthCasa, endOfMonthCasa, currentMonthCasa } = await import('@/lib/dates-casablanca');
-
-  const now = new Date();
-  const monthStart = startOfMonthCasa(now);
-  const monthEnd = endOfMonthCasa(now);
-  // `monthStart.getFullYear()/getMonth()` would return the *previous* Casa
-  // month on a UTC runtime (Casa midnight = 23:00 UTC the day before, so
-  // `monthStart` is timestamped on the last day of the prior UTC month).
-  // `currentMonthCasa()` reads from the Casa calendar string and is
-  // timezone-correct on every runtime. See docs/BUSINESS_RULES.md §6.
-  const { year, month } = currentMonthCasa();
-
-  // JS path — mirror the MV's source data exactly (Payment-anchored,
-  // non-CANCELLED). The Sémantique A gate inside the helper filters
-  // out invoices that aren't fully paid OR whose last payment fell
-  // outside the window — same logic the MV's `closed_invoices` CTE
-  // applies in SQL.
-  const invoices = await prisma.invoice.findMany({
-    where: {
-      status: { not: 'CANCELLED' },
-      payments: {
-        some: { paymentDate: { gte: monthStart, lte: monthEnd } },
-      },
-    },
-    select: {
-      items: { select: { category: true, description: true, total: true }, orderBy: { id: 'asc' } },
-      payments: { select: { amount: true, paymentDate: true } },
-    },
-    take: 2000,
-  });
-  const jsBreakdown = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0, other: 0 };
-  for (const inv of invoices) {
-    const sub = computeMonthlyRevenueByCategory(inv.payments, inv.items, monthStart, monthEnd);
-    jsBreakdown.boarding += sub.boarding;
-    jsBreakdown.taxi += sub.taxi;
-    jsBreakdown.grooming += sub.grooming;
-    jsBreakdown.croquettes += sub.croquettes;
-    jsBreakdown.other += sub.other;
-  }
-
-  // MV path
-  let mvRows: Array<{ category: string; total: number | string }> = [];
-  try {
-    mvRows = await prisma.$queryRaw<Array<{ category: string; total: number | string }>>`
-      SELECT category, total FROM monthly_revenue_mv
-      WHERE year = ${year} AND month = ${month}
-    `;
-  } catch {
-    // If the MV doesn't exist (fresh DB without migrations), skip the
-    // check — return 0 violations rather than a noisy false positive.
-    return {
-      key: 'js_vs_mv_current_month',
-      label: 'CA JS vs monthly_revenue_mv (mois courant)',
-      count: 0,
-      sample: [{ note: 'monthly_revenue_mv unavailable, skipping' }],
-      severity: 'critical',
-    };
-  }
-  const mvBreakdown = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0, other: 0 };
-  for (const row of mvRows) {
-    const amount = typeof row.total === 'string' ? parseFloat(row.total) : Number(row.total);
-    switch (row.category) {
-      case 'BOARDING': mvBreakdown.boarding += amount; break;
-      case 'PET_TAXI': mvBreakdown.taxi += amount; break;
-      case 'GROOMING': mvBreakdown.grooming += amount; break;
-      case 'PRODUCT': mvBreakdown.croquettes += amount; break;
-      default: mvBreakdown.other += amount; break;
-    }
-  }
-
-  // Compare per category. Any divergence > 0.01 MAD = 1 violation.
-  const tolerance = 0.01;
-  const diffs: Array<Record<string, unknown>> = [];
-  for (const key of ['boarding', 'taxi', 'grooming', 'croquettes', 'other'] as const) {
-    const js = jsBreakdown[key];
-    const mv = mvBreakdown[key];
-    if (Math.abs(js - mv) > tolerance) {
-      diffs.push({ category: key, js, mv, diff: Math.round((js - mv) * 100) / 100 });
-    }
-  }
-  return {
-    key: 'js_vs_mv_current_month',
-    label: 'CA JS vs monthly_revenue_mv (mois courant)',
-    count: diffs.length,
-    sample: diffs,
-    severity: 'critical',
-  };
-}
+// `checkJsVsMvCurrentMonth` was removed 2026-05-17 — see
+// CLAUDE.md "DETTE TECHNIQUE" entry. The Sémantique A allocator it
+// compared against the MV is no longer the canonical path : both the
+// MV (via `monthly_revenue_mv`) and the live PG function
+// (`compute_payment_by_category`) are Sémantique B sources, and #11
+// (`checkPaymentAttributionDrift`) + #12 (`checkRevenueHelperVsLive`)
+// already cover the cross-check apples-to-apples. Keeping the JS-vs-MV
+// invariant would also have required keeping the JS keyword fallback
+// (`inferItemCategory`) running on raw OTHER rows, which is precisely
+// what the 20260518_normalize_legacy_other_categories migration is
+// designed to retire.
 
 // ─── Sémantique B — cash basis pure (depuis 2026-05-17) ───────────────
 //
@@ -520,7 +425,7 @@ export async function runAllInvariantChecks(): Promise<InvariantResult[]> {
   const [
     overpaid, negativeStock, itemDrift, invoiceDrift,
     allocatedSum, paymentSum, allocOverflow, missingPaidAt,
-    mvFresh, jsVsMv,
+    mvFresh,
     paymentAttribDrift, helperVsLive,
   ] = await Promise.all([
     checkOverpaidInvoices(),
@@ -532,14 +437,13 @@ export async function runAllInvariantChecks(): Promise<InvariantResult[]> {
     checkItemAllocatedOverflow(),
     checkFullyPaidMissingPaidAt(),
     checkMonthlyRevenueMvFresh(),
-    checkJsVsMvCurrentMonth(),
     checkPaymentAttributionDrift(),
     checkRevenueHelperVsLive(),
   ]);
   return [
     overpaid, negativeStock, itemDrift, invoiceDrift,
     allocatedSum, paymentSum, allocOverflow, missingPaidAt,
-    mvFresh, jsVsMv,
+    mvFresh,
     paymentAttribDrift, helperVsLive,
   ];
 }

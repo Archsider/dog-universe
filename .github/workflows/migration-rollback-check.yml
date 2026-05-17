@@ -174,6 +174,12 @@ jobs:
             # nextDueDate_confirmed_idx`. They exist after migration but not
             # in the canonical baseline. Cosmetic drift, runtime correct.
             "20260518_perf_indexes"
+            # Data-only normalization migration (UPDATE rows where
+            # category='OTHER' and description matches inferItemCategory
+            # keywords). No schema change → schema dumps are identical, but
+            # the @rollback: not-applicable marker already short-circuits
+            # the rollback test. Listed here for explicit intent.
+            "20260518_normalize_legacy_other_categories"
           )
 
           for d in $(ls -1 "$MIG_DIR" | sort); do
