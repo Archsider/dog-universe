@@ -189,11 +189,11 @@ describe('POST /api/admin/bookings/[id]/items', () => {
 
 // ─── PATCH /items/[itemId] ──────────────────────────────────────────────────
 describe('PATCH /api/admin/bookings/[id]/items/[itemId]', () => {
-  it('401 for CLIENT', async () => {
+  it('403 for CLIENT', async () => {
     mocks.auth.mockResolvedValue(CLIENT);
     const { PATCH } = await import('@/app/api/admin/bookings/[id]/items/[itemId]/route');
     const res = await PATCH(patchReq({ version: 0, quantity: 2 }), { params: Promise.resolve({ id: 'b_1', itemId: 'i_1' }) });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('404 when item missing', async () => {
@@ -300,11 +300,11 @@ describe('POST /api/admin/bookings/[id]/invoices/supplementary', () => {
     expect((await res.json()).error).toBe('NOTHING_TO_INVOICE');
   });
 
-  it('401 for CLIENT', async () => {
+  it('403 for CLIENT', async () => {
     mocks.auth.mockResolvedValue(CLIENT);
     const { POST } = await import('@/app/api/admin/bookings/[id]/invoices/supplementary/route');
     const res = await POST(new NextRequest('https://example.com/'), { params: Promise.resolve({ id: 'b_1' }) });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('201 creates Invoice + back-links each BookingItem', async () => {

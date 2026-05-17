@@ -118,11 +118,11 @@ describe('POST /api/admin/products', () => {
 
 // ─── PATCH /api/admin/products/[id] ─────────────────────────────────────────
 describe('PATCH /api/admin/products/[id]', () => {
-  it('401 when CLIENT role', async () => {
+  it('403 when CLIENT role', async () => {
     mocks.auth.mockResolvedValue(CLIENT_SESSION);
     const { PATCH } = await import('@/app/api/admin/products/[id]/route');
     const res = await PATCH(makePatchReq({ version: 0, name: 'X' }), { params: Promise.resolve({ id: 'p_1' }) });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('400 when body missing version', async () => {
@@ -178,11 +178,11 @@ describe('POST /api/admin/products/[id]/archive + /restore', () => {
     expect(res.status).toBe(404);
   });
 
-  it('archive 401 for CLIENT', async () => {
+  it('archive 403 for CLIENT', async () => {
     mocks.auth.mockResolvedValue(CLIENT_SESSION);
     const { POST } = await import('@/app/api/admin/products/[id]/archive/route');
     const res = await POST(new NextRequest('https://example.com/'), { params: Promise.resolve({ id: 'p_1' }) });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('archive sets isArchived=true and logs PRODUCT_ARCHIVED', async () => {

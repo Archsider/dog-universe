@@ -3,7 +3,7 @@
 > Généré automatiquement depuis `prisma/schema.prisma`. Ne pas éditer à la main.
 > Régénérer avec `node scripts/generate-schema-doc.mjs` (ou `npm run db:doc`).
 
-**37 modèles** · **7 enums** · 2026-05-16
+**38 modèles** · **7 enums** · 2026-05-17
 
 ## Sommaire
 
@@ -38,6 +38,7 @@
 - [PasswordResetToken](#passwordresettoken)
 - [ClientContract](#clientcontract)
 - [Product](#product)
+- [ProductCatalogSuggestion](#productcatalogsuggestion)
 - [MonthlyRevenueSummary](#monthlyrevenuesummary)
 - [InvoiceSequence](#invoicesequence)
 - [GuardianEvent](#guardianevent)
@@ -911,11 +912,38 @@
 | `updatedAt` | `DateTime` | — |  |
 | `invoiceItems` | `InvoiceItem[]` | — |  |
 | `bookingItems` | `BookingItem[]` | — |  |
+| `catalogSuggestions` | `ProductCatalogSuggestion[]` | — |  |
 
 **Indexes :**
 - `([available])`
 - `([isArchived])`
 - `([targetSpecies, targetAge, available], name: "Product_targeting_idx")`
+
+---
+
+## ProductCatalogSuggestion
+
+> See section "PRODUCT CATALOG INTELLIGENCE" in CLAUDE.md.
+
+| Champ | Type | Attributs | Commentaire |
+|---|---|---|---|
+| `id` | `String` | PK · default=`cuid(` |  |
+| `invoiceItemId` | `String` | UNIQUE |  |
+| `suggestedProductId` | `String` | — |  |
+| `confidence` | `Float` | — | 0..1 — fuzzy match score (≥0.8 required for insert) |
+| `matchedTokens` | `String[]` | default=`[]` | words that matched (for UI explainability) |
+| `status` | `String` | default=`"pending"` | 'pending' | 'accepted' | 'rejected' |
+| `createdAt` | `DateTime` | default=`now(` |  |
+| `respondedAt` | `DateTime?` | — |  |
+| `respondedBy` | `String?` | — | userId of the admin who accepted/rejected |
+
+**Relations**
+
+- `suggestedProduct` → `Product`
+
+**Indexes :**
+- `([status, createdAt])`
+- `([suggestedProductId])`
 
 ---
 

@@ -188,6 +188,9 @@ jobs:
             # CHECK constraint section. Defense-in-depth floor for the
             # "PRODUCT category requires productId" invariant.
             "20260518_product_category_requires_product_id"
+            # No-op migration (all indexes pre-existed); down.sql drops indexes
+            # that were already there before → pg_dump diff expected.
+            "20260519_phase3_perf_indexes"
           )
 
           for d in $(ls -1 "$MIG_DIR" | sort); do

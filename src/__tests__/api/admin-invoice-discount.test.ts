@@ -104,10 +104,10 @@ describe('POST discount — auth', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 401 when role is CLIENT', async () => {
+  it('returns 403 when role is CLIENT', async () => {
     mocks.auth.mockResolvedValueOnce({ user: { id: 'c1', role: 'CLIENT' } });
     const res = await POST(postReq({ type: 'AMOUNT', value: 100 }) as never, ctx);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('SUPERADMIN bypasses the cross-role guard', async () => {
