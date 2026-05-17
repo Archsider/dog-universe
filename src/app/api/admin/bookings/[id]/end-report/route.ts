@@ -36,6 +36,7 @@ import { createEndStayReportNotification } from '@/lib/notifications';
 import { sendEmailNow } from '@/lib/notify-now';
 import { getEmailTemplate } from '@/lib/email';
 import { differenceInCalendarDays } from 'date-fns';
+import { withSpan } from '@/lib/observability';
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -118,7 +119,10 @@ const SERVICE_LABEL_EN: Record<string, string> = {
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { id: bookingId } = await params;
+  return withSpan('api.admin.bookings.end_report', { entityId: bookingId }, () => endReportImpl(request, bookingId));
+}
 
+async function endReportImpl(request: NextRequest, bookingId: string): Promise<Response> {
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

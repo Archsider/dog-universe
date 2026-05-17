@@ -6,6 +6,7 @@ import { isPaidExceedsCheckViolation, PAID_EXCEEDS_PAYLOAD } from '@/lib/billing
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { cacheDel } from '@/lib/cache';
 import { casablancaYMD } from '@/lib/dates-casablanca';
+import { withSpan } from '@/lib/observability';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -57,12 +58,16 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 export async function PATCH(request: Request, { params }: Params) {
+  const { id } = await params;
+  return withSpan('api.invoices.patch', { entityId: id }, () => patchImpl(request, id));
+}
+
+async function patchImpl(request: Request, id: string): Promise<Response> {
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { id } = await params;
   const body = await request.json();
 
   const invoice = await prisma.invoice.findUnique({
@@ -254,12 +259,15 @@ export async function PATCH(request: Request, { params }: Params) {
 }
 
 export async function DELETE(_req: Request, { params }: Params) {
+  const { id } = await params;
+  return withSpan('api.invoices.delete', { entityId: id }, () => deleteImpl(id));
+}
+
+async function deleteImpl(id: string): Promise<Response> {
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-
-  const { id } = await params;
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },

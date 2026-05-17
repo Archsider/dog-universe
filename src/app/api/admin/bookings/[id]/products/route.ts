@@ -7,6 +7,7 @@ import { resolveItemCategory } from '@/lib/billing';
 import { isPaidExceedsCheckViolation, PAID_EXCEEDS_PAYLOAD } from '@/lib/billing-errors';
 import { logger } from '@/lib/logger';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -23,6 +24,10 @@ interface Params { params: Promise<{ id: string }> }
  */
 export async function POST(request: NextRequest, { params }: Params) {
   const { id: bookingId } = await params;
+  return withSpan('api.admin.bookings.add_product', { entityId: bookingId }, () => addProductImpl(request, bookingId));
+}
+
+async function addProductImpl(request: NextRequest, bookingId: string): Promise<Response> {
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

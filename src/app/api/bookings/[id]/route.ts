@@ -9,6 +9,7 @@ import { createNotification } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
 import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -47,6 +48,15 @@ export async function GET(_req: Request, { params }: Params) {
 // route would silently bypass all of those protections, which has historically
 // caused production incidents — the route is now hard-gated to CLIENT.
 export async function PATCH(request: Request, { params }: Params) {
+  const { id } = await params;
+  return withSpan(
+    'api.bookings.client_patch',
+    { entityId: id },
+    () => patchImpl(request, id),
+  );
+}
+
+async function patchImpl(request: Request, id: string): Promise<Response> {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -60,7 +70,6 @@ export async function PATCH(request: Request, { params }: Params) {
     );
   }
 
-  const { id } = await params;
   const body = await request.json();
 
   const booking = await prisma.booking.findFirst({

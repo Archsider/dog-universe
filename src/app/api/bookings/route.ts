@@ -24,6 +24,7 @@ import { BookingError } from '@/lib/services/booking-errors';
 import { decodeCursor, encodeCursor, parseLimit } from '@/lib/pagination';
 import { revalidateTag } from 'next/cache';
 import * as Sentry from '@sentry/nextjs';
+import { withSpan } from '@/lib/observability';
 import { tryAutoMerge } from './_lib/auto-merge';
 import { resolveBookingPrice } from './_lib/resolve-price';
 import { notifyAdminsBookingCreated } from './_lib/notify-new-booking';
@@ -88,6 +89,13 @@ export async function GET(request: Request) {
 }
 
 export const POST = withSchema({ body: bookingCreateSchema }, async (request, { body }) => {
+  return withSpan(
+    'api.bookings.create',
+    {
+      serviceType: typeof body?.serviceType === 'string' ? body.serviceType : undefined,
+      petCount: Array.isArray(body?.petIds) ? body.petIds.length : undefined,
+    },
+    async () => {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -349,4 +357,6 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
     });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
   }
+    },
+  );
 });
