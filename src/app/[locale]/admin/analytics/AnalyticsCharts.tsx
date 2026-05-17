@@ -73,20 +73,13 @@ const AnalyticsBreakdownDonut = dynamic(
   },
 );
 
-export interface ServiceKpi {
-  thisAmt: number;
-  lastAmt: number;
-  delta: number;
-  count: number;
-}
-
 export interface Props {
-  serviceKpis: {
-    boarding:   ServiceKpi;
-    taxi:       ServiceKpi;
-    grooming:   ServiceKpi;
-    croquettes: ServiceKpi;
-  };
+  // Encaissé ce mois par catégorie (source de vérité = drill items côté
+  // serveur ; cf. analytics/page.tsx — pas la MV qui rate les items legacy).
+  cashedByCategory: { boarding: number; taxi: number; grooming: number; croquettes: number };
+  // Delta % vs mois précédent par catégorie — affiché en badge compact
+  // sur les KPI cards du haut, en remplacement de la 2e rangée redondante.
+  serviceDelta:    { boarding: number; taxi: number; grooming: number; croquettes: number };
   yearlyData: {
     month: string;
     boarding: number;
@@ -116,44 +109,19 @@ const CHART_COLORS = {
   croquettes: '#f59e0b',
 } as const;
 
-// Style cards KPI service — même palette que dashboard
-const SERVICES = [
-  {
-    key:        'boarding'   as const,
-    color:      '#c9a84c',
-    cardClass:  'bg-gradient-to-br from-[#FBF5E0] to-[#FDF8EC] border-[#E2C048]/30',
-    labelClass: 'text-gold-700',
-    amtClass:   'text-gold-800',
-    subClass:   'text-gold-600',
-  },
-  {
-    key:        'taxi'       as const,
-    color:      '#4a90d9',
-    cardClass:  'bg-gradient-to-br from-[#EBF4FF] to-[#F0F7FF] border-blue-200/50',
-    labelClass: 'text-blue-700',
-    amtClass:   'text-blue-800',
-    subClass:   'text-blue-600',
-  },
-  {
-    key:        'grooming'   as const,
-    color:      '#8b5cf6',
-    cardClass:  'bg-gradient-to-br from-[#F3EEFF] to-[#F7F2FF] border-purple-200/50',
-    labelClass: 'text-purple-700',
-    amtClass:   'text-purple-800',
-    subClass:   'text-purple-600',
-  },
-  {
-    key:        'croquettes' as const,
-    color:      '#f59e0b',
-    cardClass:  'bg-gradient-to-br from-[#FEF3E2] to-[#FFF8EE] border-orange-200/50',
-    labelClass: 'text-orange-700',
-    amtClass:   'text-orange-800',
-    subClass:   'text-orange-600',
-  },
+// Legend des services pour les charts Recharts (couleurs dans CHART_COLORS).
+// L'ancienne version exposait aussi `cardClass`, etc. — supprimés depuis la
+// suppression de la 2e rangée KPI "vs mois préc." (PR analytics-fix-redesign-may17).
+const SERVICES: { key: keyof typeof CHART_COLORS }[] = [
+  { key: 'boarding'   },
+  { key: 'taxi'       },
+  { key: 'grooming'   },
+  { key: 'croquettes' },
 ];
 
 export default function AnalyticsCharts({
-  serviceKpis, yearlyData, lastYearData, donutData, volumeData,
+  serviceDelta, cashedByCategory,
+  yearlyData, lastYearData, donutData, volumeData,
   avgBasket, avgNights, newClients, totalCA: _totalCA, totalDelta: _totalDelta,
   categoryItems, locale, currentYear,
 }: Props) {
@@ -164,6 +132,9 @@ export default function AnalyticsCharts({
   // count = nombre de factures encaissées ce mois ayant un item de la catégorie
   //         (volumeByCategory côté serveur, source de vérité unique)
   // total = ENCAISSÉ (somme des Payment alloués via computeMonthlyRevenue…)
+  //   → lue depuis `cashedByCategory` (déjà aggregé serveur depuis
+  //   `categoryItems`, lui-même filtré sur `inferItemCategory`).
+  // delta = % vs mois préc. — affiché en badge compact dans le coin.
   const VOLUME_KEY: Record<DrillCategory, keyof typeof volumeData> = {
     BOARDING: 'boarding',
     PET_TAXI: 'taxi',
@@ -171,10 +142,11 @@ export default function AnalyticsCharts({
     PRODUCT: 'croquettes',
   };
   const drillStats = DRILL_CATS.map(cat => {
-    const items = categoryItems.filter(i => i.category === cat.key);
-    const count = volumeData[VOLUME_KEY[cat.key]];
-    const total = items.reduce((s, i) => s + i.amount, 0);
-    return { ...cat, count, total };
+    const k = VOLUME_KEY[cat.key];
+    const count = volumeData[k];
+    const total = cashedByCategory[k];
+    const delta = serviceDelta[k];
+    return { ...cat, count, total, delta };
   });
 
   const activeItems = activeCategory
@@ -203,26 +175,53 @@ export default function AnalyticsCharts({
   return (
     <div className="space-y-5">
 
-      {/* ── Drill-down — 4 cards cliquables par catégorie ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* ── KPI cards par catégorie (cliquables — drill down) ──
+          Chaque card concentre : count + montant encaissé + delta vs mois
+          préc. en badge compact. Remplace l'ancienne 2e rangée redondante
+          (decision Mehdi 2026-05-17 — "0 MAD partout + déjà visible
+          au-dessus"). */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {drillStats.map(cat => {
           const active = activeCategory === cat.key;
           const unit = isFr ? cat.unitFr : cat.unitEn;
           const label = isFr ? cat.labelFr : cat.labelEn;
+          const deltaLabel = `${cat.delta > 0 ? '+' : ''}${cat.delta}%`;
+          // Badge chip — green up / red down / neutral grey
+          const deltaChipClass = active
+            ? 'bg-white/20 text-white'
+            : cat.delta > 0
+              ? 'bg-green-100 text-green-700'
+              : cat.delta < 0
+                ? 'bg-red-100 text-red-700'
+                : 'bg-gray-100 text-gray-500';
+          const deltaArrow = cat.delta > 0 ? '▲' : cat.delta < 0 ? '▼' : '—';
           return (
             <button
               key={cat.key}
               type="button"
+              aria-pressed={active}
+              aria-label={isFr
+                ? `${label} — ${cat.count} ${unit}, ${formatMAD(cat.total)} encaissé, ${deltaLabel} vs mois préc.`
+                : `${label} — ${cat.count} ${unit}, ${formatMAD(cat.total)} collected, ${deltaLabel} vs prev. month`}
               onClick={() => setActiveCategory(prev => (prev === cat.key ? null : cat.key))}
               className={`text-left rounded-xl border-[1.5px] border-[#C4974A] p-5 cursor-pointer transition-all duration-200 ${
                 active
                   ? 'bg-[#C4974A] text-white shadow-md shadow-[#C4974A]/30'
-                  : 'bg-white text-[#2A2520] hover:shadow-md hover:shadow-[#C4974A]/20'
+                  : 'bg-white text-[#2A2520] hover:shadow-md hover:shadow-[#C4974A]/20 hover:-translate-y-0.5'
               }`}
             >
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xl leading-none">{cat.icon}</span>
-                <span className="text-[15px] font-bold">{label}</span>
+              <div className="flex items-center justify-between mb-3 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xl leading-none" aria-hidden>{cat.icon}</span>
+                  <span className="text-[15px] font-bold truncate">{label}</span>
+                </div>
+                <span
+                  className={`shrink-0 inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-bold ${deltaChipClass}`}
+                  title={isFr ? 'Variation vs mois précédent' : 'Change vs previous month'}
+                >
+                  <span aria-hidden>{deltaArrow}</span>
+                  <span>{Math.abs(cat.delta)}%</span>
+                </span>
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="font-serif text-[28px] leading-none">{cat.count}</span>
@@ -232,35 +231,6 @@ export default function AnalyticsCharts({
                 {formatMAD(cat.total)}
               </div>
             </button>
-          );
-        })}
-      </div>
-
-      {/* ── Ligne 1 — 4 KPI cards par service ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {SERVICES.map(svc => {
-          const kpi = serviceKpis[svc.key];
-          const { label, sub } = serviceLabels[svc.key];
-          const deltaClass = kpi.delta > 0 ? 'text-green-600' : kpi.delta < 0 ? 'text-red-500' : 'text-gray-400';
-          return (
-            <div
-              key={svc.key}
-              className={`rounded-xl border p-5 shadow-card ${svc.cardClass}`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span className={`text-xs font-semibold uppercase tracking-wider ${svc.labelClass}`}>
-                  {label}
-                </span>
-                <span className={`text-xs ${svc.subClass}`}>
-                  {kpi.count} {sub}
-                </span>
-              </div>
-              <p className={`text-xl font-bold mb-1 ${svc.amtClass}`}>{formatMAD(kpi.thisAmt)}</p>
-              <p className={`text-xs font-medium ${deltaClass}`}>
-                {kpi.delta > 0 ? '+' : ''}{kpi.delta}%{' '}
-                {isFr ? 'vs mois préc.' : 'vs prev. month'}
-              </p>
-            </div>
           );
         })}
       </div>

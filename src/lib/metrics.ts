@@ -53,6 +53,18 @@ export type MonthlyEntry = {
 // encaissé d'un mois unique passer par
 // `getMonthlyRevenueByCategory(year, month).totalAllCategories` de
 // `@/lib/billing/monthly-revenue` (Sémantique B canonical helper).
+//
+// Sémantique B fix (2026-05-17, PR analytics-fix-redesign-may17) :
+// l'ancienne implémentation lisait directement `monthly_revenue_mv` qui
+// utilise `InvoiceItem.category` brut. Les items legacy persistés en
+// `category=OTHER` (créés avant que la colonne soit obligatoire) tombent
+// dans le bucket `other` invisible sur le graphique Performance par
+// activité — d'où des courbes Pension/Taxi/Toilettage/Croquettes plates
+// à 0 sur les mois récents. La nouvelle implémentation appelle 12 fois
+// `computeRevenueByCategoryProrataLive` en parallèle, qui re-classifie via
+// `inferItemCategory(category, description)` côté JS → les items legacy
+// sont attribués au bon bucket. Coût : 12 round-trips DB au lieu d'1 (MV)
+// ; acceptable pour analytics annuel (page non-critique, ISR 60s).
 export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
   const yearStart = new Date(year, 0, 1);
   const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
@@ -66,64 +78,28 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
     croquettes: 0,
   }));
 
-  // O1 — 1 query sur la materialized view monthly_revenue_mv (refreshée
-  // chaque heure par /api/cron/refresh-monthly-revenue) au lieu de 12
-  // round-trips séquentiels via revenueByCategoryProrata. La MV stocke
-  // 1 row par (year, month, category) ; on agrège en JS sur les 12 mois.
-  let mvRows: { month: number; category: string; total: unknown }[] = [];
-  try {
-    mvRows = await prisma.$queryRaw<{ month: number; category: string; total: unknown }[]>`
-      SELECT month, category, total
-      FROM monthly_revenue_mv
-      WHERE year = ${year}
-    `;
-  } catch (err) {
-    // MV indisponible (ex: première migration pas encore appliquée) → fallback
-    // immédiat sur la lecture par mois.
-    logger.error('metrics', 'monthly_revenue_mv unavailable, falling back to per-month query', { error: err instanceof Error ? err.message : String(err) });
-  }
-
-  if (mvRows.length > 0) {
-    for (const row of mvRows) {
-      const m = row.month - 1; // MV: month 1-12 → array 0-11
-      if (m < 0 || m > 11) continue;
-      const amount = toNumber(row.total as number | string | null);
-      switch (row.category) {
-        case 'BOARDING':
-          monthly[m].boarding += amount;
-          break;
-        case 'PET_TAXI':
-          monthly[m].taxi += amount;
-          break;
-        case 'GROOMING':
-          monthly[m].grooming += amount;
-          break;
-        case 'PRODUCT':
-          monthly[m].croquettes += amount;
-          break;
-        default:
-          // OTHER → comptabilisé dans total mais pas attribué à une catégorie UI.
-          break;
-      }
-      monthly[m].total += amount;
-    }
-  } else {
-    // Fallback per-month si MV vide — préserve l'ancien comportement.
-    for (let m = 0; m < 12; m++) {
+  // 12 LIVE computes in parallel — bypass MV so that items legacy classés
+  // `OTHER` côté DB sont re-classifiés par description (inferItemCategory).
+  const breakdowns = await Promise.all(
+    Array.from({ length: 12 }, (_, m) => {
       const mStart = new Date(year, m, 1);
       const mEnd = new Date(year, m + 1, 0, 23, 59, 59, 999);
-      const breakdown = await revenueByCategoryProrata(mStart, mEnd);
-      monthly[m].boarding = breakdown.boarding;
-      monthly[m].taxi = breakdown.taxi;
-      monthly[m].grooming = breakdown.grooming;
-      monthly[m].croquettes = breakdown.croquettes;
-      monthly[m].total =
-        breakdown.boarding +
-        breakdown.taxi +
-        breakdown.grooming +
-        breakdown.croquettes +
-        breakdown.other;
-    }
+      return computeRevenueByCategoryProrataLive(mStart, mEnd);
+    }),
+  );
+
+  for (let m = 0; m < 12; m++) {
+    const breakdown = breakdowns[m];
+    monthly[m].boarding = breakdown.boarding;
+    monthly[m].taxi = breakdown.taxi;
+    monthly[m].grooming = breakdown.grooming;
+    monthly[m].croquettes = breakdown.croquettes;
+    monthly[m].total =
+      breakdown.boarding +
+      breakdown.taxi +
+      breakdown.grooming +
+      breakdown.croquettes +
+      breakdown.other;
   }
 
   // Fallback MonthlyRevenueSummary pour les mois sans payments réels
@@ -185,6 +161,24 @@ export type CategoryBreakdown = {
 // cette fonction live si la MV est vide. Les deux paths doivent rester
 // arithmétiquement identiques — toute évolution sémantique doit toucher
 // les deux dans la même PR.
+// EXPORTED for callers that need a guaranteed LIVE compute path (bypassing
+// the materialized view + Redis cache). The MV reads `InvoiceItem.category`
+// verbatim, which under Sémantique B funnels legacy items persisted as
+// `OTHER` straight into the `other` bucket — invisible on the
+// `/admin/analytics` Performance chart and Donut. The live path here
+// re-classifies via `inferItemCategory(category, description)` so that
+// legacy rows are still attributed to the right activity bucket.
+//
+// Use sparingly — the per-month query is 1 round-trip with `take=2000`.
+// Looping it across 12 months (annual chart) is OK ; do not use this on
+// hot per-request paths.
+export async function computeRevenueByCategoryProrataLive(
+  start: Date,
+  end: Date,
+): Promise<CategoryBreakdown> {
+  return computeRevenueByCategoryProrata(start, end);
+}
+
 async function computeRevenueByCategoryProrata(
   start: Date,
   end: Date,

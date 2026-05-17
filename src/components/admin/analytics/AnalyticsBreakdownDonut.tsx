@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatMAD } from '@/lib/utils';
 
@@ -18,8 +19,12 @@ const SERVICE_COLORS = {
 
 type ServiceKey = keyof typeof SERVICE_COLORS;
 
+// Order canonique pour affichage légende (gros activités d'abord).
+const DISPLAY_ORDER: ServiceKey[] = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER'];
+
 export default function AnalyticsBreakdownDonut({ data, locale }: Props) {
   const isFr = locale === 'fr';
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const serviceLabels: Record<ServiceKey, string> = {
     BOARDING: isFr ? 'Pension'    : 'Boarding',
@@ -39,10 +44,13 @@ export default function AnalyticsBreakdownDonut({ data, locale }: Props) {
     );
   }
 
-  const rows: { key: ServiceKey; label: string; value: number }[] = (
-    Object.keys(SERVICE_COLORS) as ServiceKey[]
-  )
-    .map(key => ({ key, label: serviceLabels[key], value: data[key] }))
+  const rows: { key: ServiceKey; label: string; value: number; pct: number }[] = DISPLAY_ORDER
+    .map(key => ({
+      key,
+      label: serviceLabels[key],
+      value: data[key],
+      pct: total > 0 ? (data[key] / total) * 100 : 0,
+    }))
     .filter(r => r.value > 0);
 
   const tooltipStyle = {
@@ -52,53 +60,105 @@ export default function AnalyticsBreakdownDonut({ data, locale }: Props) {
     color: '#374151',
     fontSize: 12,
     boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)',
+    padding: '8px 10px',
   };
+
+  // Catégorie dominante affichée au centre du donut quand idle.
+  const dominant = rows.reduce(
+    (best, r) => (r.value > best.value ? r : best),
+    rows[0],
+  );
+  const focused = activeIndex !== null && activeIndex < rows.length ? rows[activeIndex] : dominant;
 
   return (
     <div className="w-full">
-      <ResponsiveContainer width="100%" height={180}>
-        <PieChart>
-          <Pie
-            data={rows}
-            cx="50%"
-            cy="50%"
-            innerRadius={60}
-            outerRadius={85}
-            dataKey="value"
-            paddingAngle={3}
-          >
-            {rows.map(r => (
-              <Cell key={r.key} fill={SERVICE_COLORS[r.key]} />
-            ))}
-          </Pie>
-          <Tooltip
-            formatter={(value) => {
-              const numeric = typeof value === 'number' ? value : Number(value ?? 0);
-              return [`${Math.round(numeric).toLocaleString()} MAD`];
-            }}
-            contentStyle={tooltipStyle}
-          />
-        </PieChart>
-      </ResponsiveContainer>
+      <div className="relative">
+        <ResponsiveContainer width="100%" height={200}>
+          <PieChart>
+            <Pie
+              data={rows}
+              cx="50%"
+              cy="50%"
+              innerRadius={62}
+              outerRadius={88}
+              dataKey="value"
+              paddingAngle={3}
+              stroke="none"
+              onMouseEnter={(_, idx) => setActiveIndex(idx)}
+              onMouseLeave={() => setActiveIndex(null)}
+            >
+              {rows.map((r, i) => (
+                <Cell
+                  key={r.key}
+                  fill={SERVICE_COLORS[r.key]}
+                  opacity={activeIndex === null || activeIndex === i ? 1 : 0.45}
+                  style={{ transition: 'opacity 200ms ease-out' }}
+                />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(value, _name, item) => {
+                const numeric = typeof value === 'number' ? value : Number(value ?? 0);
+                const pct = total > 0 ? Math.round((numeric / total) * 100) : 0;
+                const label = item?.payload?.label ?? '';
+                return [`${formatMAD(numeric)} · ${pct}%`, label];
+              }}
+              contentStyle={tooltipStyle}
+              cursor={false}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+
+        {/* Centre du donut — total ou catégorie focus */}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-[10px] uppercase tracking-wider text-gray-400">
+              {activeIndex === null
+                ? (isFr ? 'Total mois' : 'Month total')
+                : focused.label}
+            </div>
+            <div className="text-base font-bold text-charcoal mt-0.5">
+              {formatMAD(activeIndex === null ? total : focused.value)}
+            </div>
+            {activeIndex !== null && (
+              <div className="text-[10px] text-gray-400 mt-0.5">
+                {Math.round(focused.pct)}%
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="mt-4 space-y-2.5">
-        {rows.map(row => (
-          <div key={row.key} className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
-              <span
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: SERVICE_COLORS[row.key] }}
-              />
-              <span className="text-gray-700">{row.label}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-charcoal">{formatMAD(row.value)}</span>
-              <span className="text-xs w-10 text-right text-gray-400">
-                {Math.round((row.value / total) * 100)}%
-              </span>
-            </div>
-          </div>
-        ))}
+        {rows.map((row, i) => {
+          const active = activeIndex === i;
+          return (
+            <button
+              key={row.key}
+              type="button"
+              onMouseEnter={() => setActiveIndex(i)}
+              onMouseLeave={() => setActiveIndex(null)}
+              className={`w-full flex items-center justify-between text-sm rounded-md px-1.5 py-1 transition-colors ${
+                active ? 'bg-gray-50' : 'bg-transparent'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: SERVICE_COLORS[row.key] }}
+                  aria-hidden
+                />
+                <span className="text-gray-700 truncate">{row.label}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="font-semibold text-charcoal">{formatMAD(row.value)}</span>
+                <span className="text-xs w-10 text-right text-gray-400">
+                  {Math.round(row.pct)}%
+                </span>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
