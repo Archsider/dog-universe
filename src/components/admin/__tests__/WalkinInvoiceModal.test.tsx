@@ -59,8 +59,12 @@ async function openAndFillThroughStep3(user: ReturnType<typeof userEvent.setup>)
   await user.click(utils.getByRole('button', { name: /Client anonyme/ }));
   await user.click(utils.getByRole('button', { name: /Suivant/ }));
   // Step 2 : fill the single default row + bump unitPrice > 0.
-  const desc = utils.container.querySelector('input[placeholder*="Royal Canin"]') as HTMLInputElement;
-  fireEvent.change(desc, { target: { value: 'Croquettes 10kg' } });
+  // The default row now starts with category=OTHER (PRODUCT default was
+  // changed in the catalog-intelligence refactor so the user makes a
+  // deliberate PRODUCT pick via the smart-search input). The OTHER
+  // placeholder is "Ex : Toilettage long".
+  const desc = utils.container.querySelector('input[placeholder*="Toilettage"]') as HTMLInputElement;
+  fireEvent.change(desc, { target: { value: 'Service divers' } });
   const unitPriceInput = utils.container.querySelectorAll('input[type="number"]')[1] as HTMLInputElement;
   fireEvent.change(unitPriceInput, { target: { value: '100' } });
   await user.click(utils.getByRole('button', { name: /Suivant/ }));

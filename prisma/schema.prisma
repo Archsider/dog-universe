@@ -798,12 +798,35 @@ model Product {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  invoiceItems InvoiceItem[]
-  bookingItems BookingItem[]
+  invoiceItems        InvoiceItem[]
+  bookingItems        BookingItem[]
+  catalogSuggestions  ProductCatalogSuggestion[]
 
   @@index([available])
   @@index([isArchived])
   @@index([targetSpecies, targetAge, available], name: "Product_targeting_idx")
+}
+
+// Smart catalog suggestions — weekly cron scans recent InvoiceItem rows
+// with `category='OTHER'` AND `productId=null` and fuzzy-matches their
+// description against `Product.name`. High-confidence matches land here as
+// PENDING for admin review on `/admin/products/suggestions`.
+// See section "PRODUCT CATALOG INTELLIGENCE" in CLAUDE.md.
+model ProductCatalogSuggestion {
+  id                 String   @id @default(cuid())
+  invoiceItemId      String   @unique
+  suggestedProductId String
+  confidence         Float // 0..1 — fuzzy match score (≥0.8 required for insert)
+  matchedTokens      String[] @default([]) // words that matched (for UI explainability)
+  status             String   @default("pending") // 'pending' | 'accepted' | 'rejected'
+  createdAt          DateTime @default(now())
+  respondedAt        DateTime?
+  respondedBy        String? // userId of the admin who accepted/rejected
+
+  suggestedProduct Product @relation(fields: [suggestedProductId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([suggestedProductId])
 }
 
 // Historical revenue summaries — for pre-production data entry (Jan/Feb/Mar/etc.)

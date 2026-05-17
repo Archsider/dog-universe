@@ -23,7 +23,10 @@ export function todayCasaYmd(): string {
 }
 
 function makeInitialItem(): WalkinItem {
-  return { id: newItemId(), category: 'PRODUCT', description: '', quantity: 1, unitPrice: 0 };
+  // Default category is OTHER so the user makes a deliberate PRODUCT choice
+  // via the dropdown. Avoids the trap of "PRODUCT default → free-text → no
+  // productId → 400 PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID at submit."
+  return { id: newItemId(), category: 'OTHER', description: '', quantity: 1, unitPrice: 0, productId: null };
 }
 
 export interface UseWalkinFormResult {
@@ -123,6 +126,10 @@ export function useWalkinForm(open: boolean): UseWalkinFormResult {
     if (items.some((it) => !it.description.trim() || it.quantity <= 0)) return false;
     // Negative unitPrice only for DISCOUNT.
     if (items.some((it) => it.category === 'DISCOUNT' ? it.unitPrice >= 0 : it.unitPrice < 0)) return false;
+    // PRODUCT category MUST carry a productId — mirror of server Zod rule
+    // PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID (Agent 1). Without this we'd
+    // unblock the "Next" button just to crash at submit.
+    if (items.some((it) => it.category === 'PRODUCT' && !it.productId)) return false;
     // Net total must be strictly positive.
     if (total <= 0) return false;
     // If there's a DISCOUNT, at least one non-DISCOUNT item must exist.

@@ -28,6 +28,7 @@ import {
   Star,
   Car,
   Package,
+  Sparkles,
   Activity,
   ShieldAlert,
   Flag,
@@ -43,7 +44,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRequestCount = 0, userRole = 'ADMIN' }: { pendingCount?: number; pendingClaimsCount?: number; addonRequestCount?: number; userRole?: string }) {
+export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRequestCount = 0, catalogSuggestionsCount = 0, userRole = 'ADMIN' }: { pendingCount?: number; pendingClaimsCount?: number; addonRequestCount?: number; catalogSuggestionsCount?: number; userRole?: string }) {
   const t = useTranslations('nav.admin');
   const locale = useLocale();
   const pathname = usePathname();
@@ -59,6 +60,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
     { href: `/${locale}/admin/driver`, labelKey: 'driver', icon: Car },
     { href: `/${locale}/admin/billing`, labelKey: 'billing', icon: Receipt },
     { href: `/${locale}/admin/products`, labelKey: 'products', icon: Package },
+    { href: `/${locale}/admin/products/suggestions`, labelKey: 'catalog_suggestions', icon: Sparkles },
     { href: `/${locale}/admin/contracts`, labelKey: 'contracts', icon: FileText },
     { href: `/${locale}/admin/loyalty`, labelKey: 'loyalty', icon: Gift },
     { href: `/${locale}/admin/reviews`, labelKey: 'reviews', icon: Star },
@@ -99,6 +101,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
           const Icon = item.icon;
           const isReservations = item.href.includes('/reservations');
           const isLoyalty = item.href.includes('/loyalty');
+          const isCatalogSuggestions = item.href.endsWith('/products/suggestions');
 
           // Prefetch tweak: heavy / rarely-visited admin pages skip prefetch.
           // /admin/logs and /admin/queues fetch large server-side lists and
@@ -141,6 +144,14 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
               {isLoyalty && pendingClaimsCount > 0 && (
                 <span className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-gold-500 text-white text-xs font-bold">
                   {pendingClaimsCount > 99 ? '99+' : pendingClaimsCount}
+                </span>
+              )}
+              {isCatalogSuggestions && catalogSuggestionsCount > 0 && (
+                <span
+                  title="Catalog suggestions pending"
+                  className="flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-emerald-500 text-white text-xs font-bold"
+                >
+                  {catalogSuggestionsCount > 99 ? '99+' : catalogSuggestionsCount}
                 </span>
               )}
             </Link>

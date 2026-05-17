@@ -58,6 +58,9 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
 
   const addItem = () => setItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
   const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
+  const patchItem = (i: number, patch: Partial<LineItem>) => {
+    setItems(prev => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  };
   const updateItem = (i: number, field: keyof LineItem, value: string | number | undefined) => {
     setItems(prev => prev.map((it, idx) => {
       if (idx !== i) return it;
@@ -92,6 +95,13 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
     if (!clientId) { setError(fr ? 'Sélectionnez un client.' : 'Select a client.'); return; }
     if (clientId === 'WALK_IN' && !walkInName.trim()) { setError(fr ? 'Le nom du client de passage est obligatoire.' : 'Walk-in client name is required.'); return; }
     if (items.some(it => !it.description.trim())) { setError(fr ? 'Tous les articles doivent avoir une description.' : 'All items must have a description.'); return; }
+    // Mirror of server Zod rule PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID — block
+    // submit early so the user sees the inline warning rather than a generic
+    // server 400.
+    if (items.some(it => it.category === 'PRODUCT' && !it.productId)) {
+      setError(fr ? 'Une ligne « Produit » doit être liée au catalogue.' : 'A "Product" line must be linked to the catalog.');
+      return;
+    }
     if (total <= 0) { setError(fr ? 'Le total doit être supérieur à 0.' : 'Total must be greater than 0.'); return; }
     const otherCount = items.filter(it => it.category === 'OTHER').length;
     if (otherCount > 0 && !window.confirm(fr ? `⚠️ ${otherCount} ligne(s) classée(s) dans « Autre » — les analytics seront imprécis. Continuer ?` : `⚠️ ${otherCount} line(s) classified as "Other" — analytics will be imprecise. Continue?`)) return;
@@ -136,7 +146,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
             serviceType={serviceType} onServiceTypeChange={setServiceType}
             issuedAt={issuedAt} onIssuedAtChange={setIssuedAt}
             items={items} catalog={catalog}
-            onAddItem={addItem} onRemoveItem={removeItem} onUpdateItem={updateItem} onAddPreset={addPreset}
+            onAddItem={addItem} onRemoveItem={removeItem} onUpdateItem={updateItem} onPatchItem={patchItem} onAddPreset={addPreset}
             notes={notes} onNotesChange={setNotes}
             markPaid={markPaid} paymentMethod={paymentMethod} paidAt={paidAt}
             onMarkPaidChange={setMarkPaid} onPaymentMethodChange={setPaymentMethod} onPaidAtChange={setPaidAt}

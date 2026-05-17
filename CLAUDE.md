@@ -1944,6 +1944,169 @@ l'impact sur Supabase.
 
 ---
 
+## PRODUCT CATALOG INTELLIGENCE (depuis 2026-05-17)
+
+Workflow "smart catalog" qui aligne progressivement les `InvoiceItem`
+manuels (free-text) avec le catalogue `Product`. Trois pièces :
+
+### 1. UI temps-réel — `ProductCatalogSearchSelect`
+
+`src/components/admin/ProductCatalogSearchSelect.tsx` (~380 LoC).
+Composant smart-search réutilisable pour toutes les lignes
+`InvoiceItem` de catégorie `PRODUCT`.
+
+- Input debounced 300 ms → `GET /api/admin/products?search=…`
+- Dropdown highlight de la substring matchée
+- Stock badge (rouge si `stock <= 0`)
+- Si aucun match → bouton "+ Ajouter au catalogue : « {input} »"
+  ouvre une mini-modal (nom + prix + catégorie + fournisseur) →
+  `POST /api/admin/products` → onChange avec le `productId` du
+  nouveau produit
+- onChange signature : `{ productId, description, price, category: 'PRODUCT' }`
+  — toujours non-null par contrat (mirror du Zod server-side
+  `PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID`)
+- Mobile-first : input pleine-largeur, rows tap-friendly, dropdown
+  en overlay absolute (ne casse pas l'overflow parent)
+
+Intégrations :
+- `src/components/admin/walkin-invoice/WalkinItemsStep.tsx` — swap
+  free-text input pour `<ProductCatalogSearchSelect>` quand
+  `category === 'PRODUCT'`
+- `src/components/admin/standalone-invoice/LineItemsEditor.tsx` —
+  même pattern, via la nouvelle prop `onPatchItem` (multi-field
+  update atomique pour `{description, unitPrice, productId, category}`)
+
+Validation client-side mirror du contract serveur : `step2Valid`
+dans `useWalkinForm.ts` bloque "Suivant" si une ligne PRODUCT n'a
+pas de productId. `CreateStandaloneInvoiceModal.handleSubmit` fait
+la même check pre-flight.
+
+### 2. Cron hebdomadaire — `product-catalog-suggestions`
+
+`src/app/api/cron/product-catalog-suggestions/route.ts`.
+Lundi 08h UTC (`0 8 * * 1` dans `vercel.json`). Scan :
+
+1. `InvoiceItem` créés ces 7 derniers jours avec
+   `category='OTHER'` AND `productId IS NULL` AND
+   `LENGTH(description) >= 4` (cap 500 rows)
+2. Fuzzy match contre `Product.name` via
+   `src/lib/product-catalog-match.ts` :
+   - `tokenize()` — normalise (NFD strip diacritics + lowercase) puis
+     split en mots ≥ 3 chars
+   - `scoreMatch()` — Jaccard-ish : `matched / max(descTokens.size,
+     prodTokens.size)`
+   - `findBestMatch()` — meilleure confidence ≥ 0.8 (sinon null)
+3. Crée une row `ProductCatalogSuggestion` avec `status='pending'` +
+   liste des `matchedTokens` pour l'UI
+
+Race idempotente : P2002 sur le unique `invoiceItemId` → skip.
+Pas de SMS/email — admin review uniquement.
+
+### 3. Page admin — `/admin/products/suggestions`
+
+`src/app/[locale]/admin/products/suggestions/page.tsx` (Server
+Component) + `SuggestionsClient.tsx` (interactions).
+Tabs `?status=pending|accepted|rejected`. Chaque card affiche :
+
+- Description originale + métadonnées InvoiceItem (qty, prix, lien
+  facture)
+- Produit suggéré (nom + brand + prix + catégorie + flag archivé)
+- Confidence % + chips de tokens matchés (explicabilité)
+- Boutons "Accepter" / "Ignorer" sur les pending
+
+Lien dans `AdminSidebar` "Suggestions catalogue" (icône Sparkles),
+badge emerald si pending > 0. Compteur chargé dans
+`admin/layout.tsx` via `unstable_cache` tag `admin-counts`.
+
+### 4. API accept/reject
+
+- `POST /api/admin/products/catalog-suggestions/[id]/accept` —
+  transaction atomique : update `InvoiceItem.productId` +
+  `category='PRODUCT'` ET mark `suggestion.status='accepted'`.
+  Idempotent (409 ALREADY_RESOLVED). Garde-fous : produit non
+  archivé, invoiceItem encore existant (410 si soft-deleted).
+- `POST /api/admin/products/catalog-suggestions/[id]/reject` —
+  flip status à `rejected` avec audit trail respondedBy/At. Pas de
+  side effect sur l'InvoiceItem (reste OTHER).
+
+### Modèle Prisma
+
+```prisma
+model ProductCatalogSuggestion {
+  id                 String   @id @default(cuid())
+  invoiceItemId      String   @unique           // un seul match par row
+  suggestedProductId String
+  confidence         Float                       // 0..1 (CHECK)
+  matchedTokens      String[] @default([])
+  status             String   @default("pending") // pending|accepted|rejected (CHECK)
+  createdAt          DateTime @default(now())
+  respondedAt        DateTime?
+  respondedBy        String?
+
+  suggestedProduct Product @relation(fields: [suggestedProductId], references: [id], onDelete: Cascade)
+  @@index([status, createdAt])
+  @@index([suggestedProductId])
+}
+```
+
+Migration : `prisma/migrations/20260518_product_catalog_suggestions/`.
+Down rollback : DROP TABLE CASCADE — les suggestions sont
+régénérables au prochain tick cron.
+
+### Tests (25 nouveaux)
+
+- `src/lib/__tests__/product-catalog-match.test.ts` (10) — pure
+  helper : normalize, tokenize, scoreMatch, findBestMatch (no-match,
+  boundary 0.8, ties, accents)
+- `src/app/api/cron/product-catalog-suggestions/__tests__/route.test.ts`
+  (5) — empty catalog skip, happy path create, dedup existing,
+  no-match + too-short skip, P2002 race
+- `src/app/api/admin/products/catalog-suggestions/[id]/accept/__tests__/route.test.ts`
+  (6) — 403 non-admin, 404 missing, 409 already resolved, 400
+  archived product, 410 invoice item gone, happy tx
+- `src/app/api/admin/products/catalog-suggestions/[id]/reject/__tests__/route.test.ts`
+  (4) — 401 unauth, 404, 409, happy reject with audit trail
+
+### Garde-fous Module 4-B respectés
+
+- ✅ Zéro `prisma.payment.create` (money path inchangé)
+- ✅ Zéro `prisma.invoice.update` direct
+- ✅ Zéro `.toFixed()` sur money — `formatMAD()` partout
+- ✅ Zéro `.getMonth()` Casa-derived
+- ✅ Mirror du contract Zod Agent 1 : UI bloque submit si
+  PRODUCT sans productId
+
+### Décisions
+
+- **Cron weekly, pas daily** : volume bas (Mehdi traite ~5-20
+  factures/jour), pas besoin de scanner tous les jours. Lundi 08h
+  UTC tombe sur 09h Casa = début de semaine ouvrée.
+- **Confidence threshold 0.8** : tuning pragmatique — sous 0.8,
+  trop de faux positifs (un seul token "royal" match "Royal Canin",
+  "Royal Treat", "Royal Diet"). Au-dessus de 0.8, on rate seulement
+  les cas où l'admin a tapé une description très différente du
+  product.name (légitime à laisser en suggestion manuelle).
+- **Pas d'auto-accept** : même à confidence 1.0, on n'écrit pas
+  automatiquement le `productId` dans l'`InvoiceItem` — l'admin
+  garde le contrôle (cas où la description est ambiguë malgré le
+  match parfait).
+- **Pas de notification SMS/email** : l'admin voit le badge dans
+  la sidebar à sa prochaine connexion. Pas de spam pour un workflow
+  qui n'est pas urgent.
+- **Default category OTHER (pas PRODUCT)** dans walk-in modal : le
+  trap "PRODUCT par défaut → admin tape free-text → soumet → 400"
+  est évité. La rangée commence neutre, l'admin choisit explicitement
+  PRODUCT pour activer la smart-search.
+
+### Action manuelle Mehdi post-merge
+
+Exécuter sur Supabase SQL Editor le fichier
+`prisma/migrations/20260518_product_catalog_suggestions/migration.sql`
+(ou laisser `node scripts/db-migrate.mjs` le faire au prochain
+deploy si configuré pour auto-apply).
+
+---
+
 ## HISTORIQUE
 
 L'historique complet des sessions de travail et décisions techniques (sécurité, perf, architecture) est consigné dans [HISTORY.md](./HISTORY.md).

@@ -1,9 +1,10 @@
 'use client';
 
-import { Plus, X } from 'lucide-react';
+import { Plus, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import ProductCatalogSearchSelect from '@/components/admin/ProductCatalogSearchSelect';
 import { CATEGORY_OPTIONS, QUICK_ADD_PRESETS, type LineItem, type CatalogProduct, type QuickAddPreset } from './types';
 
 interface LineItemsEditorProps {
@@ -13,6 +14,12 @@ interface LineItemsEditorProps {
   onAddItem: () => void;
   onRemoveItem: (i: number) => void;
   onUpdateItem: (i: number, field: keyof LineItem, value: string | number | undefined) => void;
+  /**
+   * Optional multi-field patch — used by ProductCatalogSearchSelect to update
+   * (description + unitPrice + productId + category) in one shot. Falls back
+   * to sequential onUpdateItem if not provided (legacy callers).
+   */
+  onPatchItem?: (i: number, patch: Partial<LineItem>) => void;
   onAddPreset: (preset: QuickAddPreset) => void;
 }
 
@@ -23,9 +30,22 @@ export function LineItemsEditor({
   onAddItem,
   onRemoveItem,
   onUpdateItem,
+  onPatchItem,
   onAddPreset,
 }: LineItemsEditorProps) {
   const fr = locale === 'fr';
+
+  function patchItem(i: number, patch: Partial<LineItem>) {
+    if (onPatchItem) {
+      onPatchItem(i, patch);
+      return;
+    }
+    // Fallback : sequential updates. Last-write-wins on the underlying state
+    // reducer — works because the parent's onUpdateItem uses functional setState.
+    for (const k of Object.keys(patch) as (keyof LineItem)[]) {
+      onUpdateItem(i, k, patch[k] as string | number | undefined);
+    }
+  }
 
   const productLabel = (p: CatalogProduct) =>
     p.brand ? `${p.name} — ${p.brand}` : p.name;
@@ -70,18 +90,52 @@ export function LineItemsEditor({
             <span className="col-span-1" />
           </div>
 
-          {items.map((it, i) => (
+          {items.map((it, i) => {
+            const isProduct = it.category === 'PRODUCT';
+            const productMissing = isProduct && !it.productId;
+            return (
             <div key={i} className="grid grid-cols-12 gap-2 items-center">
-              <Input
-                className="col-span-4 text-sm h-8"
-                list="invoice-products-datalist"
-                value={it.description}
-                onChange={e => onUpdateItem(i, 'description', e.target.value)}
-                placeholder={fr ? 'Tape ou choisis un produit du catalogue…' : 'Type or pick from catalogue…'}
-              />
+              {isProduct ? (
+                <div className="col-span-4">
+                  <ProductCatalogSearchSelect
+                    locale={fr ? 'fr' : 'en'}
+                    value={{ productId: it.productId ?? null, description: it.description, price: it.unitPrice }}
+                    serverError={productMissing
+                      ? (fr ? 'Produit non lié' : 'Not catalog-linked')
+                      : null}
+                    onChange={(sel) => patchItem(i, {
+                      productId: sel.productId,
+                      description: sel.description,
+                      unitPrice: sel.price,
+                      category: 'PRODUCT',
+                    })}
+                  />
+                </div>
+              ) : (
+                <Input
+                  className="col-span-4 text-sm h-8"
+                  list="invoice-products-datalist"
+                  value={it.description}
+                  onChange={e => onUpdateItem(i, 'description', e.target.value)}
+                  placeholder={fr ? 'Tape ou choisis un produit du catalogue…' : 'Type or pick from catalogue…'}
+                />
+              )}
               <select
                 value={it.category}
-                onChange={e => onUpdateItem(i, 'category', e.target.value)}
+                onChange={e => {
+                  const next = e.target.value as LineItem['category'];
+                  // Switching INTO PRODUCT : reset description+price+productId so
+                  // the smart-search input renders blank and the user must pick
+                  // explicitly. Switching OUT : drop the productId so legacy
+                  // free-text path resumes.
+                  if (isProduct && next !== 'PRODUCT') {
+                    patchItem(i, { category: next, productId: undefined });
+                  } else if (!isProduct && next === 'PRODUCT') {
+                    patchItem(i, { category: 'PRODUCT', productId: undefined, description: '', unitPrice: 0 });
+                  } else {
+                    onUpdateItem(i, 'category', next);
+                  }
+                }}
                 className={`col-span-3 text-sm h-8 px-2 rounded-lg border border-[#C4974A] bg-white focus:outline-none focus:ring-2 focus:ring-[#C4974A]/20 min-w-0 ${it.category === 'OTHER' ? 'border-l-4 border-l-amber-400' : ''}`}
               >
                 {CATEGORY_OPTIONS.map(opt => (
@@ -101,6 +155,7 @@ export function LineItemsEditor({
                 step={0.01}
                 className="col-span-3 text-sm h-8 text-right"
                 value={it.unitPrice}
+                disabled={isProduct && !it.productId}
                 onChange={e => onUpdateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
               />
               <button
@@ -111,8 +166,17 @@ export function LineItemsEditor({
                 <X className="h-4 w-4" />
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
+        {items.some((it) => it.category === 'PRODUCT' && !it.productId) && (
+          <p className="text-xs text-amber-700 flex items-center gap-1 mt-1">
+            <AlertCircle className="h-3 w-3" />
+            {fr
+              ? 'Une ligne « Produit » doit être liée au catalogue avant envoi.'
+              : 'A "Product" line must be linked to the catalog before submit.'}
+          </p>
+        )}
 
         {/* Catalogue produits — alimente l'autocomplete des descriptions */}
         <datalist id="invoice-products-datalist">
