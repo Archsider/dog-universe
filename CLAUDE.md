@@ -717,6 +717,7 @@ ces dernières semaines.
 | `no-direct-invoice-mutation` | `prisma.invoice.update` direct sur `paidAmount`/`amount`/`status`/`paidAt`/`version` — bypass de `recordPayment` (livré 2026-05-17, audit Kleppmann I3) |
 | `no-direct-revenue-computation` | `prisma.payment.aggregate({_sum,where:paymentDate})` hors helper Sémantique B (livré 2026-05-17) |
 | `no-hardcoded-product-without-id` | Object literal InvoiceItem-shaped (`description`+`quantity`+`unitPrice`/`total`) avec `category: 'PRODUCT'` mais `productId` absent ou null. Defense-in-depth en complément du Zod refine `PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID` et de la CHECK constraint DB `InvoiceItem_product_category_has_productId` (livré 2026-05-18) |
+| `no-naive-casa-timezone-cast` | `AT TIME ZONE 'Africa/Casablanca'` dans un `prisma.$queryRaw` / `$executeRaw` sans `AT TIME ZONE 'UTC'` préalable. Les colonnes `DateTime` (sans `@db.Timestamptz`) sont stockées `TIMESTAMP(3)` naive et contiennent un instant UTC — le cast doit être `col AT TIME ZONE 'UTC' AT TIME ZONE 'Africa/Casablanca'` (livré 2026-05-18, suite à la fix de `compute_payment_by_category` dans `20260518_audit_tz_casa_fixes`) |
 
 ### Pattern d'escape
 

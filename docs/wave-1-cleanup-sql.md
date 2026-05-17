@@ -183,7 +183,7 @@ BEGIN;
       AND tt.status IN ('EN_ROUTE_TO_CLIENT', 'ON_SITE_CLIENT', 'ANIMAL_ON_BOARD')
     RETURNING tt.id, tt."tripType", tt.status
   )
-  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy", "updatedAt")
+  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy")
   SELECT
     gen_random_uuid()::text,
     u.id,
@@ -279,7 +279,7 @@ BEGIN;
       )
     RETURNING id
   )
-  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy", "updatedAt")
+  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy")
   SELECT
     gen_random_uuid()::text, i.id, 'PLANNED',
     'WAVE_1_BACKFILL', NOW()
@@ -313,7 +313,7 @@ BEGIN;
       )
     RETURNING id
   )
-  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy", "updatedAt")
+  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy")
   SELECT
     gen_random_uuid()::text, i.id, 'PLANNED',
     'WAVE_1_BACKFILL', NOW()
