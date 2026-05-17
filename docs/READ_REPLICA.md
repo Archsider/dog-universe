@@ -22,15 +22,16 @@ le primary pour les mutations + lectures critiques.
 3. Récupérer la connection string (port 5432, hostname différent)
 4. Dans Vercel → Environment Variables :
    - `DATABASE_URL` (existant — primary write)
-   - `DATABASE_REPLICA_URL` (nouveau — read-only, pooler conseillé)
+   - `READ_DATABASE_URL` (nouveau — read-only, pooler conseillé)
 
 ## Pattern Prisma — 2 clients
 
-Fichier : `src/lib/prisma-read.ts` (déjà créé en scaffolding 2026-05-07).
+Fichier : `src/lib/prisma-read.ts` (scaffolding livré 2026-05-17, PR
+read-replica-scaffolding-may17).
 
 ```ts
-export const prismaRead = process.env.DATABASE_REPLICA_URL
-  ? new PrismaClient({ datasources: { db: { url: process.env.DATABASE_REPLICA_URL } } })
+export const prismaRead = process.env.READ_DATABASE_URL
+  ? new PrismaClient({ datasources: { db: { url: process.env.READ_DATABASE_URL } } })
   : prisma; // fallback transparent vers primary
 ```
 
@@ -85,7 +86,7 @@ const reread = await prismaRead.booking.findUnique({ where: { id: created.id } }
 
 ## Migration progressive
 
-1. **Phase 1** : provisionner replica Supabase + ajouter `DATABASE_REPLICA_URL`
+1. **Phase 1** : provisionner replica Supabase + ajouter `READ_DATABASE_URL`
    sur Vercel preview uniquement. `prismaRead` reste fallback `prisma` en prod.
 2. **Phase 2** : activer la var d'env en prod sur staging branch. Monitorer
    1 semaine (Sentry errors, tail latency).
@@ -107,3 +108,40 @@ Ajouter dans Sentry tags :
 
 Si replica > primary, c'est un signe que la replica est sous-provisionnée
 (plan upgrade) ou que le lag grossit (vérifier `pg_stat_replication`).
+
+## Tests avant prod
+
+Avant de pousser un consommateur de `prismaRead` en prod :
+
+1. **Staging end-to-end** : déployer la PR avec `READ_DATABASE_URL` set
+   sur la branche preview Vercel. Smoke-test la route (charge + cohérence).
+2. **Load test k6** : pour les hot paths analytics, exécuter le scénario
+   `tests/k6/dashboard-perf.js` contre staging avant + après. Vérifier
+   que p95 baisse et que primary CPU descend.
+3. **Replay 24h** : laisser tourner staging 24h avec trafic de canari.
+   Watcher Sentry pour `Prisma.ClientInitializationError` (DNS replica
+   down, credentials, etc.) et `PrismaClientKnownRequestError` (rare,
+   mais possible si schema drift entre primary/replica).
+
+## Rollback (instant)
+
+Si la replica part en vrille (lag massif, indisponible, drift schema) :
+
+1. **Vercel** → Project Settings → Environment Variables → supprimer
+   `READ_DATABASE_URL` sur Production.
+2. Redéployer (ou attendre le prochain push — le fallback est
+   transparent : `prismaRead` redevient pointeur sur `prisma`).
+3. Aucune migration de code n'est requise. Aucune mutation n'est
+   affectée puisque les writes ne sont jamais routés vers la replica.
+
+## Garde-fous
+
+- **Singleton dev** : `prismaRead` est mis en cache sur `globalThis` en
+  dev pour éviter d'épuiser les connexions au reload Next.js (même
+  pattern que `prisma`).
+- **Pas de `$transaction` cross-client** : Prisma ne supporte pas une
+  transaction qui spanne 2 clients. Si une route a besoin de read +
+  write atomique, tout passe par `prisma`.
+- **Tests** : `src/lib/__tests__/prisma-read.test.ts` verrouille le
+  contrat de fallback (référence identique au write client si env
+  absent, instance distincte si env présent).
