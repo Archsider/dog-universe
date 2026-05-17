@@ -180,6 +180,14 @@ jobs:
             # the @rollback: not-applicable marker already short-circuits
             # the rollback test. Listed here for explicit intent.
             "20260518_normalize_legacy_other_categories"
+            # Adds a CHECK constraint + normalizes data (UPDATE rows
+            # category='PRODUCT' with NULL productId to link to Product
+            # catalogue, or downgrade to 'OTHER' with audit prefix). The
+            # down.sql drops the CHECK but does NOT revert the data
+            # cleanup → round-trip dump diff is expected on the InvoiceItem
+            # CHECK constraint section. Defense-in-depth floor for the
+            # "PRODUCT category requires productId" invariant.
+            "20260518_product_category_requires_product_id"
           )
 
           for d in $(ls -1 "$MIG_DIR" | sort); do
