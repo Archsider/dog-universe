@@ -8,10 +8,9 @@ import { logger } from '@/lib/logger';
 // DELETE /api/admin/contracts/[id] — delete a contract (forces client to re-sign)
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   const contract = await prisma.clientContract.findUnique({
     where: { id: id },
