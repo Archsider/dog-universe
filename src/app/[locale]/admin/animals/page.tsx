@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { PawPrint, ChevronRight } from 'lucide-react';
 import { calculateAge } from '@/lib/utils';
-import CreateAnimalModal from './CreateAnimalModal';
+import CreateAnimalModalLazy from './CreateAnimalModalLazy';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -55,7 +55,7 @@ export default async function AdminAnimalsPage(props: PageProps) {
         <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">{pets.length}</span>
-          <CreateAnimalModal locale={locale} />
+          <CreateAnimalModalLazy locale={locale} />
         </div>
       </div>
 

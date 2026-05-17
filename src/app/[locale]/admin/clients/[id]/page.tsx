@@ -10,7 +10,7 @@ import { LoyaltyBadge } from '@/components/shared/LoyaltyBadge';
 import ClientDetailActions from './ClientDetailActions';
 import EditClientInfoForm from './EditClientInfoForm';
 import DeleteClientButton from './DeleteClientButton';
-import CreateAnimalModal from '../../animals/CreateAnimalModal';
+import CreateAnimalModalLazy from '../../animals/CreateAnimalModalLazy';
 import HistoricalDataForm from './HistoricalDataForm';
 import RgpdAdminSection from './RgpdAdminSection';
 import AdminCreateBookingModal from '@/components/admin/AdminCreateBookingModalLazy';
@@ -189,7 +189,7 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><PawPrint className="h-4 w-4 text-gold-500" /><h3 className="font-semibold text-charcoal text-sm">{l.pets}</h3></div>
-              <CreateAnimalModal locale={locale} defaultOwnerId={id} />
+              <CreateAnimalModalLazy locale={locale} defaultOwnerId={id} />
             </div>
             {client.pets.length === 0 ? <p className="text-sm text-gray-400">{l.noPets}</p> : (
               <div className="space-y-2">
