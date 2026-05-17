@@ -20,7 +20,7 @@
  * This test runs the function against a real Postgres (CI service
  * container or a developer's INTEGRATION_DATABASE_URL) with a fixture
  * payment at the 1st-of-month boundary. It MUST report month=May. The
- * test rolls back via savepoint so nothing leaks.
+ * test rolls back via explicit BEGIN/ROLLBACK so nothing leaks.
  *
  * Skip mode : if INTEGRATION_DATABASE_URL is unset, the suite skips
  * silently — same pattern as the SMS dedup integration test.
@@ -32,30 +32,84 @@ const INTEGRATION_URL = process.env.INTEGRATION_DATABASE_URL;
 
 const describeIntegration = INTEGRATION_URL ? describe : describe.skip;
 
+// The function body mirrors migration 20260518_fix_function_tz_casa exactly.
+// We create it here because `prisma db push` (used in CI) does not run
+// migrations — it only syncs the Prisma schema (tables/columns/constraints).
+const CREATE_FUNCTION_SQL = `
+CREATE OR REPLACE FUNCTION public.compute_payment_by_category(
+  target_year  integer DEFAULT NULL::integer,
+  target_month integer DEFAULT NULL::integer
+)
+RETURNS TABLE(year integer, month integer, category text, total numeric)
+LANGUAGE sql
+STABLE
+AS $fn$
+  WITH casa_payment AS (
+    SELECT
+      p.id                                                                       AS payment_id,
+      (p."paymentDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Africa/Casablanca'      AS casa_date,
+      p.amount                                                                    AS payment_amount,
+      p."invoiceId"                                                               AS invoice_id
+    FROM public."Payment" p
+    WHERE
+      (target_year  IS NULL OR EXTRACT(YEAR  FROM ((p."paymentDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Africa/Casablanca'))::int = target_year)
+      AND
+      (target_month IS NULL OR EXTRACT(MONTH FROM ((p."paymentDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Africa/Casablanca'))::int = target_month)
+  ),
+  invoice_alloc AS (
+    SELECT
+      ii."invoiceId",
+      ii.category,
+      SUM(ii."allocatedAmount")                                                  AS cat_alloc,
+      SUM(SUM(ii."allocatedAmount")) OVER (PARTITION BY ii."invoiceId")          AS inv_alloc_total
+    FROM public."InvoiceItem" ii
+    WHERE ii."allocatedAmount" > 0
+    GROUP BY ii."invoiceId", ii.category
+  )
+  SELECT
+    EXTRACT(YEAR  FROM cp.casa_date)::int                  AS year,
+    EXTRACT(MONTH FROM cp.casa_date)::int                  AS month,
+    LOWER(ia.category::text)                               AS category,
+    SUM(
+      ROUND(
+        (cp.payment_amount * ia.cat_alloc / NULLIF(ia.inv_alloc_total, 0))::numeric,
+        2
+      )
+    )::numeric(12, 2)                                      AS total
+  FROM casa_payment cp
+  JOIN public."Invoice" i      ON i.id = cp.invoice_id
+  JOIN invoice_alloc ia        ON ia."invoiceId" = i.id
+  WHERE NOT (i.status = 'CANCELLED' AND i."paidAmount" = 0)
+  GROUP BY year, month, category;
+$fn$
+`;
+
 describeIntegration('compute_payment_by_category — Casa TZ bucketing', () => {
   let client: PrismaClient;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     client = new PrismaClient({
       datasources: { db: { url: INTEGRATION_URL } },
     });
+    // Create the PG function — prisma db push only creates tables, not functions.
+    await client.$executeRawUnsafe(CREATE_FUNCTION_SQL);
   });
 
   afterAll(async () => {
     await client.$disconnect();
   });
 
+  // Use BEGIN/ROLLBACK instead of SAVEPOINT — savepoints require an outer
+  // transaction block which Prisma does not provide by default.
   beforeEach(async () => {
-    await client.$executeRawUnsafe('SAVEPOINT test_start');
+    await client.$executeRawUnsafe('BEGIN');
   });
 
   afterEach(async () => {
-    await client.$executeRawUnsafe('ROLLBACK TO SAVEPOINT test_start');
+    await client.$executeRawUnsafe('ROLLBACK');
   });
 
   it('paymentDate "2026-05-01 00:00:00" (UTC stored naive = user clicked 1 mai) buckets in May Casa', async () => {
-    // Create a minimal fixture : User → Booking → Invoice → InvoiceItem → Payment.
-    // Use deterministic CUIDs so failures are easier to debug.
     const tag = `tz-test-${Date.now()}`;
     const userId = `u_${tag}`;
     const bookingId = `b_${tag}`;
@@ -64,7 +118,7 @@ describeIntegration('compute_payment_by_category — Casa TZ bucketing', () => {
     const paymentId = `p_${tag}`;
 
     await client.$executeRawUnsafe(
-      `INSERT INTO "User"(id, email, name, role) VALUES ('${userId}', 'tz-test-${tag}@example.test', 'TZ Test', 'CLIENT')`,
+      `INSERT INTO "User"(id, email, "firstName", "lastName", name, "passwordHash", role) VALUES ('${userId}', 'tz-test-${tag}@example.test', 'TZ', 'Test', 'TZ Test', 'e2e-placeholder-hash', 'CLIENT')`,
     );
     await client.$executeRawUnsafe(
       `INSERT INTO "Booking"(id, "clientId", "startDate", "endDate", status, "serviceType", "totalPrice", "createdAt", "updatedAt") VALUES ('${bookingId}', '${userId}', '2026-05-01', '2026-05-03', 'COMPLETED', 'BOARDING', 240, NOW(), NOW())`,
@@ -99,9 +153,6 @@ describeIntegration('compute_payment_by_category — Casa TZ bucketing', () => {
   });
 
   it('paymentDate "2026-05-31 23:30:00" (UTC late evening = 2 juin Casa) buckets in June Casa', async () => {
-    // Symmetric boundary case : a payment at 23:30 UTC on May 31 is
-    // actually 00:30 Casa on June 1. The post-fix function must bucket
-    // it in June, not May.
     const tag = `tz-test2-${Date.now()}`;
     const userId = `u_${tag}`;
     const bookingId = `b_${tag}`;
@@ -110,7 +161,7 @@ describeIntegration('compute_payment_by_category — Casa TZ bucketing', () => {
     const paymentId = `p_${tag}`;
 
     await client.$executeRawUnsafe(
-      `INSERT INTO "User"(id, email, name, role) VALUES ('${userId}', 'tz-test-${tag}@example.test', 'TZ Test 2', 'CLIENT')`,
+      `INSERT INTO "User"(id, email, "firstName", "lastName", name, "passwordHash", role) VALUES ('${userId}', 'tz-test-${tag}@example.test', 'TZ', 'Test2', 'TZ Test 2', 'e2e-placeholder-hash', 'CLIENT')`,
     );
     await client.$executeRawUnsafe(
       `INSERT INTO "Booking"(id, "clientId", "startDate", "endDate", status, "serviceType", "totalPrice", "createdAt", "updatedAt") VALUES ('${bookingId}', '${userId}', '2026-05-30', '2026-06-01', 'COMPLETED', 'BOARDING', 120, NOW(), NOW())`,
