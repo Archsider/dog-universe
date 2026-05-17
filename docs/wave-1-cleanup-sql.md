@@ -183,13 +183,12 @@ BEGIN;
       AND tt.status IN ('EN_ROUTE_TO_CLIENT', 'ON_SITE_CLIENT', 'ANIMAL_ON_BOARD')
     RETURNING tt.id, tt."tripType", tt.status
   )
-  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy", "updatedAt")
+  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy")
   SELECT
     gen_random_uuid()::text,
     u.id,
     u.status,
-    'AUTO_BOOKING_COMPLETED_CLEANUP',
-    NOW()
+    'AUTO_BOOKING_COMPLETED_CLEANUP'
   FROM updated u;
 COMMIT;
 ```
@@ -279,10 +278,8 @@ BEGIN;
       )
     RETURNING id
   )
-  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy", "updatedAt")
-  SELECT
-    gen_random_uuid()::text, i.id, 'PLANNED',
-    'WAVE_1_BACKFILL', NOW()
+  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy")
+  SELECT gen_random_uuid()::text, i.id, 'PLANNED', 'WAVE_1_BACKFILL'
   FROM inserted i;
 
   -- RETURN backfill (same pattern)
@@ -313,10 +310,8 @@ BEGIN;
       )
     RETURNING id
   )
-  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy", "updatedAt")
-  SELECT
-    gen_random_uuid()::text, i.id, 'PLANNED',
-    'WAVE_1_BACKFILL', NOW()
+  INSERT INTO "TaxiStatusHistory" ("id", "taxiTripId", "status", "updatedBy")
+  SELECT gen_random_uuid()::text, i.id, 'PLANNED', 'WAVE_1_BACKFILL'
   FROM inserted_ret i;
 COMMIT;
 ```
