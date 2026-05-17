@@ -7,6 +7,50 @@
 
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
+### 2026-05-19 — PR #131 : ESLint rule #9 + requireRole() + notDeleted() + intégration Postgres
+
+**PR : `feat(phase1): requireRole codemod + ESLint rule #9 + notDeleted migration batch`**
+
+Session de hardening systémique en 3 phases + résolution de 5 défaillances CI.
+
+#### Phase 1 — ESLint rule #9 `no-inline-deletedAt-null`
+
+Nouvelle règle warn dans `eslint-plugin-dog-universe` : interdit `deletedAt: null` inline dans les clauses `where` Prisma sans passer par `notDeleted()`. Objectif : forcer l'utilisation du helper centralisé et rendre les overrides légitimes explicites via `-- OK: <reason>`. Warn (pas error) pour permettre les cas légitimes (write ops, état React client-side). Tests : `eslint-rules/__tests__/no-inline-deletedAt-null.test.js`.
+
+#### Phase 2 — Migration batch `notDeleted()` + `requireRole()`
+
+Adoption de `notDeleted()` / `onlyDeleted()` sur les crons (`contract-reminders`, `birthday-notifications`, `overdue-invoices`, `review-requests`) et les routes booking (admin + client). Tous les `deletedAt: null` inline non-légitimes remplacés ou supprimés avec disable-comment justifié.
+
+`requireRole(['ADMIN', 'SUPERADMIN'])` adopté sur 33+ routes admin. Retourne 403 (au lieu de 401) pour un utilisateur authentifié avec le mauvais rôle — distinction sémantique correcte (401 = non authentifié, 403 = authentifié mais non autorisé).
+
+Split du god-file `HealthClient.tsx` 605L → orchestrateur 193L + 8 sous-composants dans `_components/` : `types.ts`, `health-utils.ts`, `HealthKpiStrip.tsx`, `InvariantsSection.tsx`, `DbPoolSection.tsx`, `SlowQueriesSection.tsx`, `CronStatusSection.tsx`, `SmsSection.tsx`.
+
+#### Phase 3 — Tests d'intégration Postgres + perf indexes
+
+3 nouveaux fichiers de tests d'intégration (real Postgres, skip si `INTEGRATION_DATABASE_URL` absent) :
+- `record-payment-integration.test.ts` (8 tests) — DB invariants du flow `recordPayment / allocatePayments`
+- `cancel-invoice-integration.test.ts` (7 tests) — state machine PENDING/PAID→CANCELLED, lock optimiste, cascade BookingItem
+- `monthly-revenue-integration.test.ts` (7 tests) — `compute_payment_by_category` : bucketing mai, TZ boundary 23:30 UTC→juin Casa, CANCELLED exclusion, multi-catégorie
+
+Migration `20260519_phase3_perf_indexes` : audit de 7 indexes candidats → tous déjà présents en DB. Migration no-op (n'insère que la row `_app_migrations`).
+
+Lazy-loading des modals admin lourdes (Phase 3 perf) : `CreateAnimalModalLazy.tsx`, `CreateClientModalLazy.tsx` via `next/dynamic({ ssr: false })`.
+
+#### CI fixes (5 défaillances résolues)
+
+| Défaillance | Cause | Fix |
+|---|---|---|
+| Tests (401→403) | `requireRole()` retourne 403 pour wrong-role ; 6 assertions de tests attendaient 401 | Assertions mises à jour dans 4 fichiers |
+| Tests (intégration SAVEPOINT) | `SAVEPOINT` exige une transaction parente que Prisma ne fournit pas | Remplacé par `BEGIN`/`ROLLBACK` dans 3 fichiers (pattern du test TZ bucketing) |
+| Tests (PG function manquante) | `prisma db push` ne crée pas `compute_payment_by_category` ; le test monthly-revenue l'appelait sans la créer | Ajout `CREATE OR REPLACE FUNCTION` dans `beforeAll` |
+| Validate Migrations | `docs/SCHEMA.md` périmé après split HealthClient | `node scripts/generate-schema-doc.mjs` recommité |
+| Migration Rollback Check | 4 migrations absentes de `COSMETIC_DRIFT_EXCLUSIONS` : `20260519_phase3_perf_indexes`, `20260518_fix_function_tz_casa`, `20260518_product_catalog_suggestions`, plus les 2 précédentes | Ajout dans le workflow |
+| Lighthouse | `assertProductionEnv()` ignorait `SKIP_ENV_VALIDATION=1` → crash au boot CI (pas de Supabase/Redis/TOTP) | Early-return sur `SKIP_ENV_VALIDATION === '1'` |
+
+**Résultat :** 1565 tests passing, CI vert sur 11/11 checks (2 E2E skippés sans secrets).
+
+---
+
 ### 2026-05-14 — Session GPS + SMS + CI + Wave 1 (PRs #67 → #75)
 
 Session marathon : 9 PRs ouvertes (7 mergées, 2 ouvertes au bouclage), 3 ADR (0006/0007/0008), +123 tests, +1 module de cleanup SQL pour les données existantes corrompues.
