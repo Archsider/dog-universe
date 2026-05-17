@@ -109,7 +109,7 @@ async function patchImpl(request: Request, id: string): Promise<Response> {
     // mirror /api/admin/walkin-invoice : DISCOUNT ⇒ unitPrice < 0 ;
     // everything else ⇒ unitPrice >= 0.
     const VALID_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER', 'DISCOUNT'] as const;
-    for (const item of items as { description: unknown; quantity: unknown; unitPrice: unknown; category?: unknown }[]) {
+    for (const item of items as { description: unknown; quantity: unknown; unitPrice: unknown; category?: unknown; productId?: unknown }[]) {
       if (typeof item.description !== 'string' || !item.description.trim()) {
         return NextResponse.json({ error: 'INVALID_ITEM_DESCRIPTION' }, { status: 400 });
       }
@@ -131,10 +131,16 @@ async function patchImpl(request: Request, id: string): Promise<Response> {
       if (!isDiscount && (item.unitPrice as number) < 0) {
         return NextResponse.json({ error: 'INVALID_ITEM_PRICE' }, { status: 400 });
       }
+      // Defense-in-depth refine : category='PRODUCT' MUST carry a non-empty
+      // productId. Twin of the Zod refine in /api/admin/walkin-invoice +
+      // the DB CHECK constraint InvoiceItem_product_category_has_productId.
+      if (item.category === 'PRODUCT' && (typeof item.productId !== 'string' || item.productId.length === 0)) {
+        return NextResponse.json({ error: 'PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID' }, { status: 400 });
+      }
     }
 
     type ItemCategory = typeof VALID_CATEGORIES[number];
-    interface ValidItem { description: string; quantity: number; unitPrice: number; category?: ItemCategory }
+    interface ValidItem { description: string; quantity: number; unitPrice: number; category?: ItemCategory; productId?: string | null }
     const validItems = items as ValidItem[];
     const newAmount = validItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
     if (newAmount <= 0) return NextResponse.json({ error: 'INVALID_AMOUNT' }, { status: 400 });
@@ -171,6 +177,9 @@ async function patchImpl(request: Request, id: string): Promise<Response> {
           unitPrice: it.unitPrice,
           total: it.quantity * it.unitPrice,
           category: (it.category ?? 'OTHER') as ItemCategory,
+          // Defense-in-depth : PRODUCT requires productId (Zod refine
+          // PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID + DB CHECK).
+          productId: it.productId ?? null,
         })),
       });
 

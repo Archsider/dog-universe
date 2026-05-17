@@ -16,5 +16,6 @@ module.exports = {
     'no-prisma-date-without-helper': require('./rules/no-prisma-date-without-helper'),
     'no-direct-invoice-mutation': require('./rules/no-direct-invoice-mutation'),
     'no-direct-revenue-computation': require('./rules/no-direct-revenue-computation'),
+    'no-hardcoded-product-without-id': require('./rules/no-hardcoded-product-without-id'),
   },
 };

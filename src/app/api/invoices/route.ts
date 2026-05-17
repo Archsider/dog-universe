@@ -144,7 +144,7 @@ export async function POST(request: Request) {
 
     // Validate each item: amounts must be positive numbers
     const VALID_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER'];
-    for (const item of items as { description: string; quantity: number; unitPrice: number; total: number; category?: string }[]) {
+    for (const item of items as { description: string; quantity: number; unitPrice: number; total: number; category?: string; productId?: string | null }[]) {
       if (!item.description || typeof item.description !== 'string') {
         return NextResponse.json({ error: 'INVALID_ITEM_DESCRIPTION' }, { status: 400 });
       }
@@ -159,6 +159,13 @@ export async function POST(request: Request) {
       }
       if (item.category !== undefined && !VALID_CATEGORIES.includes(item.category)) {
         return NextResponse.json({ error: 'INVALID_ITEM_CATEGORY' }, { status: 400 });
+      }
+      // Defense-in-depth (Zod-equivalent) refine for the floor :
+      // category='PRODUCT' MUST carry a non-empty productId. Twin of the
+      // Zod refine in /api/admin/walkin-invoice and PATCH /api/invoices/[id],
+      // and the DB CHECK constraint InvoiceItem_product_category_has_productId.
+      if (item.category === 'PRODUCT' && (typeof item.productId !== 'string' || item.productId.length === 0)) {
+        return NextResponse.json({ error: 'PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID' }, { status: 400 });
       }
     }
 

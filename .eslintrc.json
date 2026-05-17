@@ -25,7 +25,8 @@
     "dog-universe/no-direct-payment-create": "error",
     "dog-universe/no-prisma-date-without-helper": "error",
     "dog-universe/no-direct-invoice-mutation": "error",
-    "dog-universe/no-direct-revenue-computation": "error"
+    "dog-universe/no-direct-revenue-computation": "error",
+    "dog-universe/no-hardcoded-product-without-id": "error"
   },
   "overrides": [
     {
@@ -40,7 +41,8 @@
         "dog-universe/no-direct-payment-create": "off",
         "dog-universe/no-prisma-date-without-helper": "off",
         "dog-universe/no-direct-invoice-mutation": "off",
-        "dog-universe/no-direct-revenue-computation": "off"
+        "dog-universe/no-direct-revenue-computation": "off",
+        "dog-universe/no-hardcoded-product-without-id": "off"
       }
     },
     {
@@ -53,7 +55,8 @@
         "dog-universe/no-direct-payment-create": "off",
         "dog-universe/no-prisma-date-without-helper": "off",
         "dog-universe/no-direct-invoice-mutation": "off",
-        "dog-universe/no-direct-revenue-computation": "off"
+        "dog-universe/no-direct-revenue-computation": "off",
+        "dog-universe/no-hardcoded-product-without-id": "off"
       }
     },
     {
@@ -66,7 +69,8 @@
         "dog-universe/no-direct-payment-create": "off",
         "dog-universe/no-prisma-date-without-helper": "off",
         "dog-universe/no-direct-invoice-mutation": "off",
-        "dog-universe/no-direct-revenue-computation": "off"
+        "dog-universe/no-direct-revenue-computation": "off",
+        "dog-universe/no-hardcoded-product-without-id": "off"
       }
     },
     {

@@ -23,9 +23,13 @@ export function todayCasaYmd(): string {
 }
 
 function makeInitialItem(): WalkinItem {
-  // Default category is OTHER so the user makes a deliberate PRODUCT choice
-  // via the dropdown. Avoids the trap of "PRODUCT default → free-text → no
-  // productId → 400 PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID at submit."
+  // Default to 'OTHER' (not 'PRODUCT') so the user makes a deliberate PRODUCT
+  // choice via the smart-search input. Avoids the trap "PRODUCT default →
+  // free-text typed → no productId → 400 PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID
+  // at submit" — enforced server-side by Zod refine + DB CHECK constraint
+  // `InvoiceItem_product_category_has_productId` (Agent 1, PR #123).
+  // The ProductCatalogSearchSelect component (PR #124) binds productId
+  // when the user explicitly switches to PRODUCT.
   return { id: newItemId(), category: 'OTHER', description: '', quantity: 1, unitPrice: 0, productId: null };
 }
 

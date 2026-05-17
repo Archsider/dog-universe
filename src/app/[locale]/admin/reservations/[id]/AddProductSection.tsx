@@ -21,6 +21,7 @@ interface InvoiceItemView {
   unitPrice: number;
   total: number;
   category: string;
+  productId?: string | null;
   pending?: boolean;
 }
 
@@ -112,6 +113,10 @@ export default function AddProductSection({
       unitPrice: product.price,
       total: Number((product.price * quantity).toFixed(2)),
       category: 'PRODUCT',
+      // Bind productId on the optimistic view to mirror the server-side
+      // InvoiceItem shape (Zod refine PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID
+      // + DB CHECK InvoiceItem_product_category_has_productId).
+      productId: product.id,
       pending: true,
     };
     setItems((prev) => [...prev, optimistic]);
