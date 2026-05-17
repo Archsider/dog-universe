@@ -37,13 +37,66 @@ const INTEGRATION_URL = process.env.INTEGRATION_DATABASE_URL;
 
 const describeIntegration = INTEGRATION_URL ? describe : describe.skip;
 
+// The function body mirrors migration 20260518_fix_function_tz_casa.
+// prisma db push (used in CI) does not run migrations — it only syncs
+// tables/columns. We create the function here so the tests can run.
+const CREATE_FUNCTION_SQL = `
+CREATE OR REPLACE FUNCTION public.compute_payment_by_category(
+  target_year  integer DEFAULT NULL::integer,
+  target_month integer DEFAULT NULL::integer
+)
+RETURNS TABLE(year integer, month integer, category text, total numeric)
+LANGUAGE sql
+STABLE
+AS $fn$
+  WITH casa_payment AS (
+    SELECT
+      p.id                                                                       AS payment_id,
+      (p."paymentDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Africa/Casablanca'      AS casa_date,
+      p.amount                                                                    AS payment_amount,
+      p."invoiceId"                                                               AS invoice_id
+    FROM public."Payment" p
+    WHERE
+      (target_year  IS NULL OR EXTRACT(YEAR  FROM ((p."paymentDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Africa/Casablanca'))::int = target_year)
+      AND
+      (target_month IS NULL OR EXTRACT(MONTH FROM ((p."paymentDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Africa/Casablanca'))::int = target_month)
+  ),
+  invoice_alloc AS (
+    SELECT
+      ii."invoiceId",
+      ii.category,
+      SUM(ii."allocatedAmount")                                                  AS cat_alloc,
+      SUM(SUM(ii."allocatedAmount")) OVER (PARTITION BY ii."invoiceId")          AS inv_alloc_total
+    FROM public."InvoiceItem" ii
+    WHERE ii."allocatedAmount" > 0
+    GROUP BY ii."invoiceId", ii.category
+  )
+  SELECT
+    EXTRACT(YEAR  FROM cp.casa_date)::int                  AS year,
+    EXTRACT(MONTH FROM cp.casa_date)::int                  AS month,
+    LOWER(ia.category::text)                               AS category,
+    SUM(
+      ROUND(
+        (cp.payment_amount * ia.cat_alloc / NULLIF(ia.inv_alloc_total, 0))::numeric,
+        2
+      )
+    )::numeric(12, 2)                                      AS total
+  FROM casa_payment cp
+  JOIN public."Invoice" i      ON i.id = cp.invoice_id
+  JOIN invoice_alloc ia        ON ia."invoiceId" = i.id
+  WHERE NOT (i.status = 'CANCELLED' AND i."paidAmount" = 0)
+  GROUP BY year, month, category;
+$fn$
+`;
+
 describeIntegration('compute_payment_by_category — monthly revenue semantics', () => {
   let client: PrismaClient;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     client = new PrismaClient({
       datasources: { db: { url: INTEGRATION_URL } },
     });
+    await client.$executeRawUnsafe(CREATE_FUNCTION_SQL);
   });
 
   afterAll(async () => {
