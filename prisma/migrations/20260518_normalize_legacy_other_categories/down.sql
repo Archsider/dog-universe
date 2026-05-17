@@ -1,0 +1,9 @@
+-- @rollback: not-applicable
+-- This is a one-way data normalization. Restoring InvoiceItem.category
+-- back to 'OTHER' for the affected rows would re-introduce the JS-vs-MV
+-- divergence the migration is designed to eliminate. The rows in
+-- question are the same legacy entries the `inferItemCategory()` JS
+-- helper has been silently re-classifying since the column was added.
+-- A "rollback" would only put us back into the broken-but-tolerated
+-- state — use a Supabase point-in-time restore if a true revert is
+-- ever required.
