@@ -5,11 +5,16 @@ import { createAdminMessageNotification } from '@/lib/notifications';
 import { getEmailTemplate } from '@/lib/email';
 import { sendEmailNow } from '@/lib/notify-now';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;
+  return withSpan('api.admin.bookings.message', { entityId: id }, () => messageImpl(request, id));
+}
+
+async function messageImpl(request: NextRequest, id: string): Promise<Response> {
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -4,12 +4,17 @@ import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { calculateBoardingBreakdown, getPricingSettings } from '@/lib/pricing';
 import { notDeleted } from '@/lib/prisma-soft';
+import { withSpan } from '@/lib/observability';
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
 export async function POST(request: NextRequest) {
+  return withSpan('api.admin.bookings.merge', {}, () => mergeImpl(request));
+}
+
+async function mergeImpl(request: NextRequest): Promise<Response> {
   const session = await auth();
   if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
