@@ -41,6 +41,12 @@ export default function RegisterPage() {
       setError(t('errors.weakPassword'));
       return;
     }
+    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(form.password)) {
+      setError(locale === 'fr'
+        ? 'Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre (ex : Bobinou@777)'
+        : 'Password must contain at least one uppercase letter, one lowercase letter, and one digit (e.g. Bobinou@777)');
+      return;
+    }
 
     setLoading(true);
 
@@ -63,8 +69,13 @@ export default function RegisterPage() {
       if (!res.ok) {
         if (data.error === 'EMAIL_TAKEN') {
           setError(t('errors.emailTaken'));
+        } else if (data.error === 'VALIDATION_ERROR' && Array.isArray(data.details) && data.details.length > 0) {
+          // Extract the human-readable part after "field: message"
+          const raw: string = data.details[0];
+          const msg = raw.includes(': ') ? raw.split(': ').slice(1).join(': ') : raw;
+          setError(msg);
         } else {
-          setError(data.message ?? locale === 'fr' ? 'Erreur lors de la création du compte' : 'Error creating account');
+          setError(data.message ?? (locale === 'fr' ? 'Erreur lors de la création du compte' : 'Error creating account'));
         }
         setLoading(false);
         return;
@@ -182,6 +193,11 @@ export default function RegisterPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              <p className="text-xs text-neutral-400 mt-1">
+                {locale === 'fr'
+                  ? '8 caractères minimum · 1 majuscule · 1 chiffre (ex : Bobinou@777)'
+                  : '8 characters minimum · 1 uppercase letter · 1 digit (e.g. Bobinou@777)'}
+              </p>
             </div>
 
             <div>
