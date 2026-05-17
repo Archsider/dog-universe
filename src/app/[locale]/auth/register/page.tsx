@@ -5,11 +5,34 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
-import { PawPrint, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
+
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['300', '400'],
+  style: ['italic'],
+  display: 'swap',
+  variable: '--font-cormorant',
+});
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['300', '400', '500'],
+  display: 'swap',
+  variable: '--font-dmsans',
+});
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontFamily: 'var(--font-dmsans), sans-serif',
+  fontWeight: 500,
+  fontSize: '10px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.13em',
+  color: '#9a7b2e',
+};
 
 export default function RegisterPage() {
   const t = useTranslations('auth.register');
@@ -70,7 +93,6 @@ export default function RegisterPage() {
         if (data.error === 'EMAIL_TAKEN') {
           setError(t('errors.emailTaken'));
         } else if (data.error === 'VALIDATION_ERROR' && Array.isArray(data.details) && data.details.length > 0) {
-          // Extract the human-readable part after "field: message"
           const raw: string = data.details[0];
           const msg = raw.includes(': ') ? raw.split(': ').slice(1).join(': ') : raw;
           setError(msg);
@@ -81,7 +103,6 @@ export default function RegisterPage() {
         return;
       }
 
-      // Auto-login after registration
       await signIn('credentials', {
         email: form.email.toLowerCase().trim(),
         password: form.password,
@@ -96,18 +117,73 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#FAF6F0] flex items-center justify-center p-4">
+    <main className={`min-h-screen bg-[#FAF6F0] flex items-center justify-center p-4 ${cormorant.variable} ${dmSans.variable}`}>
+      <style>{`
+        .du-input {
+          width: 100%;
+          background: #faf8f4;
+          border: 0.5px solid #ddd0b0;
+          border-radius: 4px;
+          padding: 10px 12px;
+          font-size: 14px;
+          color: #2c2315;
+          font-family: var(--font-dmsans), sans-serif;
+          transition: border-color 0.15s, box-shadow 0.15s;
+          outline: none;
+          box-sizing: border-box;
+        }
+        .du-input::placeholder {
+          font-family: var(--font-cormorant), serif;
+          font-style: italic;
+          color: #c8b98a;
+        }
+        .du-input:focus {
+          border-color: #9a7b2e;
+          box-shadow: 0 0 0 3px rgba(154, 123, 46, 0.08);
+        }
+        .du-btn:hover:not(:disabled) {
+          background: #7d6424 !important;
+        }
+      `}</style>
+
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <Link href={`/${locale}`} className="inline-flex items-center gap-2 mb-6">
-            <PawPrint className="h-7 w-7 text-gold-500" />
-            <span className="text-2xl font-serif font-bold text-charcoal">
-              Dog <span className="text-gold-500">Universe</span>
+          <Link href={`/${locale}`}>
+            <span style={{
+              fontFamily: 'var(--font-cormorant), serif',
+              fontStyle: 'italic',
+              fontWeight: 300,
+              fontSize: '15px',
+              color: '#9a7b2e',
+              letterSpacing: '0.15em',
+              textTransform: 'uppercase',
+              display: 'block',
+              marginBottom: '18px',
+            }}>
+              Dog Universe
             </span>
           </Link>
-          <h1 className="text-2xl font-serif font-semibold text-charcoal">{t('title')}</h1>
-          <p className="text-neutral-600 mt-1 text-sm">{t('subtitle')}</p>
+          <h1 style={{
+            fontFamily: 'var(--font-cormorant), serif',
+            fontStyle: 'italic',
+            fontWeight: 300,
+            fontSize: '34px',
+            color: '#2c2315',
+            lineHeight: 1.2,
+            margin: 0,
+          }}>
+            {locale === 'fr' ? 'Pensé pour eux. Fait pour vous.' : 'Designed for them. Made for you.'}
+          </h1>
+          <p style={{
+            fontFamily: 'var(--font-cormorant), serif',
+            fontStyle: 'italic',
+            fontSize: '15px',
+            color: '#a08c5b',
+            marginTop: '8px',
+          }}>
+            {locale === 'fr' ? 'Bienvenue dans l’univers.' : 'Welcome to the universe.'}
+          </p>
         </div>
 
         {/* Card */}
@@ -115,8 +191,10 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="firstName">{locale === 'fr' ? 'Prénom' : 'First name'}</Label>
-                <Input
+                <label htmlFor="firstName" style={labelStyle}>
+                  {locale === 'fr' ? 'Prénom' : 'First name'}
+                </label>
+                <input
                   id="firstName"
                   name="firstName"
                   type="text"
@@ -125,12 +203,14 @@ export default function RegisterPage() {
                   placeholder={locale === 'fr' ? 'Marie' : 'Jane'}
                   required
                   minLength={2}
-                  className="mt-1"
+                  className="du-input mt-1"
                 />
               </div>
               <div>
-                <Label htmlFor="lastName">{locale === 'fr' ? 'Nom' : 'Last name'}</Label>
-                <Input
+                <label htmlFor="lastName" style={labelStyle}>
+                  {locale === 'fr' ? 'Nom' : 'Last name'}
+                </label>
+                <input
                   id="lastName"
                   name="lastName"
                   type="text"
@@ -139,14 +219,14 @@ export default function RegisterPage() {
                   placeholder={locale === 'fr' ? 'Dupont' : 'Smith'}
                   required
                   minLength={2}
-                  className="mt-1"
+                  className="du-input mt-1"
                 />
               </div>
             </div>
 
             <div>
-              <Label htmlFor="email">{t('email')}</Label>
-              <Input
+              <label htmlFor="email" style={labelStyle}>{t('email')}</label>
+              <input
                 id="email"
                 name="email"
                 type="email"
@@ -154,27 +234,27 @@ export default function RegisterPage() {
                 onChange={handleChange}
                 placeholder="votre@email.com"
                 required
-                className="mt-1"
+                className="du-input mt-1"
               />
             </div>
 
             <div>
-              <Label htmlFor="phone">{t('phone')}</Label>
-              <Input
+              <label htmlFor="phone" style={labelStyle}>{t('phone')}</label>
+              <input
                 id="phone"
                 name="phone"
                 type="tel"
                 value={form.phone}
                 onChange={handleChange}
                 placeholder="+212 600-000000"
-                className="mt-1"
+                className="du-input mt-1"
               />
             </div>
 
             <div>
-              <Label htmlFor="password">{t('password')}</Label>
+              <label htmlFor="password" style={labelStyle}>{t('password')}</label>
               <div className="relative mt-1">
-                <Input
+                <input
                   id="password"
                   name="password"
                   type={showPassword ? 'text' : 'password'}
@@ -182,59 +262,121 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   required
                   minLength={8}
-                  className="pr-10"
+                  className="du-input"
+                  style={{ paddingRight: '40px' }}
                 />
                 <button
                   type="button"
-                  aria-label={showPassword ? (locale === 'fr' ? 'Masquer le mot de passe' : 'Hide password') : (locale === 'fr' ? 'Afficher le mot de passe' : 'Show password')}
+                  aria-label={showPassword
+                    ? (locale === 'fr' ? 'Masquer le mot de passe' : 'Hide password')
+                    : (locale === 'fr' ? 'Afficher le mot de passe' : 'Show password')}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-gold-500 rounded"
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: '#a08c5b',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <p className="text-xs text-neutral-400 mt-1">
+              <p style={{
+                fontFamily: 'var(--font-dmsans), sans-serif',
+                fontSize: '10px',
+                color: '#c8b98a',
+                marginTop: '5px',
+                letterSpacing: '0.02em',
+              }}>
                 {locale === 'fr'
                   ? '8 caractères minimum · 1 majuscule · 1 minuscule · 1 chiffre'
-                  : '8 characters minimum · 1 uppercase letter · 1 lowercase letter · 1 digit'}
+                  : '8 characters minimum · 1 uppercase · 1 lowercase · 1 digit'}
               </p>
             </div>
 
             <div>
-              <Label htmlFor="confirmPassword">{t('confirmPassword')}</Label>
-              <Input
+              <label htmlFor="confirmPassword" style={labelStyle}>{t('confirmPassword')}</label>
+              <input
                 id="confirmPassword"
                 name="confirmPassword"
                 type="password"
                 value={form.confirmPassword}
                 onChange={handleChange}
                 required
-                className="mt-1"
+                className="du-input mt-1"
               />
             </div>
 
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+              <div style={{
+                fontSize: '13px',
+                color: '#dc2626',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                fontFamily: 'var(--font-dmsans), sans-serif',
+              }}>
                 {error}
               </div>
             )}
 
-            <Button type="submit" className="w-full mt-2" disabled={loading}>
+            <button
+              type="submit"
+              disabled={loading}
+              className="du-btn"
+              style={{
+                width: '100%',
+                background: loading ? '#c4a95e' : '#9a7b2e',
+                color: '#ffffff',
+                fontFamily: 'var(--font-dmsans), sans-serif',
+                fontWeight: 500,
+                fontSize: '10.5px',
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                borderRadius: '4px',
+                padding: '13px 24px',
+                border: 'none',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                marginTop: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'background 0.15s',
+              }}
+            >
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   {locale === 'fr' ? 'Création...' : 'Creating...'}
                 </>
               ) : (
-                t('submit')
+                locale === 'fr' ? 'Rejoindre l’univers' : 'Join the universe'
               )}
-            </Button>
+            </button>
           </form>
         </div>
 
-        <p className="text-center text-sm text-neutral-600 mt-6">
-          {t('hasAccount')}{' '}
-          <Link href={`/${locale}/auth/login`} className="text-gold-600 hover:text-gold-700 font-medium">
+        <p style={{
+          textAlign: 'center',
+          fontSize: '13px',
+          color: '#a08c5b',
+          marginTop: '24px',
+          fontFamily: 'var(--font-dmsans), sans-serif',
+        }}>
+          {locale === 'fr' ? 'Déjà membre ?' : 'Already a member?'}{' '}
+          <Link
+            href={`/${locale}/auth/login`}
+            style={{ color: '#9a7b2e', fontWeight: 500, textDecoration: 'none' }}
+          >
             {t('login')}
           </Link>
         </p>
