@@ -202,15 +202,21 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
     if (it.category === 'PRODUCT')   cashedByCategory.croquettes += it.amount;
   }
 
-  // Mois précédent — utilise `thisBilled`/`lastBilled` (billedByCategory →
-  // MV-first) pour le calcul de delta seulement. Acceptable car le delta
-  // est une mesure relative (la valeur absolue affichée vient de
-  // `cashedByCategory` qui est fidèle).
+  // Mois précédent — source = `cashByMonth(currentYear)` (déjà fetched ci-dessus
+  // comme `currentYearMonthly`). C'est désormais une fonction live qui
+  // re-classifie les items via `inferItemCategory(category, description)` →
+  // immunisée au bug "tout en OTHER" de la MV pour items legacy.
+  // Si le mois courant est janvier, on bascule sur décembre de l'année préc.
+  // (`lastYearMonthly` est `cashByMonth(currentYear - 1)`).
+  const prevMonthIdx = currentMonthNum - 2;  // 0-indexed mois précédent
+  const lastMonthData = prevMonthIdx >= 0
+    ? currentYearMonthly[prevMonthIdx]
+    : lastYearMonthly[11];  // janv courant → déc préc.
   const serviceDelta = {
-    boarding:   deltaPercent(cashedByCategory.boarding,   lastBilled.boarding),
-    taxi:       deltaPercent(cashedByCategory.taxi,       lastBilled.taxi),
-    grooming:   deltaPercent(cashedByCategory.grooming,   lastBilled.grooming),
-    croquettes: deltaPercent(cashedByCategory.croquettes, lastBilled.croquettes),
+    boarding:   deltaPercent(cashedByCategory.boarding,   lastMonthData.boarding),
+    taxi:       deltaPercent(cashedByCategory.taxi,       lastMonthData.taxi),
+    grooming:   deltaPercent(cashedByCategory.grooming,   lastMonthData.grooming),
+    croquettes: deltaPercent(cashedByCategory.croquettes, lastMonthData.croquettes),
   };
 
   const volumeData = {
