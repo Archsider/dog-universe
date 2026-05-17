@@ -131,6 +131,7 @@ export function LineItemsEditor({
                   if (isProduct && next !== 'PRODUCT') {
                     patchItem(i, { category: next, productId: undefined });
                   } else if (!isProduct && next === 'PRODUCT') {
+                    // eslint-disable-next-line dog-universe/no-hardcoded-product-without-id -- OK: UI state reset (category switch), not an InvoiceItem create. ProductCatalogSearchSelect will bind productId before submit; pre-submit guard in CreateStandaloneInvoiceModal.handleSubmit also blocks PRODUCT without productId.
                     patchItem(i, { category: 'PRODUCT', productId: undefined, description: '', unitPrice: 0 });
                   } else {
                     onUpdateItem(i, 'category', next);
