@@ -4,7 +4,7 @@
 // display a meaningful status banner: storage configured? last success when?
 // last error when? Removes the "is anything actually running?" guesswork.
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { env } from '@/lib/env';
 import { logServerError } from '@/lib/observability';
 import { listBackups, BackupError, getBackupBucket } from '@/lib/db-backup';
@@ -13,10 +13,8 @@ import { getLastBackupSuccess, getLastBackupError } from '@/lib/backup-health';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   const storageConfigured = Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
   const [lastSuccess, lastError] = await Promise.all([

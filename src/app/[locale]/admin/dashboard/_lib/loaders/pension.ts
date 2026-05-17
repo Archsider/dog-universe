@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { startOfTodayCasa, endOfTodayCasa } from '@/lib/dates-casablanca';
 import { getCapacityLimits, countOverlappingPets } from '@/lib/capacity';
+import { notDeleted } from '@/lib/prisma-soft';
 import type { PensionSnapshot } from '../shapes';
 
 export async function loadPension(): Promise<PensionSnapshot> {
@@ -19,11 +20,10 @@ export async function loadPension(): Promise<PensionSnapshot> {
   // IN_PROGRESS) by design — for "Pension actuelle" we need IN_PROGRESS
   // strict, so we re-query directly. Simpler than parameterising the lib.
   const inProgress = await prisma.booking.findMany({
-    where: {
+    where: notDeleted({
       serviceType: 'BOARDING',
       status: 'IN_PROGRESS',
-      deletedAt: null,
-    },
+    }),
     select: {
       bookingPets: {
         select: { pet: { select: { species: true } } },

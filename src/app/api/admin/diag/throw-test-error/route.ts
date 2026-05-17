@@ -32,7 +32,7 @@
 
 import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -41,10 +41,9 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 10;
 
 export async function POST() {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   // Build the canary id BEFORE the throw so it lands in both the
   // Vercel structured log AND the Sentry error message — same string,

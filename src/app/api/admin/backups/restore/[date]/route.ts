@@ -15,8 +15,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gunzipSync } from 'node:zlib';
 import { Prisma } from '@prisma/client';
-import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { requireRole } from '@/lib/auth-guards';
 import { env } from '@/lib/env';
 import { logServerError } from '@/lib/observability';
 import { BACKUP_PREFIX } from '@/lib/db-backup';
@@ -113,10 +113,8 @@ export async function POST(
 ) {
   const { date } = await params;
 
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: 'Invalid date format' }, { status: 400 });

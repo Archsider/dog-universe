@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { supersedePendingForBooking } from '@/lib/time-proposals';
 import { withSpan } from '@/lib/observability';
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     select: {
       id: true,
       clientId: true,

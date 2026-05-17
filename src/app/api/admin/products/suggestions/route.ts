@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import {
   getAgeCategory,
@@ -14,10 +14,8 @@ import { notDeleted } from '@/lib/prisma-soft';
  * produits en rupture (utile pour suggérer une commande future).
  */
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   const bookingId = request.nextUrl.searchParams.get('bookingId');
   if (!bookingId) return NextResponse.json({ error: 'MISSING_BOOKING_ID' }, { status: 400 });

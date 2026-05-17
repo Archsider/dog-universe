@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { APP_URL } from '@/lib/config';
 import { logger } from '@/lib/logger';
@@ -17,13 +18,12 @@ export async function POST(req: NextRequest) {
 
   const { clientId } = await req.json().catch(() => ({}));
 
-  const where = {
+  const where = notDeleted({
     role: 'CLIENT' as const,
-    deletedAt: null as null, // soft-delete: required — no global extension (Edge Runtime incompatible)
     isWalkIn: false, // Walk-in clients have no portal — never invite to sign.
     contract: null,
     ...(clientId ? { id: clientId } : {}),
-  };
+  });
 
   const clients = await prisma.user.findMany({
     where,

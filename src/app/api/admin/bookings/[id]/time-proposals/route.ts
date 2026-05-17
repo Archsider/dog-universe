@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import {
   createProposal,
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   // Sanity : the booking must exist + role gate (ADMIN can only touch
   // CLIENT-owned bookings ; SUPERADMIN any).
   const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, deletedAt: null },
+    where: notDeleted({ id: bookingId }),
     select: {
       id: true,
       clientId: true,

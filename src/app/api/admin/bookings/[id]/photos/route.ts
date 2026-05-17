@@ -19,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   // RGPD: never serve photos from a soft-deleted booking. Filter via the
   // parent relation so the DB enforces the guard even if a row leaks.
   const photos = await prisma.stayPhoto.findMany({
-    where: { bookingId: id, booking: { deletedAt: null } },
+    where: { bookingId: id, booking: notDeleted() },
     orderBy: { createdAt: 'desc' },
     take: 500,
   });
@@ -94,7 +94,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   // Capture URL before delete so the audit log can record what was removed.
   // RGPD: refuse to mutate photos tied to a soft-deleted booking.
   const photo = await prisma.stayPhoto.findFirst({
-    where: { id: photoId, bookingId: id, booking: { deletedAt: null } },
+    where: { id: photoId, bookingId: id, booking: notDeleted() },
     select: { id: true, url: true, caption: true },
   });
   if (!photo) return NextResponse.json({ error: 'Not found' }, { status: 404 });

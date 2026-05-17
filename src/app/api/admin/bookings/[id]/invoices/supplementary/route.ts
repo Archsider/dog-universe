@@ -12,7 +12,7 @@
 // Returns 400 with explicit error codes when the booking has no main invoice
 // or no unbilled items.
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
@@ -20,10 +20,6 @@ import { notDeleted } from '@/lib/prisma-soft';
 import { withSpan } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
-
-function isAdmin(role?: string) {
-  return role === 'ADMIN' || role === 'SUPERADMIN';
-}
 
 async function allocateInvoiceNumber(tx: Prisma.TransactionClient, year: number): Promise<string | null> {
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -45,10 +41,9 @@ async function allocateInvoiceNumber(tx: Prisma.TransactionClient, year: number)
 
 export async function POST(_request: NextRequest, { params }: Params) {
   const { id: bookingId } = await params;
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   const booking = await prisma.booking.findFirst({
     where: notDeleted({ id: bookingId }),

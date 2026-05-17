@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { deleteFromPrivateStorage } from '@/lib/supabase';
 import { logAction, LOG_ACTIONS } from '@/lib/log';

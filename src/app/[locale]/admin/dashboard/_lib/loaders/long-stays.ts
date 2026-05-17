@@ -1,6 +1,7 @@
 import { addDays } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { startOfTodayCasa, casablancaStartOfDay, casablancaYMD } from '@/lib/dates-casablanca';
+import { notDeleted } from '@/lib/prisma-soft';
 import type { LongStayItem } from '../shapes';
 
 export async function loadLongStays(): Promise<LongStayItem[]> {
@@ -9,12 +10,11 @@ export async function loadLongStays(): Promise<LongStayItem[]> {
   // proactively reach out to the client via WhatsApp.
   const cutoff = casablancaStartOfDay(addDays(new Date(), -21));
   const rows = await prisma.booking.findMany({
-    where: {
+    where: notDeleted({
       serviceType: 'BOARDING',
       status: 'IN_PROGRESS',
       startDate: { lt: cutoff },
-      deletedAt: null,
-    },
+    }),
     select: {
       id: true,
       startDate: true,

@@ -2,7 +2,7 @@
 // Returns invariant violations + DLQ count + crons last-run timestamps + SMS stats.
 // Used by /admin/health for manual refresh (auto-refresh 60s).
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { runAllInvariantChecks } from '@/lib/health-invariants';
 import { getCronLastRun, CRON_NAMES, logServerError } from '@/lib/observability';
@@ -66,10 +66,8 @@ async function getSmsStats() {
 }
 
 export async function GET() {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   try {
     const [invariants, cronRuns, dlqCount, smsStats, slowQueryStats, slowQueriesSample] =

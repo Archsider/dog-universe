@@ -52,6 +52,7 @@ import {
   IdempotencyKeyInvalidError,
 } from '@/lib/idempotency';
 import { formatMAD } from '@/lib/utils';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export const dynamic = 'force-dynamic';
 
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest) {
 
         // Sanity-check : client must exist + be soft-active.
         const client = await tx.user.findFirst({
-          where: { id: clientId, deletedAt: null },
+          where: notDeleted({ id: clientId }),
           select: { id: true, name: true, phone: true, email: true, role: true },
         });
         if (!client) {

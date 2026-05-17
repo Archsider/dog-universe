@@ -1,6 +1,7 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import Link from 'next/link';
 import Image from 'next/image';
 import { PawPrint, ChevronRight } from 'lucide-react';
@@ -23,7 +24,7 @@ export default async function AdminAnimalsPage(props: PageProps) {
 
   const pets = await prisma.pet.findMany({
     where: {
-      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      ...notDeleted(),
       ...(q && { OR: [{ name: { contains: q, mode: 'insensitive' } }, { breed: { contains: q, mode: 'insensitive' } }, { owner: { name: { contains: q, mode: 'insensitive' } } }] }),
       ...(species && { species }),
     },

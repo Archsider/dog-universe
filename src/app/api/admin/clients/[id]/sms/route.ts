@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { sendSMS, formatMAD } from '@/lib/sms';
 import { logAction } from '@/lib/log';
@@ -21,10 +21,9 @@ export const POST = withSchema(
   { body: smsBodySchema, params: paramsSchema },
   async (_request, { body, params }) => {
     const { id } = params;
-    const session = await auth();
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+    if (authResult.error) return authResult.error;
+    const { session } = authResult;
 
     const { type, note, invoiceId } = body;
 

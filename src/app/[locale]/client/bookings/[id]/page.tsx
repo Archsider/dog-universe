@@ -59,12 +59,12 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
       orderBy: { createdAt: 'desc' },
     }),
     prisma.notification.findMany({
-      // `deletedAt: null` — admin-soft-deleted messages don't show on the
-      // client booking detail page either. See docs/CLIENT_MESSAGES.md.
+      // admin-soft-deleted messages don't show on the client booking detail
+      // page either. See docs/CLIENT_MESSAGES.md.
       where: {
+        ...notDeleted(),
         userId: session.user.id,
         type: { in: ['ADMIN_MESSAGE', 'STAY_PHOTO'] },
-        deletedAt: null,
       },
       orderBy: { createdAt: 'desc' },
       take: 50,

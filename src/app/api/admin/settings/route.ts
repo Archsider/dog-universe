@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { invalidateCapacityCache } from '@/lib/capacity';
@@ -29,10 +29,8 @@ const DEFAULT_SETTINGS: Record<string, string> = {
 };
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   const rows = await prisma.setting?.findMany({ take: 200 }) ?? [];
   const settings = { ...DEFAULT_SETTINGS };
@@ -44,10 +42,9 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   const parsed = settingsBodySchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {

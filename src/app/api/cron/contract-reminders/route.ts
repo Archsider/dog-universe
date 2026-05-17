@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { getEmailTemplate } from '@/lib/email';
 import { enqueueEmail, enqueueSms } from '@/lib/queues';
 import { APP_URL } from '@/lib/config';
@@ -11,7 +12,7 @@ export const GET = defineCron({
   period: 'weekly',
   fn: async ({ logger }) => {
     const unsigned = await prisma.user.findMany({
-      where: { role: 'CLIENT', deletedAt: null, isWalkIn: false, contract: null }, // soft-delete: required — no global extension (Edge Runtime incompatible). Walk-in clients have no portal access — skip.
+      where: notDeleted({ role: 'CLIENT', isWalkIn: false, contract: null }), // Walk-in clients have no portal access — skip.
       select: { id: true, name: true, email: true, language: true, phone: true },
       take: 500,
     });

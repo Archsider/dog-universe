@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { notDeleted } from '@/lib/prisma-soft';
 
@@ -7,10 +7,8 @@ interface Params { params: Promise<{ id: string; itemId: string }> }
 
 export async function DELETE(_request: NextRequest, { params }: Params) {
   const { id: bookingId, itemId } = await params;
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   const booking = await prisma.booking.findFirst({
     where: notDeleted({ id: bookingId }),

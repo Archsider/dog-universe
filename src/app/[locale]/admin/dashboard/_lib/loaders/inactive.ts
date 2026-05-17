@@ -1,6 +1,7 @@
 import { addDays } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { startOfTodayCasa, casablancaStartOfDay, casablancaYMD } from '@/lib/dates-casablanca';
+import { notDeleted } from '@/lib/prisma-soft';
 import type { InactiveClient } from '../shapes';
 
 export async function loadInactiveClients(): Promise<InactiveClient[]> {
@@ -12,17 +13,16 @@ export async function loadInactiveClients(): Promise<InactiveClient[]> {
   // Pull candidate clients with their last booking and last payment in
   // one query each, then merge in JS.
   const clients = await prisma.user.findMany({
-    where: {
+    where: notDeleted({
       role: 'CLIENT',
       isWalkIn: false,
-      deletedAt: null,
-    },
+    }),
     select: {
       id: true,
       name: true,
       phone: true,
       bookings: {
-        where: { deletedAt: null },
+        where: notDeleted(),
         select: {
           startDate: true,
           bookingPets: { select: { pet: { select: { name: true } } } },

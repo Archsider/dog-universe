@@ -44,15 +44,14 @@ export default async function HistoryPage(props: PageProps) {
   const statusFilter = searchParams.status || '';
 
   const bookings = await prisma.booking.findMany({
-    where: {
+    where: notDeleted({
       clientId: session.user.id,
-      deletedAt: null,
       ...(statusFilter && {
-      status: statusFilter === 'CANCELLED'
-        ? { in: ['CANCELLED', 'REJECTED'] as const satisfies BookingStatus[] }
-        : statusFilter as BookingStatus,
+        status: statusFilter === 'CANCELLED'
+          ? { in: ['CANCELLED', 'REJECTED'] as const satisfies BookingStatus[] }
+          : statusFilter as BookingStatus,
+      }),
     }),
-    },
     include: {
       bookingPets: { include: { pet: true } },
       boardingDetail: true,

@@ -1,16 +1,14 @@
 // GET /api/admin/guardian — SUPERADMIN only.
 // Returns the 30 most recent GuardianEvents for the client-side auto-refresh.
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   const events = await prisma.guardianEvent.findMany({
     orderBy: { createdAt: 'desc' },
