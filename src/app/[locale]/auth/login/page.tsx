@@ -7,10 +7,33 @@ import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import Image from 'next/image';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
+
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['300', '400'],
+  style: ['italic'],
+  display: 'swap',
+  variable: '--font-cormorant',
+});
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['300', '400', '500'],
+  display: 'swap',
+  variable: '--font-dmsans',
+});
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontFamily: 'var(--font-dmsans), sans-serif',
+  fontWeight: 500,
+  fontSize: '10px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.13em',
+  color: '#9a7b2e',
+};
 
 export default function LoginPage() {
   const t = useTranslations('auth.login');
@@ -41,7 +64,6 @@ export default function LoginPage() {
         return;
       }
 
-      // Fetch session to get role
       const sessionRes = await fetch('/api/auth/session');
       const session = await sessionRes.json();
 
@@ -57,23 +79,69 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#FAF6F0] flex items-center justify-center p-4">
+    <main className={`min-h-screen bg-[#FAF6F0] flex items-center justify-center p-4 ${cormorant.variable} ${dmSans.variable}`}>
+      <style>{`
+        .du-input {
+          width: 100%;
+          background: #faf8f4;
+          border: 0.5px solid #ddd0b0;
+          border-radius: 4px;
+          padding: 10px 12px;
+          font-size: 14px;
+          color: #2c2315;
+          font-family: var(--font-dmsans), sans-serif;
+          transition: border-color 0.15s, box-shadow 0.15s;
+          outline: none;
+          box-sizing: border-box;
+        }
+        .du-input::placeholder {
+          font-family: var(--font-cormorant), serif;
+          font-style: italic;
+          color: #c8b98a;
+        }
+        .du-input:focus {
+          border-color: #9a7b2e;
+          box-shadow: 0 0 0 3px rgba(154, 123, 46, 0.08);
+        }
+        .du-btn:hover:not(:disabled) {
+          background: #7d6424 !important;
+        }
+      `}</style>
+
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
           <Link href={`/${locale}`} className="inline-block mb-6">
             <Image src="/logo.png" alt="Dog Universe" width={160} height={44} className="h-12 w-auto object-contain mx-auto" priority />
           </Link>
-          <h1 className="text-2xl font-serif font-semibold text-charcoal">{t('title')}</h1>
-          <p className="text-neutral-600 mt-1 text-sm">{t('subtitle')}</p>
+          <h1 style={{
+            fontFamily: 'var(--font-cormorant), serif',
+            fontStyle: 'italic',
+            fontWeight: 300,
+            fontSize: '34px',
+            color: '#2c2315',
+            lineHeight: 1.2,
+            margin: 0,
+          }}>
+            {locale === 'fr' ? 'Vous étiez attendu.' : 'You were expected.'}
+          </h1>
+          <p style={{
+            fontFamily: 'var(--font-cormorant), serif',
+            fontStyle: 'italic',
+            fontSize: '15px',
+            color: '#a08c5b',
+            marginTop: '8px',
+          }}>
+            {locale === 'fr' ? 'Votre univers est intact.' : 'Your universe is intact.'}
+          </p>
         </div>
 
         {/* Card */}
         <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-gold p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <Label htmlFor="email">{t('email')}</Label>
-              <Input
+              <label htmlFor="email" style={labelStyle}>{t('email')}</label>
+              <input
                 id="email"
                 type="email"
                 value={email}
@@ -81,35 +149,55 @@ export default function LoginPage() {
                 placeholder="votre@email.com"
                 required
                 autoComplete="email"
-                className="mt-1"
+                className="du-input mt-1"
               />
             </div>
 
             <div>
               <div className="flex justify-between items-center">
-                <Label htmlFor="password">{t('password')}</Label>
+                <label htmlFor="password" style={labelStyle}>{t('password')}</label>
                 <Link
                   href={`/${locale}/auth/reset-password`}
-                  className="text-xs text-gold-600 hover:text-gold-700 transition-colors"
+                  style={{
+                    fontFamily: 'var(--font-dmsans), sans-serif',
+                    fontSize: '11px',
+                    color: '#9a7b2e',
+                    textDecoration: 'none',
+                  }}
                 >
                   {t('forgotPassword')}
                 </Link>
               </div>
               <div className="relative mt-1">
-                <Input
+                <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  className="pr-10"
+                  className="du-input"
+                  style={{ paddingRight: '40px' }}
                 />
                 <button
                   type="button"
-                  aria-label={showPassword ? (locale === 'fr' ? 'Masquer le mot de passe' : 'Hide password') : (locale === 'fr' ? 'Afficher le mot de passe' : 'Show password')}
+                  aria-label={showPassword
+                    ? (locale === 'fr' ? 'Masquer le mot de passe' : 'Hide password')
+                    : (locale === 'fr' ? 'Afficher le mot de passe' : 'Show password')}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-gold-500 rounded"
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: '#a08c5b',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -117,12 +205,44 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+              <div style={{
+                fontSize: '13px',
+                color: '#dc2626',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                fontFamily: 'var(--font-dmsans), sans-serif',
+              }}>
                 {error}
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <button
+              type="submit"
+              disabled={loading}
+              className="du-btn"
+              style={{
+                width: '100%',
+                background: loading ? '#c4a95e' : '#9a7b2e',
+                color: '#ffffff',
+                fontFamily: 'var(--font-dmsans), sans-serif',
+                fontWeight: 500,
+                fontSize: '10.5px',
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                borderRadius: '4px',
+                padding: '13px 24px',
+                border: 'none',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                marginTop: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'background 0.15s',
+              }}
+            >
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -131,15 +251,23 @@ export default function LoginPage() {
               ) : (
                 t('submit')
               )}
-            </Button>
+            </button>
           </form>
-
         </div>
 
         {/* Links */}
-        <p className="text-center text-sm text-neutral-600 mt-6">
-          {t('noAccount')}{' '}
-          <Link href={`/${locale}/auth/register`} className="text-gold-600 hover:text-gold-700 font-medium">
+        <p style={{
+          textAlign: 'center',
+          fontSize: '13px',
+          color: '#a08c5b',
+          marginTop: '24px',
+          fontFamily: 'var(--font-dmsans), sans-serif',
+        }}>
+          {locale === 'fr' ? 'Pas encore membre ?' : 'Not a member yet?'}{' '}
+          <Link
+            href={`/${locale}/auth/register`}
+            style={{ color: '#9a7b2e', fontWeight: 500, textDecoration: 'none' }}
+          >
             {t('register')}
           </Link>
         </p>
