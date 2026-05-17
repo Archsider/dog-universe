@@ -43,11 +43,11 @@ describeIntegration('cancelInvoice — real Postgres DB invariants', () => {
   });
 
   beforeEach(async () => {
-    await client.$executeRawUnsafe('SAVEPOINT ci_test_start');
+    await client.$executeRawUnsafe('BEGIN');
   });
 
   afterEach(async () => {
-    await client.$executeRawUnsafe('ROLLBACK TO SAVEPOINT ci_test_start');
+    await client.$executeRawUnsafe('ROLLBACK');
   });
 
   // ─── Helpers ──────────────────────────────────────────────────────────

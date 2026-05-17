@@ -44,11 +44,11 @@ describeIntegration('recordPayment — real Postgres DB invariants', () => {
   });
 
   beforeEach(async () => {
-    await client.$executeRawUnsafe('SAVEPOINT rp_test_start');
+    await client.$executeRawUnsafe('BEGIN');
   });
 
   afterEach(async () => {
-    await client.$executeRawUnsafe('ROLLBACK TO SAVEPOINT rp_test_start');
+    await client.$executeRawUnsafe('ROLLBACK');
   });
 
   // ─── Helpers ──────────────────────────────────────────────────────────

@@ -51,11 +51,11 @@ describeIntegration('compute_payment_by_category — monthly revenue semantics',
   });
 
   beforeEach(async () => {
-    await client.$executeRawUnsafe('SAVEPOINT mr_test_start');
+    await client.$executeRawUnsafe('BEGIN');
   });
 
   afterEach(async () => {
-    await client.$executeRawUnsafe('ROLLBACK TO SAVEPOINT mr_test_start');
+    await client.$executeRawUnsafe('ROLLBACK');
   });
 
   // ─── Helpers ──────────────────────────────────────────────────────────
