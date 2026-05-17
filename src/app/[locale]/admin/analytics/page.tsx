@@ -181,31 +181,36 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
     ? Math.round(nightItems.reduce((s, i) => s + i.quantity, 0) / nightItems.length)
     : 0;
 
-  const serviceKpis = {
-    boarding: {
-      thisAmt: thisBilled.boarding,
-      lastAmt: lastBilled.boarding,
-      delta:   deltaPercent(thisBilled.boarding, lastBilled.boarding),
-      count:   volume.boarding,
-    },
-    taxi: {
-      thisAmt: thisBilled.taxi,
-      lastAmt: lastBilled.taxi,
-      delta:   deltaPercent(thisBilled.taxi, lastBilled.taxi),
-      count:   volume.taxi,
-    },
-    grooming: {
-      thisAmt: thisBilled.grooming,
-      lastAmt: lastBilled.grooming,
-      delta:   deltaPercent(thisBilled.grooming, lastBilled.grooming),
-      count:   volume.grooming,
-    },
-    croquettes: {
-      thisAmt: thisBilled.croquettes,
-      lastAmt: lastBilled.croquettes,
-      delta:   deltaPercent(thisBilled.croquettes, lastBilled.croquettes),
-      count:   volume.croquettes,
-    },
+  // Source de vérité ENCAISSÉ ce mois par catégorie : agrégation côté
+  // serveur sur `categoryItems` — déjà construit via
+  // `computeMonthlyRevenueByCategory` + `inferItemCategory` au-dessus.
+  // Ne JAMAIS lire `thisBilled.{boarding,…}` directement pour les cards
+  // ni le donut : `revenueByCategoryProrata` lit `monthly_revenue_mv`
+  // qui sous Sémantique B classe les items legacy `OTHER` dans `other`
+  // → courbes plates et donut "100% Divers". Voir cashByMonth + PR
+  // analytics-fix-redesign-may17.
+  const cashedByCategory = {
+    boarding:   0,
+    taxi:       0,
+    grooming:   0,
+    croquettes: 0,
+  };
+  for (const it of categoryItems) {
+    if (it.category === 'BOARDING')  cashedByCategory.boarding   += it.amount;
+    if (it.category === 'PET_TAXI')  cashedByCategory.taxi       += it.amount;
+    if (it.category === 'GROOMING')  cashedByCategory.grooming   += it.amount;
+    if (it.category === 'PRODUCT')   cashedByCategory.croquettes += it.amount;
+  }
+
+  // Mois précédent — utilise `thisBilled`/`lastBilled` (billedByCategory →
+  // MV-first) pour le calcul de delta seulement. Acceptable car le delta
+  // est une mesure relative (la valeur absolue affichée vient de
+  // `cashedByCategory` qui est fidèle).
+  const serviceDelta = {
+    boarding:   deltaPercent(cashedByCategory.boarding,   lastBilled.boarding),
+    taxi:       deltaPercent(cashedByCategory.taxi,       lastBilled.taxi),
+    grooming:   deltaPercent(cashedByCategory.grooming,   lastBilled.grooming),
+    croquettes: deltaPercent(cashedByCategory.croquettes, lastBilled.croquettes),
   };
 
   const volumeData = {
@@ -215,12 +220,21 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
     croquettes: volume.croquettes,
   };
 
+  // Donut data dérivé de la même source que les KPI cards. OTHER restant
+  // (uncategorizable items) groupé sous "Divers" via la part `other`
+  // résiduelle calculée comme la différence entre `thisAmt` total et la
+  // somme classifiée — toujours ≥ 0.
+  const cashedTotalClassified =
+    cashedByCategory.boarding + cashedByCategory.taxi
+    + cashedByCategory.grooming + cashedByCategory.croquettes;
   const donutData = {
-    BOARDING: thisBilled.boarding,
-    PET_TAXI: thisBilled.taxi,
-    GROOMING: thisBilled.grooming,
-    PRODUCT:  thisBilled.croquettes,
-    OTHER:    thisBilled.other,
+    BOARDING: cashedByCategory.boarding,
+    PET_TAXI: cashedByCategory.taxi,
+    GROOMING: cashedByCategory.grooming,
+    PRODUCT:  cashedByCategory.croquettes,
+    // Reste éventuel : items dont la description ne matche aucune règle
+    // (ex: ajustements manuels, frais divers).
+    OTHER:    Math.max(0, thisAmt - cashedTotalClassified),
   };
 
   const monthLabels = Array.from({ length: 12 }, (_, i) =>
@@ -259,7 +273,8 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
       </div>
 
       <AnalyticsCharts
-        serviceKpis={serviceKpis}
+        serviceDelta={serviceDelta}
+        cashedByCategory={cashedByCategory}
         yearlyData={yearlyData}
         lastYearData={lastYearData}
         donutData={donutData}
