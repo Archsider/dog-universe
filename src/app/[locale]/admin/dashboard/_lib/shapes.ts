@@ -104,7 +104,7 @@ export interface InactiveClient {
 }
 
 export interface CriticalInvariantHit {
-  /** e.g. 'overpaid', 'js_vs_mv_current_month' — keys defined in health-invariants.ts */
+  /** e.g. 'overpaid', 'payment_attribution_drift' — keys defined in health-invariants.ts */
   key: string;
   label: string;
   count: number;

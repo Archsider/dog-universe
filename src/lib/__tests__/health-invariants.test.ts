@@ -14,32 +14,8 @@ vi.mock('@/lib/observability', () => ({
   CRON_NAMES: [],
 }));
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.prisma }));
-// Bug A : `getMonthlyInvoicesWhere` is no longer imported by
-// `checkJsVsMvCurrentMonth` (the JS path now mirrors the MV's source
-// CTE directly). The mock stays for any other consumer that might
-// import it through the test surface, but is now unused.
-vi.mock('@/lib/billing', () => ({
-  getMonthlyInvoicesWhere: vi.fn(() => ({ OR: [] })),
-}));
-vi.mock('@/lib/accounting', () => ({
-  computeMonthlyRevenueByCategory: vi.fn(() => ({
-    boarding: 0, taxi: 0, grooming: 0, croquettes: 0, other: 0,
-  })),
-}));
-vi.mock('@/lib/dates-casablanca', () => ({
-  // Recreate the Bug-A-timezone production hazard in the mock : the Date
-  // returned by startOfMonthCasa for May is timestamped at 23:00 UTC the
-  // last day of April. Calling `.getMonth()` on it on a UTC runtime gives
-  // 3 (April). The fix in src/lib/health-invariants.ts uses
-  // `currentMonthCasa()` (also mocked here) to bypass that hazard.
-  startOfMonthCasa: () => new Date('2026-04-30T23:00:00Z'),
-  endOfMonthCasa: () => new Date('2026-05-31T22:59:59.999Z'),
-  currentMonthCasa: () => ({ year: 2026, month: 5 }),
-}));
-
 import {
   checkMonthlyRevenueMvFresh,
-  checkJsVsMvCurrentMonth,
   checkItemAllocatedOverflow,
 } from '../health-invariants';
 
@@ -81,117 +57,10 @@ describe('checkMonthlyRevenueMvFresh — Redis-based freshness probe', () => {
   });
 });
 
-describe('checkJsVsMvCurrentMonth — JS vs MV parity', () => {
-  it('returns count=0 when JS and MV agree exactly', async () => {
-    mocks.prisma.invoice.findMany.mockResolvedValue([]);
-    mocks.prisma.$queryRaw.mockResolvedValue([]);
-    const r = await checkJsVsMvCurrentMonth();
-    expect(r.key).toBe('js_vs_mv_current_month');
-    expect(r.count).toBe(0);
-  });
-
-  it('returns count=N for each category with a > 0.01 MAD divergence', async () => {
-    // JS path returns 100 grooming for a fake invoice
-    mocks.prisma.invoice.findMany.mockResolvedValue([
-      {
-        items: [{ category: 'GROOMING', description: 'x', total: 100 }],
-        payments: [{ amount: 100, paymentDate: new Date() }],
-      },
-    ]);
-    const { computeMonthlyRevenueByCategory } = await import('@/lib/accounting');
-    vi.mocked(computeMonthlyRevenueByCategory).mockReturnValue({
-      boarding: 0, taxi: 0, grooming: 100, croquettes: 0, other: 0,
-    });
-    // MV path returns 50 grooming → 50 MAD divergence on grooming
-    mocks.prisma.$queryRaw.mockResolvedValue([{ category: 'GROOMING', total: '50' }]);
-    const r = await checkJsVsMvCurrentMonth();
-    expect(r.count).toBe(1);
-    expect(r.sample[0]).toMatchObject({ category: 'grooming', js: 100, mv: 50, diff: 50 });
-  });
-
-  it('absorbs sub-centime drift (Decimal rounding) without alerting', async () => {
-    mocks.prisma.invoice.findMany.mockResolvedValue([]);
-    const { computeMonthlyRevenueByCategory } = await import('@/lib/accounting');
-    vi.mocked(computeMonthlyRevenueByCategory).mockReturnValue({
-      boarding: 0, taxi: 0, grooming: 0, croquettes: 0, other: 0,
-    });
-    // 0.005 MAD drift below the 0.01 tolerance
-    mocks.prisma.$queryRaw.mockResolvedValue([{ category: 'BOARDING', total: '0.005' }]);
-    const r = await checkJsVsMvCurrentMonth();
-    expect(r.count).toBe(0);
-  });
-
-  it('skips gracefully when monthly_revenue_mv does not exist (fresh DB)', async () => {
-    mocks.prisma.invoice.findMany.mockResolvedValue([]);
-    mocks.prisma.$queryRaw.mockRejectedValue(new Error('relation "monthly_revenue_mv" does not exist'));
-    const r = await checkJsVsMvCurrentMonth();
-    expect(r.count).toBe(0);
-    expect(r.sample[0]).toMatchObject({ note: expect.stringContaining('unavailable') });
-  });
-
-  // ───────────────────────────────────────────────────────────────────────
-  // Bug A : the JS path must mirror the MV's source CTE exactly. Both
-  // sides exclude CANCELLED invoices and scope by Payment-in-window
-  // (no booking-derived path). These tests pin that contract.
-  // ───────────────────────────────────────────────────────────────────────
-
-  it('JS query filters status != CANCELLED and payments.some in window (Bug A)', async () => {
-    mocks.prisma.invoice.findMany.mockResolvedValue([]);
-    mocks.prisma.$queryRaw.mockResolvedValue([]);
-    await checkJsVsMvCurrentMonth();
-    expect(mocks.prisma.invoice.findMany).toHaveBeenCalledTimes(1);
-    const where = mocks.prisma.invoice.findMany.mock.calls[0][0].where;
-    // Must exclude CANCELLED invoices (parity with MV's CTE).
-    expect(where.status).toEqual({ not: 'CANCELLED' });
-    // Must scope by at least one payment in the current month — same as
-    // the MV's WHERE clause + closed_invoices gate semantic.
-    expect(where.payments).toEqual({
-      some: { paymentDate: { gte: expect.any(Date), lte: expect.any(Date) } },
-    });
-    // Must NOT use the `getMonthlyInvoicesWhere` OR-union path. After
-    // Bug A, the JS where clause is exactly { status, payments } — no
-    // booking-derived branch.
-    expect(where).not.toHaveProperty('OR');
-    expect(where).not.toHaveProperty('booking');
-  });
-
-  it('CANCELLED full-paid invoice does not contribute to JS (Bug A)', async () => {
-    // The new `findMany` filter excludes CANCELLED rows server-side,
-    // so the mock returns [] when the helper queries for the month.
-    // Same row is also excluded from the MV by the parallel migration
-    // (20260516_revenue_mv_skip_cancelled), so MV returns [] too. No
-    // divergence flagged.
-    mocks.prisma.invoice.findMany.mockResolvedValue([]);
-    mocks.prisma.$queryRaw.mockResolvedValue([]);
-    const r = await checkJsVsMvCurrentMonth();
-    expect(r.count).toBe(0);
-    expect(r.sample).toEqual([]);
-  });
-
-  it('MV query uses Casa-anchored year/month, not getMonth() of monthStart (TZ bug regression)', async () => {
-    // Reproduces the production failure mode : on a UTC runtime,
-    // `monthStart` from startOfMonthCasa() is 2026-04-30T23:00Z and its
-    // `.getMonth()` returns 3 (April). Before this fix the invariant
-    // queried MV for (year=2026, month=4) but JS ran for May, producing
-    // a permanent false-positive divergence flag.
-    //
-    // After the fix, the MV-side year/month come from `currentMonthCasa()`
-    // (mocked to return { year: 2026, month: 5 }) and the raw SQL is
-    // parameterized with those values.
-    mocks.prisma.invoice.findMany.mockResolvedValue([]);
-    mocks.prisma.$queryRaw.mockResolvedValue([]);
-    await checkJsVsMvCurrentMonth();
-    // tagged-template call shape : [stringsArray, ...interpolatedValues]
-    // Find the call that targets `monthly_revenue_mv` (sample/count/MV).
-    const mvCall = mocks.prisma.$queryRaw.mock.calls.find(
-      (c: unknown[]) => Array.isArray(c[0]) && (c[0] as string[]).join(' ').includes('monthly_revenue_mv'),
-    );
-    expect(mvCall, 'MV query was issued').toBeTruthy();
-    const [, year, month] = mvCall!;
-    expect(year).toBe(2026);
-    expect(month).toBe(5); // ← was 4 (April) before the fix
-  });
-});
+// `checkJsVsMvCurrentMonth` was removed 2026-05-17 — see
+// CLAUDE.md DETTE TECHNIQUE. The 9-test block (parity contract, TZ
+// regression, CANCELLED exclusion) is preserved in git history at
+// commit 22521bf if a future invariant needs the same pattern.
 
 describe('checkItemAllocatedOverflow — DISCOUNT exclusion (Bug B)', () => {
   it('SQL keeps the `total > 0` guard on both sample and count queries', async () => {

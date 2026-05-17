@@ -1899,6 +1899,51 @@ Voir section UPTIME SELF-MONITORING.
 
 ---
 
+## DETTE TECHNIQUE
+
+### Invariant `js_vs_mv_current_month` supprimé (2026-05-17)
+
+Anciennement check #10 dans `src/lib/health-invariants.ts`. Comparait
+le résultat de `computeMonthlyRevenueByCategory` (allocateur JS hérité
+de Sémantique A — re-classifiait les `InvoiceItem.category='OTHER'` via
+`inferItemCategory(category, description)` au moment de la lecture) à
+la `monthly_revenue_mv` (qui lit `ii.category` brut). Depuis le pivot
+Sémantique B (PR #105, 2026-05-17), l'allocateur JS n'est plus la voie
+canonique : la MV ET la fonction PG `compute_payment_by_category` sont
+toutes les deux des sources Sémantique B, et les deux invariants
+restants couvrent le cross-check apples-to-apples :
+
+- **#11 `checkPaymentAttributionDrift`** : `Σ(Payment month)` ==
+  `Σ(monthly_revenue_mv month)` → détecte une corruption de la MV ou
+  un Payment orphelin.
+- **#12 `checkRevenueHelperVsLive`** : `monthly_revenue_mv` ==
+  `compute_payment_by_category()` → détecte un MV stale ou un drift de
+  la fonction PG.
+
+Le check supprimé restait permanent-rouge à cause d'une asymétrie
+**data quality** (pas algorithmique) : des `InvoiceItem` historiques
+ont `category='OTHER'` mais leurs descriptions matchent les patterns
+boarding/taxi/grooming/product (cas "Pension Tobie", "Taxi Mehdi", etc.).
+Le JS les re-classait à la volée, la MV non.
+
+**Solution data** : migration `20260518_normalize_legacy_other_categories`
+qui aligne le DB sur la règle JS — `UPDATE InvoiceItem SET category=...
+WHERE category='OTHER' AND description ILIKE '%keyword%'`. Idempotente,
+mirror exact du `categoryKey()` de `src/lib/category.ts`.
+
+**Solution code** : suppression du check #10 + ses 9 tests dans
+`src/lib/__tests__/health-invariants.test.ts`. Les call sites
+(`/admin/guardian/invariants` page + dashboard loader
+`critical-invariants.ts`) référencent maintenant `payment_attribution_drift`
+et `revenue_helper_vs_live` à la place.
+
+**Audit pre-migration** : `node scripts/audit-legacy-other-items.mjs`
+(read-only) liste les rows OTHER qui seraient migrées par catégorie
+cible — à exécuter avant `node scripts/db-migrate.mjs` pour vérifier
+l'impact sur Supabase.
+
+---
+
 ## HISTORIQUE
 
 L'historique complet des sessions de travail et décisions techniques (sécurité, perf, architecture) est consigné dans [HISTORY.md](./HISTORY.md).

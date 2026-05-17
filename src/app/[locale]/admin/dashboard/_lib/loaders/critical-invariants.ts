@@ -17,7 +17,11 @@ export async function loadCriticalInvariants(): Promise<CriticalInvariantHit[]> 
       'item_allocated_overflow',
       'fully_paid_missing_paidat',
       'mv_refresh_stale',
-      'js_vs_mv_current_month',
+      // `js_vs_mv_current_month` removed 2026-05-17 — redundant with
+      // #11 (payment_attribution_drift) + #12 (revenue_helper_vs_live)
+      // under Sémantique B. See CLAUDE.md DETTE TECHNIQUE.
+      'payment_attribution_drift',
+      'revenue_helper_vs_live',
     ] as const;
     const raws = await Promise.all(
       knownKeys.map((k) => cacheGet<{ count: number; label: string; severity: string } | null>(`invariant:last:${k}`)),
