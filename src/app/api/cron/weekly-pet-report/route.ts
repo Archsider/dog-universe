@@ -1,5 +1,6 @@
 import { parseMetadata } from '@/lib/notifications/metadata';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { log } from '@/lib/logger';
 import { getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
@@ -46,12 +47,11 @@ export const GET = defineCron({
 
     // ── Find active BOARDING stays of at least 7 days ──────────────────────────
     const activeBookings = await prisma.booking.findMany({
-      where: {
+      where: notDeleted({
         status: 'IN_PROGRESS',
         startDate: { lte: sevenDaysAgo },
-        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
         serviceType: 'BOARDING',
-      },
+      }),
       include: {
         client: { select: { id: true, name: true, email: true, language: true } },
         bookingPets: { include: { pet: { select: { name: true, species: true } } } },
@@ -126,7 +126,7 @@ export const GET = defineCron({
         const stayPhotos = await prisma.stayPhoto.findMany({
           where: {
             bookingId: booking.id,
-            booking: { deletedAt: null },
+            booking: notDeleted(),
             createdAt: { gte: sevenDaysAgo },
           },
           select: { url: true },
