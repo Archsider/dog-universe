@@ -23,7 +23,14 @@ export function todayCasaYmd(): string {
 }
 
 function makeInitialItem(): WalkinItem {
-  return { id: newItemId(), category: 'PRODUCT', description: '', quantity: 1, unitPrice: 0 };
+  // Default to 'OTHER' (not 'PRODUCT') because the walk-in form does NOT
+  // bind a productId — the user types the description freely. Sending a
+  // PRODUCT item without productId now rejects at the API (Zod refine
+  // PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID) and at the DB (CHECK constraint).
+  // If the user wants a PRODUCT, they switch the category dropdown ; the
+  // submit-time validation will warn them to bind a real product when
+  // PRODUCT-category support lands in this form.
+  return { id: newItemId(), category: 'OTHER', description: '', quantity: 1, unitPrice: 0 };
 }
 
 export interface UseWalkinFormResult {

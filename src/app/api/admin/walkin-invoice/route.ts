@@ -66,9 +66,17 @@ const itemSchema = z.object({
   // the outer schema enforces "DISCOUNT ⇒ unitPrice < 0" + "non-DISCOUNT
   //  ⇒ unitPrice >= 0".
   unitPrice: z.number().finite(),
+  // Optional link to Product catalogue. When `category === 'PRODUCT'`, this
+  // MUST be a non-empty string (enforced by the refine below). The DB has a
+  // matching CHECK constraint (`InvoiceItem_product_category_has_productId`)
+  // as the final floor.
+  productId: z.string().min(1).nullable().optional(),
 }).strict().refine(
   (it) => (it.category === 'DISCOUNT' ? it.unitPrice < 0 : it.unitPrice >= 0),
   { message: 'DISCOUNT items must have negative unitPrice ; other items must be non-negative' },
+).refine(
+  (it) => it.category !== 'PRODUCT' || (typeof it.productId === 'string' && it.productId.length > 0),
+  { message: 'PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID', path: ['productId'] },
 );
 
 const bodySchema = z.object({
@@ -269,6 +277,10 @@ export async function POST(request: NextRequest) {
             unitPrice: it.unitPrice,
             total: Math.round(it.quantity * it.unitPrice * 100) / 100,
             category: it.category,
+            // PRODUCT category requires productId (Zod refine
+            // PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID + DB CHECK constraint
+            // InvoiceItem_product_category_has_productId).
+            productId: it.productId ?? null,
           })),
         });
 

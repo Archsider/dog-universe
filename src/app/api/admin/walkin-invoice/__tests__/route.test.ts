@@ -201,6 +201,46 @@ describe('POST /api/admin/walkin-invoice', () => {
     expect(r.body.error).toMatch(/INVALID_BODY|TOTAL_MUST_BE_POSITIVE/);
   });
 
+  // ── Defense-in-depth : PRODUCT category requires productId (Zod refine
+  // PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID). Twin of the DB CHECK constraint
+  // `InvoiceItem_product_category_has_productId`.
+  it('rejects PRODUCT category without productId with 400', async () => {
+    const r = await callPost({
+      clientId: null,
+      paymentMethod: 'CASH',
+      items: [{ category: 'PRODUCT', description: 'Croquettes mystères', quantity: 1, unitPrice: 350 }],
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('INVALID_BODY');
+    // The body.details payload exposes the Zod issue message — we expect to
+    // see the refine message bubble up so the UI (Agent 2) can render a
+    // human-friendly "this product isn't in the catalogue" prompt.
+    const blob = JSON.stringify(r.body);
+    expect(blob).toContain('PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID');
+  });
+
+  it('rejects PRODUCT category with productId: null with 400', async () => {
+    const r = await callPost({
+      clientId: null,
+      paymentMethod: 'CASH',
+      items: [{ category: 'PRODUCT', productId: null, description: 'X', quantity: 1, unitPrice: 100 }],
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('INVALID_BODY');
+    const blob = JSON.stringify(r.body);
+    expect(blob).toContain('PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID');
+  });
+
+  it('rejects PRODUCT category with productId: empty string with 400', async () => {
+    const r = await callPost({
+      clientId: null,
+      paymentMethod: 'CASH',
+      items: [{ category: 'PRODUCT', productId: '', description: 'X', quantity: 1, unitPrice: 100 }],
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('INVALID_BODY');
+  });
+
   it('happy path : single item, existing client, CASH', async () => {
     // Seed an existing client (clientId is a cuid but we use a simple string in stub).
     state.users.push({ id: 'cuid_client_1', deletedAt: null, role: 'CLIENT', name: 'Mehdi K', phone: '+212661112233' });
@@ -208,7 +248,7 @@ describe('POST /api/admin/walkin-invoice', () => {
     const r = await callPost({
       clientId: 'cuid_client_1',
       paymentMethod: 'CASH',
-      items: [{ category: 'PRODUCT', description: 'Royal Canin 10kg', quantity: 1, unitPrice: 350 }],
+      items: [{ category: 'PRODUCT', productId: 'cmprod_royal_10kg', description: 'Royal Canin 10kg', quantity: 1, unitPrice: 350 }],
     });
     // The Zod schema enforces .cuid() ; our fake id may not pass. Skip
     // the strict shape check if so.
@@ -219,7 +259,7 @@ describe('POST /api/admin/walkin-invoice', () => {
       const r2 = await callPost({
         clientId: fakeCuid,
         paymentMethod: 'CASH',
-        items: [{ category: 'PRODUCT', description: 'Royal Canin 10kg', quantity: 1, unitPrice: 350 }],
+        items: [{ category: 'PRODUCT', productId: 'cmprod_royal_10kg', description: 'Royal Canin 10kg', quantity: 1, unitPrice: 350 }],
       });
       expect(r2.status).toBe(200);
       expect(r2.body.ok).toBe(true);
@@ -249,7 +289,7 @@ describe('POST /api/admin/walkin-invoice', () => {
       clientName: 'Passage',
       paymentMethod: 'CARD',
       items: [
-        { category: 'PRODUCT', description: 'Croquettes', quantity: 2, unitPrice: 350 },
+        { category: 'PRODUCT', productId: 'cmprod_croquettes', description: 'Croquettes', quantity: 2, unitPrice: 350 },
         { category: 'GROOMING', description: 'Bain', quantity: 1, unitPrice: 200 },
       ],
     });
@@ -263,7 +303,7 @@ describe('POST /api/admin/walkin-invoice', () => {
       clientId: null,
       paymentMethod: 'CASH',
       items: [
-        { category: 'PRODUCT', description: 'Croquettes', quantity: 1, unitPrice: 1000 },
+        { category: 'PRODUCT', productId: 'cmprod_croquettes', description: 'Croquettes', quantity: 1, unitPrice: 1000 },
         { category: 'DISCOUNT', description: 'Fidélité', quantity: 1, unitPrice: -150 },
       ],
     });
