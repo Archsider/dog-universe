@@ -62,10 +62,10 @@ beforeEach(() => {
 });
 
 describe('PATCH /api/admin/loyalty/claims/[id] — role gate', () => {
-  it('rejects CLIENT with 401', async () => {
+  it('rejects CLIENT with 403', async () => {
     mocks.auth.mockResolvedValueOnce({ user: { id: 'c', role: 'CLIENT' } });
     const res = await PATCH(makeReq({ action: 'APPROVED' }), params);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('rejects unauthenticated with 401', async () => {

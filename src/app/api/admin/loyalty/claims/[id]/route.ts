@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
-import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { getEmailTemplate } from '@/lib/email';
 import { sendEmailNow } from '@/lib/notify-now';
 import { revalidateTag } from 'next/cache';
 import { invalidateNotifCount } from '@/lib/notifications';
+import { requireRole } from '@/lib/auth-guards';
 
 // PATCH /api/admin/loyalty/claims/[id] — approve or reject a claim
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const { action, rejectionReason } = await req.json();
   if (!['APPROVED', 'REJECTED'].includes(action)) {

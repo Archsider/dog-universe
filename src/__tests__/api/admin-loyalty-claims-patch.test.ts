@@ -2,7 +2,7 @@
  * API tests — PATCH /api/admin/loyalty/claims/[id]
  *
  * Surface tested:
- *   - Auth: 401 for non-admin
+ *   - Auth: 401 for no session, 403 for wrong role
  *   - Cross-role guard (L1): ADMIN cannot review claims of non-CLIENT users
  *   - Validation: action must be APPROVED|REJECTED, REJECTED needs reason ≥ 3 chars
  *   - Atomicity: claim status + notification commit together
@@ -81,10 +81,10 @@ describe('PATCH /api/admin/loyalty/claims/[id] — auth', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 401 when role is CLIENT', async () => {
+  it('returns 403 when role is CLIENT', async () => {
     mocks.auth.mockResolvedValueOnce({ user: { id: 'c1', role: 'CLIENT' } });
     const res = await PATCH(makeReq({ action: 'APPROVED' }), ctx);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('accepts ADMIN', async () => {

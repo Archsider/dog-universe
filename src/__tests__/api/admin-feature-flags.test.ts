@@ -58,10 +58,10 @@ describe('PATCH /api/admin/feature-flags/[key] — auth', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 403 when no session', async () => {
+  it('returns 401 when no session', async () => {
     mocks.auth.mockResolvedValueOnce(null);
     const res = await PATCH(patchReq({ enabled: false }) as never, ctx);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
   });
 
   it('accepts SUPERADMIN', async () => {

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { withSchema } from '@/lib/with-schema';
+import { requireRole } from '@/lib/auth-guards';
 import { revalidateTag } from 'next/cache';
 import { BookingError } from '@/lib/services/booking-errors';
 import { canTransition, isBookingStatus, type BookingStatus } from '@/lib/booking-state-machine';
@@ -29,10 +29,8 @@ import { notDeleted } from '@/lib/prisma-soft';
 // ────────────────────────────────────────────────────────────────────────────
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const booking = await prisma.booking.findFirst({
     where: notDeleted({ id: id }),
@@ -63,10 +61,9 @@ export const PATCH = withSchema(
   { body: adminBookingPatchSchema, params: adminBookingParamsSchema },
   async (_request, { body, params }) => {
     const { id } = params;
-    const session = await auth();
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+    if (guard.error) return guard.error;
+    const { session } = guard;
 
     const { status, notes } = body;
     const forcePaidInvoice = Boolean(body.forcePaidInvoice);
@@ -314,10 +311,9 @@ export const PATCH = withSchema(
 // ────────────────────────────────────────────────────────────────────────────
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const booking = await prisma.booking.findFirst({
     where: notDeleted({ id: id }),

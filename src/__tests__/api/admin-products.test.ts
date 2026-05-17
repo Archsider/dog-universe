@@ -76,11 +76,11 @@ describe('POST /api/admin/products', () => {
     expect(res.status).toBe(401);
   });
 
-  it('401 when CLIENT role', async () => {
+  it('403 when CLIENT role', async () => {
     mocks.auth.mockResolvedValue(CLIENT_SESSION);
     const { POST } = await import('@/app/api/admin/products/route');
     const res = await POST(makeReq({ name: 'X', price: 10, stock: 1 }));
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('400 VALIDATION_ERROR when name too short (<2 chars)', async () => {
@@ -225,11 +225,11 @@ describe('POST /api/admin/products/[id]/archive + /restore', () => {
 
 // ─── GET /api/admin/products — filters ──────────────────────────────────────
 describe('GET /api/admin/products', () => {
-  it('401 when CLIENT', async () => {
+  it('403 when CLIENT', async () => {
     mocks.auth.mockResolvedValue(CLIENT_SESSION);
     const { GET } = await import('@/app/api/admin/products/route');
     const res = await GET(new NextRequest('https://example.com/api/admin/products'));
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('defaults to non-archived list', async () => {
