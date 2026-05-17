@@ -13,6 +13,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle2, AlertCircle, AlertTriangle, ChevronLeft } from 'lucide-react';
 import { cacheGet } from '@/lib/cache';
+import { RefreshInvariantsButton } from './RefreshInvariantsButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,15 +110,18 @@ export default async function InvariantsPage({
         {isFr ? 'Retour à Guardian' : 'Back to Guardian'}
       </Link>
 
-      <header>
-        <h1 className="font-serif text-2xl text-charcoal">
-          {isFr ? 'Invariants comptables' : 'Accounting invariants'}
-        </h1>
-        <p className="text-sm text-charcoal/70 mt-1">
-          {isFr
-            ? `Vérifications horaires de cohérence comptable. ${KNOWN_INVARIANT_KEYS.length} invariants surveillés.`
-            : `Hourly accounting consistency checks. ${KNOWN_INVARIANT_KEYS.length} invariants tracked.`}
-        </p>
+      <header className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-serif text-2xl text-charcoal">
+            {isFr ? 'Invariants comptables' : 'Accounting invariants'}
+          </h1>
+          <p className="text-sm text-charcoal/70 mt-1">
+            {isFr
+              ? `Vérifications horaires de cohérence comptable. ${KNOWN_INVARIANT_KEYS.length} invariants surveillés.`
+              : `Hourly accounting consistency checks. ${KNOWN_INVARIANT_KEYS.length} invariants tracked.`}
+          </p>
+        </div>
+        <RefreshInvariantsButton isFr={isFr} />
       </header>
 
       {/* Top-line counters */}
