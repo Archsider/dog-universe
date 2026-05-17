@@ -43,8 +43,8 @@ export default function RegisterPage() {
     }
     if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(form.password)) {
       setError(locale === 'fr'
-        ? 'Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre (ex : Bobinou@777)'
-        : 'Password must contain at least one uppercase letter, one lowercase letter, and one digit (e.g. Bobinou@777)');
+        ? 'Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre.'
+        : 'Password must contain at least one uppercase letter, one lowercase letter, and one digit.');
       return;
     }
 
@@ -195,8 +195,8 @@ export default function RegisterPage() {
               </div>
               <p className="text-xs text-neutral-400 mt-1">
                 {locale === 'fr'
-                  ? '8 caractères minimum · 1 majuscule · 1 chiffre (ex : Bobinou@777)'
-                  : '8 characters minimum · 1 uppercase letter · 1 digit (e.g. Bobinou@777)'}
+                  ? '8 caractères minimum · 1 majuscule · 1 minuscule · 1 chiffre'
+                  : '8 characters minimum · 1 uppercase letter · 1 lowercase letter · 1 digit'}
               </p>
             </div>
 
