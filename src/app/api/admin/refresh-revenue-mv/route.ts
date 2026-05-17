@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { log, logger } from '@/lib/logger';
 import { markMVRefreshed } from '@/lib/billing/monthly-revenue';
@@ -22,10 +22,9 @@ import { markMVRefreshed } from '@/lib/billing/monthly-revenue';
  * tag so the dashboard re-fetches.
  */
 export async function POST() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   try {
     await prisma.$executeRawUnsafe(

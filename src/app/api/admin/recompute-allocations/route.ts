@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
 
@@ -15,11 +15,9 @@ import { allocatePayments } from '@/lib/payments';
  * Protected by SUPERADMIN role + optional RECOMPUTE_SECRET env var.
  */
 export async function POST(req: NextRequest) {
-  const session = await auth();
   // Restricted to SUPERADMIN only — this is a bulk mutation on all invoices
-  if (!session?.user || session.user.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   // Optional second factor: require RECOMPUTE_SECRET header when env var is set
   const secret = process.env.RECOMPUTE_SECRET;

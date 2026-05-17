@@ -10,7 +10,7 @@ import { NextResponse } from 'next/server';
 import { readdir, readFile } from 'node:fs/promises';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { diffMigrations, type LocalMigration, type DbMigration } from '@/lib/migrations-diff';
 
@@ -48,10 +48,8 @@ async function loadDbMigrations(): Promise<DbMigration[]> {
 }
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
-  }
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
   const [local, db] = await Promise.all([loadLocalMigrations(), loadDbMigrations()]);
   const diff = diffMigrations(local, db);
   return NextResponse.json(diff);

@@ -29,7 +29,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import bcrypt from 'bcryptjs';
@@ -60,10 +60,9 @@ async function checkResetRateLimit(userId: string): Promise<boolean> {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden — SUPERADMIN only' }, { status: 403 });
-  }
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const dryRun = body.dryRun === true;
