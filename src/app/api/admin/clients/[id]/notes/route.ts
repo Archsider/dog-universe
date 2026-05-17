@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { withSchema } from '@/lib/with-schema';
 import { notDeleted } from '@/lib/prisma-soft';
+import { requireRole } from '@/lib/auth-guards';
 
 const paramsSchema = z.object({ id: z.string().min(1) });
 
@@ -21,10 +21,9 @@ const noteCreateSchema = z.object({
 export const POST = withSchema(
   { body: noteCreateSchema, params: paramsSchema },
   async (_request, { body, params }) => {
-    const session = await auth();
-    if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+    if (guard.error) return guard.error;
+    const { session } = guard;
 
     const { id } = params;
     const { content, entityType, entityId } = body;

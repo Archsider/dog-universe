@@ -12,11 +12,10 @@
  *    non-empty string of length ≤ 40. Boarding nights become Math.max(0, …),
  *    so a swapped pair would silently book 0 nights. We instead verify the
  *    400 path via Zod failure (empty `petIds` → VALIDATION_ERROR).
- * 2. "Auth CLIENT sur route admin → 403" — the admin route returns **401**
- *    (not 403) when the user lacks ADMIN/SUPERADMIN role (line 26+48 of
- *    src/app/api/admin/bookings/[id]/route.ts). We assert 401 to match the
- *    actual implementation. The DELETE handler in the same file uses 403,
- *    which is an inconsistency, but PATCH is the route under test here.
+ * 2. "Auth CLIENT sur route admin → 403" — the admin route now returns 403
+ *    (correct HTTP semantics: authenticated but wrong role) via the
+ *    `requireRole(['ADMIN', 'SUPERADMIN'])` guard. 401 is returned only for
+ *    missing session.
  * 3. WAITLIST côté CLIENT — confirmed: route does set `status='WAITLIST'`
  *    when capacity full and role!=admin (lines 569–573, 122–126). We test
  *    this path explicitly.
@@ -486,16 +485,16 @@ describe('PATCH /api/admin/bookings/[id]', () => {
     expect(mocks.createBookingNoShowNotification).toHaveBeenCalled();
   });
 
-  it('returns 401 when a CLIENT calls the admin route', async () => {
-    // NOTE: route returns 401 (not 403) for non-admins on PATCH — see header comment.
+  it('returns 403 when a CLIENT calls the admin route', async () => {
+    // requireRole returns 403 for authenticated users with wrong role.
     mocks.auth.mockResolvedValue({ user: { id: 'client-1', role: 'CLIENT' } });
     const res = await AdminBookingsPATCH(
       makeAdminPatchRequest('b5', { status: 'CONFIRMED' }) as any,
       paramsFor('b5'),
     );
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
     const json = await res.json();
-    expect(json.error).toBe('Unauthorized');
+    expect(json.error).toBe('Forbidden');
     // Must short-circuit before any DB read
     expect(mocks.prisma.booking.findFirst).not.toHaveBeenCalled();
   });

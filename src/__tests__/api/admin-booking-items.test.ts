@@ -66,11 +66,11 @@ beforeEach(() => {
 
 // ─── POST /items ────────────────────────────────────────────────────────────
 describe('POST /api/admin/bookings/[id]/items', () => {
-  it('401 for CLIENT', async () => {
+  it('403 for CLIENT', async () => {
     mocks.auth.mockResolvedValue(CLIENT);
     const { POST } = await import('@/app/api/admin/bookings/[id]/items/route');
     const res = await POST(postReq({ type: 'catalog', productId: 'p_1', quantity: 1 }), { params: Promise.resolve({ id: 'b_1' }) });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it('400 when type is unknown', async () => {

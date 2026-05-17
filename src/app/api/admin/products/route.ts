@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { serializeProduct } from './_lib/serialize';
-
-function isAdmin(role?: string) {
-  return role === 'ADMIN' || role === 'SUPERADMIN';
-}
+import { requireRole } from '@/lib/auth-guards';
 
 const createSchema = z.object({
   name: z.string().min(2).max(200),
@@ -31,10 +27,8 @@ const createSchema = z.object({
 
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category')?.trim() || undefined;
@@ -65,10 +59,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   let body: unknown;
   try {

@@ -3,9 +3,9 @@
 // DELETE — purge.
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { auth } from '../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { invalidateFlagCache } from '@/lib/feature-flags';
+import { requireRole } from '@/lib/auth-guards';
 
 const ROLES = ['CLIENT', 'ADMIN', 'SUPERADMIN'] as const;
 
@@ -17,16 +17,12 @@ const patchSchema = z.object({
   userWhitelist:  z.array(z.string().min(1).max(64)).max(500).optional(),
 }).strict();
 
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ key: string }> },
 ) {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') return forbidden();
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const { key } = await params;
 
@@ -55,8 +51,8 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ key: string }> },
 ) {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') return forbidden();
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const { key } = await params;
 

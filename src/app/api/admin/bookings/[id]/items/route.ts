@@ -6,19 +6,15 @@
 // row (same pattern as the legacy /products route on InvoiceItem). Free-line
 // items (productId null) accept EXTRA_SERVICE / MISC_FEE / DISCOUNT categories.
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { toNumber } from '@/lib/decimal';
 import { notDeleted } from '@/lib/prisma-soft';
 import { withSpan } from '@/lib/observability';
+import { requireRole } from '@/lib/auth-guards';
 
 interface Params { params: Promise<{ id: string }> }
-
-function isAdmin(role?: string) {
-  return role === 'ADMIN' || role === 'SUPERADMIN';
-}
 
 const catalogSchema = z.object({
   type: z.literal('catalog'),
@@ -57,10 +53,8 @@ function serializeItem(it: {
 
 export async function GET(_request: NextRequest, { params }: Params) {
   const { id: bookingId } = await params;
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const booking = await prisma.booking.findFirst({
     where: notDeleted({ id: bookingId }),
@@ -77,10 +71,9 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { id: bookingId } = await params;
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   let body: unknown;
   try {
