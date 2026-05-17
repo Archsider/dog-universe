@@ -5,6 +5,7 @@
  * a booking. Extracted from POST /api/bookings to keep the route ≤ 200 lines.
  */
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { sendEmailNow, sendSmsNow } from '@/lib/notify-now';
 import { formatDateFR } from '@/lib/sms';
 import { logger } from '@/lib/logger';
@@ -49,7 +50,7 @@ export function notifyAdminsBookingCreated(args: NotifyNewBookingArgs): void {
     try {
       const appUrl = APP_URL;
       const admins = await prisma.user.findMany({
-        where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        where: { ...notDeleted(), role: { in: ['ADMIN', 'SUPERADMIN'] } }, // soft-delete: required — no global extension (Edge Runtime incompatible)
         select: { email: true, language: true },
       });
       const serviceLabelFr = args.serviceType === 'BOARDING' ? 'Pension' : 'Taxi animalier';

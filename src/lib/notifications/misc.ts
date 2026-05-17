@@ -124,7 +124,7 @@ export async function notifyAdminsNewClient(
   // Send email to all admin emails (non-blocking)
   try {
     const admins = await prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null },
+      where: { ...notDeleted(), role: { in: ['ADMIN', 'SUPERADMIN'] } },
       select: { email: true, language: true },
     });
     const { getEmailTemplate: getTemplate } = await import('@/lib/email');

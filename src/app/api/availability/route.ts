@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { cacheReadThrough } from '@/lib/cache';
 import { getCapacityLimits } from '@/lib/capacity';
 import { getCasaStartOfDay, getCasaEndOfDay } from '@/lib/timezone';
@@ -58,9 +59,9 @@ async function computeAvailability(
   // while an open-ended booking is in-house.
   const bookings = await prisma.booking.findMany({
     where: {
+      ...notDeleted(),
       serviceType: 'BOARDING',
       status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
-      deletedAt: null,
       isOpenEnded: false,
       startDate: { lte: end },
       endDate: { gte: start, not: null },

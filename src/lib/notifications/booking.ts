@@ -192,9 +192,9 @@ export async function promoteWaitlistedBooking(args: {
 
   const candidates = await db.booking.findMany({
     where: {
+      ...notDeleted(),
       status: 'WAITLIST',
       serviceType: 'BOARDING',
-      deletedAt: null,
       startDate: { lte: args.endDate },
       endDate: { gte: args.startDate, not: null },
     },

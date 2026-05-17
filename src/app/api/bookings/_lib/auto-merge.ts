@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { checkBoardingCapacity, type CapacityCheckExceeded } from '@/lib/capacity';
 import { getPricingSettings, calculateBoardingTotalForExtension } from '@/lib/pricing';
 import { logAction } from '@/lib/log';
@@ -43,7 +44,7 @@ export async function tryAutoMerge(args: AutoMergeArgs): Promise<AutoMergeRespon
       status: { notIn: ['CANCELLED', 'REJECTED', 'COMPLETED'] },
       endDate: { gte: dayBeforeStart, lte: dayBeforeEnd },
       bookingPets: { some: { petId: { in: args.petIds } } },
-      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      ...notDeleted(),
     },
     select: { id: true },
   });
@@ -78,7 +79,7 @@ export async function tryAutoMerge(args: AutoMergeArgs): Promise<AutoMergeRespon
               status: { notIn: ['CANCELLED', 'REJECTED', 'COMPLETED'] },
               endDate: { gte: dayBeforeStart, lte: dayBeforeEnd },
               bookingPets: { some: { petId: { in: args.petIds } } },
-              deletedAt: null,
+              ...notDeleted(),
             },
             include: {
               invoice: true,

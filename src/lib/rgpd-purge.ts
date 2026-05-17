@@ -15,6 +15,7 @@
 //   - Bookings, Invoices, ActionLogs (incl. the RGPD_PURGE entries below)
 
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { deleteFromPrivateStorage } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
@@ -50,11 +51,9 @@ export async function runPurgeAnonymized(): Promise<PurgeResult> {
   const cutoffIso = cutoff.toISOString();
 
   const users = await prisma.user.findMany({
-    where: {
+    where: notDeleted({
       anonymizedAt: { not: null, lte: cutoff },
-      // Soft-delete: required — no global extension (Edge Runtime incompatible)
-      deletedAt: null,
-    },
+    }),
     select: { id: true },
     take: 200,
   });
