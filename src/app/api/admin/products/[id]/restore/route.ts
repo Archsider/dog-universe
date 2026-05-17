@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { serializeProduct } from '../../_lib/serialize';
 
 interface Params { params: Promise<{ id: string }> }
 
-function isAdmin(role?: string) {
-  return role === 'ADMIN' || role === 'SUPERADMIN';
-}
-
 export async function POST(_request: NextRequest, { params }: Params) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   const product = await prisma.product.findUnique({ where: { id } });
   if (!product) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });

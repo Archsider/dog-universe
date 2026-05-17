@@ -78,8 +78,8 @@ export async function POST(request: NextRequest) {
   // Block if any active booking is still on the books
   const activeBooking = await prisma.booking.findFirst({
     where: {
+      ...notDeleted(),
       clientId: targetUserId,
-      deletedAt: null,
       status: { in: [...BLOCKING_STATUSES] },
     },
     select: { id: true, status: true, startDate: true },

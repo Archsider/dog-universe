@@ -18,6 +18,7 @@ import { Redis } from '@upstash/redis';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { sendSmsNow } from '@/lib/notify-now';
 import { tryAcquireFlag } from '@/lib/cache';
 
@@ -168,7 +169,7 @@ async function broadcastBackupAlert(message: string): Promise<number> {
   let recipients: { phone: string | null }[] = [];
   try {
     recipients = await prisma.user.findMany({
-      where: { role: 'SUPERADMIN', deletedAt: null, phone: { not: null } },
+      where: notDeleted({ role: 'SUPERADMIN', phone: { not: null } }),
       select: { phone: true },
     });
   } catch (err) {

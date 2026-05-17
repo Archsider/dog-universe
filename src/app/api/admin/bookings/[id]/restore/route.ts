@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { onlyDeleted } from '@/lib/prisma-soft';
 import { logAction } from '@/lib/log';
 import { withSpan } from '@/lib/observability';
 
@@ -16,7 +17,7 @@ async function restoreImpl(id: string): Promise<Response> {
   }
 
   const booking = await prisma.booking.findFirst({
-    where: { id, deletedAt: { not: null } },
+    where: onlyDeleted({ id }),
     select: { id: true, status: true, clientId: true },
   });
 
@@ -24,6 +25,7 @@ async function restoreImpl(id: string): Promise<Response> {
     return NextResponse.json({ error: 'Not found or not deleted' }, { status: 404 });
   }
 
+  // eslint-disable-next-line dog-universe/no-inline-deletedAt-null -- OK: write op restoring a deleted booking, not a where filter
   await prisma.booking.update({ where: { id }, data: { deletedAt: null } });
 
   await logAction({

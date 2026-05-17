@@ -1,6 +1,7 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { CalendarGrid } from './CalendarGrid';
 import { AvailabilityCalendar } from '@/components/shared/AvailabilityCalendar';
 import { currentMonthCasa } from '@/lib/dates-casablanca';
@@ -36,7 +37,7 @@ export default async function AdminCalendarPage({ params, searchParams }: Props)
   const bookings = await prisma.booking.findMany({
     take: 500,
     where: {
-      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      ...notDeleted(),
       status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },
       startDate: { lte: lastDay },
       OR: [

@@ -7,6 +7,7 @@
  * when 0 or absent.
  */
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { getPricingSettings, calculateBoardingBreakdown, calculateTaxiPrice } from '@/lib/pricing';
 import type { TaxiType } from '@/lib/pricing-rules';
 import { log } from '@/lib/logger';
@@ -58,7 +59,7 @@ export async function resolveBookingPrice(args: ResolvePriceArgs): Promise<Resol
     try {
       const pricing = await getPricingSettings();
       const petsForCalc = await prisma.pet.findMany({
-        where: { id: { in: args.petIds }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        where: notDeleted({ id: { in: args.petIds } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
         select: { id: true, name: true, species: true },
       });
 

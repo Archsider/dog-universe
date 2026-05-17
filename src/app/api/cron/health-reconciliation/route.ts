@@ -4,6 +4,7 @@
 // Lock Redis prevents duplicate execution within 23h.
 
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { withSpan, logServerError } from '@/lib/observability';
 import { runAllInvariantChecks } from '@/lib/health-invariants';
 import { sendEmailNow } from '@/lib/notify-now';
@@ -25,7 +26,7 @@ export const GET = defineCron({
 
       // Alert: email all ADMIN/SUPERADMIN
       const admins = await prisma.user.findMany({
-        where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null },
+        where: { ...notDeleted(), role: { in: ['ADMIN', 'SUPERADMIN'] } },
         select: { email: true, name: true },
         take: 100,
       });

@@ -30,8 +30,8 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
     }),
     prisma.booking.findMany({
       where: {
+        ...notDeleted(),
         clientId: session.user.id,
-        deletedAt: null,
         status: { in: ['PENDING', 'CONFIRMED'] },
         startDate: { gte: startOfTodayCasa() },
       },

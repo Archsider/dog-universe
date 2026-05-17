@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { notifyAdminsAddonRequest } from '@/lib/notifications';
 import { addonRequestSchema } from '@/lib/validation';
@@ -27,10 +27,9 @@ export const POST = withSchema(
     const { id } = params;
     const { serviceType, message } = body;
 
-    const session = await auth();
-    if (!session?.user || session.user.role !== 'CLIENT') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const guard = await requireRole(['CLIENT']);
+    if (guard.error) return guard.error;
+    const { session } = guard;
 
     const booking = await prisma.booking.findFirst({
       where: notDeleted({ id }),

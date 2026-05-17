@@ -5,6 +5,7 @@
 import { cache } from 'react';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { cacheReadThrough, cacheDel, CacheKeys, CacheTTL } from '@/lib/cache';
 import * as Sentry from '@sentry/nextjs';
 
@@ -112,9 +113,10 @@ export async function countOverlappingPets(
     async () => {
       const overlapping = await client.booking.findMany({
         where: {
+          ...notDeleted(),
           serviceType: 'BOARDING',
           status: { in: [...ACTIVE_STATUSES] },
-          deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+          // soft-delete: required — no global extension (Edge Runtime incompatible)
           // Only closed-range bookings consume capacity for a future date window.
           // Open-ended bookings (isOpenEnded=true OR endDate=null) are excluded
           // by date — admin manages overbooking manually when a walk-in or a

@@ -1,5 +1,6 @@
 import { parseMetadata } from '@/lib/notifications/metadata';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { getEmailTemplate } from '@/lib/email';
 import { enqueueEmail } from '@/lib/queues';
 import { createNotification } from '@/lib/notifications';
@@ -53,7 +54,7 @@ export const GET = defineCron({
         where: {
           status: { in: [InvoiceStatus.PENDING, InvoiceStatus.PARTIALLY_PAID] },
           issuedAt: { gte: windowStart, lt: windowEnd },
-          client: { deletedAt: null, isWalkIn: false, role: 'CLIENT' },
+          client: notDeleted({ isWalkIn: false, role: 'CLIENT' }),
         },
         select: {
           id: true,

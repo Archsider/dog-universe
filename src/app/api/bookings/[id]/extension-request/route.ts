@@ -71,9 +71,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // would then have to disentangle manually.
   const overlapping = await prisma.booking.findFirst({
     where: {
+      ...notDeleted(),
       clientId: session.user.id,
       id: { not: id },
-      deletedAt: null,
       status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'PENDING_EXTENSION'] },
       startDate: { lte: newEndDate },
       endDate: { gte: extensionStartDate, not: null },

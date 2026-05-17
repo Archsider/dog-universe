@@ -20,7 +20,7 @@
 //     the right failure mode (in-app > email).
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { notDeleted } from '@/lib/prisma-soft';
 import { logger } from '@/lib/logger';
@@ -123,10 +123,9 @@ export async function POST(request: NextRequest, { params }: Params) {
 }
 
 async function endReportImpl(request: NextRequest, bookingId: string): Promise<Response> {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   // ── Load + check booking
   const booking = await prisma.booking.findFirst({
@@ -246,10 +245,8 @@ async function endReportImpl(request: NextRequest, bookingId: string): Promise<R
 export async function GET(_request: NextRequest, { params }: Params) {
   const { id: bookingId } = await params;
 
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   // Returns the history of reports for this booking (typically 0 or 1, but
   // can be 2+ if the admin re-sent an updated report). UI shows the most

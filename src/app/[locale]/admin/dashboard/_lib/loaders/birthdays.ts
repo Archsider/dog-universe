@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { upcomingBirthdays, type UpcomingBirthday } from '../helpers';
 
 export async function loadBirthdays(): Promise<UpcomingBirthday[]> {
@@ -6,13 +7,12 @@ export async function loadBirthdays(): Promise<UpcomingBirthday[]> {
   // JS. The total pet count is tiny (≤ a few hundred) ; saves a raw SQL
   // EXTRACT(MONTH) trip and keeps the helper pure-testable.
   const pets = await prisma.pet.findMany({
-    where: {
-      deletedAt: null,
+    where: notDeleted({
       dateOfBirth: { not: null },
       // Walk-in pets often have sparse profiles ; exclude their owners
       // from anniversary surfacing — they aren't recurring relationships.
-      owner: { isWalkIn: false, deletedAt: null },
-    },
+      owner: notDeleted({ isWalkIn: false }),
+    }),
     select: {
       id: true,
       name: true,

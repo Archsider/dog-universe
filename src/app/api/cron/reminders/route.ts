@@ -1,5 +1,7 @@
 import { parseMetadata } from '@/lib/notifications/metadata';
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
+import { notDeleted } from '@/lib/prisma-soft';
 import { log } from '@/lib/logger';
 import { getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
@@ -35,7 +37,7 @@ export const GET = defineCron({
 
     // Fetch all admins for admin notifications
     const admins = await prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      where: notDeleted<Prisma.UserWhereInput>({ role: { in: ['ADMIN', 'SUPERADMIN'] } }), // soft-delete: required — no global extension (Edge Runtime incompatible)
       select: { id: true, email: true, language: true },
       take: 100,
     });
@@ -52,12 +54,11 @@ export const GET = defineCron({
 
     // ── Start reminders (CONFIRMED bookings starting tomorrow) ────────────────
     const startBookings = await prisma.booking.findMany({
-      where: {
+      where: notDeleted({
         serviceType: 'BOARDING',
         status: 'CONFIRMED',
         startDate: { gte: rangeStart, lte: rangeEnd },
-        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
-      },
+      }),
       include: {
         client: { select: { name: true, email: true, language: true, phone: true } },
         bookingPets: { include: { pet: { select: { name: true, gender: true } } } },
@@ -179,12 +180,11 @@ export const GET = defineCron({
 
     // ── End reminders (IN_PROGRESS or CONFIRMED bookings ending tomorrow) ─────
     const endBookings = await prisma.booking.findMany({
-      where: {
+      where: notDeleted<Prisma.BookingWhereInput>({
         serviceType: 'BOARDING',
         status: { in: ['IN_PROGRESS', 'CONFIRMED'] },
         endDate: { gte: rangeStart, lte: rangeEnd },
-        deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
-      },
+      }),
       include: {
         client: { select: { name: true, firstName: true, email: true, language: true, phone: true } },
         bookingPets: { include: { pet: { select: { name: true, gender: true } } } },

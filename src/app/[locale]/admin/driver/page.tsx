@@ -3,8 +3,10 @@ import Link from 'next/link';
 import { Car, Clock, MapPin, Route } from 'lucide-react';
 import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { formatMAD } from '@/lib/utils';
 import { casablancaDateOnly } from '@/lib/dates-casablanca';
+import { notDeleted } from '@/lib/prisma-soft';
 import { DriverTabs } from './_components/DriverTabs';
 import { HistoryClient } from './_components/HistoryClient';
 
@@ -78,10 +80,9 @@ export default async function DriverDashboardPage({
           { status: { in: [...ACTIVE_TRIP_STATUSES] } },
           { trackingActive: true },
         ],
-        booking: {
-          deletedAt: null,
+        booking: notDeleted<Prisma.BookingWhereInput>({
           status: { notIn: [...BOOKING_DONE_STATUSES] },
-        },
+        }),
       },
       // Most recently updated wins — handles the "tracking left on by mistake"
       // case where two trips technically match.
@@ -110,8 +111,7 @@ export default async function DriverDashboardPage({
     prisma.taxiTrip.findMany({
       where: {
         date: todayStr,
-        booking: {
-          deletedAt: null,
+        booking: notDeleted<Prisma.BookingWhereInput>({
           // A trip with an UNRELATED booking status (e.g. CANCELLED, NO_SHOW)
           // should not count toward "today's trips" — it was never driven.
           // COMPLETED is left IN here because that's a normal terminal state
@@ -119,7 +119,7 @@ export default async function DriverDashboardPage({
           // TERMINAL_TRIP_STATUSES to separate "completed" vs "in progress"
           // for KPI purposes.
           status: { notIn: ['CANCELLED', 'REJECTED', 'NO_SHOW'] },
-        },
+        }),
       },
       select: {
         id: true,
@@ -140,12 +140,11 @@ export default async function DriverDashboardPage({
       where: {
         date: { gt: todayStr },
         status: 'PLANNED',
-        booking: {
-          deletedAt: null,
+        booking: notDeleted<Prisma.BookingWhereInput>({
           // Future trips on a cancelled/rejected booking should not appear
           // on the driver's "next courses" list — those will never happen.
           status: { notIn: [...BOOKING_DONE_STATUSES] },
-        },
+        }),
       },
       take: 10,
       orderBy: [{ date: 'asc' }, { time: 'asc' }],

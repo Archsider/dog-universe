@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { getMonthlyInvoicesWhere } from '@/lib/billing';
 // Shared CSV escaper — see src/lib/csv.ts for the safety contract.
@@ -35,10 +35,8 @@ const BATCH_SIZE = 500;
 const MAX_ROWS = 200_000;
 
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   const { searchParams } = new URL(request.url);
 

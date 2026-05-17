@@ -10,7 +10,7 @@
 // the daily cron returned `{ skipped: true, reason: 'already_run' }` and the
 // UI mistakenly surfaced "backup already done" while no extra dump existed.
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { runDbBackup, BackupError } from '@/lib/db-backup';
 import { markBackupAttempt } from '@/lib/backup-health';
 import { logServerError } from '@/lib/observability';
@@ -19,10 +19,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 export async function POST() {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   try {
     const result = await runDbBackup();

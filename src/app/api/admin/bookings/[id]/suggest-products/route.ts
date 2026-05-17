@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/lib/notifications';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
@@ -14,10 +14,9 @@ interface Params { params: Promise<{ id: string }> }
  */
 export async function POST(request: NextRequest, { params }: Params) {
   const { id: bookingId } = await params;
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   let body: { petId?: string; productIds?: string[] };
   try {

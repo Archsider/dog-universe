@@ -1,11 +1,12 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import Link from 'next/link';
 import Image from 'next/image';
 import { PawPrint, ChevronRight } from 'lucide-react';
 import { calculateAge } from '@/lib/utils';
-import CreateAnimalModal from './CreateAnimalModal';
+import CreateAnimalModalLazy from './CreateAnimalModalLazy';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
@@ -23,7 +24,7 @@ export default async function AdminAnimalsPage(props: PageProps) {
 
   const pets = await prisma.pet.findMany({
     where: {
-      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      ...notDeleted(),
       ...(q && { OR: [{ name: { contains: q, mode: 'insensitive' } }, { breed: { contains: q, mode: 'insensitive' } }, { owner: { name: { contains: q, mode: 'insensitive' } } }] }),
       ...(species && { species }),
     },
@@ -54,7 +55,7 @@ export default async function AdminAnimalsPage(props: PageProps) {
         <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">{pets.length}</span>
-          <CreateAnimalModal locale={locale} />
+          <CreateAnimalModalLazy locale={locale} />
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import { parseMetadata } from '@/lib/notifications/metadata';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { createNotification } from '@/lib/notifications';
 import { enqueueEmail } from '@/lib/queues';
 import { getEmailTemplate } from '@/lib/email';
@@ -22,9 +23,9 @@ export const GET = defineCron({
     // Bookings COMPLETED dans les 24h sans avis existant
     const completedBookings = await prisma.booking.findMany({
       where: {
+        ...notDeleted(),
         status: 'COMPLETED',
         updatedAt: { gte: since },
-        deletedAt: null, // soft-delete: required
         review: null, // pas encore d'avis
       },
       include: {

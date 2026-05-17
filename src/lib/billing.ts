@@ -22,6 +22,7 @@
 // produit). Le mapping est explicite pour éviter toute confusion.
 
 import type { Prisma } from '@prisma/client';
+import { notDeleted } from '@/lib/prisma-soft';
 
 // Règle métier verrouillée : tout InvoiceItem lié à un Product (productId
 // non-null) DOIT avoir category = 'PRODUCT'. Les appelants passent leur
@@ -60,8 +61,7 @@ export function getMonthlyInvoicesWhere(
       //    Module 2 case #5).
       {
         payments: { none: { paymentDate: { gte: monthStart, lte: monthEnd } } },
-        booking: {
-          deletedAt: null,
+        booking: notDeleted<Prisma.BookingWhereInput>({
           status: { in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] },
           startDate: { lte: monthEnd },
           OR: [
@@ -69,7 +69,7 @@ export function getMonthlyInvoicesWhere(
             { isOpenEnded: true },
             { endDate: null },
           ],
-        },
+        }),
       },
       // 3) Facture manuelle sans booking.
       {

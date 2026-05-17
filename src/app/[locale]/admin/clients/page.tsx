@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { Users, ChevronRight, Search, Wine } from 'lucide-react';
 import { formatMAD, getInitials } from '@/lib/utils';
-import CreateClientModal from './CreateClientModal';
+import CreateClientModalLazy from './CreateClientModalLazy';
 
 const TIER_STYLES: Record<string, { bg: string; text: string }> = {
   BRONZE:   { bg: '#E8D4B8', text: '#7A4A28' },
@@ -87,7 +87,7 @@ export default async function AdminClientsPage(props: PageProps) {
           <h1 className="text-3xl font-serif font-bold text-[#2A2520]">{l.title}</h1>
           <p className="text-sm text-[#8A7E75] mt-1">{subtitle}</p>
         </div>
-        <CreateClientModal locale={locale} />
+        <CreateClientModalLazy locale={locale} />
       </div>
 
       {/* Search + Filter pills */}

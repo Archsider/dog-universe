@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { createAdminMessageNotification } from '@/lib/notifications';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { logger } from '@/lib/logger';
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
   // END_STAY_REPORT sent by mistake (wrong owner, wrong content). The
   // client view filters them out so the message disappears from the bell
   // + notifications page. Audit copy + admin view stay accessible.
-  const where: Record<string, unknown> = { userId: session.user.id, deletedAt: null };
+  const where: Record<string, unknown> = notDeleted({ userId: session.user.id });
   if (unreadOnly) where.read = false;
 
   const notifications = await prisma.notification.findMany({

@@ -29,6 +29,7 @@ import { tryAutoMerge } from './_lib/auto-merge';
 import { resolveBookingPrice } from './_lib/resolve-price';
 import { notifyAdminsBookingCreated } from './_lib/notify-new-booking';
 import { invalidateAvailabilityCache } from '@/lib/availability-cache';
+import { notDeleted } from '@/lib/prisma-soft';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400 });
   }
 
-  const where: Record<string, unknown> = { deletedAt: null }; // soft-delete: required — no global extension (Edge Runtime incompatible)
+  const where: Record<string, unknown> = notDeleted(); // soft-delete: required — no global extension (Edge Runtime incompatible)
 
   if (session.user.role === 'CLIENT') {
     where.clientId = session.user.id;
@@ -157,7 +158,7 @@ export const POST = withSchema({ body: bookingCreateSchema }, async (request, { 
     // Verify pets belong to this client
     if (session.user.role === 'CLIENT') {
       const pets = await prisma.pet.findMany({
-        where: { id: { in: petIds }, ownerId: session.user.id, deletedAt: null }, // soft-delete: required — no global extension (Edge Runtime incompatible)
+        where: notDeleted({ id: { in: petIds }, ownerId: session.user.id }), // soft-delete: required — no global extension (Edge Runtime incompatible)
       });
       if (pets.length !== petIds.length) {
         return NextResponse.json({ error: 'INVALID_PETS' }, { status: 400 });

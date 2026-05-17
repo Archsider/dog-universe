@@ -1,6 +1,7 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import NotificationsClient, { type NotificationData } from './NotificationsClient';
 
 interface PageProps { params: Promise<{ locale: string }> }
@@ -11,9 +12,8 @@ export default async function NotificationsPage({ params }: PageProps) {
   if (!session?.user) redirect(`/${locale}/auth/login`);
 
   const rows = await prisma.notification.findMany({
-    // `deletedAt: null` — admin-deleted messages disappear from the
-    // client list (see docs/CLIENT_MESSAGES.md).
-    where: { userId: session.user.id, deletedAt: null },
+    // admin-deleted messages disappear from the client list (see docs/CLIENT_MESSAGES.md).
+    where: notDeleted({ userId: session.user.id }),
     orderBy: { createdAt: 'desc' },
     take: 100,
     select: {

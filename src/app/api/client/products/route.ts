@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== 'CLIENT') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['CLIENT']);
+  if (guard.error) return guard.error;
 
   const products = await prisma.product.findMany({
     where: { available: true, stock: { gt: 0 } },

@@ -22,6 +22,7 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { prisma } from './prisma';
+import { notDeleted } from './prisma-soft';
 import type { Prisma, TimeProposalScope, TimeProposalStatus } from '@prisma/client';
 
 // ─── Constants ──────────────────────────────────────────────────────────
@@ -155,7 +156,7 @@ export async function createProposal(
 
   // Guard : booking must be in a state where time negotiation makes sense.
   const booking = await prisma.booking.findFirst({
-    where: { id: input.bookingId, deletedAt: null },
+    where: notDeleted({ id: input.bookingId }),
     select: { status: true },
   });
   if (!booking) return { ok: false, error: 'BOOKING_NOT_FOUND' };

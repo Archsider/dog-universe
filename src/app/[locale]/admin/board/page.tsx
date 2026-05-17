@@ -7,6 +7,7 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import BoardView from './BoardView';
 
 type Params = { locale: string };
@@ -28,7 +29,7 @@ export default async function BoardPage({ params }: { params: Promise<Params> })
 
   const bookings = await prisma.booking.findMany({
     where: {
-      deletedAt: null, // soft-delete: required — no global extension (Edge Runtime incompatible)
+      ...notDeleted(),
       OR: [
         { status: { in: ['PENDING', 'CONFIRMED', 'AT_PICKUP', 'IN_PROGRESS'] } },
         { status: 'COMPLETED', updatedAt: { gte: sevenDaysAgo } },

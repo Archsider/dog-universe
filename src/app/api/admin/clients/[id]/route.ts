@@ -117,7 +117,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
     }
-    const existing = await prisma.user.findFirst({ where: { email, NOT: { id }, deletedAt: null } });
+    const existing = await prisma.user.findFirst({ where: notDeleted({ email, NOT: { id } }) });
     if (existing) return NextResponse.json({ error: 'EMAIL_TAKEN' }, { status: 409 });
     updateData.email = email;
   }

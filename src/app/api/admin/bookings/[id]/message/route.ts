@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { createAdminMessageNotification } from '@/lib/notifications';
 import { getEmailTemplate } from '@/lib/email';
@@ -15,10 +15,9 @@ export async function POST(request: NextRequest, { params }: Params) {
 }
 
 async function messageImpl(request: NextRequest, id: string): Promise<Response> {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   const { messageFr: rawFr, messageEn: rawEn } = await request.json();
   if (typeof rawFr !== 'string' || !rawFr.trim()) {

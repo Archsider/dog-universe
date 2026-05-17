@@ -2,6 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { createSignedUrl } from '@/lib/supabase';
+import { notDeleted } from '@/lib/prisma-soft';
 import { FileText, CheckCircle2, XCircle } from 'lucide-react';
 import ContractsManager from './ContractsManager';
 
@@ -15,7 +16,7 @@ export default async function AdminContractsPage({ params }: PageProps) {
   }
 
   const rawClients = await prisma.user.findMany({
-    where: { role: 'CLIENT', deletedAt: null, isWalkIn: false }, // walk-ins n'ont pas d'accès portail, pas de contrat attendu
+    where: notDeleted({ role: 'CLIENT', isWalkIn: false }), // walk-ins n'ont pas d'accès portail, pas de contrat attendu
     include: {
       contract: { select: { id: true, signedAt: true, storageKey: true, version: true } },
     },

@@ -11,17 +11,13 @@
 //   - Restores Product.stock by quantity if the item was a catalog item.
 //   - ActionLog with the deleted snapshot.
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { toNumber } from '@/lib/decimal';
 
 interface Params { params: Promise<{ id: string; itemId: string }> }
-
-function isAdmin(role?: string) {
-  return role === 'ADMIN' || role === 'SUPERADMIN';
-}
 
 const patchSchema = z.object({
   version: z.number().int().min(0),
@@ -51,10 +47,9 @@ function serializeItem(it: {
 
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { id: bookingId, itemId } = await params;
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   let body: unknown;
   try {
@@ -167,10 +162,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
 export async function DELETE(_request: NextRequest, { params }: Params) {
   const { id: bookingId, itemId } = await params;
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   const existing = await prisma.bookingItem.findFirst({
     where: { id: itemId, bookingId },

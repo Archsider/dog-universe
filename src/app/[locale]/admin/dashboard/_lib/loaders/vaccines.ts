@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { startOfTodayCasa, casablancaYMD } from '@/lib/dates-casablanca';
+import { notDeleted } from '@/lib/prisma-soft';
 import type { VaccineExpiry } from '../shapes';
 
 export async function loadVaccines(): Promise<VaccineExpiry[]> {
@@ -9,7 +10,7 @@ export async function loadVaccines(): Promise<VaccineExpiry[]> {
     where: {
       status: 'CONFIRMED',
       nextDueDate: { gte: today, lte: horizon },
-      pet: { deletedAt: null, owner: { deletedAt: null, isWalkIn: false } },
+      pet: notDeleted({ owner: notDeleted({ isWalkIn: false }) }),
     },
     select: {
       nextDueDate: true,

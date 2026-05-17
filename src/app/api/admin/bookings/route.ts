@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REJECTED'];
   const VALID_SERVICE_TYPES = ['BOARDING', 'PET_TAXI'];
 
-  const where: Record<string, unknown> = { deletedAt: null };
+  const where: Record<string, unknown> = notDeleted();
   if (status && VALID_STATUSES.includes(status)) where.status = status;
   if (serviceType && VALID_SERVICE_TYPES.includes(serviceType)) where.serviceType = serviceType;
 
@@ -257,7 +257,7 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
           select: { id: true },
         }),
         prisma.pet.findMany({
-          where: { id: { in: resolvedPetIds }, ownerId: resolvedClientId, deletedAt: null },
+          where: notDeleted({ id: { in: resolvedPetIds }, ownerId: resolvedClientId }),
           select: { id: true },
         }),
       ]);

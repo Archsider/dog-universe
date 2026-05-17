@@ -2,7 +2,7 @@
 // Returns a short-lived (15 min) signed URL for downloading a backup file.
 // The date param format is YYYY-MM-DD.
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { logServerError } from '@/lib/observability';
 import { BACKUP_PREFIX } from '@/lib/db-backup';
 import { createSignedBackupUrl } from '@/lib/supabase';
@@ -15,10 +15,8 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ date: string }> },
 ) {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['SUPERADMIN']);
+  if (authResult.error) return authResult.error;
 
   const { date } = await params;
   if (!DATE_RE.test(date)) {

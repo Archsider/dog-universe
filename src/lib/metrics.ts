@@ -400,9 +400,9 @@ export async function currentBoarders(): Promise<{
   // CONFIRMED = réservé mais pas encore arrivé → exclu de ce compteur.
   // Capacity check et facturation continuent à inclure CONFIRMED ailleurs.
   const boardingFilter = {
+    ...notDeleted(),
     serviceType: 'BOARDING' as const,
     status: BookingStatus.IN_PROGRESS,
-    deletedAt: null,
   };
   const [cat, dog] = await Promise.all([
     prisma.bookingPet.count({ where: { pet: { species: 'CAT' }, booking: boardingFilter } }),

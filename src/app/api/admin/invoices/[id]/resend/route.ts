@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
 import { createInvoiceNotification, createInvoicePaidNotification } from '@/lib/notifications';
@@ -16,10 +16,9 @@ type Params = { params: Promise<{ id: string }> };
  * For PENDING/PARTIALLY_PAID, sends the invoice available notification.
  */
 export async function POST(_req: Request, { params }: Params) {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   const { id } = await params;
 

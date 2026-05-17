@@ -153,7 +153,7 @@ async function patchImpl(request: Request, id: string): Promise<Response> {
     // Notify all admins (in-app)
     try {
       const admins = await prisma.user.findMany({
-        where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null },
+        where: { ...notDeleted(), role: { in: ['ADMIN', 'SUPERADMIN'] } },
         select: { id: true },
       });
       const petNames = booking.bookingPets.map(bp => bp.pet.name).join(' et ') || 'animal';
@@ -227,7 +227,7 @@ async function patchImpl(request: Request, id: string): Promise<Response> {
 
   try {
     const admins = await prisma.user.findMany({
-      where: { role: { in: ['ADMIN', 'SUPERADMIN'] }, deletedAt: null },
+      where: { ...notDeleted(), role: { in: ['ADMIN', 'SUPERADMIN'] } },
       select: { id: true },
     });
     await Promise.all(

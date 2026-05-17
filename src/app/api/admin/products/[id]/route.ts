@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { toNumber } from '@/lib/decimal';
 import { z } from 'zod';
@@ -7,10 +7,6 @@ import { serializeProduct } from '../_lib/serialize';
 import { withSpan } from '@/lib/observability';
 
 interface Params { params: Promise<{ id: string }> }
-
-function isAdmin(role?: string) {
-  return role === 'ADMIN' || role === 'SUPERADMIN';
-}
 
 const patchSchema = z.object({
   // Optimistic locking — caller MUST send the version they read.
@@ -37,10 +33,8 @@ const patchSchema = z.object({
 
 export async function GET(_request: NextRequest, { params }: Params) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
   const product = await prisma.product.findUnique({ where: { id } });
   if (!product) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
   return NextResponse.json(serializeProduct(product));
@@ -48,10 +42,9 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   let body: unknown;
   try {
@@ -130,10 +123,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 // to preserve historical traceability (cf. spec — archive workflow is canonical).
 export async function DELETE(_request: NextRequest, { params }: Params) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   const product = await prisma.product.findUnique({ where: { id } });
   if (!product) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });

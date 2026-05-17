@@ -2,14 +2,13 @@
 // Auth requis. Retourne `{ key: bool }` pour chaque flag DB.
 // Consommé par le hook React `useFeatureFlag()`.
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { getAllFlagsForUser } from '@/lib/feature-flags';
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authResult = await requireRole(['CLIENT', 'ADMIN', 'SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
   const flags = await getAllFlagsForUser({
     userId: session.user.id,
     role:   session.user.role ?? null,

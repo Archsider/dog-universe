@@ -70,10 +70,10 @@ describe('POST addon-request — auth', () => {
     expect(res.status).toBe(401);
   });
 
-  it('rejects ADMIN with 401 (route is CLIENT-only)', async () => {
+  it('rejects ADMIN with 403 (route is CLIENT-only)', async () => {
     mocks.auth.mockResolvedValueOnce({ user: { id: 'a1', role: 'ADMIN' } });
     const res = await POST(req({ serviceType: 'PET_TAXI' }) as never, ctx as never);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 });
 

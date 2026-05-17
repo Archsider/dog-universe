@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { defineCron } from '@/lib/cron-runner';
 
 export const maxDuration = 60;
@@ -44,11 +45,10 @@ export const GET = defineCron({
       // can audit-log the exact batch size without trusting a count
       // returned across a relation filter.
       const candidates = await prisma.notification.findMany({
-        where: {
+        where: notDeleted({
           createdAt: { lt: cutoff },
-          deletedAt: null,
           user: { role: { not: 'SUPERADMIN' } },
-        },
+        }),
         select: { id: true },
         take: BATCH_LIMIT,
         orderBy: { createdAt: 'asc' },
@@ -57,7 +57,7 @@ export const GET = defineCron({
       if (candidates.length > 0) {
         const ids = candidates.map((c) => c.id);
         const result = await prisma.notification.updateMany({
-          where: { id: { in: ids }, deletedAt: null },
+          where: notDeleted({ id: { in: ids } }),
           data: { deletedAt: new Date(), deletedBy: 'cron:archive-notifications' },
         });
         archived = result.count;

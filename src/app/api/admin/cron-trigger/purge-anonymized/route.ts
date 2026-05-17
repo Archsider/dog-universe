@@ -13,7 +13,7 @@
 //   - Force-purge after a manual `anonymizedAt` backfill.
 
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { runPurgeAnonymized } from '@/lib/rgpd-purge';
 import { logServerError, markCronRun } from '@/lib/observability';
 import { logAction } from '@/lib/log';
@@ -24,10 +24,9 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST() {
-  const session = await auth();
-  if (session?.user?.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const authResult = await requireRole(['SUPERADMIN']);
+  if (authResult.error) return authResult.error;
+  const { session } = authResult;
 
   const startedAt = Date.now();
   try {

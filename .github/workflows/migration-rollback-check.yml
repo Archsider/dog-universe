@@ -188,6 +188,19 @@ jobs:
             # CHECK constraint section. Defense-in-depth floor for the
             # "PRODUCT category requires productId" invariant.
             "20260518_product_category_requires_product_id"
+            # PG function (compute_payment_by_category) — not in schema.prisma
+            # so prisma db push doesn't create it. Before snapshot lacks it;
+            # after down→up it exists → expected drift (same family as the MV
+            # migrations above). The function IS deployed correctly in prod via
+            # db-migrate.mjs.
+            "20260518_fix_function_tz_casa"
+            # CHECK constraints (status/confidence) + FK on ProductCatalogSuggestion
+            # — prisma db push doesn't emit custom CHECK constraints, so the
+            # canonical baseline lacks them. Down→up restores them → cosmetic drift.
+            "20260518_product_catalog_suggestions"
+            # No-op migration (all indexes pre-existed); down.sql drops indexes
+            # that were already there before → pg_dump diff expected.
+            "20260519_phase3_perf_indexes"
           )
 
           for d in $(ls -1 "$MIG_DIR" | sort); do

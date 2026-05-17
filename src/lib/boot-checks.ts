@@ -67,6 +67,7 @@ function validate(v: RequiredVar): string | null {
 }
 
 export function assertProductionEnv(): void {
+  if (process.env.SKIP_ENV_VALIDATION === '1') return;
   const isProd = process.env.NODE_ENV === 'production';
   const errors: string[] = [];
   const warnings: string[] = [];

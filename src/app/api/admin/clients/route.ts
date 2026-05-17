@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'INVALID_CURSOR' }, { status: 400 });
   }
 
-  const where: Record<string, unknown> = { role: 'CLIENT', deletedAt: null };
+  const where: Record<string, unknown> = notDeleted({ role: 'CLIENT' });
 
   if (search) {
     where.OR = [
