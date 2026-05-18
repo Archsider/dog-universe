@@ -19,6 +19,23 @@ const { dsn, source } = resolveSentryDsn();
 Sentry.init({
   dsn,
 
+  // Known-benign noise on Node runtime — filtered before send to keep the
+  // Sentry signal high. Each entry below is justified by a real incident:
+  //
+  //  - "Connection is closed.":
+  //    BullMQ ephemeral workers on Vercel serverless (/api/workers/process)
+  //    close their ioredis blocking client at the end of each tick. Any
+  //    pending BRPOPLPUSH / queue probe in flight at that moment rejects
+  //    with this message. Functional impact: nil (jobs are already
+  //    processed before close()). Sentry noise: high. Filtering here
+  //    instead of swallowing in the worker so we don't mask a real
+  //    connection problem if it ever shows up in a non-shutdown context —
+  //    a real outage would surface as repeated "ECONNREFUSED" or
+  //    "ETIMEDOUT", which we DO want to see.
+  ignoreErrors: [
+    /Connection is closed\.?$/,
+  ],
+
   // Dynamic sampling tuned for 10x growth (May 17 scale prep):
   //  - 1.0 for crons (low volume, high signal — never miss a job failure)
   //  - 0.1 for API routes and everything else (~10% sample is enough to

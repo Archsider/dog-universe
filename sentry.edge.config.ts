@@ -12,6 +12,13 @@ import { SENTRY_DSN } from './src/lib/sentry-dsn';
 
 Sentry.init({
   dsn: SENTRY_DSN,
+  // Parity with sentry.server.config.ts — see there for the rationale.
+  // Edge runtime shouldn't touch ioredis at all (BullMQ is Node-only) but
+  // we keep the filter symmetric so a future stray import doesn't surface
+  // shutdown noise here.
+  ignoreErrors: [
+    /Connection is closed\.?$/,
+  ],
   // Dynamic sampling — see sentry.server.config.ts for rationale (10x scale prep).
   // Edge runtime hosts middleware + edge route handlers. /api/cron/* routes can
   // surface here through middleware traces, so we still bump them to 1.0.
