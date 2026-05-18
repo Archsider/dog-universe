@@ -221,6 +221,31 @@
   background: #7d6424;
 }
 
+/* Nav contact icons — phone + WhatsApp deep links. Circular gold-bordered
+ * buttons, 36px, sit between the logo and the language switcher. */
+.du-nav-contact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 0.5px solid rgba(154, 123, 46, 0.4);
+  color: #f5edd8;
+  text-decoration: none;
+  transition: border-color 0.2s, background 0.2s, color 0.2s, transform 0.2s;
+}
+.du-nav-contact svg {
+  width: 15px;
+  height: 15px;
+}
+.du-nav-contact:hover {
+  border-color: #9a7b2e;
+  background: rgba(154, 123, 46, 0.12);
+  color: #9a7b2e;
+  transform: translateY(-1px);
+}
+
 /* ─── Hero ─────────────────────────────────────────────────────────── */
 .du-hero {
   background:
@@ -268,13 +293,67 @@
   font-size: 28px;
   color: rgba(201, 168, 76, 0.85);
   margin-top: 24px;
-  margin-bottom: 56px;
+  margin-bottom: 36px;
   opacity: 0;
   animation: du-fade-up 1s 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+/* Trust strip — 3 social-proof stats in a refined small-caps gold line.
+ * Reads as a catalogue caption, not a banner. */
+.du-hero-trust {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-family: var(--font-dmsans), sans-serif;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(201, 168, 76, 0.78);
+  opacity: 0;
+  animation: du-fade-up 0.9s 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.du-rtl .du-hero-trust {
+  font-family: var(--font-arabic), sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 13px;
+}
+.du-hero-trust-sep {
+  color: rgba(201, 168, 76, 0.4);
+}
+/* Gold ornament divider — line · paw · line. Signals "chapter break"
+ * before the CTA. Pure ornament, no semantic meaning (aria-hidden in JSX). */
+.du-hero-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  max-width: 260px;
+  margin: 32px auto 36px;
+  opacity: 0;
+  animation: du-fade-up 0.9s 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.du-hero-divider-line {
+  flex: 1;
+  height: 0.5px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(154, 123, 46, 0.5) 50%,
+    transparent 100%
+  );
+}
+.du-hero-divider-icon {
+  width: 14px;
+  height: 14px;
+  color: rgba(201, 168, 76, 0.7);
+  flex-shrink: 0;
+}
 .du-hero-ctas {
   opacity: 0;
-  animation: du-fade-up 0.8s 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: du-fade-up 0.8s 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* ─── Stats ────────────────────────────────────────────────────────── */
@@ -711,6 +790,24 @@
   .du-rtl .du-langs {
     margin-right: 0;
     margin-left: 6px;
+  }
+  /* Hide nav contact icons on tight phones — the CTAs already crowd
+   * the bar. Users will find phone/WhatsApp in the footer and via the
+   * CTA flow inside the app. */
+  .du-nav-contact {
+    display: none;
+  }
+  .du-hero-trust {
+    font-size: 10px;
+    gap: 10px;
+    letter-spacing: 0.16em;
+  }
+  .du-rtl .du-hero-trust {
+    font-size: 12px;
+  }
+  .du-hero-divider {
+    margin: 24px auto 28px;
+    max-width: 200px;
   }
   .du-hero {
     padding: 88px 20px 72px;
