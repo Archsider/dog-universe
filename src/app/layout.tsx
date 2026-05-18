@@ -37,6 +37,13 @@ export const metadata: Metadata = {
   icons: {
     apple: '/icons/icon-192.png',
   },
+  // Google Search Console property verification (app.doguniverse.ma).
+  // Renders <meta name="google-site-verification" content="..."> in head.
+  // Kept alongside public/google64d2445348e5aa96.html (file method) as
+  // belt-and-suspenders — Google can confirm via either.
+  verification: {
+    google: 'N7_L1CYkerTLbM1EqkeiHF5fDt0yPKfJhsc6yvmlI7w',
+  },
 };
 
 export default async function RootLayout({
