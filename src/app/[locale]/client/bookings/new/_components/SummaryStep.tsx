@@ -4,7 +4,15 @@ import { AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatMAD } from '@/lib/utils';
 import type { BookingType, Pet, PriceItem, TaxiType } from '../_lib/types';
-import type { WizardLabels } from '../_lib/i18n';
+import { pick, type WizardLabels } from '../_lib/i18n';
+
+// Locale → Intl date locale tag. AR uses Moroccan Arabic for the calendar
+// (numerals automatically Eastern Arabic for users with that preference).
+function dateLocaleFor(locale: string): string {
+  if (locale === 'ar') return 'ar-MA';
+  if (locale === 'fr') return 'fr-MA';
+  return 'en-US';
+}
 
 export interface SummaryStepProps {
   locale: string;
@@ -41,7 +49,7 @@ export function SummaryStep({
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">{l.dates}</span>
               <span className="font-medium text-charcoal">
-                {new Date(checkIn).toLocaleDateString(locale === 'fr' ? 'fr-MA' : 'en-US')} → {new Date(checkOut).toLocaleDateString(locale === 'fr' ? 'fr-MA' : 'en-US')}
+                {new Date(checkIn).toLocaleDateString(dateLocaleFor(locale))} → {new Date(checkOut).toLocaleDateString(dateLocaleFor(locale))}
               </span>
             </div>
             <div className="flex justify-between text-sm">
@@ -92,7 +100,12 @@ export function SummaryStep({
       </div>
       <div className="flex items-start gap-2 bg-blue-50 p-3 rounded-lg text-sm text-blue-700">
         <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-        <span>{locale === 'fr' ? 'Le montant final sera confirmé par notre équipe.' : 'The final amount will be confirmed by our team.'}</span>
+        <span>{pick(
+          locale,
+          'Le montant final sera confirmé par notre équipe.',
+          'The final amount will be confirmed by our team.',
+          'سيتم تأكيد المبلغ النهائي من قِبَل فريقنا.',
+        )}</span>
       </div>
     </div>
   );

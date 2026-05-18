@@ -2,7 +2,7 @@
 
 import { Car, Package } from 'lucide-react';
 import type { BookingType } from '../_lib/types';
-import type { WizardLabels } from '../_lib/i18n';
+import { pick, type WizardLabels } from '../_lib/i18n';
 
 interface Props {
   bookingType: BookingType;
@@ -17,9 +17,12 @@ export function ServiceTypeStep({ bookingType, setBookingType, isPrefill, locale
     <div className="space-y-4">
       {isPrefill && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
-          ✨ {locale === 'fr'
-            ? 'Formulaire pré-rempli depuis votre dernière réservation'
-            : 'Form pre-filled from your last booking'}
+          ✨ {pick(
+            locale,
+            'Formulaire pré-rempli depuis votre dernière réservation',
+            'Form pre-filled from your last booking',
+            'تمّ ملء النموذج تلقائيًا من حجزك الأخير',
+          )}
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
