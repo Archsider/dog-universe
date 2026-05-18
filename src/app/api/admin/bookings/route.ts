@@ -116,6 +116,7 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
       isOpenEnded,
       initialStatus,
       finalAmount,
+      acknowledgeCapacityOverride,
     } = body;
 
     // ── Basic structural validations ──────────────────────────────────────
@@ -271,11 +272,19 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
 
     // ── Capacity: open-ended walk-ins checked against a 30-day window ──
     // Open-ended bookings are excluded from the normal overlap count
-    // (isOpenEnded=false filter), so this is an advisory pre-check only.
-    // If capacity is tight, the admin sees a warning but the booking proceeds.
+    // (isOpenEnded=false filter), so this is a pre-create probe on the
+    // hypothesis that the walk-in stays for the standard window.
+    //
+    // Before (advisory): warning shown, booking always proceeded — admins
+    // ignored the warning, real overbookings happened (audit #7).
+    //
+    // Now (gated): if the probe fails AND admin did not explicitly opt
+    // in via `acknowledgeCapacityOverride: true`, refuse with detailed
+    // diagnostic. When the admin DOES opt in, proceed but flag it so
+    // the audit log marks the override (post-creation, below).
     let capacityWarning: string | null = null;
+    let capacityOverride = false;
     if (isOpenEnded && serviceType === 'BOARDING') {
-      // Add fixed-day-as-ms to avoid Date.setDate() ±1h drift at Casa midnight.
       const windowEnd = new Date(new Date(startDate).getTime() + WALKIN_DEFAULT_WINDOW_DAYS * 86_400_000);
       const { checkBoardingCapacity } = await import('@/lib/capacity');
       const cap = await checkBoardingCapacity({
@@ -284,7 +293,24 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
         endDate: windowEnd,
       });
       if (!cap.ok) {
-        capacityWarning = `CAPACITY_WARNING_${cap.species}`;
+        if (!acknowledgeCapacityOverride) {
+          return NextResponse.json(
+            {
+              error: 'CAPACITY_OVERRIDE_REQUIRED',
+              detail: {
+                species: cap.species,
+                available: cap.available,
+                requested: cap.requested,
+                limit: cap.limit,
+                windowDays: WALKIN_DEFAULT_WINDOW_DAYS,
+                hint: 'Set acknowledgeCapacityOverride: true to commit the booking and log the override in ActionLog.',
+              },
+            },
+            { status: 400 },
+          );
+        }
+        capacityWarning = `CAPACITY_OVERRIDE_${cap.species}`;
+        capacityOverride = true;
       }
     }
 
@@ -494,6 +520,10 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
         initialStatus,
         isOpenEnded: !!isOpenEnded,
         invoiceNumber,
+        // Flag this booking as a capacity override so audit reviews can
+        // surface overbookings (audit finding #7). capacityWarning carries
+        // the species (CAPACITY_OVERRIDE_DOG / CAPACITY_OVERRIDE_CAT).
+        ...(capacityOverride ? { capacityOverride: true, capacityWarning } : {}),
       },
     });
 

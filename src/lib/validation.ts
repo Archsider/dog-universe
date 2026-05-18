@@ -221,6 +221,15 @@ export const adminBookingCreateSchema = z.object({
   initialStatus: z.enum(['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED']).optional().default('IN_PROGRESS'),
   // Required when initialStatus === 'COMPLETED' (retroactive entry with known amount).
   finalAmount: z.number().min(0).max(1_000_000).optional().nullable(),
+  // Capacity override — explicit opt-in flag the admin must set to
+  // overbook the pension on an open-ended walk-in. The capacity probe
+  // runs on a 30-day window. Previously the failure was advisory only
+  // (warning silently ignored by admins, real overbookings possible
+  // — audit finding #7). Now: if the probe fails AND this flag is
+  // false, the API refuses with CAPACITY_OVERRIDE_REQUIRED. Setting it
+  // to true commits the booking and logs the override in ActionLog
+  // for accountability.
+  acknowledgeCapacityOverride: z.boolean().optional().default(false),
 }).refine(
   d => !!d.clientId || !!d.walkIn,
   { message: 'clientId or walkIn required' },
