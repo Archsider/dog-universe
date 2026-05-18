@@ -54,6 +54,23 @@ export async function POST(request: NextRequest) {
   });
   if (!target) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // Catastrophic-action guard — the walk-in anonymous user aggregates
+  // every walk-in transaction (no real client). Anonymizing it would
+  // wipe / scramble the entire historical walk-in ledger. The route is
+  // only reachable by SUPERADMIN via `?userId=`, but a typo could still
+  // ruin years of accounting in one click. Refuse hard.
+  if (target.email === 'walkin-anonymous@dog-universe.local') {
+    return NextResponse.json(
+      {
+        error: 'ANON_AGGREGATE_USER',
+        detail: {
+          reason: 'The walk-in anonymous user aggregates all walk-in transactions and cannot be anonymized — doing so would scramble the historical ledger of many real-world clients.',
+        },
+      },
+      { status: 403 },
+    );
+  }
+
   // Idempotency: re-running on an already-anonymized account is a no-op
   if (target.anonymizedAt) {
     return NextResponse.json({ success: true, alreadyAnonymized: true });

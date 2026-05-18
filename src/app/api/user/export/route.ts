@@ -52,6 +52,25 @@ export async function GET(request: NextRequest) {
   });
   if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // RGPD guard — the walk-in anonymous shared user (see
+  // src/app/api/admin/walkin-invoice/route.ts) aggregates every walk-in
+  // transaction that wasn't tied to an actual client account. Exporting
+  // it would surface bookings, invoices, payments and notifications from
+  // many DIFFERENT real-world clients into a single JSON, which is the
+  // opposite of the GDPR right-of-access guarantee. Audit finding #
+  // walk-in-anonymous-user.
+  if (user.email === 'walkin-anonymous@dog-universe.local') {
+    return NextResponse.json(
+      {
+        error: 'ANON_AGGREGATE_USER',
+        detail: {
+          reason: 'The walk-in anonymous user aggregates many real-world clients ; exporting it would breach data-minimisation. Walk-in transactions belong to no single subject and are excluded from RGPD self-export.',
+        },
+      },
+      { status: 403 },
+    );
+  }
+
   const [pets, bookings, invoices, loyaltyGrade, notifications, contract] = await Promise.all([
     prisma.pet.findMany({
       where: { ownerId: targetUserId },

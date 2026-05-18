@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth-guards';
 
@@ -25,6 +26,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     where: { id },
     data: { status: 'rejected', respondedAt: new Date(), respondedBy: session.user.id },
   });
+
+  // Drop the sidebar "Suggestions catalogue" badge by 1 (cache TTL 30s
+  // would otherwise show a stale count after a reject).
+  revalidateTag('admin-counts');
 
   return NextResponse.json({ ok: true, suggestionId: id });
 }

@@ -3,6 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const authMock = vi.fn();
 vi.mock('../../../../../../../../../auth', () => ({ auth: () => authMock() }));
+// revalidateTag is called after a successful reject (drop sidebar count);
+// stub it so we don't pull in Next's static-gen context in unit tests.
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
 
 const suggestionFindUnique = vi.fn();
 const suggestionUpdate = vi.fn();

@@ -1,3 +1,4 @@
+import { revalidateTag } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { defineCron } from '@/lib/cron-runner';
 import { findBestMatch } from '@/lib/product-catalog-match';
@@ -86,6 +87,14 @@ export const GET = defineCron({
         });
         skipped++;
       }
+    }
+
+    // New `pending` suggestions just landed — the sidebar badge count
+    // needs to refresh so the admin sees them on the next page load
+    // (otherwise they'd wait up to 30s for the cache TTL). Only call
+    // when we actually created something to avoid pointless invalidations.
+    if (suggested > 0) {
+      revalidateTag('admin-counts');
     }
 
     return { scanned: recentItems.length, suggested, skipped, noMatch, catalogSize: catalog.length };
