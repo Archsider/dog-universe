@@ -8,7 +8,7 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { Cormorant_Garamond, DM_Sans, Noto_Naskh_Arabic } from 'next/font/google';
-import { PawPrint, Cat, Car, Scissors, ShoppingBag, Star, Sun } from 'lucide-react';
+import { PawPrint, Cat, Car, Scissors, ShoppingBag, Star, Sun, Phone, MessageCircle } from 'lucide-react';
 import styles from './LandingPage.module.css';
 
 const cormorant = Cormorant_Garamond({
@@ -264,6 +264,27 @@ export default async function LandingPage({ locale }: LandingPageProps) {
             Dog Universe
           </Link>
           <div className={styles['du-nav-actions']}>
+            {/* Direct contact — tel: deep link + WhatsApp deep link.
+             * Hidden on small mobile (< 480px) where the CTAs already
+             * crowd the bar; medium-up shows the icons. */}
+            <a
+              href="tel:+212669183981"
+              className={styles['du-nav-contact']}
+              aria-label="Appeler Dog Universe"
+              title="+212 669 18 39 81"
+            >
+              <Phone aria-hidden />
+            </a>
+            <a
+              href="https://wa.me/212669183981"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles['du-nav-contact']}
+              aria-label="WhatsApp Dog Universe"
+              title="WhatsApp +212 669 18 39 81"
+            >
+              <MessageCircle aria-hidden />
+            </a>
             <div className={styles['du-langs']} role="group" aria-label="Language">
               {(['fr', 'en', 'ar'] as const).map((l) => (
                 <Link
@@ -293,6 +314,29 @@ export default async function LandingPage({ locale }: LandingPageProps) {
             <span className={styles['du-hero-badge']}>{t.hero.badge}</span>
             <h1 id="hero-title" className={cn('du-italic', 'du-hero-title')}>{t.hero.title}</h1>
             <p className={cn('du-italic', 'du-hero-sub')}>{t.hero.subtitle}</p>
+
+            {/* Trust strip — surfaces the 3 social-proof stats into
+             * the first viewport so users don't have to scroll to see
+             * "10 ans · 500+ familles · 4.9★ Google". Small caps gold
+             * letter-spaced to read as a refined catalogue caption,
+             * not a banner. */}
+            <div className={styles['du-hero-trust']} aria-label={t.stats.tag}>
+              <span>{t.stats.a1}</span>
+              <span className={styles['du-hero-trust-sep']} aria-hidden>·</span>
+              <span>{t.stats.b1} {t.stats.b2}</span>
+              <span className={styles['du-hero-trust-sep']} aria-hidden>·</span>
+              <span>{t.stats.c1} {t.stats.c2.split(' · ')[0]}</span>
+            </div>
+
+            {/* Gold ornament divider — pure decorative break, signals
+             * "section pivot" before the CTA the way a chapter break
+             * does in a luxury catalogue. */}
+            <div className={styles['du-hero-divider']} aria-hidden>
+              <span className={styles['du-hero-divider-line']}></span>
+              <PawPrint className={styles['du-hero-divider-icon']} />
+              <span className={styles['du-hero-divider-line']}></span>
+            </div>
+
             <Link href={`/${safeLocale}/auth/register`} className={styles['du-gold-btn']}>
               {t.hero.cta}
             </Link>
