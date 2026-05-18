@@ -4,6 +4,10 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 // Bypass cron auth + lock + observability — we only test the inner fn.
 vi.mock('@/lib/cron-lock', () => ({ acquireCronLock: vi.fn(async () => true) }));
 vi.mock('@/lib/observability', () => ({ markCronRun: vi.fn(async () => undefined) }));
+// revalidateTag is called when the cron creates new suggestions (drops the
+// admin sidebar badge cache); it requires Next's static-gen context which
+// vitest doesn't provide. No-op mock for the unit test.
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
 
 const productFindMany = vi.fn();
 const invoiceItemFindMany = vi.fn();

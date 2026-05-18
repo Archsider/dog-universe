@@ -3,6 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const authMock = vi.fn();
 vi.mock('../../../../../../../../../auth', () => ({ auth: () => authMock() }));
+// revalidateTag needs Next.js's static-gen context (absent in unit tests).
+// The route calls it after a successful accept to drop the admin sidebar
+// badge count; the mock just no-ops it.
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
 
 const suggestionFindUnique = vi.fn();
 const suggestionUpdate = vi.fn();

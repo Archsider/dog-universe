@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth-guards';
 
@@ -51,6 +52,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       data: { status: 'accepted', respondedAt: new Date(), respondedBy: session.user.id },
     }),
   ]);
+
+  // Sidebar badge "Suggestions catalogue" derives from `pending` count —
+  // accept transitions one to `accepted`, so the badge needs to drop by 1.
+  // Without this the admin sees a stale count for up to 30s (cache TTL).
+  revalidateTag('admin-counts');
 
   return NextResponse.json({ ok: true, suggestionId: id, invoiceItemId: suggestion.invoiceItemId, productId: suggestion.suggestedProductId });
 }
