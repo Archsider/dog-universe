@@ -150,14 +150,11 @@ async function runDbBackupImpl(options: { rotate?: boolean } = {}): Promise<Back
   // loses older history. Log a structured warning so /admin/health surfaces
   // it before the next backup window.
   if (Array.isArray(notifications) && notifications.length >= 100_000) {
-    console.warn(JSON.stringify({
-      level: 'warn',
-      service: 'db-backup',
-      message: 'Notification cap saturated — older rows excluded from dump',
-      count: notifications.length,
-      cap: 100_000,
-      timestamp: new Date().toISOString(),
-    }));
+    logger.warn(
+      'db-backup',
+      'Notification cap saturated — older rows excluded from dump',
+      { count: notifications.length, cap: 100_000 },
+    );
   }
 
   const tables = {

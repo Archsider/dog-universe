@@ -17,6 +17,7 @@
 // it guarantees we never silently sign with `'dev-secret'` on a misconfigured
 // production deploy (which would let anyone forge taxi tokens).
 import { createHmac, randomBytes } from 'crypto';
+import { logger } from './logger';
 
 let cachedSecret: string | null = null;
 let warnedDevFallback = false;
@@ -32,13 +33,9 @@ function getSecret(): string {
     throw new Error('TAXI_TOKEN_SECRET_MISSING: NEXTAUTH_SECRET is required in production');
   }
   if (!warnedDevFallback) {
-    console.warn(
-      JSON.stringify({
-        level: 'warn',
-        service: 'taxi-token',
-        message: 'NEXTAUTH_SECRET missing — using deterministic dev fallback (NEVER acceptable in production)',
-        timestamp: new Date().toISOString(),
-      }),
+    logger.warn(
+      'taxi-token',
+      'NEXTAUTH_SECRET missing — using deterministic dev fallback (NEVER acceptable in production)',
     );
     warnedDevFallback = true;
   }
