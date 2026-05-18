@@ -285,17 +285,24 @@
   font-size: 104px;
   color: #f5edd8;
   letter-spacing: -0.01em;
-  /* Hero entrance — staggered fade-up. Title arrives just after badge. */
-  opacity: 0;
-  animation: du-fade-up 1s 0.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  /* Intentionally NO opacity:0 / animation here. The title is the
+   * largest visible element on first paint — Lighthouse measures
+   * Largest Contentful Paint at the moment the user can SEE this
+   * element. Fading it in from opacity 0 delays LCP by the animation
+   * duration (was ~1.15s, score 86) and damages Performance.
+   * Visual treatment instead: title stays etched in stone while the
+   * other hero elements (badge, sub, trust strip, divider, CTAs)
+   * fade up around it — more luxe than the title popping with them.
+   */
 }
 .du-hero-sub {
   font-size: 28px;
   color: rgba(201, 168, 76, 0.85);
   margin-top: 24px;
   margin-bottom: 36px;
-  opacity: 0;
-  animation: du-fade-up 1s 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  /* Subtitle is just below the title, on first viewport. Also kept
+   * fully visible at first paint so it doesn't bait the LCP candidate
+   * away from the title. */
 }
 /* Trust strip — 3 social-proof stats in a refined small-caps gold line.
  * Reads as a catalogue caption, not a banner. */
