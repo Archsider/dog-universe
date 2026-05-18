@@ -102,16 +102,36 @@ describe('PATCH /api/invoices/[id] — cross-role authz', () => {
   });
 
   it('lets SUPERADMIN edit any invoice regardless of target client role', async () => {
+    // SUPERADMIN can edit non-CLIENT invoices via PATCH (notes-only path).
+    // The legacy `status: 'CANCELLED'` flip used to live here too but is
+    // now rejected — audit finding #8 (see the next test).
     mocks.prisma.invoice.findUnique.mockResolvedValueOnce({
       id: 'inv-1',
       version: 1,
       notes: null,
       client: { role: 'ADMIN' },
     });
-    mocks.prisma.invoice.update.mockResolvedValue({ id: 'inv-1', status: 'CANCELLED' });
+    mocks.prisma.invoice.update.mockResolvedValue({ id: 'inv-1', notes: 'super note' });
     mocks.auth.mockResolvedValueOnce({ user: { id: 'su-1', role: 'SUPERADMIN' } });
-    const res = await PATCH(makeReq({ status: 'CANCELLED' }), params);
+    const res = await PATCH(makeReq({ notes: 'super note' }), params);
     expect(res.status).toBe(200);
     expect(mocks.prisma.invoice.update).toHaveBeenCalled();
+  });
+
+  it('rejects PATCH status=CANCELLED → points to dedicated cancel endpoint (audit #8)', async () => {
+    mocks.prisma.invoice.findUnique.mockResolvedValueOnce({
+      id: 'inv-1',
+      version: 1,
+      notes: null,
+      client: { role: 'CLIENT' },
+    });
+    const res = await PATCH(makeReq({ status: 'CANCELLED' }), params);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('USE_CANCEL_ENDPOINT');
+    expect(body.detail.hint).toMatch(/\/api\/admin\/invoices\/\[id\]\/cancel/);
+    // Verify the update is NOT called so callers can't bypass the
+    // canonical cancelInvoice helper.
+    expect(mocks.prisma.invoice.update).not.toHaveBeenCalled();
   });
 });

@@ -237,15 +237,32 @@ async function patchImpl(request: Request, id: string): Promise<Response> {
     return NextResponse.json(updated);
   }
 
-  // ── Legacy: notes-only / CANCELLED status ─────────────────────────────────
-  const updateData: Record<string, unknown> = {};
-
-  if (body.notes !== undefined) {
-    updateData.notes = typeof body.notes === 'string' ? body.notes.trim() || null : null;
+  // ── Legacy: notes-only update ────────────────────────────────────────────
+  // Previously this branch also accepted `body.status === 'CANCELLED'` and
+  // flipped the invoice to CANCELLED inline — without the cascade unlink
+  // of BookingItem.invoiceItemId, without the refund handling for paid
+  // invoices, without the audit note append. Audit finding #8.
+  //
+  // All CANCELLED transitions now MUST go through POST /api/admin/invoices/
+  // [id]/cancel which uses the canonical `cancelInvoice()` helper. Callers
+  // that hit this legacy path with status=CANCELLED get a clear 400 with
+  // a pointer to the right endpoint.
+  if (body.status === 'CANCELLED') {
+    return NextResponse.json(
+      {
+        error: 'USE_CANCEL_ENDPOINT',
+        detail: {
+          hint: 'POST /api/admin/invoices/[id]/cancel with { reason, refundExisting?, paymentMethodForRefund? }',
+          reason: 'Legacy PATCH status=CANCELLED is no longer accepted — the dedicated cancel endpoint owns the full lifecycle (cascade unlink + refund + audit note).',
+        },
+      },
+      { status: 400 },
+    );
   }
 
-  if (body.status === 'CANCELLED') {
-    updateData.status = 'CANCELLED';
+  const updateData: Record<string, unknown> = {};
+  if (body.notes !== undefined) {
+    updateData.notes = typeof body.notes === 'string' ? body.notes.trim() || null : null;
   }
 
   if (Object.keys(updateData).length === 0) {
@@ -253,15 +270,16 @@ async function patchImpl(request: Request, id: string): Promise<Response> {
   }
 
   updateData.version = { increment: 1 };
+  // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: notes-only path. Status/amount/paidAmount/paidAt are NOT in the update payload (the CANCELLED path above is rejected); only `notes` is set. Version bumped so concurrent edits surface a 409 via optimistic lock.
   const updated = await prisma.invoice.update({ where: { id }, data: updateData });
 
-  // P0-4: audit log on legacy status/notes update
+  // Audit log on the notes update (kept for parity with the previous flow).
   await logAction({
     userId: session.user.id,
     action: LOG_ACTIONS.INVOICE_UPDATED,
     entityType: 'Invoice',
     entityId: id,
-    details: { fromStatus: invoice.status, toStatus: (updateData.status as string | undefined) ?? invoice.status },
+    details: { fromStatus: invoice.status, toStatus: invoice.status, notesUpdated: true },
   });
 
   return NextResponse.json(updated);
