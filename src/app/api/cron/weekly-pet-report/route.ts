@@ -11,6 +11,24 @@ import { isFeatureEnabled } from '@/lib/feature-flags';
 
 export const maxDuration = 60;
 
+// Safety bounds — the pension is in early-stage growth (Mehdi: app launched
+// April 2026), so a single weekly run currently processes a handful of
+// stays. These caps protect against runaway growth or an accidental data
+// spike:
+//
+//   MAX_BOOKINGS_PER_RUN — hard ceiling on the booking query. Above ~500
+//     concurrent boardings the cron would risk an OOM on the Lambda or
+//     blow past the 60s timeout. Stays are queried oldest-first so even
+//     if we hit the cap one week, older stays still get their report.
+//
+//   CONCURRENCY — process N bookings in parallel, sequentially across
+//     batches. Each booking triggers 1 Anthropic API call + 1 email
+//     enqueue + 1 notification create. Promise.all over hundreds would
+//     burst the Anthropic rate limit and the Upstash REST quota. 5 keeps
+//     the cron well under both limits even at the MAX cap.
+const MAX_BOOKINGS_PER_RUN = 500;
+const CONCURRENCY = 5;
+
 /**
  * GET /api/cron/weekly-pet-report
  * Called weekly on Monday at 09:00 UTC by Vercel Cron (see vercel.json).
@@ -46,6 +64,9 @@ export const GET = defineCron({
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://doguniverse.ma';
 
     // ── Find active BOARDING stays of at least 7 days ──────────────────────────
+    // `take` bounds memory. `orderBy startDate asc` guarantees older stays
+    // get their report first if we ever hit the cap (older stays have been
+    // waiting longer for news — fairness matters).
     const activeBookings = await prisma.booking.findMany({
       where: notDeleted({
         status: 'IN_PROGRESS',
@@ -56,6 +77,8 @@ export const GET = defineCron({
         client: { select: { id: true, name: true, email: true, language: true } },
         bookingPets: { include: { pet: { select: { name: true, species: true } } } },
       },
+      take: MAX_BOOKINGS_PER_RUN,
+      orderBy: { startDate: 'asc' },
     });
 
     if (activeBookings.length === 0) {
@@ -88,7 +111,14 @@ export const GET = defineCron({
     let skipped = 0;
     const errors: string[] = [];
 
-    await Promise.all(activeBookings.map(async (booking) => {
+    // Chunked concurrency — each booking does 1 Anthropic call + 1 email
+    // enqueue + 1 notification create. A flat Promise.all over the whole
+    // list would burst the Anthropic rate limit and the Upstash REST
+    // quota at scale. Process CONCURRENCY (5) at a time, sequentially
+    // across batches.
+    for (let batchStart = 0; batchStart < activeBookings.length; batchStart += CONCURRENCY) {
+      const batch = activeBookings.slice(batchStart, batchStart + CONCURRENCY);
+      await Promise.all(batch.map(async (booking) => {
       try {
         // Per-booking dedup
         const alreadyReported = reportedMap.get(booking.clientId)?.has(booking.id) ?? false;
@@ -201,7 +231,8 @@ export const GET = defineCron({
       } catch (err) {
         errors.push(`${booking.id}: ${String(err)}`);
       }
-    }));
+      }));
+    }
 
     if (errors.length) {
       await log('error', 'cron-weekly-pet-report', 'Some weekly reports failed', { errors });
