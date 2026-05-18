@@ -13,8 +13,13 @@ import styles from './LandingPage.module.css';
 
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
-  weight: ['300', '400', '500'],
-  style: ['italic', 'normal'],
+  // Used: 300 italic (large display titles) + 400 italic (logo, testimonials).
+  // We do NOT use normal style or weight 500 in any rendered element — every
+  // Cormorant usage in this landing is italic. Trimming the variant list
+  // saved ~100 KB of font payload on mobile (previously: 300/400/500 ×
+  // italic+normal = 6 files, now: 300+400 italic = 2 files).
+  weight: ['300', '400'],
+  style: ['italic'],
   display: 'swap',
   variable: '--font-cormorant',
 });
@@ -28,6 +33,9 @@ const dmSans = DM_Sans({
 
 const notoArabic = Noto_Naskh_Arabic({
   subsets: ['arabic'],
+  // Used: 400 (body), 500 (titles), 700 (logo). Dropped extra weights —
+  // each Arabic font weight is ~50 KB. Loaded only when AR locale is
+  // active in browser cache, but the variable defs cost bytes either way.
   weight: ['400', '500', '700'],
   display: 'swap',
   variable: '--font-arabic',
