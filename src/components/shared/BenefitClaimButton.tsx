@@ -12,6 +12,7 @@ interface BenefitClaimButtonProps {
   benefitKey: string;
   labelFr: string;
   labelEn: string;
+  labelAr: string;
   locale: string;
   existingClaim?: Claim;
   isPlatinum: boolean;
@@ -20,12 +21,15 @@ interface BenefitClaimButtonProps {
 }
 
 export function BenefitClaimButton({
-  benefitKey, labelFr, labelEn, locale, existingClaim, isPlatinum, titleColor, textColor,
+  benefitKey, labelFr, labelEn, labelAr, locale, existingClaim, isPlatinum, titleColor, textColor,
 }: BenefitClaimButtonProps) {
   const [claim, setClaim] = useState<Claim | undefined>(existingClaim);
   const [loading, setLoading] = useState(false);
   const fr = locale === 'fr';
-  const label = fr ? labelFr : labelEn;
+  const ar = locale === 'ar';
+  // Compact 3-locale pick used for all in-component labels below.
+  const t3 = (frStr: string, arStr: string, enStr: string) => fr ? frStr : ar ? arStr : enStr;
+  const label = t3(labelFr, labelAr, labelEn);
 
   async function handleClaim() {
     setLoading(true);
@@ -53,7 +57,7 @@ export function BenefitClaimButton({
           {label}
         </span>
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isPlatinum ? 'bg-white/10 text-[#D4AF37]' : 'bg-amber-50 text-amber-700'}`}>
-          {fr ? 'En attente' : 'Pending'}
+          {t3('En attente', 'في الانتظار', 'Pending')}
         </span>
       </div>
     );
@@ -67,7 +71,7 @@ export function BenefitClaimButton({
           {label}
         </span>
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isPlatinum ? 'bg-white/10 text-green-400' : 'bg-green-50 text-green-700'}`}>
-          {fr ? 'Validé' : 'Approved'}
+          {t3('Validé', 'تمّت الموافقة', 'Approved')}
         </span>
       </div>
     );
@@ -85,7 +89,7 @@ export function BenefitClaimButton({
           disabled={loading}
           className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isPlatinum ? 'bg-white/10 text-[#D4AF37] hover:bg-white/20' : 'bg-gold-50 text-gold-700 hover:bg-gold-100'} transition-colors`}
         >
-          {fr ? 'Réclamer' : 'Claim'}
+          {t3('Réclamer', 'المطالبة', 'Claim')}
         </button>
       </div>
     );
@@ -107,7 +111,7 @@ export function BenefitClaimButton({
             : 'bg-gold-50 text-gold-700 hover:bg-gold-100 border border-gold-200'
         }`}
       >
-        {loading ? '...' : (fr ? 'Réclamer' : 'Claim')}
+        {loading ? '...' : t3('Réclamer', 'المطالبة', 'Claim')}
       </button>
     </div>
   );

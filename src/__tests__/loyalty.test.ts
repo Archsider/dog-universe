@@ -275,11 +275,12 @@ describe('GRADE_BENEFITS', () => {
     expect(GRADE_BENEFITS.PLATINUM.length).toBeGreaterThan(GRADE_BENEFITS.GOLD.length);
   });
 
-  it('chaque avantage a labelFr et labelEn non vides', () => {
+  it('chaque avantage a labelFr, labelEn et labelAr non vides', () => {
     ALL_GRADES.forEach(grade => {
       GRADE_BENEFITS[grade].forEach(benefit => {
         expect(benefit.labelFr.length).toBeGreaterThan(0);
         expect(benefit.labelEn.length).toBeGreaterThan(0);
+        expect(benefit.labelAr.length).toBeGreaterThan(0);
       });
     });
   });

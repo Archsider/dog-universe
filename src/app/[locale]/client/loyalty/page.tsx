@@ -179,7 +179,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
                 {automaticBenefits.map((b) => (
                   <li key={b.key} className="flex items-center gap-3 p-3 rounded-lg bg-[#FAF6F0]">
                     <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                    <span className="text-sm text-charcoal">{isFr ? b.labelFr : isAr ? ((b as unknown as Record<string, string>).labelAr ?? b.labelEn) : b.labelEn}</span>
+                    <span className="text-sm text-charcoal">{isFr ? b.labelFr : isAr ? b.labelAr : b.labelEn}</span>
                   </li>
                 ))}
               </ul>
@@ -203,7 +203,7 @@ export default async function LoyaltyPage({ params }: { params: Promise<Params> 
 
                   return (
                     <li key={b.key} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[#F0D98A]/30 hover:bg-[#FAF6F0] transition-colors">
-                      <span className="text-sm text-charcoal font-medium">{isFr ? b.labelFr : isAr ? ((b as unknown as Record<string, string>).labelAr ?? b.labelEn) : b.labelEn}</span>
+                      <span className="text-sm text-charcoal font-medium">{isFr ? b.labelFr : isAr ? b.labelAr : b.labelEn}</span>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {cfg && StatusIcon ? (
                           <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.color}`}>
