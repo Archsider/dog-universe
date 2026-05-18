@@ -5,7 +5,30 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { Cormorant_Garamond, DM_Sans, Noto_Naskh_Arabic } from 'next/font/google';
-import { PawPrint, Car, Scissors, ShoppingBag } from 'lucide-react';
+import { PawPrint, Car, Scissors, ShoppingBag, Star } from 'lucide-react';
+
+// Real Google reviews provided by Mehdi 2026-05-18. Verifiable on the
+// public Google Business profile — keep author names anonymised to the
+// first initial of the surname (privacy-first) and quotes verbatim.
+// Kept in French (original language) regardless of locale — these are
+// authentic voices; translating them would defeat the trust signal.
+const REAL_TESTIMONIALS = [
+  {
+    author: 'Mounir H.',
+    quote:
+      'Un immense merci à Mehdi d’avoir si bien pris soin de mes loulous ! Je recommande vivement cette garderie pour vos animaux de compagnie. C’est un endroit idéal, magique, et surtout parfait pour socialiser les chiens entre eux. Ça se fait rare, mais ça existe désormais grâce à Mehdi !',
+  },
+  {
+    author: 'Marie L.',
+    quote:
+      'Une pension, que dis-je… une colonie pour chiens incroyable. Mehdi et son équipe sont aux petits soins pour nos animaux, que ce soit avant, pendant ou après le séjour. Je recommande sans hésiter Dog Universe. Le premier séjour pour Mozart en pension et sûrement pas le dernier ! Encore un grand merci de vous être si bien occupé de Mozart pendant notre séjour en France. C’est tellement rassurant de pouvoir compter sur des personnes aussi bienveillantes lorsque nous sommes loin de nos animaux.',
+  },
+  {
+    author: 'Sarah A.',
+    quote:
+      'J’ai confié mon chat Gaza à cette pension et j’en suis vraiment ravie ! 🐾 L’équipe est très attentionnée, professionnelle et passionnée par les animaux. J’ai eu régulièrement des nouvelles et des photos, ce qui m’a beaucoup rassurée. Gaza a été choyé comme à la maison, il est revenu calme et en pleine forme ! Je recommande cette pension les yeux fermés. Merci encore pour votre bienveillance ! 💕',
+  },
+];
 
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
@@ -34,6 +57,11 @@ interface LandingPageProps { locale: string }
 
 const COPY = {
   fr: {
+    testi: {
+      eyebrow: 'Témoignages',
+      title: 'Ce qu’en disent nos familles.',
+      note: 'Avis réels, vérifiables sur Google.',
+    },
     nav: { space: 'Mon espace client', book: 'Réserver' },
     hero: {
       badge: 'La première pension digitalisée du Maroc',
@@ -77,6 +105,11 @@ const COPY = {
     },
   },
   en: {
+    testi: {
+      eyebrow: 'Testimonials',
+      title: 'What our families say.',
+      note: 'Real reviews, verifiable on Google.',
+    },
     nav: { space: 'My account', book: 'Book' },
     hero: {
       badge: 'The first digital pet boarding in Morocco',
@@ -120,6 +153,11 @@ const COPY = {
     },
   },
   ar: {
+    testi: {
+      eyebrow: 'آراء العملاء',
+      title: 'ماذا تقول عائلاتنا.',
+      note: 'آراء حقيقية، يمكن التحقّق منها على جوجل.',
+    },
     nav: { space: 'حسابي', book: 'احجز' },
     hero: {
       badge: 'أوّل دار رقمية للحيوانات الأليفة في المغرب',
@@ -312,6 +350,41 @@ const LANDING_CSS = `
 }
 .du-rtl .du-card-desc { font-family: var(--font-arabic), sans-serif; font-size: 15px; line-height: 1.85; }
 
+/* ─── Testimonials ─────────────────────────────────────────────────── */
+.du-testi { background: #ffffff; padding: 128px 32px; border-top: 0.5px solid rgba(154,123,46,0.10); }
+.du-testi-inner { max-width: 1200px; margin: 0 auto; }
+.du-testi-head { text-align: center; margin-bottom: 72px; }
+.du-testi-title { font-size: 56px; color: #0f0d0a; margin-top: 16px; }
+.du-testi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; align-items: stretch; }
+.du-testi-card {
+  background: #faf6ec; border: 0.5px solid rgba(154,123,46,0.18); border-radius: 3px;
+  padding: 36px 32px;
+  display: flex; flex-direction: column;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.du-testi-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15,13,10,0.06); border-color: rgba(154,123,46,0.35); }
+.du-testi-stars { display: flex; gap: 3px; margin-bottom: 22px; }
+.du-testi-star { width: 16px; height: 16px; color: #9a7b2e; fill: #9a7b2e; }
+.du-testi-quote {
+  font-family: var(--font-cormorant), serif; font-style: italic; font-weight: 400;
+  font-size: 17px; line-height: 1.65; color: #2c2315;
+  flex: 1; margin: 0 0 24px;
+}
+.du-rtl .du-testi-quote { font-family: var(--font-arabic), serif; font-style: normal; font-size: 16px; line-height: 1.85; }
+.du-testi-author {
+  font-family: var(--font-dmsans), sans-serif;
+  font-weight: 500; font-size: 12px; color: #0f0d0a;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.du-rtl .du-testi-author { font-family: var(--font-arabic), sans-serif; letter-spacing: 0; text-transform: none; font-size: 14px; }
+.du-testi-note {
+  text-align: center; margin-top: 40px;
+  font-family: var(--font-dmsans), sans-serif;
+  font-weight: 300; font-size: 11px; letter-spacing: 0.04em;
+  color: rgba(15,13,10,0.45); font-style: italic;
+}
+.du-rtl .du-testi-note { font-family: var(--font-arabic), sans-serif; font-style: normal; font-size: 12px; letter-spacing: 0; }
+
 /* ─── Pricing ──────────────────────────────────────────────────────── */
 .du-pricing { background: #ffffff; padding: 128px 32px; border-top: 0.5px solid rgba(154,123,46,0.10); }
 .du-pricing-inner { max-width: 1100px; margin: 0 auto; }
@@ -378,9 +451,11 @@ const LANDING_CSS = `
 @media (max-width: 900px) {
   .du-services-grid { grid-template-columns: repeat(2, 1fr); }
   .du-pricing-grid { grid-template-columns: 1fr; max-width: 480px; margin: 0 auto; }
+  .du-testi-grid { grid-template-columns: 1fr; max-width: 640px; margin: 0 auto; }
   .du-stats-grid { grid-template-columns: 1fr; gap: 32px; }
   .du-stat + .du-stat { border-left: none; border-top: 0.5px solid rgba(154,123,46,0.18); padding-top: 32px; }
   .du-rtl .du-stat + .du-stat { border-right: none; }
+  .du-testi-title { font-size: 44px; }
 }
 @media (max-width: 640px) {
   .du-nav-inner { padding: 0 20px; height: 64px; }
@@ -395,8 +470,10 @@ const LANDING_CSS = `
   .du-stats { padding: 64px 20px; }
   .du-stat-big { font-size: 34px; }
   .du-stats-tag { font-size: 17px; margin-top: 40px; }
-  .du-services, .du-pricing { padding: 80px 20px; }
-  .du-services-title, .du-pricing-title { font-size: 32px; }
+  .du-services, .du-pricing, .du-testi { padding: 80px 20px; }
+  .du-services-title, .du-pricing-title, .du-testi-title { font-size: 32px; }
+  .du-testi-card { padding: 28px 24px; }
+  .du-testi-quote { font-size: 16px; }
   .du-services-grid { grid-template-columns: 1fr; gap: 16px; }
   .du-card-photo { height: 140px; }
   .du-final { padding: 80px 20px; }
@@ -536,6 +613,30 @@ export default async function LandingPage({ locale }: LandingPageProps) {
                 );
               })}
             </div>
+          </div>
+        </section>
+
+        {/* ─── Testimonials (real Google reviews) ───────────────────────── */}
+        <section className="du-testi" aria-labelledby="testi-title">
+          <div className="du-testi-inner">
+            <div className="du-testi-head">
+              <div className="du-eyebrow">{t.testi.eyebrow}</div>
+              <h2 id="testi-title" className="du-italic du-testi-title">{t.testi.title}</h2>
+            </div>
+            <div className="du-testi-grid">
+              {REAL_TESTIMONIALS.map((testi) => (
+                <blockquote key={testi.author} className="du-testi-card">
+                  <div className="du-testi-stars" aria-label="5 / 5">
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <Star key={i} className="du-testi-star" aria-hidden />
+                    ))}
+                  </div>
+                  <p className="du-testi-quote">“{testi.quote}”</p>
+                  <footer className="du-testi-author">{testi.author}</footer>
+                </blockquote>
+              ))}
+            </div>
+            <p className="du-testi-note">{t.testi.note}</p>
           </div>
         </section>
 
