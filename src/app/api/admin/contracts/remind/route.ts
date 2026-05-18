@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { notDeleted } from '@/lib/prisma-soft';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
@@ -11,10 +11,8 @@ const LOGIN_URL = `${APP_URL}/fr/auth/login`;
 // POST /api/admin/contracts/remind
 // Body: { clientId?: string } — if omitted, sends to ALL unsigned clients
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const { clientId } = await req.json().catch(() => ({}));
 

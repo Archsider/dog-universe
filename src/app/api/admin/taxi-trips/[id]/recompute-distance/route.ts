@@ -11,7 +11,7 @@
 // the stored rows). Safe to call multiple times.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { recomputeDistance } from '@/lib/taxi-gps-filter';
 import { logAction } from '@/lib/log';
@@ -19,10 +19,9 @@ import { logger } from '@/lib/logger';
 
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role ?? '')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const trip = await prisma.taxiTrip.findUnique({
     where: { id },

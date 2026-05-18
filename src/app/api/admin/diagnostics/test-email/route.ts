@@ -3,18 +3,15 @@
 // Rate-limited via the existing `passwordReset` bucket (5/h) at the middleware
 // layer (see RATE_LIMITED_ROUTES_DIAGNOSTICS in middleware/rate-limit.ts).
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { sendEmail } from '@/lib/email';
 import { z } from 'zod';
 
 const bodySchema = z.object({ to: z.string().email() });
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (session.user.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   let parsed: { to: string };
   try {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { auth } from '../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { withSchema } from '@/lib/with-schema';
 import { notDeleted } from '@/lib/prisma-soft';
@@ -21,11 +21,9 @@ const reviewSchema = z.object({
  * (auth, ownership, état du booking, unicité).
  */
 export const POST = withSchema({ body: reviewSchema }, async (_request, { body }) => {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (session.user.role !== 'CLIENT') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['CLIENT']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const { bookingId, rating, comment } = body;
 

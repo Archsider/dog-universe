@@ -79,10 +79,10 @@ describe('POST /api/invoices/[id]/payments — role gate', () => {
     expect(res.status).toBe(403);
   });
 
-  it('rejects unauthenticated with 403', async () => {
+  it('rejects unauthenticated with 401', async () => {
     mocks.auth.mockResolvedValueOnce(null);
     const res = await POST(makeReq({ amount: 100, paymentMethod: 'CASH' }), params);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
   });
 });
 

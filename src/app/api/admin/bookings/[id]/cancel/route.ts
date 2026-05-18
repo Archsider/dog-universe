@@ -16,7 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { notDeleted } from '@/lib/prisma-soft';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
@@ -40,10 +40,9 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { id: bookingId } = await params;
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   let body: z.infer<typeof bodySchema>;
   try {

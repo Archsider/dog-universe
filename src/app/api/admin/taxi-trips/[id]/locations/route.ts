@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 
 // Admin endpoint — full GPS trail (max 500 points, asc by createdAt) for the
@@ -8,10 +8,8 @@ const MAX_POINTS = 500;
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role ?? '')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const trip = await prisma.taxiTrip.findUnique({
     where: { id },

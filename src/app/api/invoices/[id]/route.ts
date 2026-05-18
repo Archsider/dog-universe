@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { allocatePayments } from '@/lib/payments';
 import { isPaidExceedsCheckViolation, PAID_EXCEEDS_PAYLOAD } from '@/lib/billing-errors';
@@ -63,10 +64,9 @@ export async function PATCH(request: Request, { params }: Params) {
 }
 
 async function patchImpl(request: Request, id: string): Promise<Response> {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const body = await request.json();
 
@@ -291,10 +291,9 @@ export async function DELETE(_req: Request, { params }: Params) {
 }
 
 async function deleteImpl(id: string): Promise<Response> {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },

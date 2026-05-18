@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { toNumber } from '@/lib/decimal';
@@ -11,10 +11,8 @@ interface Params { params: Promise<{ id: string; itemId: string }> }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { id: bookingId, itemId } = await params;
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   let body: unknown;
   try {

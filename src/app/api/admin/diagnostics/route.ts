@@ -3,7 +3,7 @@
 // this route. Each section is wrapped in try/catch so one failure (e.g.
 // Redis down) does not blank out the rest of the report.
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import type { Queue } from 'bullmq';
 import { isBullMQConfigured } from '@/lib/redis-bullmq';
 import { getEmailQueue, getSmsQueue, getDlqQueue } from '@/lib/queues/index';
@@ -58,13 +58,8 @@ async function lastEmailSentIso(): Promise<string | null> {
 }
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  if (session.user.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   // ── Env vars (booleans only) ────────────────────────────────────────────
   const env = (() => {

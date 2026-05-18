@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { verifyTotpForUser } from '@/lib/totp';
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const body = await request.json().catch(() => ({}));
   const token = typeof body.token === 'string' ? body.token.trim() : '';

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { deleteFromPrivateStorage } from '@/lib/supabase';
 import { logAction } from '@/lib/log';
@@ -11,10 +11,9 @@ import { notDeleted } from '@/lib/prisma-soft';
 // Supprime le contrat signé d'un client identifié par email.
 // Utilisé par les tests E2E pour réinitialiser un compte test entre runs.
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   let body: { clientEmail?: unknown };
   try {
