@@ -139,10 +139,90 @@ export const wizardMessages = {
     petsLoadError: 'Could not load your pets. Check your connection and try again.',
     retry: 'Retry',
   },
+  ar: {
+    title: 'حجز جديد',
+    steps: ['النوع', 'الحيوانات', 'التفاصيل', 'الملخّص', 'تمّ التأكيد'],
+    stepTitles: ['أيّ خدمة؟', 'اختر الحيوانات', 'التفاصيل', 'الملخّص', 'تمّ تأكيد الحجز!'],
+    boarding: 'الإيواء',
+    boardingDesc: 'إقامة لحيوانك مع رعاية شخصية',
+    taxi: 'بيت تاكسي',
+    taxiDesc: 'نقل آمن في مراكش (الطبيب البيطري، المطار، المدينة)',
+    next: 'التالي',
+    back: 'السابق',
+    selectPets: 'اختر حيواناتك',
+    noPets: 'لا تملك حيوانات بعد.',
+    addPet: 'إضافة حيوان',
+    checkIn: 'تاريخ الوصول',
+    checkOut: 'تاريخ المغادرة',
+    grooming: 'العناية (للكلاب فقط)',
+    groomingPrice: '+١٠٠/١٥٠ درهم',
+    petSize: 'الحجم',
+    small: 'صغير (< ١٠ كغ)',
+    large: 'كبير (> ١٠ كغ)',
+    taxiAddonTitle: 'خيار بيت تاكسي',
+    taxiAddonDesc: 'نقل ذهاب و/أو إياب (الاثنين-السبت، ١٠ص-٥م) — ١٥٠ درهم/رحلة',
+    taxiGo: 'الذهاب — توصيل إلى الدار',
+    taxiReturn: 'الإياب — استلام من الدار',
+    taxiGoDate: 'تاريخ التوصيل',
+    taxiReturnDate: 'تاريخ الاستلام',
+    taxiTime: 'الوقت',
+    taxiAddress: 'العنوان',
+    taxiAddressPlaceholder: 'عنوانك، مراكش',
+    sundayNotAllowed: 'الأحد غير متاح',
+    invalidTime: 'الأوقات المتاحة: ١٠ ص - ٥ م',
+    taxiTypeLabel: 'نوع الرحلة',
+    standard: 'عادي (داخل المدينة)',
+    vet: 'الطبيب البيطري',
+    airport: 'المطار',
+    taxiDateLabel: 'تاريخ الرحلة',
+    taxiTimeLabel: 'الوقت',
+    pickup: 'عنوان الانطلاق',
+    dropoff: 'عنوان الوصول',
+    useMyLocation: '📍 استعمل موقعي',
+    locating: 'جاري تحديد الموقع…',
+    geoDenied: 'تمّ رفض تحديد الموقع. فعّله من إعدادات المتصفح (أيقونة القفل) أو أدخل العنوان يدويًا.',
+    geoUnavailable: 'الموقع غير متاح. تحقّق من GPS / Wi-Fi، أو أدخل العنوان يدويًا.',
+    geoInsecure: 'تحديد الموقع غير متاح: الصفحة يجب أن تكون عبر HTTPS. أدخل العنوان يدويًا.',
+    geoTimeout: 'تحديد الموقع بطيء، أدخل العنوان يدويًا.',
+    notes: 'ملاحظات خاصّة',
+    notesPlaceholder: 'حساسية، أدوية، تفضيلات...',
+    summary: 'الملخّص',
+    type: 'النوع',
+    animals: 'الحيوانات',
+    dates: 'التواريخ',
+    duration: 'المدّة',
+    nights: 'ليالٍ',
+    night: 'ليلة',
+    breakdown: 'تفصيل السعر',
+    total: 'المجموع المُقدَّر',
+    confirm: 'تأكيد الحجز',
+    confirmedTitle: 'تمّ إرسال الحجز!',
+    confirmedDesc: 'تمّ إرسال طلبك إلى فريقنا. ستتلقّى تأكيدًا عبر البريد الإلكتروني خلال ٢٤ ساعة.',
+    ref: 'المرجع',
+    viewHistory: 'عرض حجوزاتي',
+    newBooking: 'حجز جديد',
+    groomingNote: 'العناية متاحة للكلاب فقط.',
+    selectAtLeastOne: 'اختر حيوانًا واحدًا على الأقل',
+    fillAllFields: 'يرجى ملء جميع الحقول المطلوبة',
+    checkOutAfterCheckIn: 'تاريخ المغادرة يجب أن يكون بعد تاريخ الوصول',
+    capacityFull: 'الدار ممتلئة في هذه التواريخ. اختر تواريخ أخرى أو تواصل معنا.',
+    petsLoadError: 'تعذّر تحميل حيواناتك. تحقّق من الاتّصال وأعد المحاولة.',
+    retry: 'إعادة المحاولة',
+  },
 } as const;
 
 export type WizardLabels = typeof wizardMessages.fr;
 
 export function getWizardLabels(locale: string): WizardLabels {
   return (wizardMessages[locale as keyof typeof wizardMessages] || wizardMessages.fr) as WizardLabels;
+}
+
+// Locale-pick helper for inline strings that don't warrant their own
+// wizardMessages key (one-off labels, dynamic strings, error toasts).
+// AR explicitly handled — was missing in previous `locale === 'fr' ? : :`
+// 2-locale ternaries that fell back to EN for Arabic users.
+export function pick(locale: string, fr: string, en: string, ar: string): string {
+  if (locale === 'ar') return ar;
+  if (locale === 'fr') return fr;
+  return en;
 }
