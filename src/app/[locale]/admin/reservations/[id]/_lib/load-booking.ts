@@ -104,12 +104,23 @@ export async function loadAdminBookingDetail(id: string) {
       boardingDetail: true,
       taxiDetail: true,
       taxiTrips: {
-        include: { history: { orderBy: { timestamp: 'asc' } } },
+        // Bound the GPS history per trip — a multi-hour trip can record
+        // hundreds of points (heartbeat every 10-30s), and we render the
+        // full set client-side on the map. 200 points covers 30-100 min
+        // of route at typical heartbeat cadence, which is enough for the
+        // panel's initial render. If the admin needs the full trail they
+        // open the GPS view which fetches the rest on-demand.
+        include: { history: { orderBy: { timestamp: 'asc' }, take: 200 } },
         orderBy: { createdAt: 'asc' },
       },
       invoice: { include: { items: { orderBy: { id: 'asc' } } } },
       bookingItems: { orderBy: { id: 'asc' } },
-      stayPhotos: { orderBy: { createdAt: 'desc' }, take: 200 },
+      // Bound stay photos — a long boarding can accumulate hundreds; the
+      // panel shows the most recent first and rarely needs more than 60
+      // for initial render. The previous 200 cap was a clamp not a true
+      // bound (it never bit in practice but inflated the payload on
+      // every page load).
+      stayPhotos: { orderBy: { createdAt: 'desc' }, take: 60 },
     },
   });
 
