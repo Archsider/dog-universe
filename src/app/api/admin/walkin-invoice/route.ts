@@ -39,7 +39,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { withSpan } from '@/lib/observability';
@@ -137,10 +137,9 @@ async function resolveAnonymousClient(tx: Prisma.TransactionClient): Promise<str
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   // ── Idempotency-Key — MANDATORY here ──────────────────────────────────
   const idempotencyKey = request.headers.get('idempotency-key');

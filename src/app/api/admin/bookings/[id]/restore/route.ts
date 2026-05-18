@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { onlyDeleted } from '@/lib/prisma-soft';
 import { logAction } from '@/lib/log';
@@ -11,10 +11,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 }
 
 async function restoreImpl(id: string): Promise<Response> {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const booking = await prisma.booking.findFirst({
     where: onlyDeleted({ id }),

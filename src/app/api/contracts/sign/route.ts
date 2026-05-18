@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { generateContractPDF } from '@/lib/contract-pdf';
 import { uploadBufferPrivate, createSignedUrl } from '@/lib/supabase';
@@ -9,11 +10,9 @@ import { notDeleted } from '@/lib/prisma-soft';
 import { withSpan } from '@/lib/observability';
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-
-  if (!session?.user || session.user.role !== 'CLIENT') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['CLIENT']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const clientId = session.user.id;
 

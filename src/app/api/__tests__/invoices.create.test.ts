@@ -87,10 +87,10 @@ beforeEach(() => {
 });
 
 describe('POST /api/invoices — role gate', () => {
-  it('rejects unauthenticated requests with 403', async () => {
+  it('rejects unauthenticated requests with 401', async () => {
     mocks.auth.mockResolvedValueOnce(null);
     const res = await InvoicesPOST(makeReq({}));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
   });
 
   it('rejects CLIENT role with 403', async () => {

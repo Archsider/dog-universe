@@ -21,7 +21,7 @@
 //     sent and by whom.
 
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { invalidateNotifCount } from '@/lib/notifications/core';
@@ -35,10 +35,9 @@ interface Params {
 export async function DELETE(_request: Request, { params }: Params) {
   const { id: bookingId, messageId } = await params;
 
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const message = await prisma.notification.findUnique({
     where: { id: messageId },

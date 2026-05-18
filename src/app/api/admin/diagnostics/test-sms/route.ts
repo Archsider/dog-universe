@@ -3,7 +3,7 @@
 // immediate ok/error result. Rate-limited via the existing `passwordReset`
 // bucket (5/h) at the middleware layer.
 import { NextResponse } from 'next/server';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { sendSMS } from '@/lib/sms';
 import { z } from 'zod';
 
@@ -12,11 +12,8 @@ import { z } from 'zod';
 const bodySchema = z.object({ to: z.string().min(6).max(20).regex(/^[+\d\s\-.]+$/) });
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (session.user.role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   let parsed: { to: string };
   try {

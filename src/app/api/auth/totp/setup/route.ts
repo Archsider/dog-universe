@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { generateTotpSecret, getTotpQRCodeDataURL, verifyTotpForUser } from '@/lib/totp';
 import { encryptSecret } from '@/lib/crypto';
@@ -16,10 +16,9 @@ import { encryptSecret } from '@/lib/crypto';
  *    `token` from the existing authenticator (rotation = re-enrol flow).
  */
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   let body: { password?: unknown; token?: unknown };
   try {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma, ItemCategory } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { auth } from '../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { decodeCursor, encodeCursor, parseLimit } from '@/lib/pagination';
 import { adminBookingCreateSchema } from '@/lib/validation';
@@ -24,10 +24,8 @@ import { WALKIN_DEFAULT_WINDOW_DAYS } from '@/lib/capacity';
 import { notDeleted } from '@/lib/prisma-soft';
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
@@ -96,10 +94,9 @@ export async function GET(request: NextRequest) {
 //   - isOpenEnded: true → no endDate, closed via CloseStayDialog
 //   - finalAmount: required when initialStatus=COMPLETED → creates PAID invoice
 export const POST = withSchema({ body: adminBookingCreateSchema }, async (request, { body }) => {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPERADMIN')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   try {
     const {

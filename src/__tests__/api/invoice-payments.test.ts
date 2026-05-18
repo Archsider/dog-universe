@@ -96,10 +96,10 @@ beforeEach(() => {
 });
 
 describe('POST /api/invoices/[id]/payments — auth', () => {
-  it('rejects unauthenticated requests with 403', async () => {
+  it('rejects unauthenticated requests with 401', async () => {
     mocks.auth.mockResolvedValueOnce(null);
     const res = await POST(makeReq({ amount: 100, paymentMethod: 'CASH' }), ctx);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
   });
 
   it('rejects CLIENT role with 403', async () => {

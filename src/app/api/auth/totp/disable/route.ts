@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { auth } from '../../../../../../auth';
+import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
 import { verifyTotpForUser } from '@/lib/totp';
 
@@ -14,10 +14,9 @@ import { verifyTotpForUser } from '@/lib/totp';
  * downgrade the account to single-factor.
  */
 export async function DELETE(request: Request) {
-  const session = await auth();
-  if (!session?.user || !['ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const guard = await requireRole(['ADMIN', 'SUPERADMIN']);
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   let body: { password?: unknown; token?: unknown };
   try {
