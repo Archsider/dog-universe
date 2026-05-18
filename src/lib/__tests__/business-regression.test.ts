@@ -408,6 +408,25 @@ describe('REGRESSION — soft-delete leak via getMonthlyInvoicesWhere', () => {
     // "en attente" du mois cible (regression Wave 1 documentée PR #75).
     expect(booking.deletedAt).toBe(null);
   });
+
+  it('CASE 1 (paiement encaissé) NE filtre PAS booking.deletedAt — design choice', () => {
+    // Choix produit verrouillé : un Payment encaissé reste compté dans le
+    // CA du mois MÊME si le booking parent a été soft-deleté ensuite
+    // (annulation admin, anonymisation RGPD, correction). Le cash acquis
+    // EST du revenu acquis, indépendamment de la table Booking.
+    //
+    // Si CE TEST CASSE : quelqu'un a ajouté un filtre booking.deletedAt à
+    // case 1, ce qui ferait disparaître du CA des paiements légitimement
+    // encaissés dès qu'on soft-delete une réservation après coup. C'est
+    // l'inverse du comportement souhaité (le bookkeeper ne peut pas
+    // "annuler" un revenu en supprimant un booking).
+    const where = getMonthlyInvoicesWhere(monthStart, monthEnd);
+    const case1 = where.OR![0] as Record<string, unknown>;
+    expect(case1).not.toHaveProperty('booking');
+    // Et le shape attendu : juste un filtre sur payments.some.paymentDate.
+    const payments = case1.payments as Record<string, unknown>;
+    expect(payments).toHaveProperty('some');
+  });
 });
 
 // =============================================================================
