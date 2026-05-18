@@ -179,6 +179,28 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
 
     // ── 6. First-time PAID transition: loyalty recalc ───────────────────
     if (newStatus === 'PAID' && !wasAlreadyPaid) {
+      // Concurrency guard — two payments on DIFFERENT invoices of the same
+      // client landing PAID simultaneously would both read the same
+      // `totalPaidAgg` (Postgres default READ COMMITTED isolation), both
+      // compute the same `suggestedGrade`, and both attempt the version-
+      // guarded updateMany. The first commits; the second loses the
+      // version race and silently skips — but its revenue contribution
+      // never made it into the calculation. So the client could stay at
+      // an outdated grade until a subsequent payment forces another recalc.
+      //
+      // pg_advisory_xact_lock serialises the loyalty branch per clientId.
+      // The lock is bound to the current tx and auto-releases at commit
+      // or rollback. Different clients never block each other. Same
+      // client → second payment waits for the first's tx to commit, then
+      // reads the FRESH totalPaidAgg (which now includes the first's
+      // invoice) before computing the grade.
+      //
+      // `hashtextextended` returns a stable int8 — exactly what
+      // pg_advisory_xact_lock(bigint) wants. The collision probability
+      // across millions of users is astronomically low and would only
+      // produce harmless extra serialization, not data corruption.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${invoice.clientId}, 0))`;
+
       const client = await tx.user.findUnique({
         where: { id: invoice.clientId },
         select: { language: true, historicalStays: true, historicalSpendMAD: true, isWalkIn: true },

@@ -293,6 +293,20 @@ describe('allocatePayments', () => {
     );
     // Invoice-paid notification fired post-commit
     expect(mocks.createInvoicePaidNotification).toHaveBeenCalledWith('client-1', 'INV-001', expect.any(String));
+
+    // pg_advisory_xact_lock serializes the loyalty branch per clientId.
+    // Without it, two concurrent first-time-PAID transitions for the same
+    // client would both read a stale totalPaidAgg and one would silently
+    // skip via the version guard with its revenue contribution missing
+    // from the grade calc. If this assertion fails the lock was removed.
+    const rawCalls = mocks.mockTx.$executeRaw.mock.calls;
+    const advisoryLock = rawCalls.find((c) =>
+      // Prisma sql tag = TemplateStringsArray as first arg; the string
+      // fragments contain pg_advisory_xact_lock + hashtextextended.
+      JSON.stringify(c[0]).includes('pg_advisory_xact_lock')
+      && JSON.stringify(c[0]).includes('hashtextextended'),
+    );
+    expect(advisoryLock).toBeDefined();
   });
 
   it('updates invoice to PARTIALLY_PAID on partial payment', async () => {
