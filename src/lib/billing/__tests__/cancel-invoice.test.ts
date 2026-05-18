@@ -68,11 +68,20 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
+// recordPayment mock is reassignable per test so we can exercise both the
+// happy refund path AND the REFUND_FAILED branch when the underlying
+// negative-payment insertion fails. vi.hoisted gives us a reference that
+// the mock factory (also hoisted) can capture safely.
+const { recordPaymentMock } = vi.hoisted(() => ({
+  recordPaymentMock: vi.fn(),
+}));
 vi.mock('@/lib/payment-allocation', () => ({
-  recordPayment: vi.fn(async () => ({ ok: true, paymentId: 'pay_refund_1' })),
+  recordPayment: recordPaymentMock,
 }));
 
 beforeEach(() => {
+  recordPaymentMock.mockReset();
+  recordPaymentMock.mockResolvedValue({ ok: true, paymentId: 'pay_refund_1' });
   state.invoices = [
     {
       id: 'inv_pending',
@@ -208,7 +217,7 @@ describe('cancelInvoice — state machine + cascade', () => {
     expect(state.invoices.find((i) => i.id === 'inv_paid')!.status).toBe('PAID');
   });
 
-  it('allows PAID cancel with refundExisting + paymentMethodForRefund', async () => {
+  it('PAID cancel with refundExisting: records a NEGATIVE Payment via recordPayment', async () => {
     const { cancelInvoice } = await lib();
     const r = await cancelInvoice({
       invoiceId: 'inv_paid',
@@ -218,7 +227,87 @@ describe('cancelInvoice — state machine + cascade', () => {
       refundExisting: true,
       paymentMethodForRefund: 'CASH',
     });
+
     expect(r.ok).toBe(true);
+    expect(state.invoices.find((i) => i.id === 'inv_paid')!.status).toBe('CANCELLED');
+
+    // The refund Payment MUST have been recorded through the canonical
+    // helper (no direct prisma.payment.create bypass) with:
+    //   - negative amount equal to the original paidAmount
+    //   - the operator's chosen payment method
+    //   - allowNegative: true (the only flag that unlocks negative amounts +
+    //     CANCELLED-status acceptance in recordPayment)
+    expect(recordPaymentMock).toHaveBeenCalledTimes(1);
+    const [paymentInput, paymentOptions] = recordPaymentMock.mock.calls[0];
+    expect(paymentInput.invoiceId).toBe('inv_paid');
+    expect(paymentInput.amount).toBe(-2480);
+    expect(paymentInput.paymentMethod).toBe('CASH');
+    expect(paymentInput.paymentDate).toBeInstanceOf(Date);
+    expect(paymentInput.notes).toMatch(/refund/i);
+    expect(paymentInput.notes).toMatch(/DU-2026-0040/);
+    expect(paymentOptions).toEqual({ allowNegative: true });
+
+    if (r.ok) {
+      expect(r.refundPaymentId).toBe('pay_refund_1');
+      expect(r.bookingItemsUnlinked).toBe(1);
+    }
+  });
+
+  it('PAID cancel + refundExisting with TRANSFER method propagates the method choice', async () => {
+    const { cancelInvoice } = await lib();
+    await cancelInvoice({
+      invoiceId: 'inv_paid',
+      reason: 'duplicate billing — refunded by bank transfer',
+      actorId: 'admin1',
+      actorRole: 'ADMIN',
+      refundExisting: true,
+      paymentMethodForRefund: 'TRANSFER',
+    });
+    expect(recordPaymentMock.mock.calls[0][0].paymentMethod).toBe('TRANSFER');
+  });
+
+  it('PENDING cancel (no payments): does NOT call recordPayment', async () => {
+    const { cancelInvoice } = await lib();
+    await cancelInvoice({
+      invoiceId: 'inv_pending',
+      reason: 'unpaid duplicate to drop',
+      actorId: 'admin1',
+      actorRole: 'ADMIN',
+    });
+    // No paidAmount means nothing to refund — recordPayment must NOT fire,
+    // otherwise we would insert a Payment with amount 0 (which the helper
+    // rejects, but also semantically wrong).
+    expect(recordPaymentMock).not.toHaveBeenCalled();
+  });
+
+  it('refund failure returns REFUND_FAILED with diagnostic detail', async () => {
+    recordPaymentMock.mockResolvedValueOnce({
+      ok: false,
+      error: 'INVALID_PAYMENT_METHOD',
+      detail: { reason: 'simulated downstream failure' },
+    });
+    const { cancelInvoice } = await lib();
+    const r = await cancelInvoice({
+      invoiceId: 'inv_paid',
+      reason: 'duplicate billing — refund attempted',
+      actorId: 'admin1',
+      actorRole: 'ADMIN',
+      refundExisting: true,
+      paymentMethodForRefund: 'CASH',
+    });
+
+    // The cancel itself committed (status flipped + items unlinked) BEFORE
+    // the post-commit refund step; the caller is told REFUND_FAILED so the
+    // operator can record the negative Payment manually later.
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toBe('REFUND_FAILED');
+      expect(r.detail?.invoiceNumber).toBe('DU-2026-0040');
+      expect(r.detail?.recordPaymentError).toBe('INVALID_PAYMENT_METHOD');
+      expect(r.detail?.previousStatus).toBe('PAID');
+      expect(r.detail?.bookingItemsUnlinked).toBe(1);
+    }
+    // Invoice was already flipped to CANCELLED before the refund attempt.
     expect(state.invoices.find((i) => i.id === 'inv_paid')!.status).toBe('CANCELLED');
   });
 

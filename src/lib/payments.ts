@@ -131,8 +131,21 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
 
     if (!invoice) throw new Error(`Invoice ${invoiceId} not found`);
 
-    // CANCELLED invoices are frozen — never touch their status or items.
-    if (invoice.status === 'CANCELLED') return;
+    // CANCELLED invoices: status, paidAt, items, loyalty are frozen — the
+    // invoice is voided lifecycle-wise. BUT we still recompute paidAmount
+    // so a refund (recorded as a negative Payment post-cancellation via
+    // recordPayment(allowNegative: true)) properly zeroes the cash trail.
+    // Without this, paidAmount would stay at the original positive value
+    // and dashboards would show stale "encaissé" against an invoice the
+    // bank statement says is reversed.
+    if (invoice.status === 'CANCELLED') {
+      const paidAmount = invoice.payments.reduce((sum, p) => sum + toNumber(p.amount), 0);
+      await tx.invoice.update({
+        where: { id: invoiceId },
+        data: { paidAmount, version: { increment: 1 } },
+      });
+      return;
+    }
 
     const wasAlreadyPaid = invoice.status === 'PAID';
 

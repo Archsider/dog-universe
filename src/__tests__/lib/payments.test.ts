@@ -227,11 +227,37 @@ describe('computeItemAllocation', () => {
 // allocatePayments — DB integration (mocked)
 // ===========================================================================
 describe('allocatePayments', () => {
-  it('skips CANCELLED invoices without touching items or status', async () => {
+  it('CANCELLED with no payments: only bumps version, no item / status mutation', async () => {
+    // CANCELLED invoices freeze status / paidAt / items / loyalty. paidAmount
+    // is recomputed from the Payment sum (0 here, no payments) so a refund
+    // recorded post-cancellation correctly zeroes the cash trail. Item and
+    // status updates must NOT fire — those would un-freeze the invoice.
     mocks.mockTx.invoice.findUnique.mockResolvedValue(CANCELLED_INVOICE);
     await allocatePayments('inv-cancelled');
     expect(mocks.mockTx.invoiceItem.update).not.toHaveBeenCalled();
-    expect(mocks.mockTx.invoice.update).not.toHaveBeenCalled();
+    expect(mocks.mockTx.invoice.update).toHaveBeenCalledTimes(1);
+    const updateArg = mocks.mockTx.invoice.update.mock.calls[0][0];
+    expect(updateArg.where).toEqual({ id: 'inv-cancelled' });
+    expect(updateArg.data.paidAmount).toBe(0);
+    expect(updateArg.data.version).toEqual({ increment: 1 });
+    // Status / paidAt MUST stay untouched.
+    expect(updateArg.data.status).toBeUndefined();
+    expect(updateArg.data.paidAt).toBeUndefined();
+  });
+
+  it('CANCELLED + refund Payment (-500): paidAmount nets to 0', async () => {
+    // Simulates the cancel-invoice refund path: an original +500 Payment
+    // followed by cancelInvoice → recordPayment(amount: -500, allowNegative)
+    // inserts a -500 Payment, then this allocatePayments call zeroes the
+    // cash trail without disturbing the CANCELLED lifecycle state.
+    mocks.mockTx.invoice.findUnique.mockResolvedValue({
+      ...CANCELLED_INVOICE,
+      payments: [{ amount: 500 }, { amount: -500 }],
+    });
+    await allocatePayments('inv-cancelled');
+    expect(mocks.mockTx.invoiceItem.update).not.toHaveBeenCalled();
+    expect(mocks.mockTx.invoice.update).toHaveBeenCalledTimes(1);
+    expect(mocks.mockTx.invoice.update.mock.calls[0][0].data.paidAmount).toBe(0);
   });
 
   it('throws when invoice is not found', async () => {
