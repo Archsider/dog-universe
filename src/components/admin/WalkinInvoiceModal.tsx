@@ -23,6 +23,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, ArrowLeft, ArrowRight, Check, Loader2, Receipt } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
+import { createWalkinInvoice } from '@/lib/api-client';
+import type { WalkinInvoiceBody } from '@/lib/api-schemas/walkin-invoice';
 import WalkinClientStep from './walkin-invoice/WalkinClientStep';
 import WalkinItemsStep from './walkin-invoice/WalkinItemsStep';
 import WalkinPaymentStep, { WalkinConfirmStep } from './walkin-invoice/WalkinPaymentStep';
@@ -30,13 +32,6 @@ import { useWalkinForm } from './walkin-invoice/useWalkinForm';
 
 interface Props {
   locale: string;
-}
-
-function newIdempotencyKey(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID().replace(/-/g, '');
-  }
-  return `walkin_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
 }
 
 export default function WalkinInvoiceModal({ locale }: Props) {
@@ -49,8 +44,7 @@ export default function WalkinInvoiceModal({ locale }: Props) {
     form.setError(null);
     form.setSubmitting(true);
     try {
-      const idempotencyKey = newIdempotencyKey();
-      const body = {
+      const body: WalkinInvoiceBody = {
         clientId: form.clientMode === 'existing' ? form.clientId : null,
         clientName: form.clientMode === 'anonymous' && form.anonName.trim() ? form.anonName.trim() : null,
         paymentDate: new Date(`${form.paymentDate}T12:00:00+01:00`).toISOString(),
@@ -61,23 +55,15 @@ export default function WalkinInvoiceModal({ locale }: Props) {
           quantity: it.quantity,
           unitPrice: it.unitPrice,
           // productId is REQUIRED by the server when category='PRODUCT'
-          // (Agent 1's Zod refinement). For other categories we omit it
-          // entirely so the body stays clean.
+          // (Zod refinement PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID). For
+          // other categories we omit it entirely so the body stays clean.
           ...(it.category === 'PRODUCT' && it.productId ? { productId: it.productId } : {}),
         })),
         notes: form.notes.trim() || null,
       };
-      const res = await fetch('/api/admin/walkin-invoice', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': idempotencyKey,
-        },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        form.setError(data.error || 'UNKNOWN_ERROR');
+      const result = await createWalkinInvoice(body);
+      if (!result.ok) {
+        form.setError(result.error.code || 'UNKNOWN_ERROR');
         form.setSubmitting(false);
         return;
       }
@@ -89,8 +75,8 @@ export default function WalkinInvoiceModal({ locale }: Props) {
       // modal self-contained.
       if (typeof window !== 'undefined') {
         const msg = fr
-          ? `Facture ${data.invoiceNumber} créée et encaissée ✓`
-          : `Invoice ${data.invoiceNumber} created and paid ✓`;
+          ? `Facture ${result.data.invoiceNumber} créée et encaissée ✓`
+          : `Invoice ${result.data.invoiceNumber} created and paid ✓`;
         // Soft non-blocking notification — falls back to console if no UI hook.
         try { window.dispatchEvent(new CustomEvent('toast', { detail: { kind: 'success', message: msg } })); } catch {}
       }

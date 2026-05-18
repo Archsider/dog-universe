@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { auth } from '../../../../../../auth';
 import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
@@ -12,6 +13,7 @@ import {
   type PaymentMethod,
   type RecordPaymentError,
 } from '@/lib/payment-allocation';
+import { recordPaymentBodySchema } from '@/lib/api-schemas/record-payment';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -98,13 +100,21 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
-  const body = await request.json();
-  const { amount, paymentMethod, paymentDate, notes } = body;
+  let parsedBody: z.infer<typeof recordPaymentBodySchema>;
+  try {
+    parsedBody = recordPaymentBodySchema.parse(await request.json());
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: 'INVALID_BODY', issues: err.issues }, { status: 400 });
+    }
+    return NextResponse.json({ error: 'INVALID_JSON' }, { status: 400 });
+  }
+  const { amount, paymentMethod, paymentDate, notes } = parsedBody;
   // `sendClientSms` is the UI toggle on PaymentModal. Defaults to `true` so
   // older clients that don't send the flag get the previous (always-send)
   // behaviour, refined further by the `sendSmsRespectful` policy below.
-  const sendClientSms: boolean = body.sendClientSms !== false;
-  const parsedAmount = Number(amount);
+  const sendClientSms: boolean = parsedBody.sendClientSms !== false;
+  const parsedAmount = amount;
   const parsedDate = paymentDate ? new Date(paymentDate) : new Date();
 
   // --- Insert Payment + Reallocate (span for observability) ---
@@ -118,7 +128,7 @@ export async function POST(request: Request, { params }: Params) {
           amount: parsedAmount,
           paymentMethod: paymentMethod as PaymentMethod,
           paymentDate: paymentDate ? parsedDate : undefined,
-          notes,
+          notes: notes ?? undefined,
         },
         {
           prefetchedInvoice: {

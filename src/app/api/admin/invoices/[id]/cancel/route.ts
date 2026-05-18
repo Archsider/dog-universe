@@ -18,17 +18,13 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { cancelInvoice } from '@/lib/billing/cancel-invoice';
 import { withSpan } from '@/lib/observability';
 import { toNumber } from '@/lib/decimal';
+import { cancelInvoiceBodySchema } from '@/lib/api-schemas/cancel-invoice';
 
 export const dynamic = 'force-dynamic';
 
-const bodySchema = z.object({
-  reason: z.string().trim().min(10, 'reason ≥ 10 chars required').max(2000),
-  /** Only required when the invoice has paidAmount > 0. */
-  refundExisting: z.boolean().optional(),
-  paymentMethodForRefund: z.enum(['CASH', 'CARD', 'CHECK', 'TRANSFER']).optional(),
-  /** When true, skip the client notification (silent admin cancel — data cleanup). */
-  silent: z.boolean().optional(),
-}).strict();
+// Schema is shared with the typed client in src/lib/api-client/cancel-invoice.ts
+// (single source of truth, see src/lib/api-schemas/README.md).
+const bodySchema = cancelInvoiceBodySchema;
 
 type Params = { params: Promise<{ id: string }> };
 

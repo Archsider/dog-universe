@@ -19,12 +19,17 @@
 // That guarantees:
 //   - Idempotency-Key header (server rejects replays inside 24h, ADR-0003)
 //   - sendClientSms flag honoured (ADR-0008 respectful SMS policy)
+//   - Body validated against the same Zod schema the server uses
+//     (recordPaymentBodySchema in src/lib/api-schemas/record-payment.ts)
 //   - Identical error shape across all three UIs
 //
 // The helper does NOT own UI state — it returns the result, the caller
 // decides how to surface it (toast, inline error, etc.).
 
-export type PaymentMethod = 'CASH' | 'CARD' | 'CHECK' | 'TRANSFER';
+import { recordInvoicePayment } from '@/lib/api-client';
+import type { PaymentMethod, RecordPaymentBody } from '@/lib/api-schemas/record-payment';
+
+export type { PaymentMethod };
 
 export interface RecordPaymentInput {
   invoiceId: string;
@@ -43,46 +48,21 @@ export type RecordPaymentResult =
   | { ok: true; status: number }
   | { ok: false; status: number; error: string };
 
-function randomIdempotencyKey(): string {
-  // crypto.randomUUID is available in all evergreen browsers + Node 20+;
-  // the fallback keeps older mobile WebViews from hard-failing on the
-  // header serialization.
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `pay-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 export async function submitPayment(input: RecordPaymentInput): Promise<RecordPaymentResult> {
-  try {
-    const res = await fetch(`/api/invoices/${input.invoiceId}/payments`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': randomIdempotencyKey(),
-      },
-      body: JSON.stringify({
-        amount: input.amount,
-        paymentMethod: input.paymentMethod,
-        paymentDate: input.paymentDate,
-        notes: input.notes ?? null,
-        sendClientSms: input.sendClientSms,
-      }),
-    });
-    if (res.ok) {
-      return { ok: true, status: res.status };
-    }
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    return {
-      ok: false,
-      status: res.status,
-      error: data.error ?? `HTTP ${res.status}`,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      status: 0,
-      error: err instanceof Error ? err.message : 'NETWORK_ERROR',
-    };
+  const body: RecordPaymentBody = {
+    amount: input.amount,
+    paymentMethod: input.paymentMethod,
+    paymentDate: input.paymentDate,
+    notes: input.notes ?? null,
+    sendClientSms: input.sendClientSms,
+  };
+  const result = await recordInvoicePayment(input.invoiceId, body);
+  if (result.ok) {
+    return { ok: true, status: result.status };
   }
+  return {
+    ok: false,
+    status: result.status,
+    error: result.error.code,
+  };
 }

@@ -134,28 +134,33 @@ describe('POST /api/invoices/[id]/payments — auth', () => {
 });
 
 describe('POST /api/invoices/[id]/payments — validation', () => {
-  it('rejects amount = 0 with INVALID_AMOUNT', async () => {
+  // Since PR #168 (shared api-schemas), malformed bodies are rejected
+  // by Zod with `error: 'INVALID_BODY'` + structured `issues`, BEFORE
+  // reaching the recordPayment helper. The helper's specific codes
+  // (INVALID_AMOUNT / INVALID_PAYMENT_METHOD) still exist for callers
+  // that bypass this route but are no longer reachable through it.
+  it('rejects amount = 0 with INVALID_BODY', async () => {
     const res = await POST(makeReq({ amount: 0, paymentMethod: 'CASH' }), ctx);
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('INVALID_AMOUNT');
+    expect((await res.json()).error).toBe('INVALID_BODY');
   });
 
-  it('rejects negative amount with INVALID_AMOUNT', async () => {
+  it('rejects negative amount with INVALID_BODY', async () => {
     const res = await POST(makeReq({ amount: -50, paymentMethod: 'CASH' }), ctx);
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('INVALID_AMOUNT');
+    expect((await res.json()).error).toBe('INVALID_BODY');
   });
 
-  it('rejects non-numeric amount with INVALID_AMOUNT', async () => {
+  it('rejects non-numeric amount with INVALID_BODY', async () => {
     const res = await POST(makeReq({ amount: 'abc', paymentMethod: 'CASH' }), ctx);
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('INVALID_AMOUNT');
+    expect((await res.json()).error).toBe('INVALID_BODY');
   });
 
-  it('rejects unknown paymentMethod with INVALID_PAYMENT_METHOD', async () => {
+  it('rejects unknown paymentMethod with INVALID_BODY', async () => {
     const res = await POST(makeReq({ amount: 100, paymentMethod: 'BITCOIN' }), ctx);
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('INVALID_PAYMENT_METHOD');
+    expect((await res.json()).error).toBe('INVALID_BODY');
   });
 
   it('accepts all 4 valid paymentMethods', async () => {
