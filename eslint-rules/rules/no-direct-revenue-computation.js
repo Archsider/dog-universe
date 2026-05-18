@@ -73,7 +73,11 @@ function isWhitelistedImpl(filename) {
   // Allocation owns the write path → may aggregate per-invoice on read.
   if (norm.endsWith('/src/lib/payment-allocation.ts')) return true;
   // Invariants cron compares helper vs raw — legitimate JS-vs-MV check.
+  // Path split 2026-05-18: implementations moved under src/lib/invariants/
+  // (revenue.ts owns the SUM(Payment.amount) Sémantique B cross-check).
+  // The legacy `health-invariants.ts` stays as a re-export shim.
   if (norm.endsWith('/src/lib/health-invariants.ts')) return true;
+  if (norm.includes('/src/lib/invariants/')) return true;
   return false;
 }
 
