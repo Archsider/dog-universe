@@ -296,8 +296,8 @@
 }
 .du-services-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 22px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 18px;
 }
 .du-card {
   background: #ffffff;
@@ -314,11 +314,29 @@
   border-color: rgba(154, 123, 46, 0.35);
 }
 .du-card-photo {
-  height: 160px;
+  height: 180px;
   background: linear-gradient(135deg, #1a1612 0%, #2a1f15 60%, #3a2d1c 100%);
   display: flex;
   align-items: center;
   justify-content: center;
+}
+/* Real-image variant — needs explicit height + relative for Next.js
+ * Image fill mode. Same vertical footprint as the gradient placeholder
+ * so cards stay aligned whether they have a photo or not.
+ */
+.du-card-photo-wrap {
+  position: relative;
+  height: 180px;
+  background: #1a1612;
+  overflow: hidden;
+}
+.du-card-photo-img {
+  object-fit: cover;
+  object-position: center;
+  transition: transform 0.35s ease;
+}
+.du-card:hover .du-card-photo-img {
+  transform: scale(1.04);
 }
 .du-card-photo-icon {
   width: 44px;
@@ -517,6 +535,12 @@
     font-size: 44px;
   }
 }
+@media (max-width: 1100px) {
+  /* 5 cards → 3 columns (2 rows: 3 + 2) */
+  .du-services-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
 @media (max-width: 900px) {
   .du-services-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -595,8 +619,9 @@
     grid-template-columns: 1fr;
     gap: 16px;
   }
-  .du-card-photo {
-    height: 140px;
+  .du-card-photo,
+  .du-card-photo-wrap {
+    height: 160px;
   }
   .du-testi-card {
     padding: 28px 24px;
