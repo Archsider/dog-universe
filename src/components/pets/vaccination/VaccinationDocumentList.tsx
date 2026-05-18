@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { Upload, ExternalLink, FileText, File, Trash2, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PROOF_PREFIX } from '../constants';
+import { dateLocaleFor } from '@/lib/date-locale';
 import type { PetDocument, VaccinationLabels } from '../vaccination-types';
 
 interface Props {
@@ -24,7 +25,7 @@ function ProofIcon({ fileType }: { fileType: string }) {
 }
 
 function fmtDate(val: Date | string, locale: string) {
-  return new Date(val).toLocaleDateString(locale === 'fr' ? 'fr-MA' : 'en-US', {
+  return new Date(val).toLocaleDateString(dateLocaleFor(locale), {
     day: '2-digit', month: 'short', year: 'numeric',
   });
 }
@@ -139,7 +140,11 @@ export default function VaccinationDocumentList({
                 </a>
                 <button
                   onClick={() => handleDeleteProof(doc.id)}
-                  aria-label={locale === 'fr' ? 'Supprimer le justificatif' : 'Delete proof document'}
+                  aria-label={
+                    locale === 'ar' ? 'حذف المستند'
+                    : locale === 'fr' ? 'Supprimer le justificatif'
+                    : 'Delete proof document'
+                  }
                   className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-red-400"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

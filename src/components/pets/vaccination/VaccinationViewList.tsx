@@ -8,6 +8,7 @@ import { Calendar, Sparkles, CheckCircle, AlertCircle, Clock, Trash2 } from 'luc
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { dateLocaleFor } from '@/lib/date-locale';
 import type { Vaccination, DraftForm, VaccinationLabels } from '../vaccination-types';
 
 interface Props {
@@ -36,7 +37,7 @@ export default function VaccinationViewList({
 }: Props) {
   const fmtDate = (val: Date | string | null | undefined) => {
     if (!val) return '—';
-    return new Date(val).toLocaleDateString(locale === 'fr' ? 'fr-MA' : 'en-US', {
+    return new Date(val).toLocaleDateString(dateLocaleFor(locale), {
       day: '2-digit', month: 'short', year: 'numeric',
     });
   };
@@ -178,7 +179,11 @@ export default function VaccinationViewList({
                 </div>
                 <button
                   onClick={() => onDeleteVax(v.id)}
-                  aria-label={locale === 'fr' ? 'Supprimer la vaccination' : 'Delete vaccination'}
+                  aria-label={
+                    locale === 'ar' ? 'حذف اللقاح'
+                    : locale === 'fr' ? 'Supprimer la vaccination'
+                    : 'Delete vaccination'
+                  }
                   className="p-1.5 text-gray-400 hover:text-red-500 rounded flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-red-400"
                 >
                   <Trash2 className="h-4 w-4" />

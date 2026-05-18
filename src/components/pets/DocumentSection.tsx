@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { FolderOpen, Trash2, Upload, ExternalLink, FileText, File } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { dateLocaleFor } from '@/lib/date-locale';
 
 interface PetDocument {
   id: string;
@@ -62,7 +63,7 @@ export default function DocumentSection({ petId, documents: initialDocuments, lo
   const labels = t[locale as keyof typeof t] || t.fr;
 
   const fmtDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString(locale === 'fr' ? 'fr-MA' : 'en-US', {
+    new Date(dateStr).toLocaleDateString(dateLocaleFor(locale), {
       day: '2-digit', month: 'short', year: 'numeric',
     });
 
