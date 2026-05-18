@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { AvailabilityCalendar } from '@/components/shared/AvailabilityCalendar';
 import { GROOMING_PRICES, TAXI_ADDON_PRICE, type Pet, type PetSize } from '../_lib/types';
-import type { WizardLabels } from '../_lib/i18n';
+import { pick, type WizardLabels } from '../_lib/i18n';
 import type { BoardingState, TaxiAddonState } from '../_lib/use-form-state';
 import { isValidTaxiDate } from '../_lib/validation';
 import { requestGeo } from '../_lib/geo';
@@ -128,9 +128,12 @@ export function BoardingDetailsStep({
         <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
           <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
           <span>
-            {locale === 'fr'
-              ? 'Il reste peu de places pour ces dates — votre demande pourrait être refusée si la pension se remplit avant validation.'
-              : 'Few spots left for these dates — your request may be declined if the boarding fills up before approval.'}
+            {pick(
+              locale,
+              'Il reste peu de places pour ces dates — votre demande pourrait être refusée si la pension se remplit avant validation.',
+              'Few spots left for these dates — your request may be declined if the boarding fills up before approval.',
+              'تبقّى عدد قليل من الأماكن لهذه التواريخ — قد يُرفض طلبك إذا امتلأت الدار قبل التأكيد.',
+            )}
           </span>
         </div>
       )}
@@ -138,9 +141,12 @@ export function BoardingDetailsStep({
         <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
           <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
           <span>
-            {locale === 'fr'
-              ? 'Pension complète sur ces dates — veuillez choisir une autre période.'
-              : 'Boarding is full on these dates — please pick another period.'}
+            {pick(
+              locale,
+              'Pension complète sur ces dates — veuillez choisir une autre période.',
+              'Boarding is full on these dates — please pick another period.',
+              'الدار ممتلئة في هذه التواريخ — يرجى اختيار فترة أخرى.',
+            )}
           </span>
         </div>
       )}
@@ -148,7 +154,7 @@ export function BoardingDetailsStep({
       {/* Availability Calendar — visual aid for BOARDING dates */}
       <div>
         <p className="text-xs text-gray-500 mb-2">
-          {locale === 'fr' ? 'Disponibilités de la pension' : 'Boarding availability'}
+          {pick(locale, 'Disponibilités de la pension', 'Boarding availability', 'توفّر الدار')}
         </p>
         <AvailabilityCalendar
           species={dogPets.length > 0 ? 'DOG' : 'CAT'}

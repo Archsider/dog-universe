@@ -5,7 +5,7 @@ import { useLocale } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from '@/hooks/use-toast';
 import { type BookingType, type Pet } from './_lib/types';
-import { getWizardLabels } from './_lib/i18n';
+import { getWizardLabels, pick } from './_lib/i18n';
 import { isValidTaxiDate, isValidTaxiTime } from './_lib/validation';
 import { calculateNights, getPriceBreakdown } from './_lib/pricing';
 import { useFormState } from './_lib/use-form-state';
@@ -105,9 +105,12 @@ export default function NewBookingPage() {
       if (new Date(boarding.checkOut) <= new Date(boarding.checkIn)) { toast({ title: l.checkOutAfterCheckIn, variant: 'destructive' }); return false; }
       if (capacityStatus === 'full') {
         toast({
-          title: locale === 'fr'
-            ? 'Pension complète sur ces dates — choisissez une autre période.'
-            : 'Boarding is full on these dates — please pick another period.',
+          title: pick(
+            locale,
+            'Pension complète sur ces dates — choisissez une autre période.',
+            'Boarding is full on these dates — please pick another period.',
+            'الدار ممتلئة في هذه التواريخ — اختر فترة أخرى.',
+          ),
           variant: 'destructive',
         });
         return false;
@@ -163,7 +166,7 @@ export default function NewBookingPage() {
       setBookingRef(data.bookingRef || data.id);
       setStep(5);
     } catch {
-      toast({ title: locale === 'fr' ? 'Erreur lors de la réservation' : 'Booking error', variant: 'destructive' });
+      toast({ title: pick(locale, 'Erreur lors de la réservation', 'Booking error', 'خطأ أثناء الحجز'), variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }
