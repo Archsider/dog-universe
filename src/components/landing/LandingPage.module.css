@@ -431,6 +431,26 @@
   font-size: 16px;
   line-height: 1.85;
 }
+/* Translation under the FR original. Lighter type so the eye reads
+ * the original first (trust signal) and the translation second
+ * (comprehension). Kept inside the same blockquote to preserve
+ * semantic structure.
+ */
+.du-testi-translation {
+  font-family: var(--font-dmsans), sans-serif;
+  font-weight: 300;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(15, 13, 10, 0.55);
+  margin: 0 0 22px;
+  padding-top: 14px;
+  border-top: 0.5px dashed rgba(154, 123, 46, 0.25);
+}
+.du-rtl .du-testi-translation {
+  font-family: var(--font-arabic), sans-serif;
+  font-size: 14px;
+  line-height: 1.85;
+}
 .du-testi-author {
   font-family: var(--font-dmsans), sans-serif;
   font-weight: 500;

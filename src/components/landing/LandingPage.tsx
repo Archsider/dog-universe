@@ -40,24 +40,29 @@ interface LandingPageProps {
 }
 
 // Real Google reviews — verifiable on the public business profile.
-// First-name + surname initial for privacy. Quotes verbatim in original
-// French regardless of UI locale (authentic voice; translating defeats
-// the trust signal).
+// First-name + surname initial for privacy. Original French quote is
+// ALWAYS shown (authentic customer voice, matches what readers can
+// verify on Google). When the UI locale is EN or AR, a discreet
+// translation in lighter type renders below the original — clarity
+// without sacrificing trust signal.
 const REAL_TESTIMONIALS = [
   {
     author: 'Mounir H.',
-    quote:
-      'Un immense merci à Mehdi d’avoir si bien pris soin de mes loulous ! Je recommande vivement cette garderie pour vos animaux de compagnie. C’est un endroit idéal, magique, et surtout parfait pour socialiser les chiens entre eux. Ça se fait rare, mais ça existe désormais grâce à Mehdi !',
+    fr: 'Un immense merci à Mehdi d’avoir si bien pris soin de mes loulous ! Je recommande vivement cette garderie pour vos animaux de compagnie. C’est un endroit idéal, magique, et surtout parfait pour socialiser les chiens entre eux. Ça se fait rare, mais ça existe désormais grâce à Mehdi !',
+    en: 'A huge thank you to Mehdi for taking such great care of my pups! I highly recommend this daycare for your pets. It’s an ideal place, magical, and above all perfect for socialising dogs with each other. This is rare, but it now exists thanks to Mehdi!',
+    ar: 'ألف شكر لمهدي على اعتنائه الرائع بصغاريَّ! أنصح بشدّة بهذه الدار لحيواناتكم الأليفة. مكان مثالي وساحر، ومناسب تمامًا لتنشئة الكلاب اجتماعيًّا. أمر نادر، لكنّه أصبح ممكنًا الآن بفضل مهدي!',
   },
   {
     author: 'Marie L.',
-    quote:
-      'Une pension, que dis-je… une colonie pour chiens incroyable. Mehdi et son équipe sont aux petits soins pour nos animaux, que ce soit avant, pendant ou après le séjour. Je recommande sans hésiter Dog Universe. Le premier séjour pour Mozart en pension et sûrement pas le dernier ! Encore un grand merci de vous être si bien occupé de Mozart pendant notre séjour en France. C’est tellement rassurant de pouvoir compter sur des personnes aussi bienveillantes lorsque nous sommes loin de nos animaux.',
+    fr: 'Une pension, que dis-je… une colonie pour chiens incroyable. Mehdi et son équipe sont aux petits soins pour nos animaux, que ce soit avant, pendant ou après le séjour. Je recommande sans hésiter Dog Universe. Le premier séjour pour Mozart en pension et sûrement pas le dernier ! Encore un grand merci de vous être si bien occupé de Mozart pendant notre séjour en France. C’est tellement rassurant de pouvoir compter sur des personnes aussi bienveillantes lorsque nous sommes loin de nos animaux.',
+    en: 'A boarding — what am I saying… an incredible dog colony. Mehdi and his team go out of their way for our pets, whether before, during or after the stay. I unhesitatingly recommend Dog Universe. Mozart’s first stay at the boarding, and certainly not the last! Thank you so much for taking such good care of Mozart while we were in France. It’s so reassuring to count on such caring people when we’re far from our pets.',
+    ar: 'دار، بل قُل: مستعمرة لا تُصدَّق للكلاب. مهدي وفريقه يعتنون بحيواناتنا قبل وأثناء وبعد الإقامة. أنصح بـ Dog Universe دون أيّ تردّد. أوّل إقامة لموزارت، وبالتأكيد ليست الأخيرة! شكرًا جزيلاً على رعايتكم الرائعة لموزارت أثناء سفرنا إلى فرنسا. من المُطمئِن جدًّا أن نعتمد على أشخاص بهذا القدر من اللطف عندما نكون بعيدين عن حيواناتنا.',
   },
   {
     author: 'Sarah A.',
-    quote:
-      'J’ai confié mon chat Gaza à cette pension et j’en suis vraiment ravie ! 🐾 L’équipe est très attentionnée, professionnelle et passionnée par les animaux. J’ai eu régulièrement des nouvelles et des photos, ce qui m’a beaucoup rassurée. Gaza a été choyé comme à la maison, il est revenu calme et en pleine forme ! Je recommande cette pension les yeux fermés. Merci encore pour votre bienveillance ! 💕',
+    fr: 'J’ai confié mon chat Gaza à cette pension et j’en suis vraiment ravie ! 🐾 L’équipe est très attentionnée, professionnelle et passionnée par les animaux. J’ai eu régulièrement des nouvelles et des photos, ce qui m’a beaucoup rassurée. Gaza a été choyé comme à la maison, il est revenu calme et en pleine forme ! Je recommande cette pension les yeux fermés. Merci encore pour votre bienveillance ! 💕',
+    en: 'I entrusted my cat Gaza to this boarding and I’m truly delighted! 🐾 The team is very attentive, professional, and passionate about animals. I regularly received news and photos, which reassured me a lot. Gaza was pampered as if at home, he came back calm and in great shape! I recommend this boarding with my eyes closed. Thank you again for your kindness! 💕',
+    ar: 'ائتمنتُ هذه الدار على قطّي «غزّة» وأنا في غاية السعادة! 🐾 الفريق منتبه ومهنيّ وشغوف بالحيوانات. كنت أتلقّى أخبارًا وصورًا بانتظام، ممّا طمأنني كثيرًا. تمّ تدليل غزّة كأنّه في بيته، وعاد هادئًا في قمّة عافيته! أنصح بهذه الدار وأنا مُغمَضة العينين. شكرًا مجدّدًا على لطفكم! 💕',
   },
 ];
 
@@ -362,17 +367,32 @@ export default async function LandingPage({ locale }: LandingPageProps) {
               </h2>
             </div>
             <div className={styles['du-testi-grid']}>
-              {REAL_TESTIMONIALS.map((testi) => (
-                <blockquote key={testi.author} className={styles['du-testi-card']}>
-                  <div className={styles['du-testi-stars']} aria-label="5 / 5">
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <Star key={i} className={styles['du-testi-star']} aria-hidden />
-                    ))}
-                  </div>
-                  <p className={styles['du-testi-quote']}>“{testi.quote}”</p>
-                  <footer className={styles['du-testi-author']}>{testi.author}</footer>
-                </blockquote>
-              ))}
+              {REAL_TESTIMONIALS.map((testi) => {
+                // Original FR always rendered (authentic, matches what's
+                // verifiable on Google). When locale is EN/AR, the
+                // translation renders below in lighter type. For FR
+                // visitors, no translation needed.
+                const translation =
+                  safeLocale === 'en' ? testi.en
+                  : safeLocale === 'ar' ? testi.ar
+                  : null;
+                return (
+                  <blockquote key={testi.author} className={styles['du-testi-card']}>
+                    <div className={styles['du-testi-stars']} aria-label="5 / 5">
+                      {[0, 1, 2, 3, 4].map((i) => (
+                        <Star key={i} className={styles['du-testi-star']} aria-hidden />
+                      ))}
+                    </div>
+                    <p className={styles['du-testi-quote']} lang="fr">“{testi.fr}”</p>
+                    {translation && (
+                      <p className={styles['du-testi-translation']} lang={safeLocale}>
+                        {translation}
+                      </p>
+                    )}
+                    <footer className={styles['du-testi-author']}>{testi.author}</footer>
+                  </blockquote>
+                );
+              })}
             </div>
             <p className={styles['du-testi-note']}>{t.testi.note}</p>
           </div>
