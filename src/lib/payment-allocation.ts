@@ -83,6 +83,12 @@ export interface RecordPaymentOptions {
    *  its own `findUnique` — useful for Site A (cross-role gate fetch) and
    *  Site B (post-creation, invoice is already in hand). */
   prefetchedInvoice?: PrefetchedInvoice;
+  /** Refund mode. Allows `amount < 0` (the caller MUST pass a negative
+   *  number), skips the CANCELLED status guard (refund on a CANCELLED
+   *  invoice IS the use case), and skips the overpayment guard (a
+   *  negative payment cannot overpay). Used ONLY by `cancelInvoice` when
+   *  `refundExisting: true`. */
+  allowNegative?: boolean;
 }
 
 export type RecordPaymentError =
@@ -128,10 +134,21 @@ async function recordPaymentImpl(
 ): Promise<RecordPaymentResult> {
   const client: PrismaLike = options.client ?? prisma;
   const trustedAmount = options.trustedAmount === true;
+  const allowNegative = options.allowNegative === true;
 
   // ── Input validation ───────────────────────────────────────────────────
   const parsedAmount = Number(input.amount);
-  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+  if (!Number.isFinite(parsedAmount)) {
+    return { ok: false, error: 'INVALID_AMOUNT' };
+  }
+  // Refund mode: amount MUST be < 0 (caller passes a negative). Otherwise
+  // amount MUST be > 0. The zero case is always invalid (no-op payment
+  // serves no audit purpose).
+  if (allowNegative) {
+    if (parsedAmount >= 0) {
+      return { ok: false, error: 'INVALID_AMOUNT' };
+    }
+  } else if (parsedAmount <= 0) {
     return { ok: false, error: 'INVALID_AMOUNT' };
   }
   if (!VALID_PAYMENT_METHODS.includes(input.paymentMethod)) {
@@ -159,12 +176,15 @@ async function recordPaymentImpl(
   if (!invoice) {
     return { ok: false, error: 'INVOICE_NOT_FOUND' };
   }
-  if (invoice.status === 'CANCELLED') {
+  // Refund mode: CANCELLED is expected (we're refunding a cancelled invoice).
+  // Normal mode: CANCELLED is rejected (no new charges on a voided invoice).
+  if (!allowNegative && invoice.status === 'CANCELLED') {
     return { ok: false, error: 'INVOICE_CANCELLED' };
   }
 
-  // ── Overpayment guard (unless trustedAmount) ────────────────────────────
-  if (!trustedAmount) {
+  // ── Overpayment guard (unless trustedAmount or refund) ──────────────────
+  // Refund mode: a negative payment cannot overpay (it reduces paidAmount).
+  if (!trustedAmount && !allowNegative) {
     const alreadyPaid = invoice.payments.reduce((s, p) => s + toNumber(p.amount), 0);
     const invoiceTotal = toNumber(invoice.amount);
     if (alreadyPaid + parsedAmount > invoiceTotal + 0.01) {

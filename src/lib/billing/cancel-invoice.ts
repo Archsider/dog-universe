@@ -163,22 +163,52 @@ async function cancelInvoiceImpl(input: CancelInvoiceInput): Promise<CancelInvoi
     return { unlinkedCount: unlinked.count };
   });
 
-  // ── 4. Refund (post-commit, single-record neg Payment) ───────────────
+  // ── 4. Refund — post-commit negative Payment via canonical helper ────
+  // We record a single Payment row with `amount = -paidAmount` through
+  // `recordPayment(allowNegative: true)`. The helper:
+  //   - validates `paymentMethodForRefund` against the whitelist;
+  //   - inserts the negative Payment row;
+  //   - calls `allocatePayments` which (per its CANCELLED branch) refreshes
+  //     `Invoice.paidAmount` so the cash trail nets to 0 — the invoice
+  //     status, paidAt, items, loyalty and notifications stay frozen;
+  //   - invalidates the `revenue:YYYY:MM` cache;
+  //   - schedules an MV refresh if the refund lands in the current Casa
+  //     month (the MV's `(i.status = 'CANCELLED' AND paidAmount = 0)`
+  //     guard then correctly excludes this invoice from monthly revenue).
+  //
+  // paymentDate = today: the refund is a TODAY event, not back-dated to
+  // the original payment. Bookkeepers reconcile via the negative Payment
+  // amount + the audit note in `Invoice.notes`.
   let refundPaymentId: string | null = null;
   if (hasPayments && input.refundExisting && input.paymentMethodForRefund) {
-    // recordPayment refuses negative amounts by default (INVALID_AMOUNT).
-    // We work around by creating a "refund" InvoiceItem with negative
-    // total — bookkeepers can also use a dedicated CreditNote in V2.
-    // For V1 we just leave a structured ActionLog so accounting can
-    // reconcile manually if needed. The invoice's effective revenue
-    // contribution is zeroed by the CANCELLED status (excluded from
-    // monthly_revenue_mv).
-    //
-    // Note : the cache invalidation `revenue:YYYY:MM` happens because the
-    // MV refresh cron picks up the status change ; no explicit cache
-    // invalidation needed.
-    void recordPayment; // helper available for V2 once we wire negative-payment support
-    refundPaymentId = null;
+    const refundAmount = -paidAmount;
+    const refundResult = await recordPayment(
+      {
+        invoiceId: invoice.id,
+        amount: refundAmount,
+        paymentMethod: input.paymentMethodForRefund,
+        paymentDate: new Date(),
+        notes: `Refund — invoice ${invoice.invoiceNumber} cancelled by ${input.actorRole}`,
+      },
+      { allowNegative: true },
+    );
+    if (!refundResult.ok) {
+      // The cancel itself has already committed (status flip + cascade).
+      // We surface REFUND_FAILED so the route handler can ActionLog the
+      // partial state — the operator can manually record the refund later.
+      return {
+        ok: false,
+        error: 'REFUND_FAILED',
+        detail: {
+          invoiceNumber: invoice.invoiceNumber,
+          recordPaymentError: refundResult.error,
+          recordPaymentDetail: refundResult.detail,
+          previousStatus,
+          bookingItemsUnlinked: txResult.unlinkedCount,
+        },
+      };
+    }
+    refundPaymentId = refundResult.paymentId;
   }
 
   return {
