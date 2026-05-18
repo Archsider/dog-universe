@@ -7,7 +7,6 @@
 // Locales: fr (default) / en / ar (RTL handled in layout.tsx).
 import { headers } from 'next/headers';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Cormorant_Garamond, DM_Sans, Noto_Naskh_Arabic } from 'next/font/google';
 import { PawPrint, Cat, Car, Scissors, ShoppingBag, Star } from 'lucide-react';
 import styles from './LandingPage.module.css';
@@ -85,11 +84,11 @@ const COPY = {
       eyebrow: 'Ce que nous faisons',
       title: 'Un univers complet pour eux.',
       items: [
-        { icon: PawPrint, photo: '/images/landing/pension.jpg', title: 'Pension', desc: 'Des hébergements confortables, sécurisés et chaleureux pour votre animal, avec un suivi personnalisé.' },
-        { icon: Cat, photo: '/images/landing/cats.jpg', title: 'Espace Chats', desc: 'Un espace dédié aux chats, avec arbres à chats, étagères en hauteur et zones de repos.' },
-        { icon: Car, photo: '/images/landing/pet-taxi.jpg', title: 'Pet Taxi', desc: 'Transport sécurisé et sans stress pour votre compagnon, vers le vétérinaire, l’aéroport ou partout à Marrakech.' },
-        { icon: Scissors, photo: null, title: 'Bain', desc: 'Bain disponible en complément de la pension.' },
-        { icon: ShoppingBag, photo: '/images/landing/boutique.jpg', title: 'Boutique', desc: 'Sélection de nutrition ultra premium et accessoires en boutique.' },
+        { icon: PawPrint, title: 'Pension', desc: 'Des hébergements confortables, sécurisés et chaleureux pour votre animal, avec un suivi personnalisé.' },
+        { icon: Cat, title: 'Espace Chats', desc: 'Un espace dédié aux chats, avec arbres à chats, étagères en hauteur et zones de repos.' },
+        { icon: Car, title: 'Pet Taxi', desc: 'Transport sécurisé et sans stress pour votre compagnon, vers le vétérinaire, l’aéroport ou partout à Marrakech.' },
+        { icon: Scissors, title: 'Bain', desc: 'Bain disponible en complément de la pension.' },
+        { icon: ShoppingBag, title: 'Boutique', desc: 'Sélection de nutrition ultra premium et accessoires en boutique.' },
       ],
     },
     testi: {
@@ -125,11 +124,11 @@ const COPY = {
       eyebrow: 'What we do',
       title: 'A complete universe for them.',
       items: [
-        { icon: PawPrint, photo: '/images/landing/pension.jpg', title: 'Boarding', desc: 'Comfortable, secure and warm accommodations for your pet, with personalised attention.' },
-        { icon: Cat, photo: '/images/landing/cats.jpg', title: 'Cat Space', desc: 'A dedicated cat space — cat trees, elevated shelves, and quiet resting zones.' },
-        { icon: Car, photo: '/images/landing/pet-taxi.jpg', title: 'Pet Taxi', desc: 'Safe, stress-free transport for your companion — to the vet, the airport, or anywhere in Marrakech.' },
-        { icon: Scissors, photo: null, title: 'Bath', desc: 'Bath available as an add-on to boarding.' },
-        { icon: ShoppingBag, photo: '/images/landing/boutique.jpg', title: 'Shop', desc: 'Curated ultra-premium nutrition and accessories in store.' },
+        { icon: PawPrint, title: 'Boarding', desc: 'Comfortable, secure and warm accommodations for your pet, with personalised attention.' },
+        { icon: Cat, title: 'Cat Space', desc: 'A dedicated cat space — cat trees, elevated shelves, and quiet resting zones.' },
+        { icon: Car, title: 'Pet Taxi', desc: 'Safe, stress-free transport for your companion — to the vet, the airport, or anywhere in Marrakech.' },
+        { icon: Scissors, title: 'Bath', desc: 'Bath available as an add-on to boarding.' },
+        { icon: ShoppingBag, title: 'Shop', desc: 'Curated ultra-premium nutrition and accessories in store.' },
       ],
     },
     testi: {
@@ -165,11 +164,11 @@ const COPY = {
       eyebrow: 'ماذا نقدّم',
       title: 'عالم متكامل لهم.',
       items: [
-        { icon: PawPrint, photo: '/images/landing/pension.jpg', title: 'الإيواء', desc: 'أماكن مريحة وآمنة ودافئة لحيوانك مع متابعة شخصية.' },
-        { icon: Cat, photo: '/images/landing/cats.jpg', title: 'فضاء القطط', desc: 'فضاء مخصّص للقطط، مع أشجار قطط، ورفوف مرتفعة، ومناطق هادئة للراحة.' },
-        { icon: Car, photo: '/images/landing/pet-taxi.jpg', title: 'بيت تاكسي', desc: 'نقل آمن وخالٍ من التوتر لرفيقك إلى الطبيب البيطري أو المطار أو أيّ مكان في مراكش.' },
-        { icon: Scissors, photo: null, title: 'الاستحمام', desc: 'حمام متاح كإضافة لخدمة الإيواء.' },
-        { icon: ShoppingBag, photo: '/images/landing/boutique.jpg', title: 'المتجر', desc: 'تشكيلة مختارة من التغذية الفاخرة والإكسسوارات في المتجر.' },
+        { icon: PawPrint, title: 'الإيواء', desc: 'أماكن مريحة وآمنة ودافئة لحيوانك مع متابعة شخصية.' },
+        { icon: Cat, title: 'فضاء القطط', desc: 'فضاء مخصّص للقطط، مع أشجار قطط، ورفوف مرتفعة، ومناطق هادئة للراحة.' },
+        { icon: Car, title: 'بيت تاكسي', desc: 'نقل آمن وخالٍ من التوتر لرفيقك إلى الطبيب البيطري أو المطار أو أيّ مكان في مراكش.' },
+        { icon: Scissors, title: 'الاستحمام', desc: 'حمام متاح كإضافة لخدمة الإيواء.' },
+        { icon: ShoppingBag, title: 'المتجر', desc: 'تشكيلة مختارة من التغذية الفاخرة والإكسسوارات في المتجر.' },
       ],
     },
     testi: {
@@ -327,25 +326,9 @@ export default async function LandingPage({ locale }: LandingPageProps) {
                 const Icon = service.icon;
                 return (
                   <article key={service.title} className={styles['du-card']}>
-                    {service.photo ? (
-                      // Real photo. `sizes` tells Next.js to serve a
-                      // smaller variant at narrower viewports — the
-                      // landing has up-to-5 cards/row on desktop and
-                      // 1 on mobile.
-                      <div className={styles['du-card-photo-wrap']}>
-                        <Image
-                          src={service.photo}
-                          alt={service.title}
-                          fill
-                          sizes="(max-width: 600px) 100vw, (max-width: 900px) 33vw, 20vw"
-                          className={styles['du-card-photo-img']}
-                        />
-                      </div>
-                    ) : (
-                      <div className={styles['du-card-photo']}>
-                        <Icon className={styles['du-card-photo-icon']} aria-hidden />
-                      </div>
-                    )}
+                    <div className={styles['du-card-photo']}>
+                      <Icon className={styles['du-card-photo-icon']} aria-hidden />
+                    </div>
                     <div className={styles['du-card-body']}>
                       <h3 className={cn('du-italic', 'du-card-title')}>{service.title}</h3>
                       <p className={styles['du-card-desc']}>{service.desc}</p>
