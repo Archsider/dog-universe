@@ -44,6 +44,18 @@ export function getMonthlyInvoicesWhere(
   return {
     OR: [
       // 1) Au moins un paiement encaissé ce mois.
+      //
+      //    Volontairement PAS de filtre `booking.deletedAt: null` ici. Le
+      //    cash effectivement encaissé reste comptabilisé même si la
+      //    réservation associée est soft-deletée a posteriori (annulation
+      //    admin, RGPD, correction). La cohérence "bank statement = MV CA"
+      //    prime sur le ménage interne de la table Booking — l'argent reçu
+      //    EST du revenu acquis, qu'il y ait encore un booking visible ou
+      //    non. Les factures manuelles (case 3) bypassent aussi le booking,
+      //    donc filtrer ici introduirait une asymétrie pas souhaitée.
+      //
+      //    Voir docs/BUSINESS_RULES.md §6 + regression test "CASE 1
+      //    intentionally allows soft-deleted bookings" plus bas.
       {
         payments: {
           some: {

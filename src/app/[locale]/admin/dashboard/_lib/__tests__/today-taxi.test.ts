@@ -26,6 +26,11 @@ vi.mock('@/lib/prisma', () => ({
     pet: { findMany: (args: any) => petFindMany(args) },
     vaccination: { findMany: (args: any) => vaccinationFindMany(args) },
     user: { findMany: (args: any) => userFindMany(args) },
+    // $queryRaw is used by loadInactiveClients (sibling dashboard loader)
+    // which loadDashboardSnapshot runs in parallel. These taxi tests don't
+    // care about inactive-clients output, but the mock must expose the
+    // method or the snapshot promise rejects with "is not a function".
+    $queryRaw: async () => [],
   },
 }));
 
