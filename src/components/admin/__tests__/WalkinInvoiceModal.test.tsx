@@ -114,7 +114,10 @@ describe('WalkinInvoiceModal — confirm-before-submit (WIN 1)', () => {
     const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/admin/walkin-invoice');
     expect(opts.method).toBe('POST');
-    expect((opts.headers as Record<string, string>)['idempotency-key']).toBeTruthy();
+    // Header key is case-insensitive in HTTP. PR #168 typed client uses
+    // the canonical 'Idempotency-Key' form ; older code used lowercase.
+    const headers = opts.headers as Record<string, string>;
+    expect(headers['Idempotency-Key'] || headers['idempotency-key']).toBeTruthy();
     const body = JSON.parse(opts.body as string);
     expect(body.paymentMethod).toBe('CASH');
     expect(body.clientId).toBeNull();

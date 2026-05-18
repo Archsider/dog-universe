@@ -53,41 +53,13 @@ import {
 } from '@/lib/idempotency';
 import { formatMAD } from '@/lib/utils';
 import { notDeleted } from '@/lib/prisma-soft';
+import { walkinInvoiceBodySchema } from '@/lib/api-schemas/walkin-invoice';
 
 export const dynamic = 'force-dynamic';
 
-const ITEM_CATEGORIES = ['BOARDING', 'PET_TAXI', 'GROOMING', 'PRODUCT', 'OTHER', 'DISCOUNT'] as const;
-const PAYMENT_METHODS = ['CASH', 'CARD', 'CHECK', 'TRANSFER'] as const;
-
-const itemSchema = z.object({
-  category: z.enum(ITEM_CATEGORIES),
-  description: z.string().trim().min(1).max(200),
-  quantity: z.number().int().positive().max(9999),
-  // Negative unitPrice is allowed for DISCOUNT items only ; the refine on
-  // the outer schema enforces "DISCOUNT ⇒ unitPrice < 0" + "non-DISCOUNT
-  //  ⇒ unitPrice >= 0".
-  unitPrice: z.number().finite(),
-  // Optional link to Product catalogue. When `category === 'PRODUCT'`, this
-  // MUST be a non-empty string (enforced by the refine below). The DB has a
-  // matching CHECK constraint (`InvoiceItem_product_category_has_productId`)
-  // as the final floor.
-  productId: z.string().min(1).nullable().optional(),
-}).strict().refine(
-  (it) => (it.category === 'DISCOUNT' ? it.unitPrice < 0 : it.unitPrice >= 0),
-  { message: 'DISCOUNT items must have negative unitPrice ; other items must be non-negative' },
-).refine(
-  (it) => it.category !== 'PRODUCT' || (typeof it.productId === 'string' && it.productId.length > 0),
-  { message: 'PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID', path: ['productId'] },
-);
-
-const bodySchema = z.object({
-  clientId: z.string().cuid().nullable().optional(),
-  clientName: z.string().trim().min(1).max(120).nullable().optional(),
-  paymentDate: z.string().datetime().optional(), // defaults to now
-  paymentMethod: z.enum(PAYMENT_METHODS),
-  items: z.array(itemSchema).min(1).max(50),
-  notes: z.string().trim().max(2000).nullable().optional(),
-}).strict();
+// Schema is shared with the typed client in src/lib/api-client/walkin-invoice.ts
+// (single source of truth, see src/lib/api-schemas/README.md).
+const bodySchema = walkinInvoiceBodySchema;
 
 const WALKIN_ANON_EMAIL = 'walkin-anonymous@dog-universe.local';
 const WALKIN_ANON_NAME = 'Walk-in anonyme';

@@ -102,7 +102,11 @@ describe('submitPayment', () => {
     expect(result).toEqual({ ok: false, status: 409, error: 'DUPLICATE_REQUEST' });
   });
 
-  it('falls back to "HTTP {status}" when the error body is not JSON', async () => {
+  it('returns UNKNOWN_ERROR when the error body is not JSON', async () => {
+    // Since PR #168 the shared `apiPost` fetcher canonicalises non-JSON
+    // 4xx/5xx responses to `UNKNOWN_ERROR` (with HTTP status preserved)
+    // so consumers can branch on a stable code instead of parsing
+    // free-text response.
     (global.fetch as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce({
       ok: false,
       status: 500,
@@ -117,10 +121,10 @@ describe('submitPayment', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.status).toBe(500);
-    expect(result.error).toBe('HTTP 500');
+    expect(result.error).toBe('UNKNOWN_ERROR');
   });
 
-  it('maps a network failure to ok:false / status 0', async () => {
+  it('maps a network failure to ok:false / status 0 with NETWORK_ERROR code', async () => {
     (global.fetch as unknown as { mockRejectedValueOnce: (v: unknown) => void }).mockRejectedValueOnce(
       new Error('fetch failed'),
     );
@@ -131,7 +135,7 @@ describe('submitPayment', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.status).toBe(0);
-    expect(result.error).toBe('fetch failed');
+    expect(result.error).toBe('NETWORK_ERROR');
   });
 
   it('serialises notes:null when omitted', async () => {

@@ -611,6 +611,31 @@ Pattern correct : si un helper est utilisé à la fois par un Server Component e
 
 Exemple : `src/app/[locale]/admin/billing/format-month.ts` (extrait de `BillingClient.tsx` pour cette raison).
 
+### API type-safety client ↔ serveur (depuis 2026-05-18)
+
+Toute route POST critique doit exposer son schéma Zod via
+`src/lib/api-schemas/<route-name>.ts` (zero server deps — Zod + TS
+seulement). Le route handler et le client typé importent le **même**
+schéma — mismatch impossible.
+
+Architecture en 3 couches :
+
+```
+src/lib/api-schemas/<route>.ts   ← Zod schema + types + error union (shared)
+src/lib/api-client/<route>.ts    ← typed fetcher returning ApiResult<TSuccess, TErrorCode>
+src/lib/api-client/fetcher.ts    ← apiPost() helper (client validation + discriminated result)
+```
+
+Routes migrées (Module #168) : `POST /api/admin/walkin-invoice`,
+`POST /api/invoices/[id]/payments`, `POST /api/admin/invoices/[id]/cancel`.
+Pattern à étendre à toute nouvelle route POST money/critical path.
+
+**Règle d'or** : aucun `fetch('/api/...')` direct dans un composant
+client pour les routes migrées — toujours passer par `createWalkinInvoice` /
+`recordInvoicePayment` / `cancelInvoice` du module `api-client`. Le
+validator côté client garantit que `INVALID_BODY` ne sort jamais d'une
+requête bien formée par construction (économise un round-trip + UX).
+
 ---
 
 ## /ADMIN — DASHBOARD "COMMANDANT" (depuis 2026-05-16)

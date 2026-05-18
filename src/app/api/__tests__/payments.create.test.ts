@@ -186,35 +186,40 @@ describe('POST /api/invoices/[id]/payments — input validation', () => {
     mocks.prisma.payment.create.mockResolvedValue({ id: 'pay-1' });
   });
 
-  it('rejects INVALID_AMOUNT when amount is missing', async () => {
+  // NOTE: since PR #168 (shared api-schemas), malformed bodies are
+  // rejected by Zod with `error: 'INVALID_BODY'` + a structured `issues`
+  // array, BEFORE reaching the recordPayment helper. The helper's
+  // `INVALID_AMOUNT` / `INVALID_PAYMENT_METHOD` codes still exist for
+  // downstream callers but are no longer reachable via this route.
+  it('rejects INVALID_BODY when amount is missing', async () => {
     const res = await POST(makeReq({ paymentMethod: 'CASH' }), params);
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('INVALID_AMOUNT');
+    expect((await res.json()).error).toBe('INVALID_BODY');
     expect(mocks.prisma.payment.create).not.toHaveBeenCalled();
   });
 
-  it('rejects INVALID_AMOUNT when amount is 0', async () => {
+  it('rejects INVALID_BODY when amount is 0', async () => {
     const res = await POST(makeReq({ amount: 0, paymentMethod: 'CASH' }), params);
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('INVALID_AMOUNT');
+    expect((await res.json()).error).toBe('INVALID_BODY');
   });
 
-  it('rejects INVALID_AMOUNT when amount is negative', async () => {
+  it('rejects INVALID_BODY when amount is negative', async () => {
     const res = await POST(makeReq({ amount: -50, paymentMethod: 'CASH' }), params);
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('INVALID_AMOUNT');
+    expect((await res.json()).error).toBe('INVALID_BODY');
   });
 
-  it('rejects INVALID_PAYMENT_METHOD for unknown method', async () => {
+  it('rejects INVALID_BODY for unknown payment method', async () => {
     const res = await POST(makeReq({ amount: 100, paymentMethod: 'BITCOIN' }), params);
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('INVALID_PAYMENT_METHOD');
+    expect((await res.json()).error).toBe('INVALID_BODY');
   });
 
-  it('rejects INVALID_PAYMENT_METHOD when missing', async () => {
+  it('rejects INVALID_BODY when payment method is missing', async () => {
     const res = await POST(makeReq({ amount: 100 }), params);
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('INVALID_PAYMENT_METHOD');
+    expect((await res.json()).error).toBe('INVALID_BODY');
   });
 
   it('rejects INVALID_PAYMENT_DATE when given a garbage string', async () => {

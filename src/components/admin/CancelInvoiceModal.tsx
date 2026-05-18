@@ -28,8 +28,10 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
+import { cancelInvoice } from '@/lib/api-client';
+import type { CancelInvoiceBody, RefundPaymentMethod } from '@/lib/api-schemas/cancel-invoice';
 
-type PaymentMethod = 'CASH' | 'CARD' | 'CHECK' | 'TRANSFER';
+type PaymentMethod = RefundPaymentMethod;
 
 interface Props {
   invoiceId: string;
@@ -71,22 +73,16 @@ export function CancelInvoiceModal({
     setError(null);
     setLoading(true);
     try {
-      const body: Record<string, unknown> = {
+      const body: CancelInvoiceBody = {
         reason: reason.trim(),
-        silent: silent || undefined,
+        ...(silent ? { silent: true } : {}),
+        ...(isPaid
+          ? { refundExisting: true, paymentMethodForRefund }
+          : {}),
       };
-      if (isPaid) {
-        body.refundExisting = true;
-        body.paymentMethodForRefund = paymentMethodForRefund;
-      }
-      const res = await fetch(`/api/admin/invoices/${invoiceId}/cancel`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok || !j.ok) {
-        setError(j.error ?? `HTTP ${res.status}`);
+      const result = await cancelInvoice(invoiceId, body);
+      if (!result.ok) {
+        setError(result.error.code);
         return;
       }
       onOpenChange(false);
