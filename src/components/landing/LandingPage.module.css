@@ -20,6 +20,36 @@
   color: #0f0d0a;
   scroll-behavior: smooth;
 }
+
+/* ─── Animations ───────────────────────────────────────────────────── */
+@keyframes du-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes du-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes du-shimmer {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+/* Honor user's reduced-motion preference — accessibility + a11y. */
+@media (prefers-reduced-motion: reduce) {
+  .du-root *,
+  .du-root *::before,
+  .du-root *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
 .du-root.du-rtl {
   font-family: var(--font-arabic), var(--font-dmsans), -apple-system, sans-serif;
 }
@@ -217,6 +247,8 @@
   border-radius: 999px;
   padding: 9px 22px;
   margin-bottom: 48px;
+  opacity: 0;
+  animation: du-fade-up 0.8s 0s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 .du-rtl .du-hero-badge {
   font-family: var(--font-arabic), sans-serif;
@@ -228,12 +260,21 @@
   font-size: 104px;
   color: #f5edd8;
   letter-spacing: -0.01em;
+  /* Hero entrance — staggered fade-up. Title arrives just after badge. */
+  opacity: 0;
+  animation: du-fade-up 1s 0.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 .du-hero-sub {
   font-size: 28px;
   color: rgba(201, 168, 76, 0.85);
   margin-top: 24px;
   margin-bottom: 56px;
+  opacity: 0;
+  animation: du-fade-up 1s 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.du-hero-ctas {
+  opacity: 0;
+  animation: du-fade-up 0.8s 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* ─── Stats ────────────────────────────────────────────────────────── */
@@ -296,34 +337,103 @@
 }
 .du-services-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 18px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
 }
 .du-card {
   background: #ffffff;
   border: 0.5px solid rgba(154, 123, 46, 0.18);
   border-radius: 3px;
   overflow: hidden;
-  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.3s ease;
   display: flex;
   flex-direction: column;
+  /* Staggered entrance — inline animation-delay set per card in JSX */
+  opacity: 0;
+  animation: du-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 .du-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 28px rgba(15, 13, 10, 0.08);
-  border-color: rgba(154, 123, 46, 0.35);
+  transform: translateY(-4px);
+  box-shadow:
+    0 14px 32px rgba(15, 13, 10, 0.08),
+    0 0 0 1px rgba(154, 123, 46, 0.25);
+  border-color: rgba(154, 123, 46, 0.5);
 }
+/* Editorial placeholder — black canvas + huge gold roman numeral set
+ * behind a thin gold ring containing the lucide icon. Reads like a
+ * catalogue page (Cartier / Hermès) instead of a SaaS feature grid. */
 .du-card-photo {
+  position: relative;
   height: 180px;
-  background: linear-gradient(135deg, #1a1612 0%, #2a1f15 60%, #3a2d1c 100%);
+  background:
+    radial-gradient(ellipse at center, rgba(154, 123, 46, 0.08), transparent 65%),
+    linear-gradient(135deg, #1a1612 0%, #221a10 60%, #2a1f15 100%);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
-/* Real-image variant — needs explicit height + relative for Next.js
- * Image fill mode. Same vertical footprint as the gradient placeholder
- * so cards stay aligned whether they have a photo or not.
- */
+.du-card-numeral {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 120px;
+  line-height: 1;
+  color: rgba(201, 168, 76, 0.14);
+  pointer-events: none;
+  letter-spacing: -0.02em;
+  transition: color 0.35s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.du-card:hover .du-card-numeral {
+  color: rgba(201, 168, 76, 0.22);
+  transform: scale(1.05);
+}
+.du-card-ornament-ring {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 0.5px solid rgba(201, 168, 76, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 13, 10, 0.4);
+  backdrop-filter: blur(2px);
+  transition: border-color 0.35s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 1;
+}
+.du-card:hover .du-card-ornament-ring {
+  border-color: rgba(201, 168, 76, 0.9);
+  transform: scale(1.08);
+}
+.du-card-coming-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  font-family: var(--font-dmsans), sans-serif;
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #0f0d0a;
+  background: rgba(201, 168, 76, 0.95);
+  padding: 4px 10px;
+  border-radius: 999px;
+  z-index: 2;
+}
+.du-rtl .du-card-coming-badge {
+  right: auto;
+  left: 14px;
+  font-family: var(--font-arabic), sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 11px;
+}
+/* Real-image variant — kept for future when proper photos arrive. */
 .du-card-photo-wrap {
   position: relative;
   height: 180px;
@@ -556,9 +666,10 @@
   }
 }
 @media (max-width: 1100px) {
-  /* 5 cards → 3 columns (2 rows: 3 + 2) */
+  /* 6 cards stay in 3 columns at smaller desktop widths. */
   .du-services-grid {
     grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
   }
 }
 @media (max-width: 900px) {
@@ -642,6 +753,9 @@
   .du-card-photo,
   .du-card-photo-wrap {
     height: 160px;
+  }
+  .du-card-numeral {
+    font-size: 96px;
   }
   .du-testi-card {
     padding: 28px 24px;

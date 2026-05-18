@@ -8,7 +8,7 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { Cormorant_Garamond, DM_Sans, Noto_Naskh_Arabic } from 'next/font/google';
-import { PawPrint, Cat, Car, Scissors, ShoppingBag, Star } from 'lucide-react';
+import { PawPrint, Cat, Car, Scissors, ShoppingBag, Star, Sun } from 'lucide-react';
 import styles from './LandingPage.module.css';
 
 const cormorant = Cormorant_Garamond({
@@ -83,12 +83,14 @@ const COPY = {
     services: {
       eyebrow: 'Ce que nous faisons',
       title: 'Un univers complet pour eux.',
+      comingLabel: 'Bientôt',
       items: [
-        { icon: PawPrint, title: 'Pension', desc: 'Des hébergements confortables, sécurisés et chaleureux pour votre animal, avec un suivi personnalisé.' },
-        { icon: Cat, title: 'Espace Chats', desc: 'Un espace dédié aux chats, avec arbres à chats, étagères en hauteur et zones de repos.' },
-        { icon: Car, title: 'Pet Taxi', desc: 'Transport sécurisé et sans stress pour votre compagnon, vers le vétérinaire, l’aéroport ou partout à Marrakech.' },
-        { icon: Scissors, title: 'Bain', desc: 'Bain disponible en complément de la pension.' },
-        { icon: ShoppingBag, title: 'Boutique', desc: 'Sélection de nutrition ultra premium et accessoires en boutique.' },
+        { icon: PawPrint, ornament: 'I', title: 'Pension pour chien', desc: 'Hébergements confortables, sécurisés et chaleureux pour votre chien, avec un suivi personnalisé.' },
+        { icon: Cat, ornament: 'II', title: 'Pension pour chat', desc: 'Un espace dédié aux chats — arbres à chats, étagères en hauteur, zones de repos calmes.' },
+        { icon: Sun, ornament: 'III', title: 'Daycare', desc: 'Garderie de jour pour socialiser et défouler votre chien, sans nuitée.', coming: true },
+        { icon: Car, ornament: 'IV', title: 'Pet Taxi', desc: 'Transport sécurisé et sans stress pour votre compagnon, vers le vétérinaire, l’aéroport ou partout à Marrakech.' },
+        { icon: Scissors, ornament: 'V', title: 'Bain', desc: 'Bain disponible en complément de la pension.' },
+        { icon: ShoppingBag, ornament: 'VI', title: 'Boutique', desc: 'Sélection de nutrition ultra premium et accessoires en boutique.' },
       ],
     },
     testi: {
@@ -123,12 +125,14 @@ const COPY = {
     services: {
       eyebrow: 'What we do',
       title: 'A complete universe for them.',
+      comingLabel: 'Coming soon',
       items: [
-        { icon: PawPrint, title: 'Boarding', desc: 'Comfortable, secure and warm accommodations for your pet, with personalised attention.' },
-        { icon: Cat, title: 'Cat Space', desc: 'A dedicated cat space — cat trees, elevated shelves, and quiet resting zones.' },
-        { icon: Car, title: 'Pet Taxi', desc: 'Safe, stress-free transport for your companion — to the vet, the airport, or anywhere in Marrakech.' },
-        { icon: Scissors, title: 'Bath', desc: 'Bath available as an add-on to boarding.' },
-        { icon: ShoppingBag, title: 'Shop', desc: 'Curated ultra-premium nutrition and accessories in store.' },
+        { icon: PawPrint, ornament: 'I', title: 'Dog Boarding', desc: 'Comfortable, secure and warm accommodations for your dog, with personalised attention.' },
+        { icon: Cat, ornament: 'II', title: 'Cat Boarding', desc: 'A dedicated cat space — cat trees, elevated shelves, quiet resting zones.' },
+        { icon: Sun, ornament: 'III', title: 'Daycare', desc: 'Day care for socialising and tiring out your dog — no overnight stay.', coming: true },
+        { icon: Car, ornament: 'IV', title: 'Pet Taxi', desc: 'Safe, stress-free transport for your companion — to the vet, the airport, or anywhere in Marrakech.' },
+        { icon: Scissors, ornament: 'V', title: 'Bath', desc: 'Bath available as an add-on to boarding.' },
+        { icon: ShoppingBag, ornament: 'VI', title: 'Shop', desc: 'Curated ultra-premium nutrition and accessories in store.' },
       ],
     },
     testi: {
@@ -163,12 +167,14 @@ const COPY = {
     services: {
       eyebrow: 'ماذا نقدّم',
       title: 'عالم متكامل لهم.',
+      comingLabel: 'قريبًا',
       items: [
-        { icon: PawPrint, title: 'الإيواء', desc: 'أماكن مريحة وآمنة ودافئة لحيوانك مع متابعة شخصية.' },
-        { icon: Cat, title: 'فضاء القطط', desc: 'فضاء مخصّص للقطط، مع أشجار قطط، ورفوف مرتفعة، ومناطق هادئة للراحة.' },
-        { icon: Car, title: 'بيت تاكسي', desc: 'نقل آمن وخالٍ من التوتر لرفيقك إلى الطبيب البيطري أو المطار أو أيّ مكان في مراكش.' },
-        { icon: Scissors, title: 'الاستحمام', desc: 'حمام متاح كإضافة لخدمة الإيواء.' },
-        { icon: ShoppingBag, title: 'المتجر', desc: 'تشكيلة مختارة من التغذية الفاخرة والإكسسوارات في المتجر.' },
+        { icon: PawPrint, ornament: 'I', title: 'إيواء الكلاب', desc: 'أماكن مريحة وآمنة ودافئة لكلبك مع متابعة شخصية.' },
+        { icon: Cat, ornament: 'II', title: 'إيواء القطط', desc: 'فضاء مخصّص للقطط — أشجار قطط، رفوف مرتفعة، مناطق هادئة للراحة.' },
+        { icon: Sun, ornament: 'III', title: 'الحضانة النهارية', desc: 'حضانة نهارية لتنشئة كلبك اجتماعيًّا وإطلاق طاقته — دون مبيت.', coming: true },
+        { icon: Car, ornament: 'IV', title: 'بيت تاكسي', desc: 'نقل آمن وخالٍ من التوتر لرفيقك إلى الطبيب البيطري أو المطار أو أيّ مكان في مراكش.' },
+        { icon: Scissors, ornament: 'V', title: 'الاستحمام', desc: 'حمام متاح كإضافة لخدمة الإيواء.' },
+        { icon: ShoppingBag, ornament: 'VI', title: 'المتجر', desc: 'تشكيلة مختارة من التغذية الفاخرة والإكسسوارات في المتجر.' },
       ],
     },
     testi: {
@@ -322,12 +328,31 @@ export default async function LandingPage({ locale }: LandingPageProps) {
               </h2>
             </div>
             <div className={styles['du-services-grid']}>
-              {t.services.items.map((service) => {
+              {t.services.items.map((service, i) => {
                 const Icon = service.icon;
+                const coming = 'coming' in service && service.coming === true;
                 return (
-                  <article key={service.title} className={styles['du-card']}>
+                  <article
+                    key={service.title}
+                    className={cn('du-card', coming && 'du-card-coming')}
+                    style={{ animationDelay: `${i * 0.06}s` }}
+                  >
+                    {/* Editorial placeholder: roman numeral monogram in
+                     * Cormorant italic gold + small gold ornament ring
+                     * containing the lucide icon. Reads "luxury catalogue
+                     * page" instead of "icon grid template". */}
                     <div className={styles['du-card-photo']}>
-                      <Icon className={styles['du-card-photo-icon']} aria-hidden />
+                      <span className={cn('du-italic', 'du-card-numeral')} aria-hidden>
+                        {service.ornament}
+                      </span>
+                      <span className={styles['du-card-ornament-ring']} aria-hidden>
+                        <Icon className={styles['du-card-photo-icon']} aria-hidden />
+                      </span>
+                      {coming && (
+                        <span className={styles['du-card-coming-badge']}>
+                          {t.services.comingLabel}
+                        </span>
+                      )}
                     </div>
                     <div className={styles['du-card-body']}>
                       <h3 className={cn('du-italic', 'du-card-title')}>{service.title}</h3>
