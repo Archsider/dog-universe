@@ -14,7 +14,15 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
     description: isFr
       ? "Conditions d'utilisation des services Dog Universe : pension, pet taxi et toilettage à Marrakech."
       : 'Terms of service for Dog Universe: pet boarding, pet taxi and grooming in Marrakech.',
-    alternates: { canonical: `${baseUrl}/${locale}/terms` },
+    alternates: {
+      canonical: `${baseUrl}/${locale}/terms`,
+      languages: {
+        fr: `${baseUrl}/fr/terms`,
+        en: `${baseUrl}/en/terms`,
+        ar: `${baseUrl}/ar/terms`,
+        'x-default': `${baseUrl}/fr/terms`,
+      },
+    },
   };
 }
 

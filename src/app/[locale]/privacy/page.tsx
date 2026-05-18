@@ -12,7 +12,15 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
     description: isFr
       ? 'Comment Dog Universe collecte, utilise et protège vos données personnelles.'
       : 'How Dog Universe collects, uses and protects your personal data.',
-    alternates: { canonical: `${baseUrl}/${locale}/privacy` },
+    alternates: {
+      canonical: `${baseUrl}/${locale}/privacy`,
+      languages: {
+        fr: `${baseUrl}/fr/privacy`,
+        en: `${baseUrl}/en/privacy`,
+        ar: `${baseUrl}/ar/privacy`,
+        'x-default': `${baseUrl}/fr/privacy`,
+      },
+    },
   };
 }
 
