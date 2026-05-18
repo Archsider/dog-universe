@@ -51,9 +51,26 @@ const AGE_LABELS_EN: Record<AgeCategory, (s: Species) => string> = {
   SENIOR: () => 'Senior (7+)',
 };
 
+const AGE_LABELS_AR: Record<AgeCategory, (s: Species) => string> = {
+  PUPPY:  (s) => (s === 'DOG' ? 'جرو' : 'هرّ صغير'),
+  JUNIOR: () => 'يافع',
+  ADULT:  () => 'بالغ',
+  SENIOR: () => 'مسنّ (٧+)',
+};
+
+function getAgeLabels(locale: string): Record<AgeCategory, (s: Species) => string> {
+  if (locale === 'ar') return AGE_LABELS_AR;
+  if (locale === 'fr') return AGE_LABELS_FR;
+  return AGE_LABELS_EN;
+}
+
 export default function UpsellSuggestions({ bookingId, context, locale, hasInvoice = true }: Props) {
   const router = useRouter();
   const fr = locale === 'fr';
+  const ar = locale === 'ar';
+  // 3-locale pick — same pattern as MemberCard. Avoids the historic
+  // `locale === 'fr' ? : :` 2-locale ternary that leaked English to AR.
+  const t3 = (frStr: string, arStr: string, enStr: string) => fr ? frStr : ar ? arStr : enStr;
   const [suggestions, setSuggestions] = useState<PetSuggestion[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -89,7 +106,7 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
 
   async function addToInvoice(productId: string, petId: string, productName: string) {
     if (!hasInvoice) {
-      setError(fr ? "Créez d'abord la facture du séjour." : 'Create the invoice first.');
+      setError(t3("Créez d'abord la facture du séjour.", 'أنشئ فاتورة الإقامة أوّلاً.', 'Create the invoice first.'));
       return;
     }
     setBusy(`${productId}:${petId}`);
@@ -111,10 +128,10 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
     } catch (err) {
       const code = err instanceof Error ? err.message : 'ERROR';
       setError(
-        code === 'OUT_OF_STOCK'        ? (fr ? `Stock insuffisant pour ${productName}` : `Out of stock: ${productName}`)
-        : code === 'PRODUCT_UNAVAILABLE' ? (fr ? 'Produit indisponible' : 'Product unavailable')
-        : code === 'NO_INVOICE'         ? (fr ? 'Pas de facture liée' : 'No linked invoice')
-        : (fr ? "Erreur lors de l'ajout" : 'Failed to add'),
+        code === 'OUT_OF_STOCK'        ? t3(`Stock insuffisant pour ${productName}`, `المخزون غير كافٍ لـ ${productName}`, `Out of stock: ${productName}`)
+        : code === 'PRODUCT_UNAVAILABLE' ? t3('Produit indisponible', 'المنتج غير متاح', 'Product unavailable')
+        : code === 'NO_INVOICE'         ? t3('Pas de facture liée', 'لا توجد فاتورة مرتبطة', 'No linked invoice')
+        : t3("Erreur lors de l'ajout", 'خطأ أثناء الإضافة', 'Failed to add'),
       );
     } finally {
       setBusy(null);
@@ -132,7 +149,7 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
       });
       if (!res.ok) throw new Error('ERROR');
     } catch {
-      setError(fr ? 'Échec envoi suggestion.' : 'Failed to send suggestion.');
+      setError(t3('Échec envoi suggestion.', 'تعذّر إرسال الاقتراح.', 'Failed to send suggestion.'));
     } finally {
       setBusy(null);
     }
@@ -150,8 +167,8 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
 
   const HeaderIcon = context === 'client' ? Sparkles : Lightbulb;
   const headerLabel = context === 'client'
-    ? (fr ? 'Recommandé pour vos animaux' : 'Recommended for your pets')
-    : (fr ? 'Suggestions upsell' : 'Upsell suggestions');
+    ? t3('Recommandé pour vos animaux', 'موصى به لحيواناتك', 'Recommended for your pets')
+    : t3('Suggestions upsell', 'اقتراحات بيع إضافي', 'Upsell suggestions');
 
   return (
     <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-5 shadow-card space-y-5">
@@ -166,7 +183,7 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
 
       {suggestions.map((s) => {
         if (s.recommended.length === 0) return null;
-        const ageLabel = (fr ? AGE_LABELS_FR : AGE_LABELS_EN)[s.pet.ageCategory](s.pet.species);
+        const ageLabel = getAgeLabels(locale)[s.pet.ageCategory](s.pet.species);
         const speciesEmoji = s.pet.species === 'DOG' ? '🐕' : '🐈';
 
         return (
@@ -184,7 +201,7 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
                   className="text-xs px-2 py-1 rounded-md border border-blue-200 text-blue-700 hover:bg-blue-50 inline-flex items-center gap-1 disabled:opacity-50"
                 >
                   <Send className="h-3 w-3" />
-                  {fr ? 'Suggérer au client' : 'Notify client'}
+                  {t3('Suggérer au client', 'اقترح على العميل', 'Notify client')}
                 </button>
               )}
             </div>
@@ -214,7 +231,7 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-base font-bold text-gold-700">{formatMAD(p.price)}</span>
                         {p.stock <= 3 && p.stock > 0 && (
-                          <span className="text-[10px] text-amber-600">{fr ? `Plus que ${p.stock}` : `Only ${p.stock}`}</span>
+                          <span className="text-[10px] text-amber-600">{t3(`Plus que ${p.stock}`, `لم يتبقَّ سوى ${p.stock}`, `Only ${p.stock}`)}</span>
                         )}
                       </div>
                       <button
@@ -225,8 +242,8 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
                       >
                         <Plus className="h-3 w-3" />
                         {context === 'client'
-                          ? (fr ? `Pour ${s.pet.name}` : `For ${s.pet.name}`)
-                          : (fr ? 'Ajouter' : 'Add')}
+                          ? t3(`Pour ${s.pet.name}`, `لـ ${s.pet.name}`, `For ${s.pet.name}`)
+                          : t3('Ajouter', 'إضافة', 'Add')}
                       </button>
                     </div>
                   );
@@ -239,9 +256,11 @@ export default function UpsellSuggestions({ bookingId, context, locale, hasInvoi
 
       {context === 'client' && (
         <p className="text-[11px] text-gray-500 italic border-t border-ivory-100 pt-3">
-          {fr
-            ? 'Tous les produits commandés seront ajoutés à votre facture et réglés lors de la récupération de votre animal.'
-            : 'All ordered products will be added to your invoice and settled when picking up your pet.'}
+          {t3(
+            'Tous les produits commandés seront ajoutés à votre facture et réglés lors de la récupération de votre animal.',
+            'ستتمّ إضافة جميع المنتجات المطلوبة إلى فاتورتك وتسويتها عند استلام حيوانك.',
+            'All ordered products will be added to your invoice and settled when picking up your pet.',
+          )}
         </p>
       )}
     </div>

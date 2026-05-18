@@ -222,7 +222,7 @@ export function MemberCard({
                   {automaticBenefits.map((b) => (
                     <li key={b.key} className={`flex items-center gap-2 text-xs ${isPlatinum ? 'text-[#E8E0CC]/70' : style.textColor + '/70'}`}>
                       <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 bg-gradient-to-r ${style.progressFill}`} />
-                      {fr ? b.labelFr : ar ? b.labelFr : b.labelEn}
+                      {t3(b.labelFr, b.labelAr, b.labelEn)}
                     </li>
                   ))}
                 </ul>
@@ -242,6 +242,7 @@ export function MemberCard({
                         benefitKey={b.key}
                         labelFr={b.labelFr}
                         labelEn={b.labelEn}
+                        labelAr={b.labelAr}
                         locale={locale}
                         existingClaim={claimMap.get(b.key) as Claim | undefined}
                         isPlatinum={isPlatinum}
