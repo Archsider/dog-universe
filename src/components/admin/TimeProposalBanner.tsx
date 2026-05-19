@@ -15,6 +15,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock, AlertCircle, Loader2, X } from 'lucide-react';
+import { submitTimeProposal } from '@/lib/api-client';
+import type { TimeProposalBody } from '@/lib/api-schemas/time-proposals';
 
 type Scope = 'ARRIVAL' | 'TAXI_GO' | 'TAXI_RETURN';
 
@@ -54,18 +56,13 @@ export function TimeProposalBanner({ bookingId, scope, current, confirmed, open,
   const [error, setError] = useState<string | null>(null);
   const scopeLabel = fr ? SCOPE_LABEL[scope].fr : SCOPE_LABEL[scope].en;
 
-  async function callApi(payload: Record<string, unknown>) {
+  async function callApi(payload: TimeProposalBody) {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${bookingId}/time-proposals`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok || !j.ok) {
-        setError(j.error ?? `HTTP ${res.status}`);
+      const result = await submitTimeProposal(bookingId, payload);
+      if (!result.ok) {
+        setError(result.error.code);
         return false;
       }
       router.refresh();

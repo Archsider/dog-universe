@@ -22,19 +22,13 @@ import { notDeleted } from '@/lib/prisma-soft';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { supersedePendingForBooking } from '@/lib/time-proposals';
 import { withSpan } from '@/lib/observability';
+import { cancelBookingBodySchema } from '@/lib/api-schemas/cancel-booking';
 
 export const dynamic = 'force-dynamic';
 
-const bodySchema = z.object({
-  reason: z
-    .string()
-    .trim()
-    .min(10, 'reason must be ≥ 10 chars')
-    .max(2000),
-  /** When true, no notification is sent to the client (silent admin cancel —
-   *  ex: data cleanup). Defaults to false (the client is informed). */
-  silent: z.boolean().optional(),
-}).strict();
+// Schema is shared with the typed client in src/lib/api-client/cancel-booking.ts
+// (single source of truth, see src/lib/api-schemas/README.md).
+const bodySchema = cancelBookingBodySchema;
 
 type Params = { params: Promise<{ id: string }> };
 
