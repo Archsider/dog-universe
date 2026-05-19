@@ -121,6 +121,9 @@ export async function loadAdminBookingDetail(id: string) {
       // bound (it never bit in practice but inflated the payload on
       // every page load).
       stayPhotos: { orderBy: { createdAt: 'desc' }, take: 60 },
+      preStayBriefing: {
+        select: { formData: true, submittedAt: true, invitedAt: true },
+      },
     },
   });
 

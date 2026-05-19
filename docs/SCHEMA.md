@@ -3,7 +3,7 @@
 > Généré automatiquement depuis `prisma/schema.prisma`. Ne pas éditer à la main.
 > Régénérer avec `node scripts/generate-schema-doc.mjs` (ou `npm run db:doc`).
 
-**40 modèles** · **8 enums** · 2026-05-19
+**41 modèles** · **8 enums** · 2026-05-19
 
 ## Sommaire
 
@@ -34,6 +34,7 @@
 - [Review](#review)
 - [EndStayReport](#endstayreport)
 - [DailyReport](#dailyreport)
+- [PreStayBriefing](#prestaybriefing)
 - [RescheduleRequest](#reschedulerequest)
 - [AddonRequest](#addonrequest)
 - [PasswordResetToken](#passwordresettoken)
@@ -267,6 +268,7 @@
 | `endStayReports` | `EndStayReport[]` | — |  |
 | `timeProposals` | `TimeProposal[]` | — |  |
 | `dailyReports` | `DailyReport[]` | — |  |
+| `preStayBriefing` | `PreStayBriefing?` | — |  |
 
 **Relations**
 
@@ -834,6 +836,29 @@
 - `([bookingId])`
 - `([status, date])`
 - `([date])`
+
+---
+
+## PreStayBriefing
+
+> Feature #16.
+
+| Champ | Type | Attributs | Commentaire |
+|---|---|---|---|
+| `id` | `String` | PK · default=`cuid(` |  |
+| `bookingId` | `String` | UNIQUE |  |
+| `formData` | `String?` | — | JSON blob — see src/lib/pre-stay-briefing.ts for shape |
+| `invitedAt` | `DateTime` | default=`now(` |  |
+| `submittedAt` | `DateTime?` | — |  |
+| `createdAt` | `DateTime` | default=`now(` |  |
+| `updatedAt` | `DateTime` | — |  |
+
+**Relations**
+
+- `booking` → `Booking`
+
+**Indexes :**
+- `([submittedAt])`
 
 ---
 

@@ -96,6 +96,7 @@ export const CRON_NAMES = [
   'overdue-invoices',
   'review-requests',
   'daily-report-drafts',
+  'pre-stay-briefing',
   'weekly-pet-report',
   'dlq-watch',
   'taxi-retention',

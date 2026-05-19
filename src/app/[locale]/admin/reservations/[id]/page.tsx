@@ -28,6 +28,7 @@ import EditTaxiAddonSection from './EditTaxiAddonSection';
 import EditGroomingSection from './EditGroomingSection';
 import BookingClientSection from './BookingClientSection';
 import BookingPetsSection from './BookingPetsSection';
+import PreStayBriefingSection from './PreStayBriefingSection';
 import BookingInvoiceSection from './BookingInvoiceSection';
 import BookingServiceSection from './BookingServiceSection';
 import AddProductSection from './AddProductSection';
@@ -192,6 +193,11 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
             bookingPets={booking.bookingPets}
             locale={locale}
             label={labels.animals}
+          />
+
+          <PreStayBriefingSection
+            briefing={booking.preStayBriefing}
+            locale={locale}
           />
 
           <BookingInvoiceSection

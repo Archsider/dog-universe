@@ -113,4 +113,38 @@ export const stayTemplates: Record<string, EmailTemplateBuilder> = {
       `,
     };
   },
+
+  /**
+   * Pre-stay briefing invitation — sent J-2 before boarding.  Mehdi's team
+   * uses the answers to prep the welcome (favorite food, comfort toy, fears).
+   *
+   * d.clientFirstName — pre-escaped first name (or empty)
+   * d.petName         — pre-escaped pet name
+   * d.startDateLong   — 'mardi 21 mai 2026' / 'Tuesday, May 21, 2026'
+   * d.briefingUrl     — raw URL to the form (whitelisted in shared.ts)
+   */
+  pre_stay_briefing: ({ d }) => ({
+    subjectFr: `🐾 Préparons le séjour de ${d.petName} — Dog Universe`,
+    subjectEn: `🐾 Let's prepare ${d.petName}'s stay — Dog Universe`,
+    bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientFirstName || ''},</h2>
+        <p>Le séjour de <strong>${d.petName}</strong> approche (arrivée prévue le <strong>${d.startDateLong}</strong>).</p>
+        <p>Pour préparer un accueil parfait, dites-nous en quelques lignes ce qu'on doit savoir : son alimentation préférée, son doudou, ses petites peurs, sa routine, le contact de son vétérinaire.</p>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${d.briefingUrl}" style="background: #C9A84C; color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; letter-spacing: 0.05em;">Préparer le séjour</a>
+        </p>
+        <p style="font-size: 13px; color: #6B7280;">Ça nous prend 2 minutes côté toi, ça change tout côté ${d.petName}.</p>
+        <p>À très vite,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+    bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientFirstName || ''},</h2>
+        <p><strong>${d.petName}</strong>'s stay is coming up (arrival on <strong>${d.startDateLong}</strong>).</p>
+        <p>To prepare a perfect welcome, tell us a few words about what we should know: favorite food, comfort toy, fears, routine, vet contact details.</p>
+        <p style="text-align: center; margin: 24px 0;">
+          <a href="${d.briefingUrl}" style="background: #C9A84C; color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; letter-spacing: 0.05em;">Prepare the stay</a>
+        </p>
+        <p style="font-size: 13px; color: #6B7280;">2 minutes on your side, a world of difference on ${d.petName}'s side.</p>
+        <p>See you soon,<br><strong>The Dog Universe Team</strong></p>
+      `,
+  }),
 };

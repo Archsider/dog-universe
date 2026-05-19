@@ -4,7 +4,7 @@ import { useState } from 'react';
 import {
   Bell, BellOff, CheckCheck, Loader2,
   CalendarClock, Star, ArrowRight, UserPlus,
-  AlertCircle, RefreshCw, MapPin,
+  AlertCircle, RefreshCw, MapPin, ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
@@ -31,6 +31,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   BOOKING_CANCELLED:           { icon: AlertCircle,   color: 'text-red-600',    bg: 'bg-red-50' },
   BOOKING_RESCHEDULE_REQUEST:  { icon: RefreshCw,     color: 'text-amber-600',  bg: 'bg-amber-50' },
   CLIENT_ARRIVAL_NEARBY:       { icon: MapPin,        color: 'text-emerald-700',bg: 'bg-emerald-50' },
+  PRE_STAY_BRIEFING_SUBMITTED: { icon: ClipboardList, color: 'text-emerald-700',bg: 'bg-emerald-50' },
 };
 
 function parseMetadata(raw: string | null): Record<string, unknown> {
