@@ -139,8 +139,13 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         <p className="text-sm text-[#7A6E65] mt-3">{t('subtitle')}</p>
       </div>
 
-      {/* Member Card — wrapper shadow + border doré */}
-      <div className="rounded-2xl overflow-hidden shadow-[0_8px_32px_rgba(196,151,74,0.12)] border border-[rgba(196,151,74,0.2)]">
+      {/* Member Card — wrapper shadow + border doré.  Wrapping the card in
+          a Link makes the whole card tappable → opens the standalone
+          /client/card page (Feature #2 — wallet-like shortcut). */}
+      <Link
+        href={`/${locale}/client/card`}
+        className="block rounded-2xl overflow-hidden shadow-[0_8px_32px_rgba(196,151,74,0.12)] border border-[rgba(196,151,74,0.2)] hover:shadow-[0_12px_40px_rgba(196,151,74,0.20)] transition-shadow"
+      >
         <MemberCard
           clientId={session.user.id}
           clientName={session.user.name ?? ''}
@@ -151,7 +156,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           locale={locale}
           claims={myClaims as { benefitKey: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' }[]}
         />
-      </div>
+      </Link>
 
       {/* Loyalty progress bar with paws */}
       {nextTier && (
