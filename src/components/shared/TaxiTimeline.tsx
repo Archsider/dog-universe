@@ -137,7 +137,25 @@ export default function TaxiTimeline({
 
   const terminalStatus = TERMINAL_FOR_TYPE[tripType];
   const isAlreadyTerminal = trip.status === terminalStatus;
-  const showForceShortcut = !readOnly && allowForceComplete && !isAlreadyTerminal;
+
+  // Auto-detect "this trip is in the past" → trip.date < today (Casa).
+  // Catches walk-ins IN_PROGRESS where the booking parent is still live but
+  // the taxi leg already happened (Mehdi forgot to mark it). Combined with
+  // the explicit `allowForceComplete` gate via OR : either signal is enough.
+  const tripInPast = (() => {
+    if (!trip.date) return false;
+    // trip.date is YYYY-MM-DD. Compare against today's YYYY-MM-DD in Casa.
+    // Lightweight inline compute — avoids importing date-fns into shared.
+    const now = new Date();
+    // Casa = UTC+1 (fixed, no DST in Morocco). Shift by +1h to get Casa
+    // calendar date safely from any runtime TZ.
+    const casaNow = new Date(now.getTime() + 60 * 60 * 1000);
+    const todayCasa = casaNow.toISOString().slice(0, 10); // YYYY-MM-DD
+    return trip.date < todayCasa;
+  })();
+
+  const showForceShortcut =
+    !readOnly && !isAlreadyTerminal && (allowForceComplete || tripInPast);
 
   // Map each status to its most-recent timestamp from history
   const statusTimestamps: Record<string, Date> = {};
@@ -291,19 +309,20 @@ export default function TaxiTimeline({
         </button>
       )}
 
-      {/* Force-complete shortcut — small text link below the main button,
-          deliberately less prominent. Used for retroactive walk-in
-          corrections where stepping through the live pipeline would be
-          silly (the trip already happened, possibly days ago). */}
+      {/* Force-complete shortcut — visible secondary button (amber)
+          used for retroactive corrections where stepping through the
+          live pipeline would be silly (the trip already happened,
+          possibly days ago). Shown when booking is COMPLETED OR when
+          the trip's scheduled date is in the past. */}
       {showForceShortcut && (
         <>
           <button
             type="button"
             onClick={() => setForceDialogOpen(true)}
             disabled={loading}
-            className="w-full text-xs text-gray-500 hover:text-charcoal underline underline-offset-2 flex items-center justify-center gap-1 py-1 transition-colors disabled:opacity-50"
+            className="w-full py-2.5 flex items-center justify-center gap-2 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-lg text-sm font-medium transition-all duration-200 disabled:opacity-50"
           >
-            <FastForward className="h-3 w-3" />
+            <FastForward className="h-4 w-4" />
             <span>
               {isFr
                 ? 'Marquer ce trajet comme terminé (rétroactif)'
