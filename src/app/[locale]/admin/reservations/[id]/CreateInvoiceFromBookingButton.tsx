@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FileText, Loader2, Plus } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { formatMAD } from '@/lib/utils';
+import { createInvoice } from '@/lib/api-client';
 
 interface InvoiceItem {
   description: string;
@@ -66,12 +67,8 @@ export default function CreateInvoiceFromBookingButton({ bookingId, clientId, lo
   const handleCreate = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, bookingId, items }),
-      });
-      if (!res.ok) throw new Error('Failed');
+      const result = await createInvoice({ clientId, bookingId, items });
+      if (!result.ok) throw new Error(result.error.code);
       toast({ title: l.success, variant: 'success' });
       setOpen(false);
       router.refresh();

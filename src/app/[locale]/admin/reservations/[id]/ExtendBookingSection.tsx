@@ -6,6 +6,7 @@ import { CalendarPlus, Check, X, ChevronDown, ChevronUp, AlertTriangle } from 'l
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { formatDate } from '@/lib/utils';
+import { patchAdminBooking } from '@/lib/api-client';
 import type { Decimal } from '@prisma/client/runtime/library';
 
 interface ExtendBookingSectionProps {
@@ -78,37 +79,34 @@ export default function ExtendBookingSection({ booking, locale }: ExtendBookingS
   async function applyExtension(opts: { extendEndDate?: string; approveExtension?: boolean; rejectExtension?: boolean }) {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${booking.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...opts, version: booking.version }),
-      });
-      const data = await res.json();
-      if (res.status === 409) {
-        toast({
-          title: locale === 'fr'
-            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
-            : 'This record was modified by someone else. Please refresh.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      if (!res.ok) {
-        if (data.error === 'CAPACITY_EXCEEDED') {
-          const speciesLabel = locale === 'fr'
-            ? (data.species === 'DOG' ? 'chiens' : 'chats')
-            : (data.species === 'DOG' ? 'dogs' : 'cats');
+      const result = await patchAdminBooking(booking.id, { ...opts, version: booking.version });
+      if (!result.ok) {
+        if (result.status === 409) {
           toast({
             title: locale === 'fr'
-              ? `Pension complète — ${data.available} place(s) dispo. pour les ${speciesLabel}.`
-              : `Pension full — ${data.available} slot(s) available for ${speciesLabel}.`,
+              ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+              : 'This record was modified by someone else. Please refresh.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        if (result.error.code === 'CAPACITY_EXCEEDED') {
+          const detail = result.error.detail as { species?: string; available?: number } | undefined;
+          const speciesLabel = locale === 'fr'
+            ? (detail?.species === 'DOG' ? 'chiens' : 'chats')
+            : (detail?.species === 'DOG' ? 'dogs' : 'cats');
+          toast({
+            title: locale === 'fr'
+              ? `Pension complète — ${detail?.available ?? 0} place(s) dispo. pour les ${speciesLabel}.`
+              : `Pension full — ${detail?.available ?? 0} slot(s) available for ${speciesLabel}.`,
             variant: 'destructive',
           });
         } else {
-          toast({ title: data.error ?? 'Erreur', variant: 'destructive' });
+          toast({ title: result.error.code ?? 'Erreur', variant: 'destructive' });
         }
         return;
       }
+      const data = result.data as { invoiceWarning?: boolean };
       if (opts.rejectExtension) {
         toast({ title: t.successRejected });
       } else {

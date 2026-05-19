@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Scissors, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
+import { patchAdminBooking } from '@/lib/api-client';
 
 interface BoardingDetailGrooming {
   includeGrooming: boolean;
@@ -86,30 +87,25 @@ export default function EditGroomingSection({ bookingId, bookingVersion, boardin
   async function handleSave() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${bookingId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patchBoardingDetail: {
-            includeGrooming: enabled,
-            groomingSize: enabled ? size : null,
-            groomingStatus: enabled ? groomStatus : null,
-          },
-          version: bookingVersion,
-        }),
+      const result = await patchAdminBooking(bookingId, {
+        patchBoardingDetail: {
+          includeGrooming: enabled,
+          groomingSize: enabled ? size : null,
+          groomingStatus: enabled ? groomStatus : null,
+        },
+        version: bookingVersion,
       });
-      const data = await res.json();
-      if (res.status === 409) {
-        toast({
-          title: locale === 'fr'
-            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
-            : 'This record was modified by someone else. Please refresh.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      if (!res.ok) {
-        toast({ title: data.error ?? t.errorServer, variant: 'destructive' });
+      if (!result.ok) {
+        if (result.status === 409) {
+          toast({
+            title: locale === 'fr'
+              ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+              : 'This record was modified by someone else. Please refresh.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        toast({ title: result.error.code ?? t.errorServer, variant: 'destructive' });
         return;
       }
       toast({ title: t.successMsg });

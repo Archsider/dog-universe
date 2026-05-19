@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import InlineEditField from '../InlineEditField';
+import { patchAdminBooking } from '@/lib/api-client';
 
 interface NotesSectionProps {
   bookingId: string;
@@ -21,12 +22,8 @@ export default function NotesSection({
   const fr = locale !== 'en';
 
   const saveNotes = useCallback(async (value: string) => {
-    const res = await fetch(`/api/admin/bookings/${bookingId}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ notes: value }),
-    });
-    if (!res.ok) throw new Error('save failed');
+    const result = await patchAdminBooking(bookingId, { notes: value });
+    if (!result.ok) throw new Error(result.error.code);
     onNotesChange?.(value);
   }, [bookingId, onNotesChange]);
 

@@ -12,6 +12,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LogIn, LogOut, Clock, CheckCircle2, XCircle, AlertTriangle, Calendar } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { patchAdminBooking } from '@/lib/api-client';
+import type { AdminBookingPatchBody } from '@/lib/api-schemas/admin-booking-patch';
 import { formatMAD } from '@/lib/utils';
 import { daysUntilCasablanca } from '@/lib/dates-casablanca';
 import CloseStayDialog from './CloseStayDialog';
@@ -35,19 +37,14 @@ export default function TodayClient({ snapshot, pricing, locale }: Props) {
   const [showAllPresent, setShowAllPresent] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  async function patch(id: string, body: Record<string, unknown>): Promise<boolean> {
+  async function patch(id: string, body: AdminBookingPatchBody): Promise<boolean> {
     setBusyId(id);
     try {
-      const res = await fetch(`/api/admin/bookings/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+      const result = await patchAdminBooking(id, body);
+      if (!result.ok) {
         toast({
           title: fr ? 'Erreur' : 'Error',
-          description: (data as { error?: string }).error ?? (fr ? 'Échec' : 'Failed'),
+          description: result.error.code ?? (fr ? 'Échec' : 'Failed'),
           variant: 'destructive',
         });
         return false;

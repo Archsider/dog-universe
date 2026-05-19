@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { patchAdminBooking } from '@/lib/api-client';
+import type { BookingStatus } from '@/lib/api-schemas/admin-booking-patch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, ArrowRight, Settings2, Check, X, UserX, Ban } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -98,26 +100,21 @@ export default function ReservationActions({ booking, locale }: Props) {
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${booking.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, version: booking.version }),
+      const result = await patchAdminBooking(booking.id, {
+        status: status as BookingStatus,
+        version: booking.version,
       });
-      if (res.status === 409) {
-        toast({
-          title: isFr
-            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
-            : 'This record was modified by someone else. Please refresh.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      if (!res.ok) {
-        // Surface the server's error code so the operator can debug
-        // (e.g. CANCELLATION_REASON_REQUIRED, CAPACITY_EXCEEDED) instead
-        // of a generic toast.
-        const body = await res.json().catch(() => ({}));
-        const serverErr = typeof body.error === 'string' ? body.error : `HTTP ${res.status}`;
+      if (!result.ok) {
+        if (result.status === 409) {
+          toast({
+            title: isFr
+              ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+              : 'This record was modified by someone else. Please refresh.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        const serverErr = result.error.code || `HTTP ${result.status}`;
         toast({
           title: isFr ? `Erreur : ${serverErr}` : `Error: ${serverErr}`,
           variant: 'destructive',
@@ -139,30 +136,29 @@ export default function ReservationActions({ booking, locale }: Props) {
   const handleApproveExtension = async () => {
     setLoadingApprove(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${booking.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approveExtension: true, version: booking.version }),
+      const result = await patchAdminBooking(booking.id, {
+        approveExtension: true,
+        version: booking.version,
       });
-      const data = await res.json();
-      if (!res.ok) {
-        if (data.error === 'CAPACITY_EXCEEDED') {
+      if (!result.ok) {
+        if (result.error.code === 'CAPACITY_EXCEEDED') {
+          const detail = result.error.detail as { species?: string; available?: number } | undefined;
           const speciesLabel = isFr
-            ? (data.species === 'DOG' ? 'chiens' : 'chats')
-            : (data.species === 'DOG' ? 'dogs' : 'cats');
+            ? (detail?.species === 'DOG' ? 'chiens' : 'chats')
+            : (detail?.species === 'DOG' ? 'dogs' : 'cats');
           toast({
             title: isFr
-              ? `Pension complète — ${data.available} place(s) dispo. pour les ${speciesLabel}.`
-              : `Pension full — ${data.available} slot(s) available for ${speciesLabel}.`,
+              ? `Pension complète — ${detail?.available ?? 0} place(s) dispo. pour les ${speciesLabel}.`
+              : `Pension full — ${detail?.available ?? 0} slot(s) available for ${speciesLabel}.`,
             variant: 'destructive',
           });
         } else {
-          toast({ title: data.error ?? (isFr ? 'Erreur lors de l\'approbation' : 'Approval error'), variant: 'destructive' });
+          toast({ title: result.error.code ?? (isFr ? 'Erreur lors de l\'approbation' : 'Approval error'), variant: 'destructive' });
         }
         return;
       }
       toast({ title: isFr ? 'Extension approuvée — réservations fusionnées.' : 'Extension approved — bookings merged.' });
-      // Redirect to the original booking
+      const data = result.data as { originalBookingId?: string };
       if (data.originalBookingId) {
         router.push(`/${locale}/admin/reservations/${data.originalBookingId}`);
       } else {
@@ -179,17 +175,16 @@ export default function ReservationActions({ booking, locale }: Props) {
   const handleRejectExtension = async () => {
     setLoadingReject(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${booking.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rejectExtension: true, version: booking.version }),
+      const result = await patchAdminBooking(booking.id, {
+        rejectExtension: true,
+        version: booking.version,
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast({ title: data.error ?? (isFr ? 'Erreur lors du refus' : 'Rejection error'), variant: 'destructive' });
+      if (!result.ok) {
+        toast({ title: result.error.code ?? (isFr ? 'Erreur lors du refus' : 'Rejection error'), variant: 'destructive' });
         return;
       }
       toast({ title: isFr ? 'Extension refusée.' : 'Extension rejected.' });
+      const data = result.data as { originalBookingId?: string };
       if (data.originalBookingId) {
         router.push(`/${locale}/admin/reservations/${data.originalBookingId}`);
       } else {

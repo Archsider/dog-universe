@@ -18,6 +18,8 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
+import { createAdminBooking } from '@/lib/api-client';
+import type { AdminBookingCreateBody } from '@/lib/api-schemas/admin-booking';
 import {
   calculateBoardingBreakdown,
   calculateTaxiPrice,
@@ -286,20 +288,17 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
         payload.petIds = selectedPetIds;
       }
 
-      const res = await fetch('/api/admin/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = data.error === 'CAPACITY_EXCEEDED' ? t.capacity : data.error || t.error;
+      const result = await createAdminBooking(payload as AdminBookingCreateBody);
+      if (!result.ok) {
+        const msg = result.error.code === 'CAPACITY_EXCEEDED' ? t.capacity : result.error.code;
         toast({ title: t.error, description: String(msg), variant: 'destructive' });
         setSubmitting(false);
         return;
       }
       toast({ title: t.success, variant: 'success' });
-      router.push(`/${locale}/admin/reservations/${data.booking.id}`);
+      const data = result.data as { booking?: { id: string }; bookingId?: string };
+      const newId = data.booking?.id ?? data.bookingId;
+      router.push(`/${locale}/admin/reservations/${newId}`);
     } catch (err) {
       toast({
         title: t.error,

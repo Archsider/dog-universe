@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar, ChevronDown, ChevronUp, Save } from 'lucide-react';
+import { patchAdminBooking } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { formatDate } from '@/lib/utils';
@@ -77,23 +78,21 @@ export default function EditDatesSection({ booking, locale }: EditDatesSectionPr
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${booking.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ editDates: { startDate, endDate }, version: booking.version }),
+      const result = await patchAdminBooking(booking.id, {
+        editDates: { startDate, endDate },
+        version: booking.version,
       });
-      const data = await res.json();
-      if (res.status === 409) {
-        toast({
-          title: locale === 'fr'
-            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
-            : 'This record was modified by someone else. Please refresh.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      if (!res.ok) {
-        toast({ title: data.error ?? t.errorServer, variant: 'destructive' });
+      if (!result.ok) {
+        if (result.status === 409) {
+          toast({
+            title: locale === 'fr'
+              ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+              : 'This record was modified by someone else. Please refresh.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        toast({ title: result.error.code ?? t.errorServer, variant: 'destructive' });
         return;
       }
       toast({ title: t.successMsg });

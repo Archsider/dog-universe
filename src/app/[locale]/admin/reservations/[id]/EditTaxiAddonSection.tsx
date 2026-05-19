@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Car, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
+import { patchAdminBooking } from '@/lib/api-client';
 import TaxiTimeline, { type TaxiTripData } from '@/components/shared/TaxiTimeline';
 import TaxiTrackingButton from '@/components/admin/TaxiTrackingButton';
 import { TaxiNavBlock } from '@/components/admin/TaxiNavigationButton';
@@ -99,35 +100,30 @@ export default function EditTaxiAddonSection({
   async function handleSave() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${bookingId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patchBoardingDetail: {
-            taxiGoEnabled: goEnabled,
-            taxiGoDate:    goEnabled && goDate    ? goDate    : null,
-            taxiGoTime:    goEnabled && goTime    ? goTime    : null,
-            taxiGoAddress: goEnabled && goAddress ? goAddress : null,
-            taxiReturnEnabled: returnEnabled,
-            taxiReturnDate:    returnEnabled && returnDate    ? returnDate    : null,
-            taxiReturnTime:    returnEnabled && returnTime    ? returnTime    : null,
-            taxiReturnAddress: returnEnabled && returnAddress ? returnAddress : null,
-          },
-          version: bookingVersion,
-        }),
+      const result = await patchAdminBooking(bookingId, {
+        patchBoardingDetail: {
+          taxiGoEnabled: goEnabled,
+          taxiGoDate:    goEnabled && goDate    ? goDate    : null,
+          taxiGoTime:    goEnabled && goTime    ? goTime    : null,
+          taxiGoAddress: goEnabled && goAddress ? goAddress : null,
+          taxiReturnEnabled: returnEnabled,
+          taxiReturnDate:    returnEnabled && returnDate    ? returnDate    : null,
+          taxiReturnTime:    returnEnabled && returnTime    ? returnTime    : null,
+          taxiReturnAddress: returnEnabled && returnAddress ? returnAddress : null,
+        },
+        version: bookingVersion,
       });
-      const data = await res.json();
-      if (res.status === 409) {
-        toast({
-          title: locale === 'fr'
-            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
-            : 'This record was modified by someone else. Please refresh.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      if (!res.ok) {
-        toast({ title: data.error ?? t.errorServer, variant: 'destructive' });
+      if (!result.ok) {
+        if (result.status === 409) {
+          toast({
+            title: locale === 'fr'
+              ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+              : 'This record was modified by someone else. Please refresh.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        toast({ title: result.error.code ?? t.errorServer, variant: 'destructive' });
         return;
       }
       toast({ title: t.successMsg });

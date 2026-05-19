@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { patchAdminBooking } from '@/lib/api-client';
+import type { BookingStatus } from '@/lib/api-schemas/admin-booking-patch';
 import { useRouter } from 'next/navigation';
 import { PawPrint, Car, Scissors, Loader2, Clock, Calendar } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
@@ -34,21 +36,22 @@ export function KanbanCard({ b, locale, href }: { b: BookingCard; locale: string
     if (!action || loading) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${b.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: action.next, version: b.version }),
+      const result = await patchAdminBooking(b.id, {
+        status: action.next as BookingStatus,
+        version: b.version,
       });
-      if (res.status === 409) {
-        toast({
-          title: isFr
-            ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
-            : 'This record was modified by someone else. Please refresh.',
-          variant: 'destructive',
-        });
-        return;
+      if (!result.ok) {
+        if (result.status === 409) {
+          toast({
+            title: isFr
+              ? 'Cette réservation a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+              : 'This record was modified by someone else. Please refresh.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        throw new Error(result.error.code);
       }
-      if (!res.ok) throw new Error('Failed');
       toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
       router.refresh();
     } catch {
