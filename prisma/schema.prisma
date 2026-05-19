@@ -113,6 +113,7 @@ model Pet {
   bookingPets   BookingPet[]
   weightEntries PetWeightEntry[]
   lifetimeContracts LifetimeContract[]
+  dailyReports  DailyReport[]
 
   @@index([ownerId])
   @@index([deletedAt])
@@ -205,6 +206,7 @@ model Booking {
   addonRequests     AddonRequest[]
   endStayReports    EndStayReport[]
   timeProposals     TimeProposal[]
+  dailyReports      DailyReport[]
 
   @@index([clientId])
   @@index([status])
@@ -706,6 +708,50 @@ model EndStayReport {
   @@index([bookingId])
   @@index([clientId])
   @@index([sentAt])
+}
+
+// Daily Report Card — one per (pet, day) during IN_PROGRESS boarding.
+// A cron creates DRAFT rows each afternoon ; admin opens /admin/daily-reports,
+// adds photos / emojis / one-sentence note, and clicks "Send" → email +
+// in-app notification fired.  WhatsApp delivery is a manual wa.me link
+// (no auto-API), the admin picks when/if to send via WhatsApp.
+//
+// Source : audit features 2026-05-19 (Feature #3 — Daily Report Card).
+model DailyReport {
+  id        String @id @default(cuid())
+  bookingId String
+  petId     String
+  // Casa-anchored calendar day ('YYYY-MM-DD'). String for trivial unique
+  // index across DB types and to avoid TZ ambiguity (don't use DateTime
+  // for a date-only concept).
+  date      String
+
+  // Content — all optional in DRAFT, expected populated before SENT.
+  photoUrls String[] @default([]) // 1–3 public URLs returned by uploadBuffer
+  moodEmoji        String?
+  foodEmoji        String?
+  sleepEmoji       String?
+  playEmoji        String?
+  note             String? // ≤ 280 chars — one short personal sentence
+
+  status      String    @default("DRAFT") // DRAFT | SENT | SKIPPED
+  sentAt      DateTime?
+  sentBy      String? // userId of the admin who clicked Send
+  skipReason  String?
+  emailFailed Boolean   @default(false) // surfaced in admin UI for retry
+
+  createdAt DateTime @default(now())
+  createdBy String // userId — cron-system for auto-created drafts, admin id for manual
+  updatedAt DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  pet     Pet     @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  // One report per pet per day, period.
+  @@unique([petId, date])
+  @@index([bookingId])
+  @@index([status, date])
+  @@index([date])
 }
 
 // Client-initiated reschedule request on a booking. Replaces the older pattern

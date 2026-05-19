@@ -78,6 +78,7 @@
       "backups": "DB Backups",
       "loyalty": "Loyalty Claims",
       "reviews": "Client Reviews",
+      "daily_reports": "Daily Cards",
       "logout": "Sign Out",
       "revenue_summary": "Historical Revenue"
     }
