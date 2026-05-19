@@ -21,6 +21,7 @@ import { getDayOfWeekMaroc, getHourMaroc, getMinuteMaroc } from '@/lib/timezone'
 import { BookingError } from './booking-errors';
 import { logger } from '@/lib/logger';
 import { withSpan } from '@/lib/observability';
+import { initialTaxiTripStatus, isTerminalInitialStatus } from '@/lib/taxi-trip-initial-status';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Pet Taxi slot validation
@@ -277,19 +278,28 @@ export async function createBookingTx(args: CreateBookingTxArgs) {
         // them. We create both legs here, in the same transaction as
         // the BoardingDetail row, so the invariant "addon enabled ⇒
         // TaxiTrip exists" holds from the very first row write.
+        // Status initial du trip aligné avec le status de la résa parente :
+        // une résa créée directement en COMPLETED (walk-in rétroactif) doit
+        // avoir ses trips terminaux. Helper partagé pour cohérence avec
+        // les 4 autres sites de création TaxiTrip.
+        const outboundInitial = initialTaxiTripStatus(resolvedStatus, 'OUTBOUND');
+        const returnInitial = initialTaxiTripStatus(resolvedStatus, 'RETURN');
+        const isTripTerminal = isTerminalInitialStatus(resolvedStatus);
+
         if (args.taxiGoEnabled) {
           const trip = await tx.taxiTrip.create({
             data: {
               bookingId: booking.id,
               tripType: 'OUTBOUND',
-              status: 'PLANNED',
+              status: outboundInitial,
+              ...(isTripTerminal ? { trackingActive: false, trackingToken: null } : {}),
               date: args.taxiGoDate ?? undefined,
               time: args.taxiGoTime ?? undefined,
               address: args.taxiGoAddress ?? undefined,
             },
           });
           await tx.taxiStatusHistory.create({
-            data: { taxiTripId: trip.id, status: 'PLANNED', updatedBy: args.clientId },
+            data: { taxiTripId: trip.id, status: outboundInitial, updatedBy: args.clientId },
           });
         }
         if (args.taxiReturnEnabled) {
@@ -297,14 +307,15 @@ export async function createBookingTx(args: CreateBookingTxArgs) {
             data: {
               bookingId: booking.id,
               tripType: 'RETURN',
-              status: 'PLANNED',
+              status: returnInitial,
+              ...(isTripTerminal ? { trackingActive: false, trackingToken: null } : {}),
               date: args.taxiReturnDate ?? undefined,
               time: args.taxiReturnTime ?? undefined,
               address: args.taxiReturnAddress ?? undefined,
             },
           });
           await tx.taxiStatusHistory.create({
-            data: { taxiTripId: trip.id, status: 'PLANNED', updatedBy: args.clientId },
+            data: { taxiTripId: trip.id, status: returnInitial, updatedBy: args.clientId },
           });
         }
       } else if (args.serviceType === 'PET_TAXI') {
