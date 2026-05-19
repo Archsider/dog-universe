@@ -30,10 +30,25 @@ export default async function AdminClientsPage(props: PageProps) {
   const limit = 20;
   const skip = (page - 1) * limit;
 
+  // Standard list filter excludes walk-ins by default (otherwise the list
+  // would be polluted by every one-shot walk-in client created from the
+  // billing flow).  The exception: walk-in clients who own at least one
+  // permanent-resident pet (Stephanie / Mama use case, 2026-05-19) — they
+  // are long-term relationships and belong in the list.
   const where: Record<string, unknown> = {
     role: 'CLIENT',
-    isWalkIn: false,
-    ...(q && { OR: [{ name: { contains: q } }, { email: { contains: q } }] }),
+    AND: [
+      {
+        OR: [
+          { isWalkIn: false },
+          // eslint-disable-next-line dog-universe/no-inline-deletedAt-null -- OK: nested some-filter on Pet, notDeleted() helper targets top-level User queries.
+          { isWalkIn: true, pets: { some: { isPermanentResident: true, deletedAt: null } } },
+        ],
+      },
+      ...(q
+        ? [{ OR: [{ name: { contains: q } }, { email: { contains: q } }] }]
+        : []),
+    ],
   };
 
   const [clients, total] = await Promise.all([
