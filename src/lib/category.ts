@@ -12,7 +12,13 @@ export function categoryKey(cat: string, description?: string): CategoryBucket {
   if (cat === 'PET_TAXI') return 'taxi';
   if (cat === 'GROOMING') return 'grooming';
   if (cat === 'PRODUCT') return 'croquettes';
-  if (description) {
+  // Keyword fallback is RESTRICTED to OTHER items — these are legacy rows
+  // persisted before the category column was tightened (~2026-05).
+  // DISCOUNT lines must NEVER be re-classified by description : a discount
+  // labelled "remise toilettage Pia" would otherwise inflate the grooming
+  // counter even though no grooming service was billed. Same risk applies
+  // to any future neutral category (EXTRA_SERVICE, MISC_FEE, …).
+  if (cat === 'OTHER' && description) {
     const d = description.toLowerCase();
     if (d.includes('pension') || d.includes('boarding') || d.includes('nuit') || d.includes('hébergement')) return 'boarding';
     if (d.includes('taxi') || d.includes('transport') || d.includes('aller') || d.includes('retour')) return 'taxi';

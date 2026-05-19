@@ -8,47 +8,55 @@ import { BookingStatus } from '@prisma/client';
 import { toNumber } from '../decimal';
 import { getMonthlyInvoicesWhere } from '../billing';
 import { notDeleted } from '../prisma-soft';
+import { categoryKey } from '../category';
 import type { CategoryBreakdown } from './revenue';
 
 export function deltaPercent(cur: number, prev: number): number {
   return prev === 0 ? 0 : Math.round(((cur - prev) / prev) * 1000) / 10;
 }
 
-// Invoice count by dominant category (item with highest total) for PAID+PARTIALLY_PAID
-// invoices with a payment in [start, end].
-// Compteurs ENCAISSÉS par catégorie : nombre de factures distinctes ayant
-// (a) au moins un Payment dans la fenêtre [start, end] et (b) au moins un
-// InvoiceItem de la catégorie cible.
+// Compteurs ENCAISSÉS par catégorie : nombre d'UNITÉS DE SERVICE livrées
+// (= InvoiceItems) dans la fenêtre [start, end], par bucket.
 //
-// Aligné avec le détail analytics (ENCAISSÉ ce mois). Si aucune facture n'a
-// été encaissée pour une catégorie, le compteur tombe à 0 — par ex.
-// "Toilettage — 0 soins" en mai 2026.
+// L'unité diffère du nombre d'invoices : une seule facture peut couvrir
+// 3 chiens (= 3 séjours), un aller+retour taxi (= 2 courses), ou plusieurs
+// soins de toilettage. Le drilldown analytics liste *les items*, donc le
+// compteur du header doit lister *les items* pour rester cohérent.
+//
+// Catégorie effective = `categoryKey(it.category, it.description)` —
+// MÊME logique que le drilldown analytics (qui utilise `inferItemCategory`,
+// alias direct de categoryKey). Permet de catcher les lignes legacy
+// persistées avec category='OTHER' dont la description match un keyword
+// (ex: "Ultra Premium Low Grain" → croquettes).
+//
+// Family-of-bug aligné avec `js_vs_mv_current_month` retiré en PR #105 —
+// éviter deux sources de vérité qui peuvent drifter.
+//
+// Si aucune unité n'a été encaissée pour une catégorie, le compteur tombe
+// à 0 — par ex. "Toilettage — 0 soins" en mai 2026.
 export async function volumeByCategory(
   start: Date,
   end: Date,
 ): Promise<CategoryBreakdown> {
-  const paidThisMonth = {
-    payments: { some: { paymentDate: { gte: start, lte: end } } },
-  };
-  const [boarding, taxi, grooming, product] = await Promise.all([
-    prisma.invoice.count({
-      where: { AND: [paidThisMonth, { items: { some: { category: 'BOARDING' } } }] },
-    }),
-    prisma.invoice.count({
-      where: { AND: [paidThisMonth, { items: { some: { category: 'PET_TAXI' } } }] },
-    }),
-    prisma.invoice.count({
-      where: { AND: [paidThisMonth, { items: { some: { category: 'GROOMING' } } }] },
-    }),
-    prisma.invoice.count({
-      where: { AND: [paidThisMonth, { items: { some: { category: 'PRODUCT' } } }] },
-    }),
-  ]);
+  const invoices = await prisma.invoice.findMany({
+    where: { payments: { some: { paymentDate: { gte: start, lte: end } } } },
+    select: {
+      items: { select: { category: true, description: true } },
+    },
+  });
+
+  const counts = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
+  for (const inv of invoices) {
+    for (const it of inv.items) {
+      const k = categoryKey(it.category, it.description);
+      if (k) counts[k] += 1;
+    }
+  }
   return {
-    boarding,
-    taxi,
-    grooming,
-    croquettes: product,
+    boarding: counts.boarding,
+    taxi: counts.taxi,
+    grooming: counts.grooming,
+    croquettes: counts.croquettes,
     other: 0,
   };
 }
