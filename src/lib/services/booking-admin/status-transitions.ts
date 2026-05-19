@@ -31,6 +31,7 @@ import { sendEmailNow, sendSmsNow, sendSmsRespectful } from '@/lib/notify-now';
 import { ServiceType } from './constants';
 import { notDeleted } from '@/lib/prisma-soft';
 import { withSpan } from '@/lib/observability';
+import { casablancaDateOnly } from '@/lib/dates-casablanca';
 
 type BookingForStatus = {
   id: string;
@@ -227,7 +228,9 @@ async function runStatusSideEffectsImpl(args: RunStatusSideEffectsArgs) {
     if (booking.serviceType === ServiceType.PET_TAXI) {
       const existingTrip = await prisma.taxiTrip.findFirst({ where: { bookingId: booking.id } });
       if (!existingTrip) {
-        const dateStr = booking.startDate.toISOString().slice(0, 10);
+        // Casa-anchored : a booking at 22:00–23:59 UTC = 23:00–00:59 Casa
+        // next day would otherwise land on the wrong driver dashboard day.
+        const dateStr = casablancaDateOnly(booking.startDate);
         const t = await prisma.taxiTrip.create({
           data: {
             bookingId: booking.id,
@@ -360,23 +363,57 @@ async function runStatusSideEffectsImpl(args: RunStatusSideEffectsArgs) {
     try {
       const { calculateSuggestedGrade } = await import('@/lib/loyalty');
       const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
-      const [totalStays, totalPaid, currentGrade] = await Promise.all([
+      // Filter out invoices linked to soft-deleted bookings — otherwise a
+      // legacy CANCELLED+soft-deleted booking with a PAID invoice keeps
+      // inflating the totalSpentMAD used for PLATINUM threshold.  Also
+      // pull `historicalSpendMAD` (clients migrated with pre-app history)
+      // so the suggestion is parity with the canonical payments.ts path.
+      const [totalStays, totalPaid, client, currentGrade] = await Promise.all([
         prisma.booking.count({ where: notDeleted({ clientId: booking.clientId, status: 'COMPLETED' }) }),
-        prisma.invoice.aggregate({ where: { clientId: booking.clientId, status: 'PAID' }, _sum: { amount: true } }),
+        prisma.invoice.aggregate({
+          where: {
+            clientId: booking.clientId,
+            status: 'PAID',
+            booking: { deletedAt: null }, // -- OK: explicit filter on relation, no helper available
+          },
+          _sum: { amount: true },
+        }),
+        prisma.user.findUnique({
+          where: { id: booking.clientId },
+          select: { historicalSpendMAD: true },
+        }),
         prisma.loyaltyGrade.findUnique({ where: { clientId: booking.clientId } }),
       ]);
-      const suggestedGrade = calculateSuggestedGrade(totalStays, Number(totalPaid._sum.amount ?? 0));
+      const liveRevenue = Number(totalPaid._sum.amount ?? 0);
+      const historical = Number(client?.historicalSpendMAD ?? 0);
+      const suggestedGrade = calculateSuggestedGrade(totalStays, liveRevenue + historical);
       if (!currentGrade?.isOverride && currentGrade?.grade !== suggestedGrade) {
-        await prisma.loyaltyGrade.upsert({
-          where: { clientId: booking.clientId },
-          update: { grade: suggestedGrade },
-          create: { clientId: booking.clientId, grade: suggestedGrade },
+        // Optimistic-lock guard against concurrent override admin actions :
+        // updateMany with isOverride: false matches only if no override has
+        // landed between our read and write.  upsert would clobber blindly.
+        const writeResult = await prisma.loyaltyGrade.updateMany({
+          where: { clientId: booking.clientId, isOverride: false },
+          data:  { grade: suggestedGrade },
         });
+        if (writeResult.count === 0 && !currentGrade) {
+          // No row existed → create on first promotion.
+          await prisma.loyaltyGrade.create({
+            data: { clientId: booking.clientId, grade: suggestedGrade },
+          });
+        }
         const { invalidateLoyaltyCache } = await import('@/lib/loyalty-server');
         await invalidateLoyaltyCache(booking.clientId);
         await createLoyaltyUpdateNotification(booking.clientId, suggestedGrade, booking.client.language || 'fr');
       }
-    } catch { /* non-blocking */ }
+    } catch (err) {
+      // Loyalty recompute failure should NEVER block the booking transition.
+      // But we still log it so a silent grade-promotion miss has a trace.
+      logger.error('booking-loyalty', 'recompute_failed', {
+        clientId: booking.clientId,
+        bookingId: booking.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   } else if (newStatus === 'IN_PROGRESS') {
     await createBookingInProgressNotification(
       booking.clientId,

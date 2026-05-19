@@ -54,7 +54,7 @@ export const GET = defineCron({
         where: {
           status: { in: [InvoiceStatus.PENDING, InvoiceStatus.PARTIALLY_PAID] },
           issuedAt: { gte: windowStart, lt: windowEnd },
-          client: notDeleted({ isWalkIn: false, role: 'CLIENT' }),
+          client: { ...notDeleted({ isWalkIn: false, role: 'CLIENT' }), anonymizedAt: null },
         },
         select: {
           id: true,

@@ -1,7 +1,7 @@
 import { parseMetadata } from '@/lib/notifications/metadata';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
-import { notDeleted } from '@/lib/prisma-soft';
+import { notDeleted, contactable } from '@/lib/prisma-soft';
 import { log } from '@/lib/logger';
 import { getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
@@ -24,7 +24,13 @@ export const GET = defineCron({
   name: 'reminders',
   period: 'daily',
   fn: async ({ now }) => {
-    const dateFormatOpts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+    // Vercel runtime is UTC ; without `timeZone: 'Africa/Casablanca'` a
+    // booking starting at 22:00–23:59 UTC (= 23:00–00:59 Casa next day)
+    // renders the previous Casa calendar day in the SMS/email/notif.
+    // Client gets 'demain 15 mai' for a 16 May Casa stay.
+    const dateFormatOpts: Intl.DateTimeFormatOptions = {
+      weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Africa/Casablanca',
+    };
 
     // Target: tomorrow's date range *in Casablanca local time*. Vercel runs in
     // UTC — a naive `setHours(0,0,0,0)` would compute UTC midnight, so the cron
@@ -58,6 +64,9 @@ export const GET = defineCron({
         serviceType: 'BOARDING',
         status: 'CONFIRMED',
         startDate: { gte: rangeStart, lte: rangeEnd },
+        // Skip anonymized clients (RGPD purged) — their email is a
+        // placeholder and phone is null, so email/SMS would bounce.
+        client: contactable(),
       }),
       include: {
         client: { select: { name: true, email: true, language: true, phone: true } },
@@ -184,6 +193,7 @@ export const GET = defineCron({
         serviceType: 'BOARDING',
         status: { in: ['IN_PROGRESS', 'CONFIRMED'] },
         endDate: { gte: rangeStart, lte: rangeEnd },
+        client: contactable(),
       }),
       include: {
         client: { select: { name: true, firstName: true, email: true, language: true, phone: true } },

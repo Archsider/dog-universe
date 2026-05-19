@@ -10,6 +10,7 @@ import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 import { differenceInCalendarDays } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { notDeleted } from '@/lib/prisma-soft';
+import { logger } from '@/lib/logger';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -153,6 +154,25 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     // Booking passes to COMPLETED + endDate locked → availability cache stale.
     await invalidateAvailabilityCache(booking.startDate, endDate);
+
+    // Re-allocate payments on the now-updated invoice items so that
+    // paidAmount / item.allocatedAmount / status / paidAt all reflect the
+    // new BOARDING line breakdown.  Without this, partial-paid open-ended
+    // walk-ins kept their old allocation against deleted items → dashboards
+    // showed stale paid status and the trigger-recomputed `amount` no
+    // longer matched the cached `paidAmount`.  Allocation opens its own
+    // Serializable tx ; safe to run post-checkout commit.
+    if (booking.invoice) {
+      try {
+        const { allocatePayments } = await import('@/lib/payments');
+        await allocatePayments(booking.invoice.id);
+      } catch (err) {
+        logger.error('booking-checkout', 'reallocate_failed', {
+          invoiceId: booking.invoice.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     return NextResponse.json({
       success: true,

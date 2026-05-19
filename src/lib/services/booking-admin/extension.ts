@@ -102,30 +102,54 @@ async function approveExtensionMergeImpl(args: ApproveExtensionMergeArgs) {
     throw new BookingError('INVALID_COMPUTED_TOTAL', { message: 'Invalid computed total' });
   }
 
+  // Track which invoice ends up holding the merged stay so we can
+  // re-allocate its payments + reconciles status/paidAmount/paidAt post-tx.
+  // The PG trigger `trg_recompute_invoice_amount` handles `amount` on its
+  // own from SUM(items.total) — never write `amount` manually here.
+  let mergedInvoiceId: string | null = null;
+  let extensionPaymentsToTransfer: { id: string }[] = [];
+
   await prisma.$transaction(async (tx) => {
     await tx.stayPhoto.updateMany({ where: { bookingId }, data: { bookingId: originalBooking.id } });
     await tx.bookingItem.updateMany({ where: { bookingId }, data: { bookingId: originalBooking.id } });
 
     if (originalBooking.invoice && booking.invoice) {
-      const newPaidAmount = Math.round((Number(originalBooking.invoice.paidAmount) + Number(booking.invoice.paidAmount)) * 100) / 100;
-      const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
-      await tx.invoice.update({
-        where: { id: originalBooking.invoice.id },
-        data: {
-          amount: newTotal,
-          paidAmount: newPaidAmount,
-          status: newStatus,
-          ...(newStatus === 'PAID' && !originalBooking.invoice.paidAt ? { paidAt: new Date() } : {}),
-        },
+      // MOVE items from the extension invoice into the original one.  This
+      // gives a single coherent line set and lets the PG trigger compute
+      // the canonical `amount`.  Then move payments + delete the now-empty
+      // extension invoice.  No direct write of amount/paidAmount/status.
+      await tx.invoiceItem.updateMany({
+        where: { invoiceId: booking.invoice.id },
+        data:  { invoiceId: originalBooking.invoice.id },
       });
-      await tx.invoiceItem.deleteMany({ where: { invoiceId: booking.invoice.id } });
+      extensionPaymentsToTransfer = await tx.payment.findMany({
+        where: { invoiceId: booking.invoice.id },
+        select: { id: true },
+      });
+      if (extensionPaymentsToTransfer.length > 0) {
+        await tx.payment.updateMany({
+          where: { invoiceId: booking.invoice.id },
+          data:  { invoiceId: originalBooking.invoice.id },
+        });
+      }
       await tx.invoice.delete({ where: { id: booking.invoice.id } });
+      mergedInvoiceId = originalBooking.invoice.id;
     } else if (!originalBooking.invoice && booking.invoice) {
-      await tx.invoice.update({ where: { id: booking.invoice.id }, data: { bookingId: originalBooking.id, amount: newTotal } });
+      // Re-parent the extension invoice to the original booking — items and
+      // payments stay together.  Amount stays correct via the trigger.
+      // eslint-disable-next-line dog-universe/no-direct-invoice-mutation -- OK: re-parent only, no money field touched.
+      await tx.invoice.update({
+        where: { id: booking.invoice.id },
+        data:  { bookingId: originalBooking.id },
+      });
+      mergedInvoiceId = booking.invoice.id;
     } else if (originalBooking.invoice && !booking.invoice) {
-      const newPaidAmount = Number(originalBooking.invoice.paidAmount);
-      const newStatus = newPaidAmount >= newTotal ? 'PAID' : newPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
-      await tx.invoice.update({ where: { id: originalBooking.invoice.id }, data: { amount: newTotal, status: newStatus } });
+      // No new invoice rows to merge — but the items on the original may
+      // already cover the wrong nights count.  Leave the items as-is ;
+      // allocatePayments below will at least recompute status against the
+      // trigger-derived amount.  If the nights count needs a fresh line,
+      // admin should re-issue from /admin/billing.
+      mergedInvoiceId = originalBooking.invoice.id;
     }
 
     await tx.booking.update({
@@ -139,8 +163,32 @@ async function approveExtensionMergeImpl(args: ApproveExtensionMergeArgs) {
       },
     });
 
-    await tx.booking.delete({ where: { id: bookingId } });
+    // Soft-delete the extension shadow booking so audit trail survives.
+    // Hard delete here was destroying BookingPet / BoardingDetail rows
+    // permanently (cascade FK) — making any later report on this booking
+    // id throw a 404.  Soft-delete keeps the row visible to admins via
+    // the deletedAt filter override.
+    await tx.booking.update({
+      where: { id: bookingId },
+      data: { deletedAt: new Date() },
+    });
   });
+
+  // Re-allocate payments on the merged invoice so paidAmount / status /
+  // paidAt / item.allocatedAmount reflect the post-merge truth.  Opens
+  // its own Serializable tx ; safe post-merge.
+  if (mergedInvoiceId) {
+    try {
+      const { allocatePayments } = await import('@/lib/payments');
+      await allocatePayments(mergedInvoiceId);
+    } catch (err) {
+      logger.error('extension-merge', 'reallocate_failed', {
+        invoiceId: mergedInvoiceId,
+        transferredPayments: extensionPaymentsToTransfer.length,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   const bookingRef = originalBooking.id.slice(0, 8).toUpperCase();
   const newEndDateDisplay = newEndDate.toLocaleDateString(originalBooking.client?.language === 'en' ? 'en-GB' : 'fr-MA');

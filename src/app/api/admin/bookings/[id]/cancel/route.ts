@@ -21,7 +21,9 @@ import { prisma } from '@/lib/prisma';
 import { notDeleted } from '@/lib/prisma-soft';
 import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { supersedePendingForBooking } from '@/lib/time-proposals';
-import { withSpan } from '@/lib/observability';
+import { withSpan, logServerError } from '@/lib/observability';
+import { handleNoShowInvoice } from '@/lib/services/booking-admin/status-transitions';
+import { invalidateAvailabilityCache } from '@/lib/availability-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +63,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       clientId: true,
       status: true,
       version: true,
+      startDate: true,
+      endDate: true,
       client: { select: { role: true, name: true, email: true, language: true, phone: true } },
     },
   });
@@ -90,23 +94,61 @@ export async function POST(request: NextRequest, { params }: Params) {
     async () => {
       // 1. Flip the booking to CANCELLED with the reason — same path as
       //    PATCH /api/admin/bookings/[id] but bundled with the cascade.
-      const updated = await prisma.booking.update({
-        where: { id: bookingId, version: booking.version },
-        data: {
-          status: 'CANCELLED',
-          cancellationReason: body.reason,
-          version: { increment: 1 },
-        },
-        select: { id: true },
-      }).catch(() => null);
-      if (!updated) {
-        return NextResponse.json({ error: 'VERSION_CONFLICT' }, { status: 409 });
+      let updated;
+      try {
+        updated = await prisma.booking.update({
+          where: { id: bookingId, version: booking.version },
+          data: {
+            status: 'CANCELLED',
+            cancellationReason: body.reason,
+            version: { increment: 1 },
+          },
+          select: { id: true },
+        });
+      } catch (err) {
+        // P2025 = row not found (race lost or already cancelled).  Any
+        // other Prisma error (DB down, schema mismatch, FK violation)
+        // must NOT masquerade as VERSION_CONFLICT — surface it so the
+        // operator sees the real failure in the toast + Sentry.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const code = (err as any)?.code;
+        if (code === 'P2025') {
+          return NextResponse.json({ error: 'VERSION_CONFLICT' }, { status: 409 });
+        }
+        logServerError('booking-cancel', 'unexpected db error on update', err);
+        return NextResponse.json({
+          error: 'DB_ERROR',
+          code: code ?? null,
+          detail: err instanceof Error ? err.message : String(err),
+        }, { status: 500 });
       }
 
       // 2. Cascade : SUPERSEDE all PENDING time proposals.
       const supersededCount = await supersedePendingForBooking(bookingId);
 
-      // 3. Client notification (unless silent).
+      // 3. Invoice handling : same path as NO_SHOW — cancels unpaid invoice,
+      //    keeps paid ones with audit, restocks products. Required parity ;
+      //    until 2026-05-19 the cancel flow left a dangling PENDING invoice
+      //    + occupied stock cells silently.
+      try {
+        await handleNoShowInvoice({
+          bookingId,
+          actorId: session.user.id,
+          previousStatus: booking.status,
+        });
+      } catch (err) {
+        logServerError('booking-cancel', 'invoice handling failed', err);
+      }
+
+      // 4. Release the calendar slot — without this the availability API
+      //    keeps the cancelled stay's dates blocked until the cache TTL.
+      try {
+        await invalidateAvailabilityCache(booking.startDate, booking.endDate);
+      } catch (err) {
+        logServerError('booking-cancel', 'availability cache invalidate failed', err);
+      }
+
+      // 5. Client notification (unless silent).
       if (!body.silent) {
         try {
           const { createBookingCancelledNotification } = await import('@/lib/notifications');
@@ -121,7 +163,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         }
       }
 
-      // 4. Audit log.
+      // 6. Audit log.
       await logAction({
         userId: session.user.id,
         action: LOG_ACTIONS.BOOKING_CANCELLED,

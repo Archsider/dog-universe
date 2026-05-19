@@ -44,6 +44,22 @@ export function notDeleted<const T extends object>(where?: T): T & { deletedAt: 
 }
 
 /**
+ * Reachable-user filter — combines `deletedAt: null` AND
+ * `anonymizedAt: null`.  Use this on every cron / notification dispatch
+ * that targets a User : an anonymized user has their email and phone
+ * wiped (or replaced with a synthetic placeholder), so any email/SMS
+ * we'd send would bounce or fail silently.  RGPD audit invariant.
+ *
+ * Example :
+ *   prisma.booking.findMany({
+ *     where: { ...notDeleted(), client: contactable() }
+ *   })
+ */
+export function contactable(): { deletedAt: null; anonymizedAt: null } {
+  return { deletedAt: null, anonymizedAt: null };
+}
+
+/**
  * Inverse helper — returns the `where` clause for **only** soft-deleted
  * rows (the "trash" view). Used by recovery flows in `/admin/users`.
  */
