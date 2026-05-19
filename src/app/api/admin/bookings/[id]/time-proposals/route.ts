@@ -26,29 +26,13 @@ import {
   rejectProposal,
 } from '@/lib/time-proposals';
 import { withSpan } from '@/lib/observability';
+import { timeProposalBodySchema } from '@/lib/api-schemas/time-proposals';
 
 export const dynamic = 'force-dynamic';
 
-const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
-const bodySchema = z.discriminatedUnion('action', [
-  z.object({
-    action: z.literal('propose'),
-    scope: z.enum(['ARRIVAL', 'TAXI_GO', 'TAXI_RETURN']),
-    time: z.string().regex(TIME_RE, 'time must be HH:MM 24h'),
-    note: z.string().trim().max(500).optional().nullable(),
-  }),
-  z.object({
-    action: z.literal('accept'),
-    proposalId: z.string().min(1).max(64),
-    note: z.string().trim().max(500).optional().nullable(),
-  }),
-  z.object({
-    action: z.literal('reject'),
-    proposalId: z.string().min(1).max(64),
-    note: z.string().trim().min(10, 'rejection note ≥ 10 chars required').max(500),
-  }),
-]);
+// Schema is shared with the typed client in src/lib/api-client/time-proposals.ts
+// (single source of truth, see src/lib/api-schemas/README.md).
+const bodySchema = timeProposalBodySchema;
 
 type Params = { params: Promise<{ id: string }> };
 

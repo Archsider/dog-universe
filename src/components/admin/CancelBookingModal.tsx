@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
+import { cancelBooking } from '@/lib/api-client';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -46,14 +47,12 @@ export function CancelBookingModal({ bookingId, open, onOpenChange, locale }: Pr
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${bookingId}/cancel`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ reason: reason.trim(), silent }),
+      const result = await cancelBooking(bookingId, {
+        reason: reason.trim(),
+        ...(silent ? { silent: true } : {}),
       });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok || !j.ok) {
-        setError(j.error ?? `HTTP ${res.status}`);
+      if (!result.ok) {
+        setError(result.error.code);
         return;
       }
       onOpenChange(false);
