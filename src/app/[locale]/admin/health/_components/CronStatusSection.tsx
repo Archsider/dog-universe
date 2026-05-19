@@ -1,6 +1,7 @@
 import { CheckCircle2, Clock, ShieldAlert } from 'lucide-react';
 import type { CronWithStatus } from './types';
 import { CRON_MAX_AGE_MS, relativeTime } from './health-utils';
+import { CronTriggerButton } from './CronTriggerButton';
 
 interface CronStatusSectionProps {
   cronStatuses: CronWithStatus[];
@@ -48,10 +49,15 @@ export function CronStatusSection({ cronStatuses, isFr }: CronStatusSectionProps
                   </span>
                 )}
               </div>
-              <span className={`flex items-center gap-1 text-xs ${isNeverAnomaly ? 'text-red-600' : isNever ? 'text-amber-700' : isOverdue ? 'text-amber-700' : 'text-gray-500'}`}>
-                <Clock className="h-3 w-3" />
-                {relativeTime(c.lastRun, isFr)}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`flex items-center gap-1 text-xs ${isNeverAnomaly ? 'text-red-600' : isNever ? 'text-amber-700' : isOverdue ? 'text-amber-700' : 'text-gray-500'}`}>
+                  <Clock className="h-3 w-3" />
+                  {relativeTime(c.lastRun, isFr)}
+                </span>
+                {(isNever || isOverdue) && (
+                  <CronTriggerButton name={c.name} isFr={isFr} />
+                )}
+              </div>
             </div>
           );
         })}

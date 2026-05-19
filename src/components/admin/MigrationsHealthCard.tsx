@@ -6,7 +6,7 @@
 // faciliter l'exécution manuelle dans Supabase SQL Editor.
 
 import { useEffect, useState } from 'react';
-import { Database, ChevronDown, ChevronRight, Copy, CheckCheck, Loader2 } from 'lucide-react';
+import { Database, ChevronDown, ChevronRight, Copy, CheckCheck, Loader2, Check } from 'lucide-react';
 
 interface MigrationEntry {
   name: string;
@@ -39,6 +39,7 @@ export function MigrationsHealthCard({ isFr }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [copiedName, setCopiedName] = useState<string | null>(null);
+  const [markingName, setMarkingName] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -67,6 +68,39 @@ export function MigrationsHealthCard({ isFr }: Props) {
       setTimeout(() => setCopiedName(null), 2000);
     } catch {
       // clipboard API failed — surface visually but no fallback.
+    }
+  }
+
+  async function markApplied(entry: MigrationEntry) {
+    // "I ran the SQL on Supabase manually, record it as applied" — inserts
+    // a row into _app_migrations and removes the migration from the
+    // pending list locally so the operator sees instant feedback.
+    setMarkingName(entry.name);
+    try {
+      const r = await fetch(`/api/admin/migrations/${encodeURIComponent(entry.name)}/mark-applied`, {
+        method: 'POST',
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        alert(`Erreur : ${j.error ?? r.statusText}`);
+        return;
+      }
+      // Patch local state — flip status to 'ok' so the card shrinks.
+      setData((prev) => {
+        if (!prev) return prev;
+        const newEntries = prev.entries.map((e) =>
+          e.name === entry.name
+            ? { ...e, status: 'ok' as const, dbChecksum: e.localChecksum ?? null, sql: undefined }
+            : e,
+        );
+        const counts = { ok: 0, pending: 0, manual: 0, drift: 0 };
+        for (const ent of newEntries) counts[ent.status]++;
+        return { entries: newEntries, counts, pendingCount: counts.pending };
+      });
+    } catch (e) {
+      alert(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setMarkingName(null);
     }
   }
 
@@ -147,23 +181,41 @@ export function MigrationsHealthCard({ isFr }: Props) {
                     </span>
                   </div>
                   {e.status === 'pending' && e.sql && (
-                    <button
-                      type="button"
-                      onClick={() => void copySql(e)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-red-700 hover:bg-red-50 border border-red-200"
-                    >
-                      {copiedName === e.name ? (
-                        <>
-                          <CheckCheck className="h-3 w-3" />
-                          {isFr ? 'Copié !' : 'Copied!'}
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3 w-3" />
-                          {isFr ? 'Copier SQL' : 'Copy SQL'}
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => void copySql(e)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-red-700 hover:bg-red-50 border border-red-200"
+                      >
+                        {copiedName === e.name ? (
+                          <>
+                            <CheckCheck className="h-3 w-3" />
+                            {isFr ? 'Copié !' : 'Copied!'}
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3" />
+                            {isFr ? 'Copier SQL' : 'Copy SQL'}
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void markApplied(e)}
+                        disabled={markingName === e.name}
+                        title={isFr
+                          ? 'Si vous avez déjà exécuté ce SQL sur Supabase, enregistrez-le ici pour faire taire l\'alerte.'
+                          : 'If you already ran this SQL on Supabase, record it here to silence the alert.'}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-emerald-700 hover:bg-emerald-50 border border-emerald-200 disabled:opacity-50"
+                      >
+                        {markingName === e.name ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Check className="h-3 w-3" />
+                        )}
+                        {isFr ? 'Déjà appliquée' : 'Already applied'}
+                      </button>
+                    </div>
                   )}
                 </div>
                 {e.status === 'drift' && (
