@@ -208,9 +208,16 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
 
       // Walk-in clients: skip loyalty recalc and notifications
       if (client && !client.isWalkIn) {
-        // Aggregate across ALL paid invoices (including this one, now updated)
+        // Aggregate across ALL paid invoices (including this one, now updated).
+        // Excludes invoices linked to soft-deleted bookings — otherwise
+        // legacy CANCELLED+soft-deleted bookings with PAID invoices keep
+        // inflating PLATINUM-threshold revenue silently.
         const totalPaidAgg = await tx.invoice.aggregate({
-          where: { clientId: invoice.clientId, status: 'PAID' },
+          where: {
+            clientId: invoice.clientId,
+            status: 'PAID',
+            booking: { deletedAt: null }, // -- OK: explicit filter on relation, no helper available
+          },
           _sum: { amount: true },
         });
         const completedStays = await tx.booking.count({

@@ -37,6 +37,13 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/observability', () => ({
   withSpan: async (_n: string, _a: any, fn: () => any) => fn(),
+  logServerError: vi.fn(),
+}));
+vi.mock('@/lib/services/booking-admin/status-transitions', () => ({
+  handleNoShowInvoice: vi.fn(async () => undefined),
+}));
+vi.mock('@/lib/availability-cache', () => ({
+  invalidateAvailabilityCache: vi.fn(async () => undefined),
 }));
 vi.mock('@/lib/log', () => ({
   logAction: vi.fn(async () => undefined),

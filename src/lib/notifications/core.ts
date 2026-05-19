@@ -59,6 +59,25 @@ export interface CreateNotificationData {
 }
 
 export async function createNotification(data: CreateNotificationData) {
+  // RGPD guard — never create a notification for a user that has been
+  // anonymized (right-to-be-forgotten purged).  Their email is wiped to
+  // a synthetic placeholder, their phone is null, so any downstream
+  // email/SMS dispatch would bounce or fail silently.  Cheaper to skip
+  // here at the chokepoint than to scatter the check across every cron.
+  // Also covers walk-in clients with no portal account, which historically
+  // received nothing actionable anyway.
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: data.userId },
+      select: { anonymizedAt: true },
+    });
+    if (user?.anonymizedAt) {
+      return null;
+    }
+  } catch {
+    // Fail-open : if the lookup itself fails, fall through to create.
+    // Better to log+notify than silently drop a real notification.
+  }
   const created = await prisma.notification.create({
     data: {
       userId: data.userId,

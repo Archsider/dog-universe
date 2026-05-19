@@ -1,6 +1,6 @@
 import { parseMetadata } from '@/lib/notifications/metadata';
 import { prisma } from '@/lib/prisma';
-import { notDeleted } from '@/lib/prisma-soft';
+import { notDeleted, contactable } from '@/lib/prisma-soft';
 import { createNotification } from '@/lib/notifications';
 import { enqueueEmail } from '@/lib/queues';
 import { getEmailTemplate } from '@/lib/email';
@@ -21,12 +21,16 @@ export const GET = defineCron({
     const since = new Date(now.getTime() - 24 * 3600 * 1000);
 
     // Bookings COMPLETED dans les 24h sans avis existant
+    // Use endDate instead of updatedAt — unrelated edits (notes / version
+    // bumps) on old completed bookings used to re-enter the window and
+    // re-fire REVIEW_REQUEST notifications.  endDate is immutable post-stay.
     const completedBookings = await prisma.booking.findMany({
       where: {
         ...notDeleted(),
         status: 'COMPLETED',
-        updatedAt: { gte: since },
-        review: null, // pas encore d'avis
+        endDate: { gte: since },
+        review: null,
+        client: contactable(),
       },
       include: {
         client: { select: { id: true, name: true, email: true, language: true } },

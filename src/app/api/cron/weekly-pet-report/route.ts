@@ -1,6 +1,6 @@
 import { parseMetadata } from '@/lib/notifications/metadata';
 import { prisma } from '@/lib/prisma';
-import { notDeleted } from '@/lib/prisma-soft';
+import { notDeleted, contactable } from '@/lib/prisma-soft';
 import { log } from '@/lib/logger';
 import { getEmailTemplate } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
@@ -72,6 +72,7 @@ export const GET = defineCron({
         status: 'IN_PROGRESS',
         startDate: { lte: sevenDaysAgo },
         serviceType: 'BOARDING',
+        client: contactable(),
       }),
       include: {
         client: { select: { id: true, name: true, email: true, language: true } },

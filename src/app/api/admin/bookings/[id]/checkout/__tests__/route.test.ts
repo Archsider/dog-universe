@@ -43,6 +43,12 @@ vi.mock('@/lib/observability', () => ({
   withSpan: vi.fn(async (_n: string, _a: unknown, fn: () => unknown) => fn()),
   logServerError: vi.fn(),
 }));
+// allocatePayments opens its own Serializable tx — stub it so the
+// checkout test can assert the tx count it actually cares about (1 for
+// the checkout itself).  Coverage of allocate stays in payments.test.
+vi.mock('@/lib/payments', () => ({
+  allocatePayments: vi.fn(async () => undefined),
+}));
 
 import { POST } from '@/app/api/admin/bookings/[id]/checkout/route';
 
