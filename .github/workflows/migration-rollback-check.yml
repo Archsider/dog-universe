@@ -201,6 +201,17 @@ jobs:
             # No-op migration (all indexes pre-existed); down.sql drops indexes
             # that were already there before → pg_dump diff expected.
             "20260519_phase3_perf_indexes"
+            # Partial index `Pet_isPermanentResident_idx ... WHERE
+            # "isPermanentResident" = true` — same family as 20260518_perf_indexes
+            # (Prisma's schema.prisma can't express partial indexes natively,
+            # so `prisma db push` doesn't create it in the baseline).
+            "20260518_pet_permanent_resident"
+            # Adds a custom updatedAt trigger + plpgsql function on
+            # LifetimeContract — neither is representable in schema.prisma so
+            # `prisma db push` doesn't create them in the canonical baseline.
+            # The down→up cycle restores them → cosmetic drift, runtime
+            # correct (the same family as MV migrations above).
+            "20260519_lifetime_contract"
           )
 
           for d in $(ls -1 "$MIG_DIR" | sort); do

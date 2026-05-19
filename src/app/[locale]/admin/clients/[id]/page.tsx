@@ -16,6 +16,8 @@ import RgpdAdminSection from './RgpdAdminSection';
 import AdminCreateBookingModal from '@/components/admin/AdminCreateBookingModalLazy';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModalLazy';
 import WhatsAppButton from '@/components/admin/WhatsAppButton';
+import { LifetimeContractPanel } from '@/components/admin/LifetimeContractPanel';
+import { headers } from 'next/headers';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -42,6 +44,53 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
   });
 
   if (!client || client.role !== 'CLIENT') notFound();
+
+  // Load the most recent lifetime contract for any permanent-resident pet,
+  // and a fresh signed-URL if it's already signed (so admin can download
+  // immediately).
+  const residentPet = client.pets.find(p => p.isPermanentResident && !p.deletedAt);
+  let lifetimeContractExisting: {
+    id: string;
+    status: 'PENDING' | 'SIGNED' | 'EXPIRED' | 'REVOKED';
+    signedAt: string | null;
+    publicToken: string | null;
+    publicTokenExpiresAt: string | null;
+    petName: string;
+  } | null = null;
+  let lifetimeDownloadUrl: string | null = null;
+  if (residentPet) {
+    const lc = await prisma.lifetimeContract.findFirst({
+      where: { clientId: id, petId: residentPet.id, status: { in: ['PENDING', 'SIGNED'] } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, status: true, signedAt: true, publicToken: true,
+        publicTokenExpiresAt: true, storageKey: true,
+      },
+    });
+    if (lc) {
+      lifetimeContractExisting = {
+        id: lc.id,
+        status: lc.status,
+        signedAt: lc.signedAt ? lc.signedAt.toISOString() : null,
+        publicToken: lc.publicToken,
+        publicTokenExpiresAt: lc.publicTokenExpiresAt ? lc.publicTokenExpiresAt.toISOString() : null,
+        petName: residentPet.name,
+      };
+      if (lc.status === 'SIGNED' && lc.storageKey) {
+        try {
+          lifetimeDownloadUrl = await createSignedUrl(lc.storageKey, 900, {
+            download: 'Mama_Lifetime_Boarding_Agreement_2026.pdf',
+          });
+        } catch {
+          // non-critical — UI falls back to no download button
+        }
+      }
+    }
+  }
+  const hdrs = await headers();
+  const proto = hdrs.get('x-forwarded-proto') ?? 'https';
+  const host = hdrs.get('host') ?? 'doguniverse.ma';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') ?? `${proto}://${host}`;
 
   const sl: Record<string, Record<string, string>> = {
     fr: { PENDING: 'En attente', CONFIRMED: 'Confirmé', AT_PICKUP: 'Sur place', CANCELLED: 'Annulé', REJECTED: 'Refusé', COMPLETED: 'Terminé', IN_PROGRESS: 'En cours' },
@@ -196,12 +245,32 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
                 {client.pets.map(pet => (
                   <Link key={pet.id} href={`/${locale}/admin/animals/${pet.id}`}>
                     <div className="flex items-center justify-between py-2 hover:bg-ivory-50 -mx-2 px-2 rounded">
-                      <span className="font-medium text-sm text-charcoal">{pet.name}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-medium text-sm text-charcoal">{pet.name}</span>
+                        {pet.isPermanentResident && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[10px] font-semibold border border-violet-300"
+                            title={locale === 'fr' ? 'Résident permanent — vit à la pension' : 'Permanent resident — lives at the facility'}
+                          >
+                            🏠 {locale === 'fr' ? 'Résident' : 'Resident'}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-gray-400">{pet._count.bookingPets} {l.stays}</span>
                     </div>
                   </Link>
                 ))}
               </div>
+            )}
+            {residentPet && (
+              <LifetimeContractPanel
+                clientId={id}
+                petName={residentPet.name}
+                locale={locale}
+                existing={lifetimeContractExisting}
+                baseUrl={baseUrl}
+                initialDownloadUrl={lifetimeDownloadUrl}
+              />
             )}
           </div>
 

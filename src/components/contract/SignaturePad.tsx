@@ -13,7 +13,37 @@ import {
 interface SignaturePadProps {
   onSigned: (dataUrl: string) => void;
   onCleared: () => void;
+  /** UI language. Defaults to 'fr' for backwards compat with the legacy
+   *  ClientContract flow. */
+  lang?: 'fr' | 'en';
 }
+
+const STRINGS = {
+  fr: {
+    hint: 'Dessinez votre signature dans ce cadre ou utilisez l’alternative clavier.',
+    canvasAria: 'Zone de signature — dessinez votre signature',
+    signHere: 'Signez ici',
+    typed: 'Signer par clavier',
+    clear: 'Effacer',
+    typedTitle: 'Signer par clavier',
+    typedLabel: 'Saisissez votre nom complet — il sera rendu comme signature.',
+    typedPlaceholder: 'Votre nom complet',
+    cancel: 'Annuler',
+    confirm: 'Confirmer la signature',
+  },
+  en: {
+    hint: 'Draw your signature in the box, or use the keyboard alternative.',
+    canvasAria: 'Signature area — draw your signature',
+    signHere: 'Sign here',
+    typed: 'Type signature',
+    clear: 'Clear',
+    typedTitle: 'Type your signature',
+    typedLabel: 'Enter your full name — it will be rendered as a signature.',
+    typedPlaceholder: 'Your full name',
+    cancel: 'Cancel',
+    confirm: 'Confirm signature',
+  },
+} as const;
 
 /** Renders a typed name as a cursive signature on the given canvas. */
 function renderTypedSignature(canvas: HTMLCanvasElement, name: string): string {
@@ -41,7 +71,8 @@ function renderTypedSignature(canvas: HTMLCanvasElement, name: string): string {
   return canvas.toDataURL('image/png');
 }
 
-export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
+export function SignaturePad({ onSigned, onCleared, lang = 'fr' }: SignaturePadProps) {
+  const t = STRINGS[lang];
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const padRef = useRef<SignaturePadLib | null>(null);
   // Store callbacks in refs so effect never needs to re-run when parent re-renders
@@ -129,7 +160,7 @@ export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
     <div className="flex flex-col gap-2">
       {/* Helper text referenced by aria-describedby */}
       <p id="signature-pad-hint" className="text-xs text-gray-500">
-        Dessinez votre signature dans ce cadre ou utilisez l&apos;alternative clavier.
+        {t.hint}
       </p>
 
       <div className="border-2 border-dashed border-[#C9A84C]/50 rounded-lg bg-white overflow-hidden relative">
@@ -137,12 +168,12 @@ export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
           ref={canvasRef}
           className="w-full touch-none"
           style={{ height: 160, display: 'block' }}
-          aria-label="Zone de signature — dessinez votre signature"
+          aria-label={t.canvasAria}
           role="img"
           aria-describedby="signature-pad-hint"
         />
         <div className="absolute bottom-2 right-3 text-xs text-gray-300 pointer-events-none select-none" aria-hidden="true">
-          Signez ici
+          {t.signHere}
         </div>
       </div>
 
@@ -152,14 +183,14 @@ export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
           onClick={() => setKeyboardDialogOpen(true)}
           className="text-xs text-[#8B6914] hover:text-[#6B4F10] underline"
         >
-          Signer par clavier
+          {t.typed}
         </button>
         <button
           type="button"
           onClick={handleClear}
           className="text-xs text-gray-400 hover:text-gray-600 underline"
         >
-          Effacer
+          {t.clear}
         </button>
       </div>
 
@@ -167,11 +198,11 @@ export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
       <Dialog open={keyboardDialogOpen} onOpenChange={setKeyboardDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Signer par clavier</DialogTitle>
+            <DialogTitle>{t.typedTitle}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-3">
             <label htmlFor="typed-signature-input" className="text-sm text-gray-700">
-              Saisissez votre nom complet — il sera rendu comme signature.
+              {t.typedLabel}
             </label>
             <input
               id="typed-signature-input"
@@ -179,7 +210,7 @@ export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
               value={typedName}
               onChange={(e) => setTypedName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleKeyboardConfirm(); }}
-              placeholder="Votre nom complet"
+              placeholder={t.typedPlaceholder}
               className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/60"
               autoFocus
               maxLength={100}
@@ -191,7 +222,7 @@ export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
               onClick={handleKeyboardCancel}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-200 rounded-md"
             >
-              Annuler
+              {t.cancel}
             </button>
             <button
               type="button"
@@ -199,7 +230,7 @@ export function SignaturePad({ onSigned, onCleared }: SignaturePadProps) {
               disabled={!typedName.trim()}
               className="px-4 py-2 text-sm font-medium text-white bg-[#C9A84C] hover:bg-[#B8960C] disabled:opacity-40 rounded-md transition-colors"
             >
-              Confirmer la signature
+              {t.confirm}
             </button>
           </DialogFooter>
         </DialogContent>

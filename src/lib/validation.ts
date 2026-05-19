@@ -347,6 +347,9 @@ export const petCreateSchema = z.object({
 export const petUpdateSchema = petCreateSchema.partial().extend({
   // Admin-only override : durée antiparasitaire forcée
   antiparasiticDurationDays: z.number().int().positive().optional().nullable(),
+  // Admin-only flag : permanent resident (Mama use case 2026-05-18).
+  // Pension à vie, exclu des KPIs d'occupancy classique.
+  isPermanentResident: z.boolean().optional(),
 }).strict();
 
 // ─── Vaccinations ──────────────────────────────────────────────────────────

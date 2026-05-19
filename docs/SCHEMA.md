@@ -3,7 +3,7 @@
 > Généré automatiquement depuis `prisma/schema.prisma`. Ne pas éditer à la main.
 > Régénérer avec `node scripts/generate-schema-doc.mjs` (ou `npm run db:doc`).
 
-**38 modèles** · **7 enums** · 2026-05-17
+**39 modèles** · **8 enums** · 2026-05-19
 
 ## Sommaire
 
@@ -37,6 +37,7 @@
 - [AddonRequest](#addonrequest)
 - [PasswordResetToken](#passwordresettoken)
 - [ClientContract](#clientcontract)
+- [LifetimeContract](#lifetimecontract)
 - [Product](#product)
 - [ProductCatalogSuggestion](#productcatalogsuggestion)
 - [MonthlyRevenueSummary](#monthlyrevenuesummary)
@@ -54,6 +55,7 @@
 - [PaymentMethod](#enum-paymentmethod)
 - [InvoiceStatus](#enum-invoicestatus)
 - [ItemCategory](#enum-itemcategory)
+- [LifetimeContractStatus](#enum-lifetimecontractstatus)
 
 ---
 
@@ -95,6 +97,7 @@
 | `benefitClaims` | `LoyaltyBenefitClaim[]` | — |  |
 | `revenueSummaries` | `MonthlyRevenueSummary[]` | — |  |
 | `reviews` | `Review[]` | — |  |
+| `lifetimeContracts` | `LifetimeContract[]` | — |  |
 
 **Relations**
 
@@ -137,6 +140,7 @@
 | `antiparasiticProduct` | `String?` | — |  |
 | `antiparasiticNotes` | `String?` | — |  |
 | `antiparasiticDurationDays` | `Int?` | — | Admin-only override (days). Null = use product default. |
+| `isPermanentResident` | `Boolean` | default=`false` |  |
 | `createdAt` | `DateTime` | default=`now(` |  |
 | `updatedAt` | `DateTime` | — |  |
 | `deletedAt` | `DateTime?` | — | Soft-delete — null = active, non-null = archived |
@@ -144,6 +148,7 @@
 | `documents` | `PetDocument[]` | — |  |
 | `bookingPets` | `BookingPet[]` | — |  |
 | `weightEntries` | `PetWeightEntry[]` | — |  |
+| `lifetimeContracts` | `LifetimeContract[]` | — |  |
 
 **Relations**
 
@@ -884,6 +889,38 @@
 
 ---
 
+## LifetimeContract
+
+| Champ | Type | Attributs | Commentaire |
+|---|---|---|---|
+| `id` | `String` | PK · default=`cuid(` |  |
+| `clientId` | `String` | — |  |
+| `petId` | `String` | — |  |
+| `status` | `LifetimeContractStatus` | default=`PENDING` |  |
+| `publicToken` | `String?` | UNIQUE |  |
+| `publicTokenExpiresAt` | `DateTime?` | — |  |
+| `signedAt` | `DateTime?` | — |  |
+| `storageKey` | `String?` | — | e.g. contracts-lifetime/{id}.pdf in `uploads-private` |
+| `ipAddress` | `String?` | — |  |
+| `userAgent` | `String?` | — |  |
+| `version` | `String` | default=`"1.0"` |  |
+| `createdAt` | `DateTime` | default=`now(` |  |
+| `createdBy` | `String` | — | userId of admin who generated the link |
+| `updatedAt` | `DateTime` | — |  |
+
+**Relations**
+
+- `client` → `User`
+- `pet` → `Pet`
+
+**Indexes :**
+- `([clientId])`
+- `([petId])`
+- `([status])`
+- `([publicToken])`
+
+---
+
 ## Product
 
 > Stock décrémenté à la création d'un InvoiceItem produit.
@@ -1128,3 +1165,10 @@
 - `DISCOUNT`
 - `EXTRA_SERVICE`
 - `MISC_FEE`
+
+### enum LifetimeContractStatus
+
+- `PENDING`
+- `SIGNED`
+- `EXPIRED`
+- `REVOKED`

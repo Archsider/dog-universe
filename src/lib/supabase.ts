@@ -93,12 +93,17 @@ export async function deleteFromPrivateStorage(key: string): Promise<void> {
  */
 export async function createSignedUrl(
   key: string,
-  expiresIn = 900
+  expiresIn = 900,
+  options?: { download?: string },
 ): Promise<string> {
   const client = getSupabaseAdmin();
+  // `download: true` makes Supabase set Content-Disposition: attachment.
+  // Passing a string sets the filename in that header — useful when the
+  // storage key is opaque (cuid + uuid) and we want a friendlier filename.
+  const opts = options?.download ? { download: options.download } : undefined;
   const { data, error } = await client.storage
     .from(privateBucket)
-    .createSignedUrl(key, expiresIn);
+    .createSignedUrl(key, expiresIn, opts);
   if (error || !data?.signedUrl) {
     throw new Error(`Supabase signed URL failed: ${error?.message ?? 'no URL returned'}`);
   }
