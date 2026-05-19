@@ -213,6 +213,22 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
                 ))}
               </div>
             )}
+            {client.pets.some(p => p.isPermanentResident) && (
+              <div className="mt-3 pt-3 border-t border-violet-100">
+                <a
+                  href={`/api/admin/contracts/lifetime/${id}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium transition-colors"
+                  download
+                >
+                  🏠 {locale === 'fr' ? 'Télécharger le contrat de pension à vie (PDF)' : 'Download lifetime boarding contract (PDF)'}
+                </a>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  {locale === 'fr'
+                    ? 'À imprimer, faire signer à la main par le propriétaire, et archiver.'
+                    : 'Print, get the owner to sign by hand, and file it.'}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-xl border border-[#F0D98A]/40 p-4 shadow-card">
