@@ -10,3 +10,5 @@ export { cancelBooking } from './cancel-booking';
 export { submitTimeProposal } from './time-proposals';
 export { createAdminBooking } from './admin-booking';
 export { patchAdminBooking } from './admin-booking-patch';
+export { createClientBooking } from './client-booking';
+export { createInvoice, patchInvoice } from './invoice';
