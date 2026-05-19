@@ -218,6 +218,10 @@ jobs:
             # them ; down→up restores them → expected cosmetic drift, same
             # family as 20260519_lifetime_contract.
             "20260519_daily_report"
+            # Custom updatedAt trigger + plpgsql function on PreStayBriefing —
+            # same family as 20260519_daily_report (not representable in
+            # schema.prisma).
+            "20260520_pre_stay_briefing"
           )
 
           for d in $(ls -1 "$MIG_DIR" | sort); do

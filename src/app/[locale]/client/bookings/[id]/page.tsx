@@ -42,6 +42,7 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
       },
       invoice: { include: { items: true } },
       stayPhotos: { orderBy: { createdAt: 'desc' } },
+      preStayBriefing: { select: { submittedAt: true, formData: true } },
     },
   });
 
@@ -155,6 +156,42 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
         />
 
         <BookingPetsCard bookingPets={booking.bookingPets.filter(bp => bp.pet)} locale={locale} t={t} />
+
+        {/* Pre-stay briefing CTA — visible only while the booking is upcoming
+            (PENDING/CONFIRMED) and the arrival hasn't happened yet. Soft-pushes
+            the client to fill the form before J-2 so the team has perfect
+            briefing data (feature #16 from world audit 2026-05-19). */}
+        {['PENDING', 'CONFIRMED'].includes(booking.status)
+          && booking.startDate.getTime() > Date.now() - 24 * 3600 * 1000
+          && booking.serviceType === 'BOARDING' && (
+          <a
+            href={`/${locale}/client/bookings/${booking.id}/briefing`}
+            className={`block rounded-2xl border-2 p-4 transition-all hover:shadow-md ${
+              booking.preStayBriefing?.submittedAt
+                ? 'border-emerald-200 bg-emerald-50/50'
+                : 'border-[#C9A84C]/50 bg-gradient-to-br from-[#FFF9E8] to-white'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl shrink-0" aria-hidden>
+                {booking.preStayBriefing?.submittedAt ? '✓' : '📝'}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-charcoal">
+                  {booking.preStayBriefing?.submittedAt
+                    ? (locale === 'fr' ? 'Briefing envoyé' : 'Briefing sent')
+                    : (locale === 'fr' ? 'Préparer son séjour' : 'Prepare the stay')}
+                </p>
+                <p className="text-xs text-charcoal/60 mt-0.5">
+                  {booking.preStayBriefing?.submittedAt
+                    ? (locale === 'fr' ? 'Cliquez pour mettre à jour les infos.' : 'Tap to update.')
+                    : (locale === 'fr' ? '2 min pour qu\'on prépare l\'accueil sur-mesure.' : '2 min so we tailor the welcome.')}
+                </p>
+              </div>
+              <span className="text-charcoal/40 shrink-0">→</span>
+            </div>
+          </a>
+        )}
 
         {['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && (
           <BookingAddonCard bookingId={booking.id} locale={locale} />

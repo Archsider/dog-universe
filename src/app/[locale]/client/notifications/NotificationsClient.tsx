@@ -55,6 +55,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   REVIEW_REQUEST:               { icon: Star,        color: 'text-gold-500',    bg: 'bg-gold-50' },
   END_STAY_REPORT:              { icon: FileText,    color: 'text-emerald-700', bg: 'bg-emerald-50' },
   DAILY_REPORT:                 { icon: PawPrint,    color: 'text-[#8B6914]',   bg: 'bg-[#FFF9E8]' },
+  PRE_STAY_BRIEFING_REQUEST:    { icon: FileText,    color: 'text-[#8B6914]',   bg: 'bg-[#FFF9E8]' },
 };
 
 function parseMetadata(raw: string | null): Record<string, unknown> {

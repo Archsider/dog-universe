@@ -207,6 +207,7 @@ model Booking {
   endStayReports    EndStayReport[]
   timeProposals     TimeProposal[]
   dailyReports      DailyReport[]
+  preStayBriefing   PreStayBriefing?
 
   @@index([clientId])
   @@index([status])
@@ -752,6 +753,25 @@ model DailyReport {
   @@index([bookingId])
   @@index([status, date])
   @@index([date])
+}
+
+// Pre-stay briefing — questionnaire sent J-2 before boarding so the team
+// arrives with the owner's preferences pre-recorded (favorite food, toys,
+// fears, routine, vet contact).  Source : audit features 2026-05-19,
+// Feature #16.
+model PreStayBriefing {
+  id          String    @id @default(cuid())
+  bookingId   String    @unique
+  formData    String? // JSON blob — see src/lib/pre-stay-briefing.ts for shape
+  invitedAt   DateTime  @default(now())
+  submittedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([submittedAt])
 }
 
 // Client-initiated reschedule request on a booking. Replaces the older pattern
