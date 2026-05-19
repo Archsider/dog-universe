@@ -168,13 +168,13 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
 
   const delta = deltaPercent(thisAmt, lastAmt);
 
-  // Avg stay duration — boarding-dominant invoices (item with highest total = BOARDING)
-  const boardingDominant = avgNightsData.filter(inv => {
-    if (inv.items.length === 0) return false;
-    const dom = inv.items.reduce((best, item) => Number(item.total) > Number(best.total) ? item : best);
-    return dom.category === 'BOARDING';
-  });
-  const nightItems = boardingDominant.flatMap(inv =>
+  // Avg stay duration — every BOARDING line counts, regardless of whether
+  // BOARDING is the dominant invoice category.  Previous "boarding-dominant"
+  // heuristic excluded valid stays from any invoice where products / grooming
+  // happened to outweigh the boarding line in MAD (e.g. 1-night stay with a
+  // 1.5k MAD product), biasing the metric upward.  Each `BookingItem` row
+  // is one pet's stay → quantity = nights.
+  const nightItems = avgNightsData.flatMap(inv =>
     inv.items.filter(item => item.category === 'BOARDING'),
   );
   const avgNights = nightItems.length > 0
@@ -248,14 +248,38 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
   );
   const yearSuffix = String(currentYear).slice(2);
 
-  const yearlyData = Array.from({ length: thisM + 1 }, (_, i) => ({
-    month:      `${monthLabels[i]} ${yearSuffix}`,
-    boarding:   currentYearMonthly[i].boarding,
-    grooming:   currentYearMonthly[i].grooming,
-    taxi:       currentYearMonthly[i].taxi,
-    croquettes: currentYearMonthly[i].croquettes,
-    total:      currentYearMonthly[i].total,
-  }));
+  // Current month in the year chart MUST agree with the KPI cards/donut
+  // above — both audiences expect "the May bar" to equal "the May total in
+  // the cards". `cashByMonth` and the inline `categoryItems` allocator are
+  // two implementations of the same logic ; for prior months the cache hit
+  // window is closed (data won't change) so cashByMonth is fine.  For the
+  // CURRENT month, override with the `cashedByCategory` we just computed
+  // from the same allocator that powers the cards / drilldown / donut.
+  const yearlyData = Array.from({ length: thisM + 1 }, (_, i) => {
+    const m = currentYearMonthly[i];
+    if (i === thisM) {
+      const total =
+        cashedByCategory.boarding + cashedByCategory.taxi
+        + cashedByCategory.grooming + cashedByCategory.croquettes
+        + Math.max(0, thisAmt - cashedTotalClassified);
+      return {
+        month:      `${monthLabels[i]} ${yearSuffix}`,
+        boarding:   cashedByCategory.boarding,
+        grooming:   cashedByCategory.grooming,
+        taxi:       cashedByCategory.taxi,
+        croquettes: cashedByCategory.croquettes,
+        total,
+      };
+    }
+    return {
+      month:      `${monthLabels[i]} ${yearSuffix}`,
+      boarding:   m.boarding,
+      grooming:   m.grooming,
+      taxi:       m.taxi,
+      croquettes: m.croquettes,
+      total:      m.total,
+    };
+  });
 
   const lastYearData = Array.from({ length: thisM + 1 }, (_, i) => ({
     month: monthLabels[i],
