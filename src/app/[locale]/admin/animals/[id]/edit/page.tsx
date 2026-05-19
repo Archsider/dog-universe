@@ -32,6 +32,7 @@ type FormState = {
   antiparasiticCustomProduct: string; // free text when key === 'OTHER'
   antiparasiticNotes: string;
   antiparasiticDurationDays: string;  // admin override in days (empty = use product default)
+  isPermanentResident: boolean;
 };
 
 const EMPTY_FORM: FormState = {
@@ -46,6 +47,7 @@ const EMPTY_FORM: FormState = {
   antiparasiticCustomProduct: '',
   antiparasiticNotes: '',
   antiparasiticDurationDays: '',
+  isPermanentResident: false,
 };
 
 const BEHAVIOR_OPTIONS = [
@@ -103,6 +105,7 @@ export default function AdminEditPetPage() {
           antiparasiticCustomProduct: detectProductKey(data.antiparasiticProduct || '') === 'OTHER' ? (data.antiparasiticProduct || '') : '',
           antiparasiticNotes: data.antiparasiticNotes || '',
           antiparasiticDurationDays: data.antiparasiticDurationDays ? String(data.antiparasiticDurationDays) : '',
+          isPermanentResident: data.isPermanentResident === true,
         });
         setFetching(false);
       })
@@ -155,6 +158,7 @@ export default function AdminEditPetPage() {
         lastAntiparasiticDate: form.lastAntiparasiticDate || null,
         antiparasiticProduct,
         antiparasiticDurationDays: form.antiparasiticDurationDays ? parseInt(form.antiparasiticDurationDays, 10) : null,
+        isPermanentResident: form.isPermanentResident,
       };
 
       const res = await fetch(`/api/pets/${petId}`, {
@@ -324,6 +328,34 @@ export default function AdminEditPetPage() {
                 <Input id="tattoo" value={form.tattooNumber} onChange={set('tattooNumber')} className="mt-1" placeholder="ABC123" />
               </div>
             </div>
+          </section>
+
+          {/* Statut résident */}
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
+              {fr ? 'Statut' : 'Status'}
+            </h3>
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-violet-200 bg-violet-50 cursor-pointer hover:bg-violet-100 transition-colors">
+              <input
+                type="checkbox"
+                checked={form.isPermanentResident}
+                onChange={(e) => setForm({ ...form, isPermanentResident: e.target.checked })}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🏠</span>
+                  <span className="font-semibold text-violet-900">
+                    {fr ? 'Résident permanent' : 'Permanent resident'}
+                  </span>
+                </div>
+                <p className="text-xs text-violet-800 mt-1">
+                  {fr
+                    ? "L'animal vit à demeure à Dog Universe (pension à vie). Distinct des chiens en pension classique. Exclu des compteurs d'occupancy standard."
+                    : "The pet lives at Dog Universe permanently (lifetime boarding). Distinct from regular boarders. Excluded from standard occupancy KPIs."}
+                </p>
+              </div>
+            </label>
           </section>
 
           {/* Vétérinaire */}

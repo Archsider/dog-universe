@@ -24,6 +24,7 @@ export async function GET(_req: Request, { params }: Params) {
       behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
       lastAntiparasiticDate: true, antiparasiticProduct: true, antiparasiticNotes: true,
       antiparasiticDurationDays: true,
+      isPermanentResident: true,
       createdAt: true, updatedAt: true,
       vaccinations: {
         select: { id: true, vaccineType: true, date: true, comment: true, createdAt: true },
@@ -107,6 +108,11 @@ export async function PATCH(_req: Request, { params }: Params) {
     // Admin-only override
     if (isAdmin && d.antiparasiticDurationDays !== undefined) {
       data.antiparasiticDurationDays = d.antiparasiticDurationDays;
+    }
+    // Admin-only flag : permanent resident (pension à vie, distinct des
+    // pensionnaires temporaires). Clients ne peuvent pas l'auto-déclarer.
+    if (isAdmin && typeof d.isPermanentResident === 'boolean') {
+      data.isPermanentResident = d.isPermanentResident;
     }
 
     const updated = await prisma.pet.update({

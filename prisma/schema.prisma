@@ -97,6 +97,11 @@ model Pet {
   antiparasiticProduct      String?
   antiparasiticNotes        String?
   antiparasiticDurationDays Int? // Admin-only override (days). Null = use product default.
+  // Permanent resident (Stephanie/Mama use case 2026-05-18) :
+  // Animal qui vit à demeure chez Dog Universe en pension à vie. Différencié
+  // visuellement des chiens en pension classique. Exclu des KPIs d'occupancy
+  // standard car ce n'est pas un séjour temporaire facturé à la nuit.
+  isPermanentResident       Boolean   @default(false)
   createdAt                 DateTime  @default(now())
   updatedAt                 DateTime  @updatedAt
   deletedAt                 DateTime? // Soft-delete — null = active, non-null = archived

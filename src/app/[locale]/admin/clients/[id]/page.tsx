@@ -196,7 +196,17 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
                 {client.pets.map(pet => (
                   <Link key={pet.id} href={`/${locale}/admin/animals/${pet.id}`}>
                     <div className="flex items-center justify-between py-2 hover:bg-ivory-50 -mx-2 px-2 rounded">
-                      <span className="font-medium text-sm text-charcoal">{pet.name}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-medium text-sm text-charcoal">{pet.name}</span>
+                        {pet.isPermanentResident && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[10px] font-semibold border border-violet-300"
+                            title={locale === 'fr' ? 'Résident permanent — vit à la pension' : 'Permanent resident — lives at the facility'}
+                          >
+                            🏠 {locale === 'fr' ? 'Résident' : 'Resident'}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-gray-400">{pet._count.bookingPets} {l.stays}</span>
                     </div>
                   </Link>

@@ -33,6 +33,7 @@ export default async function AdminAnimalDetailPage({ params }: PageProps) {
       behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
       lastAntiparasiticDate: true, antiparasiticProduct: true, antiparasiticNotes: true,
       antiparasiticDurationDays: true,
+      isPermanentResident: true,
       createdAt: true, updatedAt: true,
       owner: { select: { id: true, name: true, email: true } },
       vaccinations: {
@@ -120,7 +121,17 @@ export default async function AdminAnimalDetailPage({ params }: PageProps) {
             {pet.photoUrl ? <Image src={pet.photoUrl} alt={pet.name} width={56} height={56} className="w-14 h-14 object-cover" /> : <PawPrint className="h-7 w-7 text-gold-400" />}
           </div>
           <div>
-            <h1 className="text-xl font-serif font-bold text-charcoal">{pet.name}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-serif font-bold text-charcoal">{pet.name}</h1>
+              {pet.isPermanentResident && (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 text-xs font-semibold border border-violet-300"
+                  title={locale === 'fr' ? 'Résident permanent — vit à la pension à vie' : 'Permanent resident — lives at the facility for life'}
+                >
+                  🏠 {locale === 'fr' ? 'Résident permanent' : 'Permanent resident'}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-500">{pet.breed || (pet.species === 'DOG' ? l.dog : l.cat)}</p>
           </div>
         </div>
