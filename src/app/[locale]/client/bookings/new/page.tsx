@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocale } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from '@/hooks/use-toast';
+import { createClientBooking } from '@/lib/api-client';
+import type { ClientBookingCreateBody } from '@/lib/api-schemas/client-booking';
 import { type BookingType, type Pet } from './_lib/types';
 import { getWizardLabels, pick } from './_lib/i18n';
 import { isValidTaxiDate, isValidTaxiTime } from './_lib/validation';
@@ -150,20 +152,15 @@ export default function NewBookingPage() {
         taxiGoEnabled: taxiGo.enabled, taxiReturnEnabled: taxiReturn.enabled,
       });
       const body = buildBookingPayload({ bookingType, selectedPets, total, dogPets, boarding, taxiGo, taxiReturn, taxi });
-      const res = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        if (err.error === 'SUNDAY_NOT_ALLOWED') { toast({ title: l.sundayNotAllowed, variant: 'destructive' }); return; }
-        if (err.error === 'INVALID_TIME_SLOT') { toast({ title: l.invalidTime, variant: 'destructive' }); return; }
-        if (err.error === 'CAPACITY_EXCEEDED') { toast({ title: l.capacityFull, variant: 'destructive' }); return; }
+      const result = await createClientBooking(body as ClientBookingCreateBody);
+      if (!result.ok) {
+        if (result.error.code === 'SUNDAY_NOT_ALLOWED') { toast({ title: l.sundayNotAllowed, variant: 'destructive' }); return; }
+        if (result.error.code === 'INVALID_TIME_SLOT') { toast({ title: l.invalidTime, variant: 'destructive' }); return; }
+        if (result.error.code === 'CAPACITY_EXCEEDED') { toast({ title: l.capacityFull, variant: 'destructive' }); return; }
         throw new Error('Failed');
       }
-      const data = await res.json();
-      setBookingRef(data.bookingRef || data.id);
+      const data = result.data as { bookingRef?: string; id?: string };
+      setBookingRef(data.bookingRef || data.id || '');
       setStep(5);
     } catch {
       toast({ title: pick(locale, 'Erreur lors de la réservation', 'Booking error', 'خطأ أثناء الحجز'), variant: 'destructive' });

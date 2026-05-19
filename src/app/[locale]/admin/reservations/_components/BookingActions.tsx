@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { BookingStatus, ServiceType } from '@/types/booking-detail';
+import { patchAdminBooking } from '@/lib/api-client';
+import type { AdminBookingPatchBody } from '@/lib/api-schemas/admin-booking-patch';
 
 // BOARDING linear transitions
 const BOARDING_NEXT: Partial<Record<BookingStatus, BookingStatus>> = {
@@ -74,16 +76,12 @@ export default function BookingActions({
   const nextStatus: BookingStatus | undefined = nextMap[status];
   const labels = ACTION_LABELS[pipeline];
 
-  const patch = useCallback(async (body: Record<string, unknown>) => {
+  const patch = useCallback(async (body: AdminBookingPatchBody) => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${bookingId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...body, version }),
-      });
-      if (!res.ok) throw new Error('patch failed');
-      const data = (await res.json()) as { status?: BookingStatus };
+      const result = await patchAdminBooking(bookingId, { ...body, version });
+      if (!result.ok) throw new Error(result.error.code);
+      const data = result.data as { status?: BookingStatus };
       if (data.status) onStatusChange?.(data.status);
       router.refresh();
     } catch { /* errors surfaced via toast or inline */ }

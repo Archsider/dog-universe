@@ -1,4 +1,7 @@
 import { logger } from '@/lib/logger';
+import { createClientBooking, createInvoice } from '@/lib/api-client';
+import type { ClientBookingCreateBody } from '@/lib/api-schemas/client-booking';
+import type { CreateInvoiceBody } from '@/lib/api-schemas/invoice';
 import type { CustomLine, WalkInPet } from './lib';
 import type { GroomingSize, TaxiType } from '@/lib/pricing-client';
 
@@ -93,7 +96,7 @@ export async function submitAdminBooking(args: SubmitArgs): Promise<SubmitResult
     resolvedPetIds = petsPayload.pets.map(p => p.id);
   }
 
-  const body: Record<string, unknown> = {
+  const bookingBody: ClientBookingCreateBody = {
     clientId: resolvedClientId,
     serviceType,
     petIds: resolvedPetIds,
@@ -103,76 +106,69 @@ export async function submitAdminBooking(args: SubmitArgs): Promise<SubmitResult
     notes: notes.trim() || null,
     totalPrice: finalTotal,
     source: 'MANUAL',
+    ...(serviceType === 'BOARDING'
+      ? {
+          includeGrooming: groomingEnabled,
+          groomingSize: groomingEnabled && dogsCount > 0 ? groomingSize : null,
+          groomingPrice: groomingTotal,
+          taxiGoEnabled,
+          taxiGoDate: taxiGoEnabled ? taxiGoDate : null,
+          taxiGoTime: taxiGoEnabled ? taxiGoTime : null,
+          taxiGoAddress: taxiGoEnabled ? taxiGoAddress.trim() : null,
+          taxiReturnEnabled,
+          taxiReturnDate: taxiReturnEnabled ? taxiReturnDate : null,
+          taxiReturnTime: taxiReturnEnabled ? taxiReturnTime : null,
+          taxiReturnAddress: taxiReturnEnabled ? taxiReturnAddress.trim() : null,
+          taxiAddonPrice: taxiAddonTotal,
+        }
+      : { taxiType }),
+    ...(validCustomLines.length > 0
+      ? {
+          bookingItems: validCustomLines.map((l) => ({
+            description: l.description.trim(),
+            quantity: l.quantity,
+            unitPrice: l.unitPrice,
+          })),
+        }
+      : {}),
   };
 
-  if (serviceType === 'BOARDING') {
-    Object.assign(body, {
-      includeGrooming: groomingEnabled,
-      groomingSize: groomingEnabled && dogsCount > 0 ? groomingSize : null,
-      groomingPrice: groomingTotal,
-      taxiGoEnabled,
-      taxiGoDate: taxiGoEnabled ? taxiGoDate : null,
-      taxiGoTime: taxiGoEnabled ? taxiGoTime : null,
-      taxiGoAddress: taxiGoEnabled ? taxiGoAddress.trim() : null,
-      taxiReturnEnabled,
-      taxiReturnDate: taxiReturnEnabled ? taxiReturnDate : null,
-      taxiReturnTime: taxiReturnEnabled ? taxiReturnTime : null,
-      taxiReturnAddress: taxiReturnEnabled ? taxiReturnAddress.trim() : null,
-      taxiAddonPrice: taxiAddonTotal,
-    });
-  } else {
-    body.taxiType = taxiType;
-  }
-
-  if (validCustomLines.length > 0) {
-    body.bookingItems = validCustomLines.map(l => ({
-      description: l.description.trim(),
-      quantity: l.quantity,
-      unitPrice: l.unitPrice,
-      total: l.quantity * l.unitPrice,
-    }));
-  }
-
-  const res = await fetch('/api/bookings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error ?? 'INTERNAL_ERROR');
+  const bookingResult = await createClientBooking(bookingBody);
+  if (!bookingResult.ok) {
+    throw new Error(bookingResult.error.code);
   }
 
   let invoiceCreated = false;
   if (isWalkIn) {
     try {
-      const bookingResult = await res.json().catch(() => ({})) as { id?: string };
-      const invRes = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientId: resolvedClientId,
-          serviceType,
-          issuedAt: serviceType === 'PET_TAXI' ? taxiDate : startDate,
-          ...(bookingResult.id ? { bookingId: bookingResult.id } : {}),
-          items: [{
+      const invoiceBody: CreateInvoiceBody = {
+        clientId: resolvedClientId,
+        ...(bookingResult.data.id ? { bookingId: bookingResult.data.id } : {}),
+        serviceType: serviceType === 'BOARDING' ? 'BOARDING' : 'PET_TAXI',
+        issuedAt: serviceType === 'PET_TAXI' ? taxiDate : startDate,
+        items: [
+          {
             description: serviceType === 'BOARDING' ? (fr ? 'Pension' : 'Boarding') : 'Pet Taxi',
             quantity: 1,
             unitPrice: finalTotal,
             total: finalTotal,
             category: serviceType === 'BOARDING' ? 'BOARDING' : 'PET_TAXI',
-          }],
-        }),
-      });
-      if (invRes.ok) {
+          },
+        ],
+      };
+      const invResult = await createInvoice(invoiceBody);
+      if (invResult.ok) {
         invoiceCreated = true;
       } else {
-        const invErr = await invRes.json().catch(() => ({}));
-        logger.error('walk-in-booking', 'Auto-invoice failed', { status: invRes.status, error: invErr });
+        logger.error('walk-in-booking', 'Auto-invoice failed', {
+          status: invResult.status,
+          error: invResult.error.code,
+        });
       }
     } catch (err) {
-      logger.error('walk-in-booking', 'Auto-invoice threw', { error: err instanceof Error ? err.message : String(err) });
+      logger.error('walk-in-booking', 'Auto-invoice threw', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

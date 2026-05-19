@@ -19,5 +19,6 @@ module.exports = {
     'no-hardcoded-product-without-id': require('./rules/no-hardcoded-product-without-id'),
     'no-naive-casa-timezone-cast': require('./rules/no-naive-casa-timezone-cast'),
     'no-inline-deletedAt-null': require('./rules/no-inline-deletedAt-null'),
+    'no-direct-api-fetch': require('./rules/no-direct-api-fetch'),
   },
 };

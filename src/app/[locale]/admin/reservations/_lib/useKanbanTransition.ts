@@ -2,6 +2,8 @@
 
 import { useCallback } from 'react';
 import { toast } from '@/hooks/use-toast';
+import { patchAdminBooking } from '@/lib/api-client';
+import type { BookingStatus } from '@/lib/api-schemas/admin-booking-patch';
 import { type KanbanBooking, type ApplyTransition } from './kanban-types';
 
 /**
@@ -25,22 +27,23 @@ export function useKanbanTransition(
   return useCallback<ApplyTransition>(async (bookingId, currentStatus, currentVersion, newStatus) => {
     handleStatusChange(bookingId, newStatus);
     try {
-      const res = await fetch(`/api/admin/bookings/${bookingId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus, version: currentVersion }),
+      const result = await patchAdminBooking(bookingId, {
+        status: newStatus as BookingStatus,
+        version: currentVersion,
       });
-      if (res.status === 409) {
-        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: currentStatus, version: currentVersion } : b));
-        toast({
-          title: isFr
-            ? "Cette réservation a été modifiée par quelqu'un d'autre. Veuillez rafraîchir."
-            : 'This record was modified by someone else. Please refresh.',
-          variant: 'destructive',
-        });
-        return;
+      if (!result.ok) {
+        if (result.status === 409) {
+          setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: currentStatus, version: currentVersion } : b));
+          toast({
+            title: isFr
+              ? "Cette réservation a été modifiée par quelqu'un d'autre. Veuillez rafraîchir."
+              : 'This record was modified by someone else. Please refresh.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        throw new Error(result.error.code);
       }
-      if (!res.ok) throw new Error('Failed');
       toast({ title: isFr ? 'Statut mis à jour' : 'Status updated', variant: 'success' });
     } catch {
       setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: currentStatus, version: currentVersion } : b));

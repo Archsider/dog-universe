@@ -67,6 +67,34 @@ export async function apiPost<
   body: unknown,
   options: ApiPostOptions = {},
 ): Promise<ApiResult<TSuccess, TErrorCode>> {
+  return apiRequest('POST', path, schema, body, options);
+}
+
+/** Same as `apiPost` but issues a PATCH. */
+export async function apiPatch<
+  TSchema extends ZodTypeAny,
+  TSuccess,
+  TErrorCode extends string = string,
+>(
+  path: string,
+  schema: TSchema,
+  body: unknown,
+  options: ApiPostOptions = {},
+): Promise<ApiResult<TSuccess, TErrorCode>> {
+  return apiRequest('PATCH', path, schema, body, options);
+}
+
+async function apiRequest<
+  TSchema extends ZodTypeAny,
+  TSuccess,
+  TErrorCode extends string = string,
+>(
+  method: 'POST' | 'PATCH',
+  path: string,
+  schema: TSchema,
+  body: unknown,
+  options: ApiPostOptions = {},
+): Promise<ApiResult<TSuccess, TErrorCode>> {
   // Client-side validation. We use safeParse so a single misshapen field
   // surfaces with the full Zod issue list — identical to what the server
   // returns for `INVALID_BODY`.
@@ -85,7 +113,7 @@ export async function apiPost<
   let response: Response;
   try {
     response = await fetch(path, {
-      method: 'POST',
+      method,
       headers: {
         'Content-Type': options.contentType ?? 'application/json',
         ...options.headers,

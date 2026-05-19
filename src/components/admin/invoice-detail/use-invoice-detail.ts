@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from '@/hooks/use-toast';
 import { submitPayment } from '@/app/[locale]/admin/billing/_lib/submit-payment';
+import { patchInvoice } from '@/lib/api-client';
 import {
   autoCategory,
   getDisplayEmail,
@@ -105,40 +106,34 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
 
     setSaving(true);
     try {
-      const res = await fetch(`/api/invoices/${invoice.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: editItems.map(it => ({
-            description: it.description.trim(),
-            quantity: it.quantity,
-            unitPrice: it.unitPrice,
-            category: it.category,
-          })),
-          issuedAt: editIssuedAt,
-          notes: editNotes,
-          status: editStatus,
-          clientDisplayName: editClientName.trim(),
-          clientDisplayPhone: editClientPhone.trim() || null,
-          clientDisplayEmail: editClientEmail.trim() || null,
-          version: invoice.version,
-        }),
+      const result = await patchInvoice(invoice.id, {
+        items: editItems.map(it => ({
+          description: it.description.trim(),
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          category: it.category,
+        })),
+        issuedAt: editIssuedAt,
+        notes: editNotes,
+        status: editStatus as 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED',
+        clientDisplayName: editClientName.trim(),
+        clientDisplayPhone: editClientPhone.trim() || null,
+        clientDisplayEmail: editClientEmail.trim() || null,
+        version: invoice.version,
       });
-      if (res.status === 409) {
-        toast({
-          title: isFr
-            ? 'Cette facture a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
-            : 'This record was modified by someone else. Please refresh.',
-          variant: 'destructive',
-        });
-        return;
+      if (!result.ok) {
+        if (result.status === 409) {
+          toast({
+            title: isFr
+              ? 'Cette facture a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
+              : 'This record was modified by someone else. Please refresh.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        throw new Error(result.error.code);
       }
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || (isFr ? 'Erreur serveur' : 'Server error'));
-      }
-      const updated = await res.json();
-      setInvoice(updated);
+      setInvoice(result.data as unknown as typeof invoice);
       setMode('view');
       toast({ title: isFr ? 'Facture mise à jour' : 'Invoice updated', variant: 'success' });
     } catch (e: unknown) {

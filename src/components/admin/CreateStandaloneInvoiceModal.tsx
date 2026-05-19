@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { createInvoice } from '@/lib/api-client';
+import type { CreateInvoiceBody } from '@/lib/api-schemas/invoice';
 import { InvoiceFormBody } from './standalone-invoice/InvoiceFormBody';
 import {
   type LineItem,
@@ -114,13 +116,29 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
         if (!wiRes.ok) throw new Error(fr ? 'Erreur création client de passage.' : 'Failed to create walk-in client.');
         resolvedClientId = (await wiRes.json()).id;
       }
-      const body: Record<string, unknown> = {
-        clientId: resolvedClientId, serviceType, issuedAt, notes: notes.trim() || null,
-        items: items.map(it => ({ description: it.description.trim(), quantity: it.quantity, unitPrice: it.unitPrice, total: it.quantity * it.unitPrice, category: it.category, ...(it.productId ? { productId: it.productId } : {}) })),
+      const body: CreateInvoiceBody = {
+        clientId: resolvedClientId,
+        serviceType: serviceType as CreateInvoiceBody['serviceType'],
+        issuedAt,
+        notes: notes.trim() || null,
+        items: items.map(it => ({
+          description: it.description.trim(),
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          total: it.quantity * it.unitPrice,
+          category: it.category,
+          ...(it.productId ? { productId: it.productId } : {}),
+        })),
+        ...(markPaid
+          ? {
+              markPaid: true,
+              paymentMethod: paymentMethod as CreateInvoiceBody['paymentMethod'],
+              paidAt,
+            }
+          : {}),
       };
-      if (markPaid) { body.markPaid = true; body.paymentMethod = paymentMethod; body.paidAt = paidAt; }
-      const res = await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || 'INTERNAL_ERROR'); }
+      const result = await createInvoice(body);
+      if (!result.ok) throw new Error(result.error.code);
       setOpen(false); reset(); onCreated?.(); window.location.reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : (fr ? 'Erreur inattendue.' : 'Unexpected error.'));
