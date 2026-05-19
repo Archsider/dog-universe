@@ -119,14 +119,19 @@ export async function POST(req: NextRequest, { params }: Params) {
     }, { status: 400 });
   }
 
-  // Only really fire the admin alert once per (booking, day).  Refreshing
-  // the page shouldn't spam the founder's phone.
-  const flagKey = `arrival:fired:${booking.id}:${today}`;
-  const acquired = await tryAcquireFlag(flagKey, 86_400); // 24h
-
   // The client always gets a positive UI response if they're near — the
   // server-side check is just to gate the SMS / admin notif fan-out.
   const isNear = distance <= NEAR_DISTANCE_METERS;
+
+  // Idempotency flag — only consume when we're ACTUALLY near.  Acquiring
+  // it eagerly (before the isNear check) would let a far-away tap burn
+  // the daily key, then silently drop the in-range tap that follows (the
+  // P1 bug Codex flagged on PR #180).  Stay scoped to (booking, day).
+  let acquired = false;
+  if (isNear) {
+    const flagKey = `arrival:fired:${booking.id}:${today}`;
+    acquired = await tryAcquireFlag(flagKey, 86_400); // 24h
+  }
 
   if (isNear && acquired) {
     const firstName = booking.client.firstName ?? booking.client.name?.split(' ')[0] ?? 'Un client';
