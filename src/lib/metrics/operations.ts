@@ -15,19 +15,24 @@ export function deltaPercent(cur: number, prev: number): number {
   return prev === 0 ? 0 : Math.round(((cur - prev) / prev) * 1000) / 10;
 }
 
-// Compteurs ENCAISSÉS par catégorie : nombre de factures distinctes ayant
-// (a) au moins un Payment dans la fenêtre [start, end] et (b) au moins un
-// InvoiceItem dont la catégorie effective tombe dans le bucket.
+// Compteurs ENCAISSÉS par catégorie : nombre d'UNITÉS DE SERVICE livrées
+// (= InvoiceItems) dans la fenêtre [start, end], par bucket.
+//
+// L'unité diffère du nombre d'invoices : une seule facture peut couvrir
+// 3 chiens (= 3 séjours), un aller+retour taxi (= 2 courses), ou plusieurs
+// soins de toilettage. Le drilldown analytics liste *les items*, donc le
+// compteur du header doit lister *les items* pour rester cohérent.
 //
 // Catégorie effective = `categoryKey(it.category, it.description)` —
 // MÊME logique que le drilldown analytics (qui utilise `inferItemCategory`,
-// alias direct de categoryKey).  Permet de catcher les lignes legacy persistées
-// avec category='OTHER' dont la description match un keyword (ex: "Ultra
-// Premium Low Grain" → croquettes).  Sans cette parité, le header card
-// affichait "1 vente" pendant que le drilldown listait 2 lignes — c'est le
-// même family-of-bug que `js_vs_mv_current_month` retiré en PR #105.
+// alias direct de categoryKey). Permet de catcher les lignes legacy
+// persistées avec category='OTHER' dont la description match un keyword
+// (ex: "Ultra Premium Low Grain" → croquettes).
 //
-// Si aucune facture n'a été encaissée pour une catégorie, le compteur tombe
+// Family-of-bug aligné avec `js_vs_mv_current_month` retiré en PR #105 —
+// éviter deux sources de vérité qui peuvent drifter.
+//
+// Si aucune unité n'a été encaissée pour une catégorie, le compteur tombe
 // à 0 — par ex. "Toilettage — 0 soins" en mai 2026.
 export async function volumeByCategory(
   start: Date,
@@ -36,28 +41,22 @@ export async function volumeByCategory(
   const invoices = await prisma.invoice.findMany({
     where: { payments: { some: { paymentDate: { gte: start, lte: end } } } },
     select: {
-      id: true,
       items: { select: { category: true, description: true } },
     },
   });
 
-  const buckets = {
-    boarding: new Set<string>(),
-    taxi: new Set<string>(),
-    grooming: new Set<string>(),
-    croquettes: new Set<string>(),
-  };
+  const counts = { boarding: 0, taxi: 0, grooming: 0, croquettes: 0 };
   for (const inv of invoices) {
     for (const it of inv.items) {
       const k = categoryKey(it.category, it.description);
-      if (k) buckets[k].add(inv.id);
+      if (k) counts[k] += 1;
     }
   }
   return {
-    boarding: buckets.boarding.size,
-    taxi: buckets.taxi.size,
-    grooming: buckets.grooming.size,
-    croquettes: buckets.croquettes.size,
+    boarding: counts.boarding,
+    taxi: counts.taxi,
+    grooming: counts.grooming,
+    croquettes: counts.croquettes,
     other: 0,
   };
 }
