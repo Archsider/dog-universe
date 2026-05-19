@@ -34,6 +34,12 @@ interface EditTaxiAddonSectionProps {
   // Tracking GPS metadata (passée séparément car non incluse dans TaxiTripData)
   goTracking?: { trackingActive: boolean; trackingToken: string | null } | null;
   returnTracking?: { trackingActive: boolean; trackingToken: string | null } | null;
+  /**
+   * Booking.status — used to surface the "Marquer comme terminé" shortcut
+   * on each TaxiTimeline when the booking is already COMPLETED
+   * (retroactive walk-in correction path).
+   */
+  bookingStatus?: string;
   locale: string;
 }
 
@@ -71,8 +77,9 @@ const l = {
 };
 
 export default function EditTaxiAddonSection({
-  bookingId, bookingVersion, boardingDetail, goTrip, returnTrip, goTracking, returnTracking, locale,
+  bookingId, bookingVersion, boardingDetail, goTrip, returnTrip, goTracking, returnTracking, bookingStatus, locale,
 }: EditTaxiAddonSectionProps) {
+  const allowForceComplete = bookingStatus === 'COMPLETED';
   const router = useRouter();
   const t = l[locale as keyof typeof l] || l.fr;
   const hasAnyTaxi = !!(boardingDetail?.taxiGoEnabled || boardingDetail?.taxiReturnEnabled);
@@ -171,7 +178,7 @@ export default function EditTaxiAddonSection({
               <p className="text-xs font-semibold text-orange-700 mb-2">↗ Aller (dépôt pension)</p>
               {goTrip
                 ? <>
-                    <TaxiTimeline trip={goTrip} locale={locale} />
+                    <TaxiTimeline trip={goTrip} locale={locale} allowForceComplete={allowForceComplete} />
                     {goTracking && (
                       <TaxiTrackingButton
                         taxiTripId={goTrip.id}
@@ -194,7 +201,7 @@ export default function EditTaxiAddonSection({
               <p className="text-xs font-semibold text-orange-700 mb-2">↙ Retour (domicile)</p>
               {returnTrip
                 ? <>
-                    <TaxiTimeline trip={returnTrip} locale={locale} />
+                    <TaxiTimeline trip={returnTrip} locale={locale} allowForceComplete={allowForceComplete} />
                     {returnTracking && (
                       <TaxiTrackingButton
                         taxiTripId={returnTrip.id}
@@ -241,7 +248,7 @@ export default function EditTaxiAddonSection({
                 {/* Timeline (if trip exists) */}
                 {goTrip && (
                   <div className="border-t border-gray-100 pt-3">
-                    <TaxiTimeline trip={goTrip} locale={locale} />
+                    <TaxiTimeline trip={goTrip} locale={locale} allowForceComplete={allowForceComplete} />
                     {goTracking && (
                       <TaxiTrackingButton
                         taxiTripId={goTrip.id}
@@ -308,7 +315,7 @@ export default function EditTaxiAddonSection({
               <>
                 {returnTrip && (
                   <div className="border-t border-gray-100 pt-3">
-                    <TaxiTimeline trip={returnTrip} locale={locale} />
+                    <TaxiTimeline trip={returnTrip} locale={locale} allowForceComplete={allowForceComplete} />
                     {returnTracking && (
                       <TaxiTrackingButton
                         taxiTripId={returnTrip.id}
