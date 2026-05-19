@@ -141,7 +141,7 @@ export type CreateProposalResult =
       publicToken: string | null;
       publicTokenExpiresAt: Date | null;
     }
-  | { ok: false; error: 'INVALID_TIME' | 'BOOKING_NOT_FOUND' | 'BOOKING_NOT_OPEN' };
+  | { ok: false; error: 'INVALID_TIME' | 'BOOKING_NOT_FOUND' | 'BOOKING_NOT_OPEN' | 'RACE_FAILED' };
 
 /**
  * Creates a new PENDING proposal and supersedes any older PENDING for the
@@ -169,32 +169,64 @@ export async function createProposal(
     return { ok: false, error: 'BOOKING_NOT_OPEN' };
   }
 
-  // Supersede any older PENDING for the same (bookingId, scope).
-  await client.timeProposal.updateMany({
-    where: { bookingId: input.bookingId, scope: input.scope, status: 'PENDING' },
-    data: { status: 'SUPERSEDED' },
-  });
-
+  // Supersede any older PENDING for the same (bookingId, scope), then
+  // create the new PENDING.  Two statements are NOT atomic on their own,
+  // so concurrent calls can both pass the sweep and both create a PENDING
+  // — without the DB-side partial UNIQUE index it's a real race.
+  //
+  // The partial index `TimeProposal_one_pending_per_scope_idx` (migration
+  // 20260520_time_proposal_partial_unique) makes the create throw P2002
+  // when another concurrent path won.  One retry resolves : re-sweep the
+  // PENDING (the racer's row is now visible) and re-create.  Second P2002
+  // means the race is sustained → caller gets a clean error.
   const emitToken = input.emitPublicToken !== false && input.proposedByRole !== 'CLIENT';
-  const proposalId = `tp_${randomBytes(12).toString('hex')}`;
   const expiresAt = new Date(Date.now() + TOKEN_TTL_DAYS * 86_400_000);
-  const publicToken = emitToken ? signToken(proposalId) : null;
 
-  const created = await client.timeProposal.create({
-    data: {
-      id: proposalId,
-      bookingId: input.bookingId,
-      scope: input.scope,
-      time: input.time,
-      status: 'PENDING',
-      proposedBy: input.proposedBy,
-      proposedByRole: input.proposedByRole,
-      proposalNote: input.proposalNote ?? null,
-      publicToken,
-      publicTokenExpiresAt: publicToken ? expiresAt : null,
-    },
-    select: { id: true, publicToken: true, publicTokenExpiresAt: true },
-  });
+  async function sweepAndCreate() {
+    await client.timeProposal.updateMany({
+      where: { bookingId: input.bookingId, scope: input.scope, status: 'PENDING' },
+      data: { status: 'SUPERSEDED' },
+    });
+    const proposalId = `tp_${randomBytes(12).toString('hex')}`;
+    const publicToken = emitToken ? signToken(proposalId) : null;
+    return client.timeProposal.create({
+      data: {
+        id: proposalId,
+        bookingId: input.bookingId,
+        scope: input.scope,
+        time: input.time,
+        status: 'PENDING',
+        proposedBy: input.proposedBy,
+        proposedByRole: input.proposedByRole,
+        proposalNote: input.proposalNote ?? null,
+        publicToken,
+        publicTokenExpiresAt: publicToken ? expiresAt : null,
+      },
+      select: { id: true, publicToken: true, publicTokenExpiresAt: true },
+    });
+  }
+
+  let created;
+  try {
+    created = await sweepAndCreate();
+  } catch (err) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((err as any)?.code === 'P2002') {
+      // Race lost — sweep again and retry once.  Second collision is
+      // bubbled up as RACE_FAILED so the caller can surface it.
+      try {
+        created = await sweepAndCreate();
+      } catch (retryErr) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((retryErr as any)?.code === 'P2002') {
+          return { ok: false, error: 'RACE_FAILED' };
+        }
+        throw retryErr;
+      }
+    } else {
+      throw err;
+    }
+  }
 
   return {
     ok: true,
@@ -279,8 +311,14 @@ export async function supersedePendingForBooking(
   bookingId: string,
   client: PrismaLike = prisma,
 ): Promise<number> {
+  // Sweep BOTH PENDING and ACCEPTED proposals — the booking is going
+  // terminal (CANCELLED/REJECTED) so no time negotiation makes sense
+  // anymore, and `getConfirmedTime()` was still returning an ACCEPTED
+  // proposal's time post-cancel until 2026-05-19.  Audit clarity wins
+  // over historical preservation here ; the SUPERSEDED status itself
+  // carries the "no longer active" signal in the trail.
   const r = await client.timeProposal.updateMany({
-    where: { bookingId, status: 'PENDING' },
+    where: { bookingId, status: { in: ['PENDING', 'ACCEPTED'] } },
     data: { status: 'SUPERSEDED', publicToken: null, publicTokenExpiresAt: null },
   });
   return r.count;

@@ -76,14 +76,18 @@ async function approveExtensionMergeImpl(args: ApproveExtensionMergeArgs) {
 
   const newEndDate = booking.endDate ?? booking.startDate;
 
-  const extCapacity1 = await checkBoardingCapacity({
+  // Capacity is checked again INSIDE the transaction (line ~105) to close
+  // the race between two admins approving overlapping extensions
+  // concurrently.  This pre-check stays for fast 400 returns on obvious
+  // overflow ; the in-tx check is the authoritative gate.
+  const extCapacityPre = await checkBoardingCapacity({
     petIds: originalBooking.bookingPets.map(bp => bp.pet.id),
     startDate: originalBooking.endDate ?? originalBooking.startDate,
     endDate: newEndDate,
     excludeBookingId: originalBooking.id,
   });
-  if (!extCapacity1.ok) {
-    throw new BookingError('CAPACITY_EXCEEDED', { message: 'Capacity exceeded', payload: extCapacity1 });
+  if (!extCapacityPre.ok) {
+    throw new BookingError('CAPACITY_EXCEEDED', { message: 'Capacity exceeded', payload: extCapacityPre });
   }
 
   const { calculateBoardingTotalForExtension, getPricingSettings } = await import('@/lib/pricing');
@@ -110,6 +114,20 @@ async function approveExtensionMergeImpl(args: ApproveExtensionMergeArgs) {
   let extensionPaymentsToTransfer: { id: string }[] = [];
 
   await prisma.$transaction(async (tx) => {
+    // Re-check capacity inside the tx to defeat the race between two
+    // concurrent extension approvals : both see the pre-check pass, both
+    // reach the tx, only the second one re-counts (with the tx isolation
+    // semantics) and gets the canonical overflow.
+    const extCapacityTx = await checkBoardingCapacity({
+      petIds: originalBooking.bookingPets.map(bp => bp.pet.id),
+      startDate: originalBooking.endDate ?? originalBooking.startDate,
+      endDate: newEndDate,
+      excludeBookingId: originalBooking.id,
+    }, tx);
+    if (!extCapacityTx.ok) {
+      throw new BookingError('CAPACITY_EXCEEDED', { message: 'Capacity exceeded', payload: extCapacityTx });
+    }
+
     await tx.stayPhoto.updateMany({ where: { bookingId }, data: { bookingId: originalBooking.id } });
     await tx.bookingItem.updateMany({ where: { bookingId }, data: { bookingId: originalBooking.id } });
 

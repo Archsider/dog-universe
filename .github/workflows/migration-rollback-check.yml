@@ -222,6 +222,10 @@ jobs:
             # same family as 20260519_daily_report (not representable in
             # schema.prisma).
             "20260520_pre_stay_briefing"
+            # Wave 2 — partial UNIQUE index + CHECK constraint, both not
+            # expressible in schema.prisma.
+            "20260520_time_proposal_partial_unique"
+            "20260520_invoice_paid_amount_lower_bound"
           )
 
           for d in $(ls -1 "$MIG_DIR" | sort); do

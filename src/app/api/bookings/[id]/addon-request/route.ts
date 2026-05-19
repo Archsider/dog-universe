@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { notifyAdminsAddonRequest } from '@/lib/notifications';
 import { addonRequestSchema } from '@/lib/validation';
 import { withSchema } from '@/lib/with-schema';
@@ -47,14 +48,10 @@ export const POST = withSchema(
       return NextResponse.json({ error: 'BOOKING_NOT_ACTIVE' }, { status: 400 });
     }
 
-    // Rate limit per booking — count rows directly on the dedicated table.
-    const existing = await prisma.addonRequest.count({
-      where: { bookingId: id, requestedBy: session.user.id },
-    });
-    if (existing >= MAX_REQUESTS_PER_BOOKING) {
-      return NextResponse.json({ error: 'TOO_MANY_REQUESTS' }, { status: 429 });
-    }
-
+    // Atomic count + create — two double-clicks (or a retry) used to both
+    // pass the cap check (both saw N < MAX) and both insert.  Serializable
+    // forces a re-check on commit ; the racer gets a P2034 retry-error
+    // which we surface as 429 (same as the cap hit).
     const client = await prisma.user.findFirst({
       where: notDeleted({ id: session.user.id }),
       select: { name: true, email: true },
@@ -63,15 +60,60 @@ export const POST = withSchema(
     const petNames = booking.bookingPets.map((bp) => bp.pet.name).join(', ') || '—';
     const bookingRef = booking.id.slice(0, 8).toUpperCase();
 
-    const created = await prisma.addonRequest.create({
-      data: {
-        bookingId: id,
-        serviceType,
-        description: message ?? '',
-        requestedBy: session.user.id,
-        status: 'PENDING',
-      },
-    });
+    // Bounded retry on P2034 (Serializable conflict) — a racer can be
+    // aborted by SSI even when the cap is not yet reached, so naively
+    // mapping P2034 → 429 would drop valid requests.  Up to 3 attempts
+    // with small backoff ; after that we surface the conflict as 503 so
+    // the client can retry, NOT as 429 which would lie about the cap.
+    async function runCountAndCreate() {
+      return prisma.$transaction(async (tx) => {
+        const existing = await tx.addonRequest.count({
+          where: { bookingId: id, requestedBy: session.user.id },
+        });
+        if (existing >= MAX_REQUESTS_PER_BOOKING) {
+          throw new Error('TOO_MANY_REQUESTS');
+        }
+        return tx.addonRequest.create({
+          data: {
+            bookingId: id,
+            serviceType,
+            description: message ?? '',
+            requestedBy: session.user.id,
+            status: 'PENDING',
+          },
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }
+
+    let created: { id: string } | undefined;
+    const MAX_ATTEMPTS = 3;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        created = await runCountAndCreate();
+        break;
+      } catch (err) {
+        if (err instanceof Error && err.message === 'TOO_MANY_REQUESTS') {
+          return NextResponse.json({ error: 'TOO_MANY_REQUESTS' }, { status: 429 });
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const code = (err as any)?.code;
+        if (code === 'P2034' && attempt < MAX_ATTEMPTS) {
+          // Small jittered backoff to avoid lock-step retries.
+          await new Promise((r) => setTimeout(r, 30 + Math.floor(Math.random() * 50)));
+          continue;
+        }
+        if (code === 'P2034') {
+          // Bounded retry exhausted — let the client try again later.
+          return NextResponse.json({ error: 'CONCURRENT_CONFLICT' }, { status: 503 });
+        }
+        throw err;
+      }
+    }
+    if (!created) {
+      // Defensive — the loop above returns on every non-success path,
+      // so this is just to satisfy the type narrowing.
+      return NextResponse.json({ error: 'UNEXPECTED' }, { status: 500 });
+    }
 
     await notifyAdminsAddonRequest({
       bookingId: id,

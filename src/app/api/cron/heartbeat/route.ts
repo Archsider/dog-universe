@@ -132,17 +132,27 @@ export const GET = defineCron({
       const stale = rows.filter((r) => r.stale);
       if (stale.length > 0) {
         staleCrons = stale.map((r) => r.name);
-        const superadmins = await prisma.user.findMany({
-          where: notDeleted({ role: 'SUPERADMIN', phone: { not: null } }),
-          select: { phone: true },
-        });
-        const message =
-          `🚨 Dog Universe: cron(s) jamais exécuté(s) depuis ≥${STALENESS_THRESHOLD_HOURS}h : ${staleCrons.join(', ')}. Voir docs/CRON_RECOVERY.md.`;
-        await Promise.all(
-          superadmins
-            .filter((u): u is { phone: string } => Boolean(u.phone))
-            .map((u) => sendSMS(u.phone, message).catch(() => false)),
-        );
+        // Dedup flag with the staleCrons signature as part of the key —
+        // mirrors the heartbeat-down alert pattern (line 87).  Without this
+        // we'd SMS every 5 min for the same stale set : 288 SMS/day to each
+        // SUPERADMIN, which is the canonical "wake-up engineer at 3am for
+        // nothing" failure mode.  24h TTL = one nag per day until fixed.
+        const signature = [...staleCrons].sort().join('|');
+        const dedupKey = `cron-freshness:alerted:${signature}`;
+        const allowed = await tryAcquireFlag(dedupKey, 24 * 3600);
+        if (allowed) {
+          const superadmins = await prisma.user.findMany({
+            where: notDeleted({ role: 'SUPERADMIN', phone: { not: null } }),
+            select: { phone: true },
+          });
+          const message =
+            `🚨 Dog Universe: cron(s) jamais exécuté(s) depuis ≥${STALENESS_THRESHOLD_HOURS}h : ${staleCrons.join(', ')}. Voir docs/CRON_RECOVERY.md.`;
+          await Promise.all(
+            superadmins
+              .filter((u): u is { phone: string } => Boolean(u.phone))
+              .map((u) => sendSMS(u.phone, message).catch(() => false)),
+          );
+        }
       }
     } catch (err) {
       logger.error('cron-heartbeat', 'cron freshness check failed', { error: err instanceof Error ? err.message : String(err) });

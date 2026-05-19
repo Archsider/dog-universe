@@ -28,13 +28,15 @@ export type AutoMergeResponse =
   | { merged: false; capacityError: CapacityCheckExceeded | null };
 
 export async function tryAutoMerge(args: AutoMergeArgs): Promise<AutoMergeResponse> {
-  const newStartMs = new Date(args.startDate).getTime();
-  const dayBeforeMs = newStartMs - 24 * 60 * 60 * 1000;
-  const dayBefore = new Date(dayBeforeMs);
-  const dayBeforeStart = new Date(dayBefore);
-  dayBeforeStart.setUTCHours(0, 0, 0, 0);
-  const dayBeforeEnd = new Date(dayBefore);
-  dayBeforeEnd.setUTCHours(23, 59, 59, 999);
+  const newStart = new Date(args.startDate);
+  // Casa-anchored "day before" window — `setUTCHours(0,0,0,0)` shifts to
+  // UTC midnight, which is 01:00 Casa.  A booking with endDate Casa
+  // 23:30 (= 22:30 UTC) would otherwise miss this window and trigger a
+  // duplicate booking instead of an extension.
+  const { startOfDayCasa, endOfDayCasa } = await import('@/lib/dates-casablanca');
+  const dayBeforeMid = new Date(newStart.getTime() - 24 * 60 * 60 * 1000);
+  const dayBeforeStart = startOfDayCasa(dayBeforeMid);
+  const dayBeforeEnd = endOfDayCasa(dayBeforeMid);
 
   // Fast-path probe outside the tx — skip the Serializable open if no candidate exists.
   const probe = await prisma.booking.findFirst({

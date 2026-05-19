@@ -280,8 +280,14 @@ async function mergeImpl(request: NextRequest): Promise<Response> {
       },
     });
 
-    // 5. Delete source booking (cascades: BookingPets, BoardingDetail, TaxiDetail, remaining items)
-    await tx.booking.delete({ where: { id: source.id } });
+    // 5. Soft-delete source booking — hard delete used to cascade and
+    //    permanently destroy BookingPet / BoardingDetail / TaxiDetail
+    //    rows that other reports referenced.  Soft-delete keeps the
+    //    audit trail accessible to the admin trash view.
+    await tx.booking.update({
+      where: { id: source.id },
+      data:  { deletedAt: new Date() },
+    });
   });
 
   await logAction({
