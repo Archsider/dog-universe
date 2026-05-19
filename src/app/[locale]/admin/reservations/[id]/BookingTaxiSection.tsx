@@ -80,7 +80,11 @@ export default function BookingTaxiSection({
             <span className="text-base">🚗</span>
             {locale === 'fr' ? 'Suivi du transport' : 'Transport tracking'}
           </h3>
-          <TaxiTimeline trip={standaloneTrip} locale={locale} />
+          <TaxiTimeline
+            trip={standaloneTrip}
+            locale={locale}
+            allowForceComplete={bookingStatus === 'COMPLETED'}
+          />
           {bookingStatus === 'IN_PROGRESS' && (
             <TaxiHeartbeatIndicator bookingId={bookingId} locale={locale} />
           )}

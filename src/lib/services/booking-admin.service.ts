@@ -18,6 +18,7 @@ import { BookingError } from './booking-errors';
 import { taxiDescription } from '@/lib/invoice-descriptions';
 import { notDeleted } from '@/lib/prisma-soft';
 import { withSpan } from '@/lib/observability';
+import { initialTaxiTripStatus, isTerminalInitialStatus } from '@/lib/taxi-trip-initial-status';
 
 // ────────────────────────────────────────────────────────────────────────────
 // patchBoardingDetail
@@ -96,18 +97,31 @@ async function patchBoardingDetailImpl(args: PatchBoardingDetailArgs) {
       tx.taxiTrip.findFirst({ where: { bookingId, tripType: 'RETURN' } }),
     ]);
 
+    // Si la réservation parente est déjà COMPLETED (cas typique : saisie
+    // rétroactive walk-in où l'admin active l'addon taxi après-coup), on
+    // crée le trip directement à son état terminal — c'est absurde de
+    // partir d'un PLANNED pour un séjour qui s'est déjà terminé. Le
+    // raccourci UI manuel (PR #169) reste en place pour les corrections
+    // mid-stay et les cas où le booking devient COMPLETED après création
+    // du trip.
+    const outboundInitial = initialTaxiTripStatus(booking.status, 'OUTBOUND');
+    const returnInitial = initialTaxiTripStatus(booking.status, 'RETURN');
+    const isTerminal = isTerminalInitialStatus(booking.status);
+
     if (updatedBd?.taxiGoEnabled) {
       if (!outboundTrip) {
         const t = await tx.taxiTrip.create({
           data: {
-            bookingId, tripType: 'OUTBOUND', status: 'PLANNED',
+            bookingId, tripType: 'OUTBOUND', status: outboundInitial,
+            // Trip starts terminal ⇒ no live tracking, no token to issue.
+            ...(isTerminal ? { trackingActive: false, trackingToken: null } : {}),
             date: updatedBd.taxiGoDate ?? undefined,
             time: updatedBd.taxiGoTime ?? undefined,
             address: updatedBd.taxiGoAddress ?? undefined,
           },
         });
         await tx.taxiStatusHistory.create({
-          data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: actorId },
+          data: { taxiTripId: t.id, status: outboundInitial, updatedBy: actorId },
         });
       } else {
         await tx.taxiTrip.update({
@@ -124,14 +138,15 @@ async function patchBoardingDetailImpl(args: PatchBoardingDetailArgs) {
       if (!returnTrip) {
         const t = await tx.taxiTrip.create({
           data: {
-            bookingId, tripType: 'RETURN', status: 'PLANNED',
+            bookingId, tripType: 'RETURN', status: returnInitial,
+            ...(isTerminal ? { trackingActive: false, trackingToken: null } : {}),
             date: updatedBd.taxiReturnDate ?? undefined,
             time: updatedBd.taxiReturnTime ?? undefined,
             address: updatedBd.taxiReturnAddress ?? undefined,
           },
         });
         await tx.taxiStatusHistory.create({
-          data: { taxiTripId: t.id, status: 'PLANNED', updatedBy: actorId },
+          data: { taxiTripId: t.id, status: returnInitial, updatedBy: actorId },
         });
       } else {
         await tx.taxiTrip.update({

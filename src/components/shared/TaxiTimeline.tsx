@@ -2,8 +2,18 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Check, Loader2, Clock } from 'lucide-react';
+import { ArrowRight, Check, Loader2, Clock, FastForward } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 
 // ── Flows ────────────────────────────────────────────────────────────────────
 
@@ -82,13 +92,38 @@ interface Props {
   trip: TaxiTripData;
   readOnly?: boolean;
   locale: string;
+  /**
+   * When true, exposes a "Marquer comme terminé" shortcut that jumps
+   * directly to the trip's terminal status, bypassing the step-by-step
+   * pipeline AND skipping SMS notifications.
+   *
+   * Use case: retroactive walk-in bookings where the taxi already
+   * happened — sometimes days ago — and stepping through the live
+   * pipeline + texting the client is non-sensical.
+   *
+   * Recommended : `allowForceComplete={bookingStatus === 'COMPLETED'}`.
+   */
+  allowForceComplete?: boolean;
 }
+
+// Canonical terminal status per trip type (mirrors backend TERMINAL_FOR_TYPE).
+const TERMINAL_FOR_TYPE: Record<TripType, string> = {
+  OUTBOUND:   'ARRIVED_AT_PENSION',
+  STANDALONE: 'ARRIVED_AT_PENSION',
+  RETURN:     'ARRIVED_AT_CLIENT',
+};
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function TaxiTimeline({ trip, readOnly = false, locale }: Props) {
+export default function TaxiTimeline({
+  trip,
+  readOnly = false,
+  locale,
+  allowForceComplete = false,
+}: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [forceDialogOpen, setForceDialogOpen] = useState(false);
   const isFr = locale !== 'en';
 
   const tripType = (trip.tripType as TripType) in FLOWS ? (trip.tripType as TripType) : 'STANDALONE';
@@ -99,6 +134,10 @@ export default function TaxiTimeline({ trip, readOnly = false, locale }: Props) 
   const stepLabels = STEP_LABELS[tripType];
   const actionLabels = ACTION_LABELS[tripType];
   const nextActionLabel = nextStatus ? actionLabels[trip.status] : null;
+
+  const terminalStatus = TERMINAL_FOR_TYPE[tripType];
+  const isAlreadyTerminal = trip.status === terminalStatus;
+  const showForceShortcut = !readOnly && allowForceComplete && !isAlreadyTerminal;
 
   // Map each status to its most-recent timestamp from history
   const statusTimestamps: Record<string, Date> = {};
@@ -122,6 +161,35 @@ export default function TaxiTimeline({ trip, readOnly = false, locale }: Props) 
       router.refresh();
     } catch {
       toast({ title: isFr ? 'Erreur lors de la mise à jour' : 'Update failed', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForceComplete() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/taxi-trips/${trip.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nextStatus: terminalStatus,
+          force: true,
+          silent: true,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setForceDialogOpen(false);
+      toast({
+        title: isFr ? 'Trajet marqué comme terminé' : 'Trip marked as completed',
+        variant: 'success',
+      });
+      router.refresh();
+    } catch {
+      toast({
+        title: isFr ? 'Erreur lors de la mise à jour' : 'Update failed',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -221,6 +289,62 @@ export default function TaxiTimeline({ trip, readOnly = false, locale }: Props) 
             : <ArrowRight className="h-4 w-4" />}
           <span>{isFr ? nextActionLabel.fr : nextActionLabel.en}</span>
         </button>
+      )}
+
+      {/* Force-complete shortcut — small text link below the main button,
+          deliberately less prominent. Used for retroactive walk-in
+          corrections where stepping through the live pipeline would be
+          silly (the trip already happened, possibly days ago). */}
+      {showForceShortcut && (
+        <>
+          <button
+            type="button"
+            onClick={() => setForceDialogOpen(true)}
+            disabled={loading}
+            className="w-full text-xs text-gray-500 hover:text-charcoal underline underline-offset-2 flex items-center justify-center gap-1 py-1 transition-colors disabled:opacity-50"
+          >
+            <FastForward className="h-3 w-3" />
+            <span>
+              {isFr
+                ? 'Marquer ce trajet comme terminé (rétroactif)'
+                : 'Mark this trip as completed (retroactive)'}
+            </span>
+          </button>
+          <AlertDialog open={forceDialogOpen} onOpenChange={setForceDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {isFr ? 'Marquer le trajet comme terminé ?' : 'Mark trip as completed?'}
+                </AlertDialogTitle>
+                <AlertDialogDescription className="space-y-2">
+                  <span className="block">
+                    {isFr
+                      ? `Le trajet va passer directement à l'état terminal (${stepLabels[terminalStatus]?.fr ?? terminalStatus}) sans passer par les étapes intermédiaires.`
+                      : `The trip will jump directly to the terminal state (${stepLabels[terminalStatus]?.en ?? terminalStatus}) without going through the intermediate steps.`}
+                  </span>
+                  <span className="block text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                    {isFr
+                      ? '🔕 Aucun SMS ne sera envoyé au client — usage pour les saisies rétroactives uniquement.'
+                      : '🔕 No SMS will be sent to the client — use for retroactive entries only.'}
+                  </span>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={loading}>
+                  {isFr ? 'Annuler' : 'Cancel'}
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={(e) => { e.preventDefault(); void handleForceComplete(); }}
+                  disabled={loading}
+                  className="bg-charcoal hover:bg-charcoal/90"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  {isFr ? 'Confirmer' : 'Confirm'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
       )}
 
       {/* History */}

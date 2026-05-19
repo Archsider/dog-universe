@@ -358,6 +358,7 @@ export default async function AdminReservationDetailPage({ params }: PageProps) 
                   ? { trackingActive: raw.trackingActive, trackingToken: raw.trackingToken }
                   : null;
               })()}
+              bookingStatus={booking.status}
               locale={locale}
             />
           )}
