@@ -1,5 +1,7 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+import { useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,6 +13,15 @@ import type { TaxiState } from '../_lib/use-form-state';
 import { isValidTaxiDate } from '../_lib/validation';
 import { requestGeo } from '../_lib/geo';
 
+// PinPicker is Leaflet-heavy — lazy load so the wizard's other steps
+// don't ship the map bundle.
+const PinPicker = dynamic(() => import('@/components/shared/PinPicker'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-64 w-full rounded-xl border border-gray-200 bg-gray-50 animate-pulse" />
+  ),
+});
+
 export interface TaxiDetailsStepProps {
   locale: string;
   l: WizardLabels;
@@ -19,6 +30,26 @@ export interface TaxiDetailsStepProps {
 }
 
 export function TaxiDetailsStep({ locale, l, today, taxi }: TaxiDetailsStepProps) {
+  // Debounce reverse-geocode after pin drag so we don't hammer the
+  // Nominatim cache key with every pixel-shift during a continuous drag.
+  const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function onPinChange(lat: number, lng: number) {
+    taxi.setPickupLat(lat);
+    taxi.setPickupLng(lng);
+    if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
+    geocodeTimer.current = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/geocode/reverse?lat=${lat}&lng=${lng}&lang=${locale}`);
+        if (!r.ok) return;
+        const j = await r.json();
+        if (typeof j?.address === 'string' && j.address.length > 0) {
+          taxi.setPickupAddress(j.address);
+        }
+      } catch { /* keep coords, address stays editable manually */ }
+    }, 600);
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -86,6 +117,15 @@ export function TaxiDetailsStep({ locale, l, today, taxi }: TaxiDetailsStepProps
           </button>
         </div>
         <Input id="pickup" value={taxi.pickupAddress} onChange={e => taxi.setPickupAddress(e.target.value)} placeholder="Gueliz, Marrakech" className="mt-1" />
+        <div className="mt-2">
+          <PinPicker
+            lat={taxi.pickupLat}
+            lng={taxi.pickupLng}
+            onChange={onPinChange}
+            locale={locale}
+            label={l.pickup}
+          />
+        </div>
       </div>
       <div>
         <Label htmlFor="dropoff">{l.dropoff} *</Label>

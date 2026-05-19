@@ -65,7 +65,10 @@ export function requestGeo(
           labels.geoUnavailable;
         toast({ title: msg, variant: 'destructive' });
       },
-      { timeout: 8_000, enableHighAccuracy: false, maximumAge: 30_000 },
+      // enableHighAccuracy: true gives 5–20 m precision instead of 50–500 m
+      // (cell-tower fallback).  Slightly slower first fix but the PinPicker
+      // map below absorbs the wait visually — user can drag-adjust either way.
+      { timeout: 12_000, enableHighAccuracy: true, maximumAge: 30_000 },
     );
   } catch {
     if (!settled) {
