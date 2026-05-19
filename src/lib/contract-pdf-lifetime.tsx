@@ -125,10 +125,20 @@ const styles = StyleSheet.create({
     height: 50,
     marginBottom: 4,
   },
+  signatureImg: {
+    width: 170,
+    height: 70,
+    objectFit: 'contain',
+  },
   signatureHint: {
     fontSize: 7,
     color: '#9CA3AF',
     fontStyle: 'italic',
+  },
+  metaInfo: {
+    fontSize: 7.5,
+    color: '#9CA3AF',
+    marginTop: 4,
   },
   stampImg: {
     width: 95,
@@ -155,6 +165,12 @@ export interface LifetimeContractPDFData {
   dogGender: string;      // "Femelle" / "Mâle"
   contractDate: Date;
   version?: string;
+  // When set, the signature is drawn into the signature box and the
+  // metadata (signedAt, IP) is rendered.  When null/undefined, the
+  // signature box is left empty for a hand-signed paper workflow.
+  signatureDataUrl?: string | null;
+  signedAt?: Date | null;
+  ipAddress?: string | null;
 }
 
 const LIFETIME_ARTICLES = [
@@ -269,17 +285,32 @@ function LifetimeContractDocument({ data }: { data: LifetimeContractPDFData }) {
           </View>
         ))}
 
-        {/* Signature section — paper-signed, empty box */}
+        {/* Signature section */}
         <View style={styles.signatureSection}>
-          {/* Client signature — hand signing */}
           <View style={styles.signatureBox}>
             <Text style={styles.signatureLabel}>Signature du propriétaire</Text>
             <Text style={{ fontSize: 8, color: '#374151', marginBottom: 4 }}>{data.clientName}</Text>
             <Text style={{ fontSize: 8, color: '#374151', marginBottom: 8, fontStyle: 'italic' }}>
-              Lu et accepté — précédé de la mention manuscrite « Lu et approuvé »
+              Lu et accepté — sans réserve.
             </Text>
-            <View style={styles.signatureLine} />
-            <Text style={styles.signatureHint}>Signature manuscrite + date</Text>
+            {data.signatureDataUrl ? (
+              <>
+                <Image src={data.signatureDataUrl} style={styles.signatureImg} />
+                {data.signedAt && (
+                  <Text style={styles.metaInfo}>
+                    Signé le : {data.signedAt.toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                )}
+                {data.ipAddress && (
+                  <Text style={styles.metaInfo}>Adresse IP : {data.ipAddress}</Text>
+                )}
+              </>
+            ) : (
+              <>
+                <View style={styles.signatureLine} />
+                <Text style={styles.signatureHint}>Signature manuscrite + date</Text>
+              </>
+            )}
           </View>
 
           {/* Stamp */}

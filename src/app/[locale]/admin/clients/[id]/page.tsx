@@ -16,6 +16,8 @@ import RgpdAdminSection from './RgpdAdminSection';
 import AdminCreateBookingModal from '@/components/admin/AdminCreateBookingModalLazy';
 import CreateStandaloneInvoiceModal from '@/components/admin/CreateStandaloneInvoiceModalLazy';
 import WhatsAppButton from '@/components/admin/WhatsAppButton';
+import { LifetimeContractPanel } from '@/components/admin/LifetimeContractPanel';
+import { headers } from 'next/headers';
 
 interface PageProps { params: Promise<{ locale: string; id: string }> }
 
@@ -42,6 +44,51 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
   });
 
   if (!client || client.role !== 'CLIENT') notFound();
+
+  // Load the most recent lifetime contract for any permanent-resident pet,
+  // and a fresh signed-URL if it's already signed (so admin can download
+  // immediately).
+  const residentPet = client.pets.find(p => p.isPermanentResident && !p.deletedAt);
+  let lifetimeContractExisting: {
+    id: string;
+    status: 'PENDING' | 'SIGNED' | 'EXPIRED' | 'REVOKED';
+    signedAt: string | null;
+    publicToken: string | null;
+    publicTokenExpiresAt: string | null;
+    petName: string;
+  } | null = null;
+  let lifetimeDownloadUrl: string | null = null;
+  if (residentPet) {
+    const lc = await prisma.lifetimeContract.findFirst({
+      where: { clientId: id, petId: residentPet.id, status: { in: ['PENDING', 'SIGNED'] } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, status: true, signedAt: true, publicToken: true,
+        publicTokenExpiresAt: true, storageKey: true,
+      },
+    });
+    if (lc) {
+      lifetimeContractExisting = {
+        id: lc.id,
+        status: lc.status,
+        signedAt: lc.signedAt ? lc.signedAt.toISOString() : null,
+        publicToken: lc.publicToken,
+        publicTokenExpiresAt: lc.publicTokenExpiresAt ? lc.publicTokenExpiresAt.toISOString() : null,
+        petName: residentPet.name,
+      };
+      if (lc.status === 'SIGNED' && lc.storageKey) {
+        try {
+          lifetimeDownloadUrl = await createSignedUrl(lc.storageKey, 900);
+        } catch {
+          // non-critical — UI falls back to no download button
+        }
+      }
+    }
+  }
+  const hdrs = await headers();
+  const proto = hdrs.get('x-forwarded-proto') ?? 'https';
+  const host = hdrs.get('host') ?? 'doguniverse.ma';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') ?? `${proto}://${host}`;
 
   const sl: Record<string, Record<string, string>> = {
     fr: { PENDING: 'En attente', CONFIRMED: 'Confirmé', AT_PICKUP: 'Sur place', CANCELLED: 'Annulé', REJECTED: 'Refusé', COMPLETED: 'Terminé', IN_PROGRESS: 'En cours' },
@@ -213,21 +260,15 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
                 ))}
               </div>
             )}
-            {client.pets.some(p => p.isPermanentResident) && (
-              <div className="mt-3 pt-3 border-t border-violet-100">
-                <a
-                  href={`/api/admin/contracts/lifetime/${id}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium transition-colors"
-                  download
-                >
-                  🏠 {locale === 'fr' ? 'Télécharger le contrat de pension à vie (PDF)' : 'Download lifetime boarding contract (PDF)'}
-                </a>
-                <p className="text-[10px] text-gray-500 mt-1">
-                  {locale === 'fr'
-                    ? 'À imprimer, faire signer à la main par le propriétaire, et archiver.'
-                    : 'Print, get the owner to sign by hand, and file it.'}
-                </p>
-              </div>
+            {residentPet && (
+              <LifetimeContractPanel
+                clientId={id}
+                petName={residentPet.name}
+                locale={locale}
+                existing={lifetimeContractExisting}
+                baseUrl={baseUrl}
+                initialDownloadUrl={lifetimeDownloadUrl}
+              />
             )}
           </div>
 
