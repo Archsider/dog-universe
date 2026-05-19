@@ -789,7 +789,14 @@
     font-size: 19px;
   }
   .du-nav-link {
-    display: none;
+    /* Compact mobile login button — keeps the entrance for existing
+     * clients visible (was display: none, which trapped them on the
+     * sign-up CTA only).  Slimmer than desktop : no border, smaller
+     * padding, plain underline reveal on tap. */
+    padding: 6px 8px;
+    font-size: 12px;
+    border: none;
+    letter-spacing: 0.04em;
   }
   .du-langs {
     margin-right: 6px;
