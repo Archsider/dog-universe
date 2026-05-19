@@ -24,13 +24,24 @@ interface MoodState {
   music: boolean;
 }
 
-function diffCountdown(target: Date, now: Date): { d: number; h: number; m: number; live: boolean } {
+type Phase = 'future' | 'today' | 'past';
+
+function diffCountdown(target: Date, now: Date): { d: number; h: number; m: number; phase: Phase } {
   const ms = target.getTime() - now.getTime();
-  if (ms <= 0) return { d: 0, h: 0, m: 0, live: true };
-  const d = Math.floor(ms / 86_400_000);
-  const h = Math.floor((ms % 86_400_000) / 3_600_000);
-  const m = Math.floor((ms % 3_600_000) / 60_000);
-  return { d, h, m, live: false };
+  if (ms > 0) {
+    return {
+      d: Math.floor(ms / 86_400_000),
+      h: Math.floor((ms % 86_400_000) / 3_600_000),
+      m: Math.floor((ms % 3_600_000) / 60_000),
+      phase: 'future',
+    };
+  }
+  // ms <= 0 — distinguish "arrival is today" from "arrival was in the past".
+  // Bookings IN_PROGRESS for multiple days would otherwise keep showing
+  // "Today's the day!" for the entire stay.
+  const elapsedMs = -ms;
+  const phase: Phase = elapsedMs < 24 * 3600 * 1000 ? 'today' : 'past';
+  return { d: 0, h: 0, m: 0, phase };
 }
 
 export default function CountdownHero({ bookingId, startDate, petName, locale }: Props) {
@@ -60,10 +71,13 @@ export default function CountdownHero({ bookingId, startDate, petName, locale }:
     });
   }
 
-  const { d, h, m, live } = diffCountdown(target, now);
+  const { d, h, m, phase } = diffCountdown(target, now);
 
   // Hide if arrival is more than 7 days away — too far to feel urgent.
-  if (d > 7) return null;
+  if (phase === 'future' && d > 7) return null;
+  // Hide once the stay started more than 24h ago — the Live Stay Feed
+  // takes over, the countdown loses meaning.
+  if (phase === 'past') return null;
 
   const chips = [
     { key: 'toy' as const,   icon: Heart, label: fr ? 'Doudou préféré' : 'Comfort toy' },
@@ -78,10 +92,10 @@ export default function CountdownHero({ bookingId, startDate, petName, locale }:
       <div className="px-5 py-5 text-center">
         <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[3px] text-[#C9A84C] mb-2">
           <Sparkles className="h-3 w-3" />
-          {fr ? (live ? 'Arrivée prévue' : 'Arrivée') : (live ? 'Arrival' : 'Arrival')}
+          {fr ? 'Arrivée' : 'Arrival'}
         </div>
 
-        {live ? (
+        {phase === 'today' ? (
           <div className="text-3xl font-serif font-bold text-[#F5EDD8] mb-1">
             {fr ? "C'est aujourd'hui ! 🐾" : "Today's the day! 🐾"}
           </div>

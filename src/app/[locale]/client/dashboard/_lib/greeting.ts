@@ -7,7 +7,7 @@
 // rather than algorithmic.  Replaces the static "Bienvenue dans votre
 // espace personnel" subtitle.
 
-import { casablancaYMD } from '@/lib/dates-casablanca';
+import { daysUntilCasablanca } from '@/lib/dates-casablanca';
 
 export interface GreetingContext {
   locale: string;
@@ -63,11 +63,9 @@ export function buildGreeting(ctx: GreetingContext): Greeting {
   let subtitle: string;
 
   if (ctx.nextBooking) {
-    const todayCasa = casablancaYMD(now);
-    const bookingCasa = casablancaYMD(ctx.nextBooking.startDate);
-    const todayIdx = todayCasa.year * 10000 + todayCasa.month * 100 + todayCasa.day;
-    const bookIdx = bookingCasa.year * 10000 + bookingCasa.month * 100 + bookingCasa.day;
-    const days = Math.max(0, Math.round((bookIdx - todayIdx) / 1));
+    // Casa-anchored day count — the earlier YYYYMMDD arithmetic broke
+    // across month boundaries (Jan 31 → Feb 1 yielded 70 instead of 1).
+    const days = Math.max(0, daysUntilCasablanca(ctx.nextBooking.startDate, now));
     const petName = ctx.nextBooking.firstPetName ?? '';
 
     if (ctx.nextBooking.status === 'IN_PROGRESS') {

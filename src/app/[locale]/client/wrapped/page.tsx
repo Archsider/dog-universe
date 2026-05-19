@@ -31,7 +31,16 @@ export default async function WrappedPage({ params, searchParams }: {
   const ar = locale === 'ar';
 
   const todayCasa = casablancaYMD();
-  const year = yearStr ? parseInt(yearStr, 10) : todayCasa.year;
+  // Validate the ?year= param strictly — a NaN here would propagate into
+  // Date.UTC(NaN, 0, 1) → Invalid Date and crash the Prisma query.  Accept
+  // only 4-digit years within a reasonable past window (the app launched
+  // 2024 ; older years yield nothing meaningful anyway).
+  const MIN_YEAR = 2024;
+  const MAX_YEAR = todayCasa.year + 1;
+  const parsed = yearStr ? parseInt(yearStr, 10) : todayCasa.year;
+  const year = Number.isFinite(parsed) && parsed >= MIN_YEAR && parsed <= MAX_YEAR
+    ? parsed
+    : todayCasa.year;
   const yearStart = new Date(Date.UTC(year, 0, 1));
   const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
 
