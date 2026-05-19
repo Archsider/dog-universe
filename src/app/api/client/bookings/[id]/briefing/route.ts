@@ -96,6 +96,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     where: notDeleted({ id, clientId: session.user.id }),
     select: {
       id: true,
+      status: true,
+      startDate: true,
+      serviceType: true,
       bookingPets: {
         select: { pet: { select: { name: true } } },
         take: 5,
@@ -105,6 +108,23 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   if (!booking) {
     return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+  }
+
+  // Server-side eligibility gate — the UI gates with `canEdit` but a direct
+  // API call could otherwise mutate historical / cancelled briefings and
+  // trigger spurious admin notifications.  Mirror the conditions used by
+  // /client/bookings/[id]/briefing page.tsx → `canEdit`.
+  const ELIGIBLE_STATUSES = ['PENDING', 'CONFIRMED'] as const;
+  if (booking.serviceType !== 'BOARDING') {
+    return NextResponse.json({ error: 'NOT_BOARDING' }, { status: 400 });
+  }
+  if (!(ELIGIBLE_STATUSES as readonly string[]).includes(booking.status)) {
+    return NextResponse.json({ error: 'BOOKING_NOT_EDITABLE' }, { status: 409 });
+  }
+  // Allow up to 24 h past the startDate as a grace window (late arrivals,
+  // owner finishing the form while dropping off).
+  if (booking.startDate.getTime() < Date.now() - 24 * 3600 * 1000) {
+    return NextResponse.json({ error: 'STAY_ALREADY_STARTED' }, { status: 409 });
   }
 
   const serialized = serializeBriefingForm(payload);

@@ -81,6 +81,7 @@ const LABELS = {
     markAllRead: 'Tout marquer comme lu',
     viewBooking: 'Voir la réservation',
     viewPhotos: 'Voir les photos',
+    fillBriefing: 'Remplir le briefing',
   },
   en: {
     title: 'Notifications',
@@ -88,6 +89,7 @@ const LABELS = {
     markAllRead: 'Mark all as read',
     viewBooking: 'View booking',
     viewPhotos: 'View photos',
+    fillBriefing: 'Fill briefing',
   },
   ar: {
     title: 'الإشعارات',
@@ -95,6 +97,7 @@ const LABELS = {
     markAllRead: 'تعليم الكل كمقروء',
     viewBooking: 'عرض الحجز',
     viewPhotos: 'عرض الصور',
+    fillBriefing: 'ملء الموجز',
   },
 };
 
@@ -149,7 +152,8 @@ export default function NotificationsClient({ initialNotifications, locale }: Pr
             const Icon = cfg.icon;
             const meta = parseMetadata(n.metadata);
             const bookingId = meta.bookingId;
-            const showBookingLink = !!bookingId && (n.type === 'STAY_PHOTO' || n.type === 'STAY_PHOTO_ADDED' || n.type === 'ADMIN_MESSAGE' || n.type === 'END_STAY_REPORT');
+            const showBookingLink = !!bookingId && (n.type === 'STAY_PHOTO' || n.type === 'STAY_PHOTO_ADDED' || n.type === 'ADMIN_MESSAGE' || n.type === 'END_STAY_REPORT' || n.type === 'PRE_STAY_BRIEFING_REQUEST');
+            const isBriefingLink = n.type === 'PRE_STAY_BRIEFING_REQUEST';
 
             return (
               <div
@@ -179,11 +183,15 @@ export default function NotificationsClient({ initialNotifications, locale }: Pr
 
                       {showBookingLink && (
                         <Link
-                          href={`/${locale}/client/bookings/${bookingId as string}`}
+                          href={isBriefingLink
+                            ? `/${locale}/client/bookings/${bookingId as string}/briefing`
+                            : `/${locale}/client/bookings/${bookingId as string}`}
                           onClick={e => e.stopPropagation()}
                           className={`flex items-center gap-1 text-xs font-medium ${cfg.color} hover:underline`}
                         >
-                          {(n.type === 'STAY_PHOTO' || n.type === 'STAY_PHOTO_ADDED') ? l.viewPhotos : l.viewBooking}
+                          {isBriefingLink
+                            ? l.fillBriefing
+                            : (n.type === 'STAY_PHOTO' || n.type === 'STAY_PHOTO_ADDED') ? l.viewPhotos : l.viewBooking}
                           <ArrowRight className="h-3 w-3" />
                         </Link>
                       )}
