@@ -5,6 +5,7 @@ import { toNumber } from '@/lib/decimal';
 import AutoRefresh from '@/components/shared/AutoRefresh';
 import UpsellSuggestions from '@/components/shared/UpsellSuggestions';
 import ClientProductOrder from './ClientProductOrder';
+import ArrivalCheckIn from './ArrivalCheckIn';
 import { getTranslations } from './_lib/i18n';
 import { serializeTrips, computeRunningTotal } from './_lib/derived';
 import BookingHeader from './_components/BookingHeader';
@@ -128,6 +129,20 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
       />
 
       <div className="space-y-4">
+        {/* Geofencing arrival check-in — only on CONFIRMED bookings whose
+            startDate is within 36 h.  Server validates Casa coords + fires
+            an admin SMS once per (booking, day) for the "we're expecting
+            you" effect (feature #7 audit world 2026-05-19). */}
+        {booking.status === 'CONFIRMED'
+          && (booking.startDate.getTime() - Date.now()) < 36 * 3600 * 1000
+          && (Date.now() - booking.startDate.getTime()) < 12 * 3600 * 1000 && (
+          <ArrivalCheckIn
+            bookingId={booking.id}
+            petName={booking.bookingPets?.[0]?.pet?.name ?? null}
+            locale={locale}
+          />
+        )}
+
         <BookingProgressCard status={booking.status} serviceType={booking.serviceType} standaloneTrip={standaloneTrip} locale={locale} t={t} />
 
         <BookingServiceCard

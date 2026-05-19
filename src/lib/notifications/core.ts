@@ -38,6 +38,7 @@ export type NotificationType =
   | 'REVIEW_REQUEST'            // client receives after a completed stay to submit a review
   | 'END_STAY_REPORT'           // client receives at checkout — structured narrative report (see EndStayReport table)
   | 'DAILY_REPORT'              // client receives a daily card while pet is boarding (see DailyReport table)
+  | 'CLIENT_ARRIVAL_NEARBY'     // admin receives when a client checks in via geolocation near the facility
   | 'PRODUCT_ORDER'             // admin receives when a client orders a product on an active booking
   | 'BOOKING_TIME_PROPOSED'     // client receives when admin proposes a specific time (arrival / taxi go / taxi return)
   | 'BOOKING_TIME_CONFIRMED'    // client receives when a time proposal is accepted (by either side)
