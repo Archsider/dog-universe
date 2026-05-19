@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { calculateAge, formatDateShort, formatMAD, getAntiparasiticDurationDays } from '@/lib/utils';
 import { createSignedUrl } from '@/lib/supabase';
 import VaccinationSection from '@/components/pets/VaccinationSection';
+import PetPassportHero from '@/components/pets/PetPassportHero';
 import { PROOF_PREFIX } from '@/components/pets/constants';
 import DocumentSection from '@/components/pets/DocumentSection';
 
@@ -47,6 +48,7 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
       id: true, ownerId: true, name: true, species: true, breed: true,
       dateOfBirth: true, gender: true, photoUrl: true,
       isNeutered: true, microchipNumber: true, tattooNumber: true, weight: true,
+      isPermanentResident: true,
       vetName: true, vetPhone: true, allergies: true, currentMedication: true,
       behaviorWithDogs: true, behaviorWithCats: true, behaviorWithHumans: true, notes: true,
       lastAntiparasiticDate: true, antiparasiticProduct: true, antiparasiticNotes: true,
@@ -130,8 +132,40 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
 
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+      {/* Compact back link — Feature #5 Wave 5 replaces the legacy header
+          with the passport hero below ; we keep just the back arrow here. */}
+      <div className="flex items-center justify-between mb-4">
+        <Link
+          href={`/${locale}/client/pets`}
+          className="inline-flex items-center gap-1 text-sm text-charcoal/60 hover:text-charcoal"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {fr ? 'Mes compagnons' : 'My pets'}
+        </Link>
+        <Link
+          href={`/${locale}/client/pets/${pet.id}/edit`}
+          className="inline-flex items-center gap-1 text-sm text-charcoal/60 hover:text-[#C9A84C]"
+        >
+          <Edit className="h-4 w-4" />
+          {fr ? 'Modifier' : 'Edit'}
+        </Link>
+      </div>
+
+      <PetPassportHero
+        name={pet.name}
+        species={pet.species}
+        breed={pet.breed}
+        gender={pet.gender}
+        dateOfBirth={pet.dateOfBirth}
+        photoUrl={pet.photoUrl}
+        microchipNumber={pet.microchipNumber}
+        isNeutered={pet.isNeutered}
+        stayCount={pet.bookingPets.length}
+        isPermanentResident={pet.isPermanentResident}
+        locale={locale}
+      />
+
+      <div className="mt-6 flex items-center gap-3 mb-6 hidden">
         <Link href={`/${locale}/client/pets`} className="text-charcoal/50 hover:text-charcoal">
           <ArrowLeft className="h-5 w-5" />
         </Link>
