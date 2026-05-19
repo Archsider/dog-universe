@@ -3,7 +3,7 @@
 > Généré automatiquement depuis `prisma/schema.prisma`. Ne pas éditer à la main.
 > Régénérer avec `node scripts/generate-schema-doc.mjs` (ou `npm run db:doc`).
 
-**39 modèles** · **8 enums** · 2026-05-19
+**40 modèles** · **8 enums** · 2026-05-19
 
 ## Sommaire
 
@@ -33,6 +33,7 @@
 - [StayPhoto](#stayphoto)
 - [Review](#review)
 - [EndStayReport](#endstayreport)
+- [DailyReport](#dailyreport)
 - [RescheduleRequest](#reschedulerequest)
 - [AddonRequest](#addonrequest)
 - [PasswordResetToken](#passwordresettoken)
@@ -149,6 +150,7 @@
 | `bookingPets` | `BookingPet[]` | — |  |
 | `weightEntries` | `PetWeightEntry[]` | — |  |
 | `lifetimeContracts` | `LifetimeContract[]` | — |  |
+| `dailyReports` | `DailyReport[]` | — |  |
 
 **Relations**
 
@@ -264,6 +266,7 @@
 | `addonRequests` | `AddonRequest[]` | — |  |
 | `endStayReports` | `EndStayReport[]` | — |  |
 | `timeProposals` | `TimeProposal[]` | — |  |
+| `dailyReports` | `DailyReport[]` | — |  |
 
 **Relations**
 
@@ -792,6 +795,45 @@
 - `([bookingId])`
 - `([clientId])`
 - `([sentAt])`
+
+---
+
+## DailyReport
+
+> Source : audit features 2026-05-19 (Feature #3 — Daily Report Card).
+
+| Champ | Type | Attributs | Commentaire |
+|---|---|---|---|
+| `id` | `String` | PK · default=`cuid(` |  |
+| `bookingId` | `String` | — |  |
+| `petId` | `String` | — |  |
+| `date` | `String` | — |  |
+| `photoUrls` | `String[]` | default=`[]` | 1–3 public URLs returned by uploadBuffer |
+| `moodEmoji` | `String?` | — |  |
+| `foodEmoji` | `String?` | — |  |
+| `sleepEmoji` | `String?` | — |  |
+| `playEmoji` | `String?` | — |  |
+| `note` | `String?` | — | ≤ 280 chars — one short personal sentence |
+| `status` | `String` | default=`"DRAFT"` | DRAFT | SENT | SKIPPED |
+| `sentAt` | `DateTime?` | — |  |
+| `sentBy` | `String?` | — | userId of the admin who clicked Send |
+| `skipReason` | `String?` | — |  |
+| `emailFailed` | `Boolean` | default=`false` | surfaced in admin UI for retry |
+| `createdAt` | `DateTime` | default=`now(` |  |
+| `createdBy` | `String` | — | userId — cron-system for auto-created drafts, admin id for manual |
+| `updatedAt` | `DateTime` | — |  |
+
+**Relations**
+
+- `booking` → `Booking`
+- `pet` → `Pet`
+
+**Uniques composites :** `([petId, date])`
+
+**Indexes :**
+- `([bookingId])`
+- `([status, date])`
+- `([date])`
 
 ---
 

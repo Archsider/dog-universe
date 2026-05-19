@@ -212,6 +212,12 @@ jobs:
             # The down→up cycle restores them → cosmetic drift, runtime
             # correct (the same family as MV migrations above).
             "20260519_lifetime_contract"
+            # Adds a custom updatedAt trigger + plpgsql function + CHECK
+            # constraint on DailyReport.status — none representable in
+            # schema.prisma so the canonical 'prisma db push' baseline lacks
+            # them ; down→up restores them → expected cosmetic drift, same
+            # family as 20260519_lifetime_contract.
+            "20260519_daily_report"
           )
 
           for d in $(ls -1 "$MIG_DIR" | sort); do

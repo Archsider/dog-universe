@@ -201,6 +201,7 @@ export type EmailTemplateName =
   | 'invoice_overdue_30'
   | 'invoice_overdue_60'
   | 'review_request'
+  | 'daily_report'
   | 'booking_time_proposed'
   | 'booking_time_confirmed'
   | 'booking_cancelled'

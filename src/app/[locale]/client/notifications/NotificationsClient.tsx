@@ -5,7 +5,7 @@ import {
   CheckCheck, Loader2, BellOff, Camera, MessageSquare,
   CheckCircle2, XCircle, Bell, Star, Receipt, CalendarClock,
   ArrowRight, Cake, Truck, UserX, Hourglass, Sparkles, AlertTriangle,
-  AlertCircle, RefreshCw, Car, MapPin, FileText,
+  AlertCircle, RefreshCw, Car, MapPin, FileText, PawPrint,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
@@ -54,6 +54,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   INVOICE_OVERDUE:              { icon: Receipt,     color: 'text-red-600',     bg: 'bg-red-50' },
   REVIEW_REQUEST:               { icon: Star,        color: 'text-gold-500',    bg: 'bg-gold-50' },
   END_STAY_REPORT:              { icon: FileText,    color: 'text-emerald-700', bg: 'bg-emerald-50' },
+  DAILY_REPORT:                 { icon: PawPrint,    color: 'text-[#8B6914]',   bg: 'bg-[#FFF9E8]' },
 };
 
 function parseMetadata(raw: string | null): Record<string, unknown> {
