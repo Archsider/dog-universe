@@ -100,12 +100,14 @@ export async function POST(req: Request, { params }: Params) {
 
   const baseUrl = getBaseUrl(req);
   // next-intl `localePrefix: 'always'` — the path MUST include the locale.
-  // We default to FR (Stephanie's language) ; the page itself is in French.
-  const signUrl = `${baseUrl}/fr/contracts/lifetime/${token}`;
+  // EN prefix : Stephanie is anglophone, and the contract content is in
+  // English regardless of locale (verbatim hardcoded).  The locale prefix
+  // is just a routing artifact here.
+  const signUrl = `${baseUrl}/en/contracts/lifetime/${token}`;
 
-  // WhatsApp pre-built message — French (Stephanie's primary language).
+  // WhatsApp pre-built message — English (signer's primary language).
   const phone = normalizePhone(client.phone);
-  const waMessage = `Bonjour ${client.name?.split(' ')[0] ?? ''}, voici le lien pour signer le contrat de pension à vie de ${pet.name} : ${signUrl}\n\nLe contrat est à signer directement depuis votre téléphone — il vous suffit de signer avec le doigt à la fin du document. Vous recevrez ensuite le PDF signé.\n\nDog Universe`;
+  const waMessage = `Hi ${client.name?.split(' ')[0] ?? ''}, here is the link to sign the Lifetime Boarding Agreement for ${pet.name}: ${signUrl}\n\nYou can sign directly from your phone — just draw your signature with your finger at the bottom of the document. You will receive the signed PDF immediately afterwards.\n\nDog Universe`;
   const whatsappUrl = phone
     ? `https://wa.me/${phone}?text=${encodeURIComponent(waMessage)}`
     : null;

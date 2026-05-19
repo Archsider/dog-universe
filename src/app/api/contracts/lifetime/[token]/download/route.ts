@@ -39,7 +39,9 @@ export async function GET(_req: Request, { params }: Params) {
   }
 
   try {
-    const downloadUrl = await createSignedUrl(contract.storageKey, 3600);
+    const downloadUrl = await createSignedUrl(contract.storageKey, 3600, {
+      download: 'Mama_Lifetime_Boarding_Agreement_2026.pdf',
+    });
     return NextResponse.json({
       downloadUrl,
       signedAt: contract.signedAt?.toISOString(),

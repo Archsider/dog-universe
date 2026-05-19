@@ -21,7 +21,7 @@ BEGIN;
 -- ── 1. Stephanie Yanik — walk-in client ─────────────────────────────────────
 -- Pas de mot de passe loginable. Géré uniquement via admin panel.
 INSERT INTO "User" (
-  id, email, name, "firstName", "lastName", role, "isWalkIn",
+  id, email, name, "firstName", "lastName", phone, role, "isWalkIn",
   "passwordHash", "createdAt", "updatedAt"
 )
 VALUES (
@@ -31,6 +31,7 @@ VALUES (
   'Stephanie Yanik',
   'Stephanie',
   'Yanik',
+  '+1 (248) 321-7653',
   'CLIENT',
   true,
   'walkin-no-login-' || md5(random()::text),  -- non-loginable random hash
@@ -40,8 +41,29 @@ VALUES (
 ON CONFLICT (email) DO UPDATE SET
   -- Idempotent : si elle existe déjà, on s'assure juste qu'elle est bien walk-in.
   "isWalkIn" = true,
+  phone = '+1 (248) 321-7653',
   "updatedAt" = NOW()
-RETURNING id, name, "isWalkIn";
+RETURNING id, name, phone, "isWalkIn";
+
+-- Stephanie's real-world contact email (stephyanik@gmail.com) is stored in
+-- an AdminNote rather than User.email — User.email keeps the synthetic
+-- walk-in convention used everywhere else in the codebase, but the admin
+-- needs the real email for billing receipts and out-of-band communication.
+INSERT INTO "AdminNote" (
+  id, "entityType", "entityId", "createdBy", content, "createdAt"
+)
+SELECT
+  'c_stephanie_yanik_contact_note_1',
+  'CLIENT',
+  u.id,
+  u.id, -- self-attributed; admin can edit later
+  E'Real-world contact (do not change User.email — walk-in convention):\n• Email: stephyanik@gmail.com\n• Phone: +1 (248) 321-7653\n• Country: USA',
+  NOW()
+FROM "User" u
+WHERE u.email = 'stephanie.yanik+walkin@dog-universe.local'
+  AND NOT EXISTS (
+    SELECT 1 FROM "AdminNote" n WHERE n.id = 'c_stephanie_yanik_contact_note_1'
+  );
 
 -- ── 2. Mama — chienne résidente permanente ──────────────────────────────────
 -- Find-or-create : on lookup par (ownerId, name, deletedAt IS NULL) pour

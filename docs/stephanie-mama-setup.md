@@ -1,4 +1,10 @@
-# Setup Stephanie Yanik / Mama — pas-à-pas SQL + signature magic link
+# Setup Stephanie Yanik / Mama — Lifetime Boarding Agreement (EN)
+
+> **Contract content (verbatim) supplied by Mehdi 2026-05-19.**
+> Effective Date: May 18, 2026 — supersedes prior Care Agreement of May 17, 2025.
+> Monthly Boarding Fee: 2,500 MAD — Care budget replenishment threshold: 3,000 MAD.
+>
+> The contract text lives in `src/lib/contract-pdf-lifetime-content.ts` — **single source of truth** for both the on-screen rendering and the PDF generation. Updating it means updating one file ; both views stay in sync.
 
 Procédure en 3 étapes pour activer le cas Stephanie / Mama (résidente
 permanente).  Tout passe par Supabase SQL Editor pour la création des

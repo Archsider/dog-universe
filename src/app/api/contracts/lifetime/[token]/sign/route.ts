@@ -20,26 +20,6 @@ export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ token: string }> };
 
-function describeDog(pet: {
-  breed: string | null;
-  gender: string | null;
-  isNeutered: boolean | null;
-  microchipNumber: string | null;
-  notes: string | null;
-}): string {
-  const parts: string[] = [];
-  if (pet.breed) parts.push(pet.breed);
-  if (pet.gender === 'FEMALE') parts.push('femelle');
-  else if (pet.gender === 'MALE') parts.push('mâle');
-  if (pet.isNeutered === true) parts.push('stérilisée');
-  if (pet.microchipNumber) parts.push(`identifiée (puce ${pet.microchipNumber})`);
-  else parts.push('identifiée par puce électronique');
-  if (pet.notes && pet.notes.trim().length > 0) {
-    parts.push(pet.notes.trim().replace(/\s+/g, ' '));
-  }
-  return parts.join(', ');
-}
-
 export async function POST(req: NextRequest, { params }: Params) {
   const { token } = await params;
   const contractId = verifyLifetimeToken(token);
@@ -68,18 +48,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   const contract = await prisma.lifetimeContract.findUnique({
     where: { id: contractId },
     include: {
-      client: { select: { id: true, name: true, email: true, phone: true } },
-      pet: {
-        select: {
-          id: true,
-          name: true,
-          gender: true,
-          breed: true,
-          isNeutered: true,
-          microchipNumber: true,
-          notes: true,
-        },
-      },
+      client: { select: { id: true, name: true } },
+      pet: { select: { id: true, name: true } },
     },
   });
 
@@ -122,20 +92,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   const signedAt = new Date();
   const storageKey = `contracts-lifetime/${contract.id}/${Date.now()}-${randomUUID().slice(0, 8)}.pdf`;
 
-  const genderLabel =
-    contract.pet.gender === 'FEMALE' ? 'Femelle' :
-    contract.pet.gender === 'MALE' ? 'Mâle' : 'Non précisé';
-
   let pdfBuffer: Buffer;
   try {
     pdfBuffer = await generateLifetimeContractPDF({
-      clientName: contract.client.name ?? 'Propriétaire',
-      clientEmail: contract.client.email && !contract.client.email.endsWith('@dog-universe.local') ? contract.client.email : null,
-      clientPhone: contract.client.phone,
-      dogName: contract.pet.name,
-      dogDescription: describeDog(contract.pet),
-      dogGender: genderLabel,
-      contractDate: signedAt,
       version: contract.version,
       signatureDataUrl,
       signedAt,
@@ -192,7 +151,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   let downloadUrl: string | null = null;
   try {
-    downloadUrl = await createSignedUrl(storageKey, 3600);
+    downloadUrl = await createSignedUrl(storageKey, 3600, {
+      download: 'Mama_Lifetime_Boarding_Agreement_2026.pdf',
+    });
   } catch (err) {
     logger.error('lifetime-contracts', 'SIGNED_URL_FAILED', {
       contractId,

@@ -78,7 +78,9 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
       };
       if (lc.status === 'SIGNED' && lc.storageKey) {
         try {
-          lifetimeDownloadUrl = await createSignedUrl(lc.storageKey, 900);
+          lifetimeDownloadUrl = await createSignedUrl(lc.storageKey, 900, {
+            download: 'Mama_Lifetime_Boarding_Agreement_2026.pdf',
+          });
         } catch {
           // non-critical — UI falls back to no download button
         }

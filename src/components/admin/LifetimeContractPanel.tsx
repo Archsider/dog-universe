@@ -38,7 +38,7 @@ export function LifetimeContractPanel(props: Props) {
     if (props.existing?.status === 'PENDING' && props.existing.publicToken) {
       return {
         kind: 'generated',
-        signUrl: `${props.baseUrl}/fr/contracts/lifetime/${props.existing.publicToken}`,
+        signUrl: `${props.baseUrl}/en/contracts/lifetime/${props.existing.publicToken}`,
         whatsappUrl: null,
         expiresAt: props.existing.publicTokenExpiresAt ?? '',
       };
