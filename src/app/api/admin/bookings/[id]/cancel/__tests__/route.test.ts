@@ -23,8 +23,14 @@ vi.mock('@/lib/prisma', () => ({
     timeProposal: {
       updateMany: async ({ where, data }: any) => {
         let n = 0;
+        const statusMatches = (p: any) => {
+          if (where.status == null) return true;
+          if (typeof where.status === 'string') return p.status === where.status;
+          if (where.status?.in) return where.status.in.includes(p.status);
+          return false;
+        };
         for (const p of state.proposals) {
-          if (p.bookingId === where.bookingId && (where.status == null || p.status === where.status)) {
+          if (p.bookingId === where.bookingId && statusMatches(p)) {
             Object.assign(p, data);
             n++;
           }
@@ -77,16 +83,16 @@ async function call(body: any) {
 }
 
 describe('POST /api/admin/bookings/[id]/cancel — WIN 1 root cause fix', () => {
-  it('happy path : cancels + cascades 2 PENDING proposals + notifies', async () => {
+  it('happy path : cancels + cascades PENDING + ACCEPTED proposals + notifies', async () => {
     const r = await call({ reason: 'client called to cancel' });
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
-    expect(r.body.timeProposalsSuperseded).toBe(2);
+    // Wave 2 fix: ACCEPTED proposals are also swept on cancel (was leaking
+    // a stale "confirmed time" past the booking's terminal state).
+    expect(r.body.timeProposalsSuperseded).toBe(3);
     expect(state.bookings[0].status).toBe('CANCELLED');
     expect(state.bookings[0].cancellationReason).toBe('client called to cancel');
-    // 2 PENDING → SUPERSEDED ; the ACCEPTED stays untouched.
-    expect(state.proposals.filter((p) => p.status === 'SUPERSEDED')).toHaveLength(2);
-    expect(state.proposals.find((p) => p.id === 'tp3')!.status).toBe('ACCEPTED');
+    expect(state.proposals.filter((p) => p.status === 'SUPERSEDED')).toHaveLength(3);
     expect(notifMock).toHaveBeenCalledOnce();
   });
 

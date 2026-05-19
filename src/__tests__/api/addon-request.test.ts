@@ -28,6 +28,12 @@ vi.mock('@/lib/prisma', () => ({
     booking: { findFirst: mocks.bookingFindFirst },
     user: { findFirst: mocks.userFindFirst },
     addonRequest: { count: mocks.addonRequestCount, create: mocks.addonRequestCreate },
+    // The route now wraps count+create in $transaction for atomicity ;
+    // surface a passthrough mock that runs the callback against the same
+    // mocked client so test assertions keep working.
+    $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb({
+      addonRequest: { count: mocks.addonRequestCount, create: mocks.addonRequestCreate },
+    })),
   },
 }));
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { notifyAdminsAddonRequest } from '@/lib/notifications';
 import { addonRequestSchema } from '@/lib/validation';
 import { withSchema } from '@/lib/with-schema';
@@ -47,14 +48,10 @@ export const POST = withSchema(
       return NextResponse.json({ error: 'BOOKING_NOT_ACTIVE' }, { status: 400 });
     }
 
-    // Rate limit per booking — count rows directly on the dedicated table.
-    const existing = await prisma.addonRequest.count({
-      where: { bookingId: id, requestedBy: session.user.id },
-    });
-    if (existing >= MAX_REQUESTS_PER_BOOKING) {
-      return NextResponse.json({ error: 'TOO_MANY_REQUESTS' }, { status: 429 });
-    }
-
+    // Atomic count + create — two double-clicks (or a retry) used to both
+    // pass the cap check (both saw N < MAX) and both insert.  Serializable
+    // forces a re-check on commit ; the racer gets a P2034 retry-error
+    // which we surface as 429 (same as the cap hit).
     const client = await prisma.user.findFirst({
       where: notDeleted({ id: session.user.id }),
       select: { name: true, email: true },
@@ -63,15 +60,37 @@ export const POST = withSchema(
     const petNames = booking.bookingPets.map((bp) => bp.pet.name).join(', ') || '—';
     const bookingRef = booking.id.slice(0, 8).toUpperCase();
 
-    const created = await prisma.addonRequest.create({
-      data: {
-        bookingId: id,
-        serviceType,
-        description: message ?? '',
-        requestedBy: session.user.id,
-        status: 'PENDING',
-      },
-    });
+    let created;
+    try {
+      created = await prisma.$transaction(async (tx) => {
+        const existing = await tx.addonRequest.count({
+          where: { bookingId: id, requestedBy: session.user.id },
+        });
+        if (existing >= MAX_REQUESTS_PER_BOOKING) {
+          throw new Error('TOO_MANY_REQUESTS');
+        }
+        return tx.addonRequest.create({
+          data: {
+            bookingId: id,
+            serviceType,
+            description: message ?? '',
+            requestedBy: session.user.id,
+            status: 'PENDING',
+          },
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (err) {
+      if (err instanceof Error && err.message === 'TOO_MANY_REQUESTS') {
+        return NextResponse.json({ error: 'TOO_MANY_REQUESTS' }, { status: 429 });
+      }
+      // P2034 = Serializable retry needed (concurrent commit conflict) ;
+      // surface as the same 429 — the racer effectively hit the cap.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((err as any)?.code === 'P2034') {
+        return NextResponse.json({ error: 'TOO_MANY_REQUESTS', concurrent: true }, { status: 429 });
+      }
+      throw err;
+    }
 
     await notifyAdminsAddonRequest({
       bookingId: id,

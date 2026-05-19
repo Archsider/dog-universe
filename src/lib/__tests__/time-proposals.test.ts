@@ -235,13 +235,16 @@ describe('time-proposals — getConfirmedTime / getCurrentProposal', () => {
 });
 
 describe('time-proposals — supersedePendingForBooking cascade', () => {
-  it('supersedes all PENDING proposals for a booking (cancel cascade)', async () => {
+  it('supersedes both PENDING and ACCEPTED proposals (cancel cascade)', async () => {
+    // Wave 2 fix: cancel/reject of a booking now sweeps ACCEPTED too —
+    // until 2026-05-19, getConfirmedTime() kept returning the old time
+    // after a cancel because only PENDING were swept.
     tpUpdateMany.mockResolvedValueOnce({ count: 3 });
     const { supersedePendingForBooking } = await mod();
     const n = await supersedePendingForBooking('b1');
     expect(n).toBe(3);
     const where = tpUpdateMany.mock.calls[0][0].where;
     expect(where.bookingId).toBe('b1');
-    expect(where.status).toBe('PENDING');
+    expect(where.status).toEqual({ in: ['PENDING', 'ACCEPTED'] });
   });
 });
