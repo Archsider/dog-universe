@@ -14,7 +14,7 @@ import {
 } from '../accounting';
 import { getMonthlyInvoicesWhere } from '../billing';
 import { cacheReadThrough } from '../cache';
-import { casablancaYMD } from '../dates-casablanca';
+import { casablancaYMD, startOfMonthCasa, endOfMonthCasa } from '../dates-casablanca';
 import { logger } from '../logger';
 
 // ── Cash family ─────────────────────────────────────────────────────────
@@ -58,9 +58,6 @@ export type MonthlyEntry = {
 // attributed to the right bucket. Cost: 12 DB round-trips instead of 1
 // (MV). Acceptable for annual analytics (non-critical, ISR 60s).
 export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
-  const yearStart = new Date(year, 0, 1);
-  const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
-
   const monthly: MonthlyEntry[] = Array.from({ length: 12 }, (_, i) => ({
     month: i,
     total: 0,
@@ -72,10 +69,20 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
 
   // 12 LIVE computes in parallel — bypass MV so that items legacy classés
   // `OTHER` côté DB sont re-classifiés par description (inferItemCategory).
+  //
+  // CASA-anchored month bounds : without this, `new Date(year, m, 1)` runs in
+  // the server local TZ (UTC on Vercel) and resolves to "Jan 1 00:00 UTC" =
+  // "Jan 1 01:00 Casa".  Payments received between 00:00 and 01:00 Casa on
+  // the 1st of any month would land in the WRONG monthly bucket, drifting
+  // out of step with the cards/donut/billing (which already use
+  // startOfMonthCasa).  See docs/BUSINESS_RULES.md §6.
   const breakdowns = await Promise.all(
     Array.from({ length: 12 }, (_, m) => {
-      const mStart = new Date(year, m, 1);
-      const mEnd = new Date(year, m + 1, 0, 23, 59, 59, 999);
+      // `new Date(year, m, 15)` gives a Date inside the target month under
+      // any runtime TZ — Casa helpers project it onto the Casa calendar.
+      const anchor = new Date(year, m, 15);
+      const mStart = startOfMonthCasa(anchor);
+      const mEnd = endOfMonthCasa(anchor);
       return computeRevenueByCategoryProrataLive(mStart, mEnd);
     }),
   );
@@ -115,8 +122,6 @@ export async function cashByMonth(year: number): Promise<MonthlyEntry[]> {
     }
   }
 
-  void yearStart;
-  void yearEnd;
   return monthly;
 }
 

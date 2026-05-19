@@ -216,11 +216,12 @@ export default function AnalyticsCharts({
                   <span className="text-[15px] font-bold truncate">{label}</span>
                 </div>
                 <span
-                  className={`shrink-0 inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-bold ${deltaChipClass}`}
+                  className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${deltaChipClass}`}
                   title={isFr ? 'Variation vs mois précédent' : 'Change vs previous month'}
                 >
                   <span aria-hidden>{deltaArrow}</span>
                   <span>{Math.abs(cat.delta)}%</span>
+                  <span className="font-normal opacity-80">{isFr ? 'vs préc.' : 'vs prev.'}</span>
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
