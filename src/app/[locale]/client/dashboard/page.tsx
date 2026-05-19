@@ -12,6 +12,9 @@ import { RebookButton } from '@/components/client/RebookButton';
 import { waLink } from '@/lib/whatsapp';
 import { notDeleted } from '@/lib/prisma-soft';
 import { startOfTodayCasa } from '@/lib/dates-casablanca';
+import { buildGreeting } from './_lib/greeting';
+import TierUpCelebration from '@/components/client/TierUpCelebration';
+import HolographicWrapper from '@/components/shared/HolographicWrapper';
 
 type Params = { locale: string };
 
@@ -57,7 +60,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
     }),
   ]);
 
-  const [totalStays, totalSpent, lastBooking, waSetting] = await Promise.all([
+  const [totalStays, totalSpent, lastBooking, waSetting, lastLoyaltyNotif] = await Promise.all([
     prisma.booking.count({ where: notDeleted({ clientId: session.user.id, status: 'COMPLETED' }) }),
     prisma.invoice.aggregate({ where: { clientId: session.user.id, status: 'PAID' }, _sum: { amount: true } }),
     prisma.booking.findFirst({
@@ -71,6 +74,12 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       },
     }),
     prisma.setting.findUnique({ where: { key: 'whatsapp_number' } }),
+    // Most recent LOYALTY_UPDATE — fuels the tier-up celebration modal.
+    prisma.notification.findFirst({
+      where: { userId: session.user.id, type: 'LOYALTY_UPDATE' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, createdAt: true, read: true },
+    }),
   ]);
 
   const grade = (loyaltyGrade?.grade ?? 'BRONZE') as Grade;
@@ -126,25 +135,57 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
-      {/* Greeting */}
-      <div className="text-center sm:text-left">
-        <p className="text-[10px] uppercase tracking-[2px] text-[#8A7E75]">
-          {locale === 'fr' ? 'Bonjour' : locale === 'ar' ? 'مرحباً' : 'Hello'}
-        </p>
-        <h1 className="font-serif text-4xl font-bold text-[#1C1612] mt-1 leading-tight">
-          {firstName}
-          {lastName && <> <span className="italic text-[#C4974A]">{lastName}</span></>}
-        </h1>
-        <div className="w-10 h-[2px] bg-[#C4974A] mt-3 mx-auto sm:mx-0" />
-        <p className="text-sm text-[#7A6E65] mt-3">{t('subtitle')}</p>
-      </div>
+      {/* Tier-up celebration (Feature #2 Wave 5).  No-op when no unread
+          loyalty notif < 7d — pure client-side gate. */}
+      <TierUpCelebration
+        grade={grade}
+        locale={locale}
+        lastLoyaltyNotification={lastLoyaltyNotif ? {
+          id: lastLoyaltyNotif.id,
+          createdAt: lastLoyaltyNotif.createdAt.toISOString(),
+          read: lastLoyaltyNotif.read,
+        } : null}
+      />
+
+      {/* Greeting — contextual (Wave 5 / UX classe mondiale). */}
+      {(() => {
+        const greeting = buildGreeting({
+          locale,
+          nextBooking: upcomingBookings[0]
+            ? {
+                serviceType: upcomingBookings[0].serviceType as 'BOARDING' | 'PET_TAXI',
+                startDate: upcomingBookings[0].startDate,
+                status: upcomingBookings[0].status,
+                firstPetName: upcomingBookings[0].bookingPets?.[0]?.pet?.name ?? null,
+              }
+            : null,
+          lastCompletedBooking: lastBooking
+            ? { endDate: null, firstPetName: lastBooking.bookingPets?.[0]?.pet?.name ?? null }
+            : null,
+        });
+        return (
+          <div className="text-center sm:text-left">
+            <p className="text-[10px] uppercase tracking-[2px] text-[#8A7E75]">
+              {greeting.salutation}
+            </p>
+            <h1 className="font-serif text-4xl font-bold text-[#1C1612] mt-1 leading-tight">
+              {firstName}
+              {lastName && <> <span className="italic text-[#C4974A]">{lastName}</span></>}
+            </h1>
+            <div className="w-10 h-[2px] bg-[#C4974A] mt-3 mx-auto sm:mx-0" />
+            <p className="text-sm text-[#7A6E65] mt-3">{greeting.subtitle}</p>
+          </div>
+        );
+      })()}
+      {/* End greeting */}
+      <div className="hidden">{t('subtitle')}</div>
 
       {/* Member Card — wrapper shadow + border doré.  Cannot wrap in a Link
           because MemberCard contains interactive "Réclamer" buttons that
           would otherwise trigger nested-anchor navigation.  Instead, a
           dedicated CTA below points to the standalone /client/card page
           (Feature #2 — wallet-like shortcut). */}
-      <div className="rounded-2xl overflow-hidden shadow-[0_8px_32px_rgba(196,151,74,0.12)] border border-[rgba(196,151,74,0.2)]">
+      <HolographicWrapper holographic={grade === 'PLATINUM'} className="rounded-2xl overflow-hidden shadow-[0_8px_32px_rgba(196,151,74,0.12)] border border-[rgba(196,151,74,0.2)]">
         <MemberCard
           clientId={session.user.id}
           clientName={session.user.name ?? ''}
@@ -155,7 +196,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           locale={locale}
           claims={myClaims as { benefitKey: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' }[]}
         />
-      </div>
+      </HolographicWrapper>
 
       <Link
         href={`/${locale}/client/card`}
@@ -163,6 +204,29 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       >
         {locale === 'fr' ? 'Ouvrir ma carte en plein écran →' : locale === 'ar' ? 'فتح بطاقتي بملء الشاشة ←' : 'Open my card full-screen →'}
       </Link>
+
+      {/* Year Wrapped link (Feature #7 Wave 5) — visible only for clients
+          with at least 1 stay this year ; otherwise the page would be a
+          dead-end empty state. */}
+      {totalStays > 0 && (
+        <Link
+          href={`/${locale}/client/wrapped`}
+          className="block rounded-2xl border-2 border-[#D4AF37]/30 bg-gradient-to-br from-[#141428] to-[#0A0A1F] p-4 hover:border-[#D4AF37]/60 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-3xl" aria-hidden>🎉</span>
+            <div className="flex-1">
+              <p className="text-[10px] uppercase tracking-[2px] text-[#D4AF37] font-semibold">
+                {locale === 'fr' ? 'Votre année en résumé' : locale === 'ar' ? 'سنتك في ملخص' : 'Your year in review'}
+              </p>
+              <p className="text-sm text-[#F5EDD8] font-medium mt-0.5">
+                Dog Universe Wrapped
+              </p>
+            </div>
+            <span className="text-[#D4AF37]/60">→</span>
+          </div>
+        </Link>
+      )}
 
       {/* Loyalty progress bar with paws */}
       {nextTier && (

@@ -6,6 +6,8 @@ import AutoRefresh from '@/components/shared/AutoRefresh';
 import UpsellSuggestions from '@/components/shared/UpsellSuggestions';
 import ClientProductOrder from './ClientProductOrder';
 import ArrivalCheckIn from './ArrivalCheckIn';
+import CountdownHero from './CountdownHero';
+import LiveTaxiBanner from '@/components/client/LiveTaxiBanner';
 import { getTranslations } from './_lib/i18n';
 import { serializeTrips, computeRunningTotal } from './_lib/derived';
 import BookingHeader from './_components/BookingHeader';
@@ -130,6 +132,32 @@ export default async function ClientBookingDetailPage({ params }: PageProps) {
       />
 
       <div className="space-y-4">
+        {/* Live Pet Taxi banner (Feature #6 Wave 5) — visible during any
+            active trip, links to /track/[token] for the full Leaflet map. */}
+        {(() => {
+          const liveTrip = booking.taxiTrips.find(t => t.trackingToken
+            && ['DRIVER_EN_ROUTE', 'ON_SITE_CLIENT', 'ANIMAL_ON_BOARD', 'ON_SITE_PENSION'].includes(t.status));
+          return liveTrip ? (
+            <LiveTaxiBanner
+              trackingToken={liveTrip.trackingToken!}
+              tripStatus={liveTrip.status}
+              petName={booking.bookingPets?.[0]?.pet?.name ?? null}
+              locale={locale}
+            />
+          ) : null;
+        })()}
+
+        {/* Countdown Hero + Mood Builder (Feature #1 Wave 5) — J-7 to J-0
+            CONFIRMED bookings.  Transforms the wait into anticipation. */}
+        {['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && (
+          <CountdownHero
+            bookingId={booking.id}
+            startDate={booking.startDate.toISOString()}
+            petName={booking.bookingPets?.[0]?.pet?.name ?? null}
+            locale={locale}
+          />
+        )}
+
         {/* Geofencing arrival check-in — only on CONFIRMED bookings whose
             startDate is within 36 h.  Server validates Casa coords + fires
             an admin SMS once per (booking, day) for the "we're expecting
