@@ -60,9 +60,13 @@ export const POST = withSchema(
     const petNames = booking.bookingPets.map((bp) => bp.pet.name).join(', ') || '—';
     const bookingRef = booking.id.slice(0, 8).toUpperCase();
 
-    let created;
-    try {
-      created = await prisma.$transaction(async (tx) => {
+    // Bounded retry on P2034 (Serializable conflict) — a racer can be
+    // aborted by SSI even when the cap is not yet reached, so naively
+    // mapping P2034 → 429 would drop valid requests.  Up to 3 attempts
+    // with small backoff ; after that we surface the conflict as 503 so
+    // the client can retry, NOT as 429 which would lie about the cap.
+    async function runCountAndCreate() {
+      return prisma.$transaction(async (tx) => {
         const existing = await tx.addonRequest.count({
           where: { bookingId: id, requestedBy: session.user.id },
         });
@@ -79,17 +83,36 @@ export const POST = withSchema(
           },
         });
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    } catch (err) {
-      if (err instanceof Error && err.message === 'TOO_MANY_REQUESTS') {
-        return NextResponse.json({ error: 'TOO_MANY_REQUESTS' }, { status: 429 });
+    }
+
+    let created: { id: string } | undefined;
+    const MAX_ATTEMPTS = 3;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        created = await runCountAndCreate();
+        break;
+      } catch (err) {
+        if (err instanceof Error && err.message === 'TOO_MANY_REQUESTS') {
+          return NextResponse.json({ error: 'TOO_MANY_REQUESTS' }, { status: 429 });
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const code = (err as any)?.code;
+        if (code === 'P2034' && attempt < MAX_ATTEMPTS) {
+          // Small jittered backoff to avoid lock-step retries.
+          await new Promise((r) => setTimeout(r, 30 + Math.floor(Math.random() * 50)));
+          continue;
+        }
+        if (code === 'P2034') {
+          // Bounded retry exhausted — let the client try again later.
+          return NextResponse.json({ error: 'CONCURRENT_CONFLICT' }, { status: 503 });
+        }
+        throw err;
       }
-      // P2034 = Serializable retry needed (concurrent commit conflict) ;
-      // surface as the same 429 — the racer effectively hit the cap.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ((err as any)?.code === 'P2034') {
-        return NextResponse.json({ error: 'TOO_MANY_REQUESTS', concurrent: true }, { status: 429 });
-      }
-      throw err;
+    }
+    if (!created) {
+      // Defensive — the loop above returns on every non-success path,
+      // so this is just to satisfy the type narrowing.
+      return NextResponse.json({ error: 'UNEXPECTED' }, { status: 500 });
     }
 
     await notifyAdminsAddonRequest({
