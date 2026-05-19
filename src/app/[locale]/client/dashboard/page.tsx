@@ -139,7 +139,11 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
         <p className="text-sm text-[#7A6E65] mt-3">{t('subtitle')}</p>
       </div>
 
-      {/* Member Card — wrapper shadow + border doré */}
+      {/* Member Card — wrapper shadow + border doré.  Cannot wrap in a Link
+          because MemberCard contains interactive "Réclamer" buttons that
+          would otherwise trigger nested-anchor navigation.  Instead, a
+          dedicated CTA below points to the standalone /client/card page
+          (Feature #2 — wallet-like shortcut). */}
       <div className="rounded-2xl overflow-hidden shadow-[0_8px_32px_rgba(196,151,74,0.12)] border border-[rgba(196,151,74,0.2)]">
         <MemberCard
           clientId={session.user.id}
@@ -152,6 +156,13 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           claims={myClaims as { benefitKey: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' }[]}
         />
       </div>
+
+      <Link
+        href={`/${locale}/client/card`}
+        className="block text-center text-sm font-medium text-[#C4974A] hover:text-[#8B6914] transition-colors py-2"
+      >
+        {locale === 'fr' ? 'Ouvrir ma carte en plein écran →' : locale === 'ar' ? 'فتح بطاقتي بملء الشاشة ←' : 'Open my card full-screen →'}
+      </Link>
 
       {/* Loyalty progress bar with paws */}
       {nextTier && (

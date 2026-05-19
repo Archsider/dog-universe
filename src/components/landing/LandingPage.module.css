@@ -782,28 +782,52 @@
 }
 @media (max-width: 640px) {
   .du-nav-inner {
-    padding: 0 20px;
+    padding: 0 14px;
     height: 64px;
+    gap: 8px;
   }
   .du-nav-logo {
-    font-size: 19px;
+    font-size: 17px;
+    /* Allow logo to truncate gracefully on really narrow screens (≤ 360 px)
+     * so the right-side CTAs still fit on a single line. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .du-nav-actions {
+    gap: 6px;
+    flex-shrink: 0;
   }
   .du-nav-link {
     /* Compact mobile login button — keeps the entrance for existing
      * clients visible (was display: none, which trapped them on the
      * sign-up CTA only).  Slimmer than desktop : no border, smaller
-     * padding, plain underline reveal on tap. */
-    padding: 6px 8px;
-    font-size: 12px;
+     * padding, plain underline reveal on tap.  Also forced to a single
+     * line so it doesn't wrap and push the right edge past the viewport. */
+    padding: 6px 6px;
+    font-size: 11px;
     border: none;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .du-nav-cta {
+    padding: 9px 14px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
   }
   .du-langs {
-    margin-right: 6px;
+    margin-right: 2px;
+    gap: 2px;
   }
   .du-rtl .du-langs {
     margin-right: 0;
-    margin-left: 6px;
+    margin-left: 2px;
+  }
+  .du-lang {
+    padding: 4px 4px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
   }
   /* Hide nav contact icons on tight phones — the CTAs already crowd
    * the bar. Users will find phone/WhatsApp in the footer and via the
