@@ -34,6 +34,16 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     background-color: #FAF6F0;
+    /* Hard cap horizontal overflow on mobile — any rogue child that spills
+     * past the viewport (long nav links, full-bleed sections with vw
+     * padding, animated transforms) clips silently instead of producing
+     * the dreaded white gap on the right.  Pairs with overflow-clip on the
+     * landing wrapper to avoid breaking sticky/`position: -webkit-sticky`
+     * behaviour. */
+    overflow-x: hidden;
+  }
+  html {
+    overflow-x: hidden;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-serif;
