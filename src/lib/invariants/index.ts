@@ -23,6 +23,14 @@ export {
   checkRevenueHelperVsLive,
 } from './revenue';
 
+export { checkAnonymizedUserActiveNotifications } from './rgpd';
+
+export {
+  checkAcceptedProposalOrphaned,
+  checkNegativePaidAmount,
+  checkOpenEndedOccupancyOverflow,
+} from './lifecycle';
+
 import {
   checkOverpaidInvoices,
   checkItemTotalDrift,
@@ -38,15 +46,16 @@ import {
   checkPaymentAttributionDrift,
   checkRevenueHelperVsLive,
 } from './revenue';
+import { checkAnonymizedUserActiveNotifications } from './rgpd';
+import {
+  checkAcceptedProposalOrphaned,
+  checkNegativePaidAmount,
+  checkOpenEndedOccupancyOverflow,
+} from './lifecycle';
 import type { InvariantResult } from './types';
 
 export async function runAllInvariantChecks(): Promise<InvariantResult[]> {
-  const [
-    overpaid, negativeStock, itemDrift, invoiceDrift,
-    allocatedSum, paymentSum, allocOverflow, missingPaidAt,
-    mvFresh,
-    paymentAttribDrift, helperVsLive,
-  ] = await Promise.all([
+  const results = await Promise.all([
     checkOverpaidInvoices(),
     checkNegativeStock(),
     checkItemTotalDrift(),
@@ -58,11 +67,11 @@ export async function runAllInvariantChecks(): Promise<InvariantResult[]> {
     checkMonthlyRevenueMvFresh(),
     checkPaymentAttributionDrift(),
     checkRevenueHelperVsLive(),
+    // Wave 4 additions — RGPD + lifecycle.
+    checkAnonymizedUserActiveNotifications(),
+    checkAcceptedProposalOrphaned(),
+    checkNegativePaidAmount(),
+    checkOpenEndedOccupancyOverflow(),
   ]);
-  return [
-    overpaid, negativeStock, itemDrift, invoiceDrift,
-    allocatedSum, paymentSum, allocOverflow, missingPaidAt,
-    mvFresh,
-    paymentAttribDrift, helperVsLive,
-  ];
+  return results;
 }
