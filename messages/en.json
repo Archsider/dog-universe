@@ -72,6 +72,7 @@
       "contracts": "Contracts",
       "users": "Users",
       "feature_flags": "Feature flags",
+      "maintenance": "Maintenance",
       "diagnostics": "Diagnostics",
       "health": "System health",
       "guardian": "AI Guardian",

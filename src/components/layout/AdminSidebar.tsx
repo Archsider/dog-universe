@@ -34,6 +34,7 @@ import {
   Flag,
   Database,
   Mail,
+  Wrench,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -78,6 +79,7 @@ export function AdminSidebar({ pendingCount = 0, pendingClaimsCount = 0, addonRe
           { href: `/${locale}/admin/backups`, labelKey: 'backups', icon: Database },
           { href: `/${locale}/admin/users`, labelKey: 'users', icon: UserCog },
           { href: `/${locale}/admin/feature-flags`, labelKey: 'feature_flags', icon: Flag },
+          { href: `/${locale}/admin/maintenance`, labelKey: 'maintenance', icon: Wrench },
           { href: `/${locale}/admin/revenue-summary`, labelKey: 'revenue_summary', icon: TrendingUp },
         ]
       : []),
