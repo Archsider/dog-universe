@@ -395,7 +395,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
                       </span>
                     </div>
                     <p className="text-xs text-[#7A6E65]">
-                      {booking.bookingPets.map((bp) => bp.pet.name).join(', ')}
+                      {booking.bookingPets.filter((bp) => bp.pet).map((bp) => bp.pet!.name).join(', ')}
                       {' · '}
                       {formatDateShort(booking.startDate, locale)}
                       {booking.endDate && ` → ${formatDateShort(booking.endDate, locale)}`}

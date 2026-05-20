@@ -14,7 +14,11 @@ const mocks = vi.hoisted(() => ({
     booking: { findFirst: vi.fn() },
     $transaction: vi.fn(async (cb: any) => {
       const tx = {
-        booking: { update: vi.fn().mockResolvedValue({}) },
+        booking: {
+          update: vi.fn().mockResolvedValue({}),
+          // Optimistic-lock path : updateMany returns { count: 1 } on success.
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
         invoice: { update: vi.fn().mockResolvedValue({}) },
         invoiceItem: {
           deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
