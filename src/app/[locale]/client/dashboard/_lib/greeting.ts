@@ -78,20 +78,32 @@ export function buildGreeting(ctx: GreetingContext): Greeting {
           : petName ? `${petName} is in the best hands 🐾` : 'Your companion is in the best hands 🐾';
     } else if (days === 0) {
       subtitle = fr
-        ? petName ? `On vous attend aujourd'hui pour ${petName}` : 'On vous attend aujourd\'hui'
-        : ar ? 'نراك اليوم' : petName ? `See you today for ${petName}` : 'See you today';
+        ? petName ? `Nous accueillons ${petName} aujourd'hui` : 'On vous attend aujourd\'hui'
+        : ar
+          ? petName ? `نستقبل ${petName} اليوم` : 'نراك اليوم'
+          : petName ? `Welcoming ${petName} today` : 'See you today';
     } else if (days === 1) {
       subtitle = fr
-        ? petName ? `À demain pour ${petName} 🌙` : 'À demain 🌙'
-        : ar ? 'إلى اللقاء غداً 🌙' : petName ? `See you tomorrow for ${petName} 🌙` : 'See you tomorrow 🌙';
+        ? petName ? `${petName} arrive demain 🌙` : 'À demain 🌙'
+        : ar
+          ? petName ? `${petName} يصل غداً 🌙` : 'إلى اللقاء غداً 🌙'
+          : petName ? `${petName} arrives tomorrow 🌙` : 'See you tomorrow 🌙';
     } else if (days <= 7) {
       subtitle = fr
-        ? `Plus que ${days} jour${days > 1 ? 's' : ''} avant ${petName || 'leur arrivée'}.`
-        : ar ? `${days} يوم/أيام للوصول.` : `${days} day${days > 1 ? 's' : ''} until ${petName || 'their arrival'}.`;
+        ? petName
+          ? `Le séjour de ${petName} commence dans ${days} jours`
+          : `Votre séjour commence dans ${days} jours`
+        : ar
+          ? petName ? `إقامة ${petName} تبدأ خلال ${days} أيام` : `إقامتك تبدأ خلال ${days} أيام`
+          : petName ? `${petName}'s stay begins in ${days} days` : `Your stay begins in ${days} days`;
     } else {
       subtitle = fr
-        ? `Prochaine réservation dans ${days} jours.`
-        : ar ? `الحجز القادم خلال ${days} يوماً.` : `Next stay in ${days} days.`;
+        ? petName
+          ? `Le séjour de ${petName} est dans ${days} jours`
+          : `Prochaine réservation dans ${days} jours`
+        : ar
+          ? petName ? `إقامة ${petName} خلال ${days} يوماً` : `الحجز القادم خلال ${days} يوماً`
+          : petName ? `${petName}'s stay is ${days} days away` : `Next stay in ${days} days`;
     }
   } else if (ctx.lastCompletedBooking?.firstPetName) {
     const petName = ctx.lastCompletedBooking.firstPetName;
