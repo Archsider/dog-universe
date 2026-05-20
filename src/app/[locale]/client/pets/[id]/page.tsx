@@ -11,6 +11,7 @@ import { calculateAge, formatDateShort, formatMAD, getAntiparasiticDurationDays 
 import { createSignedUrl } from '@/lib/supabase';
 import VaccinationSection from '@/components/pets/VaccinationSection';
 import PetPassportHero from '@/components/pets/PetPassportHero';
+import { SharePassportButton } from '@/components/client/SharePassportButton';
 import { PROOF_PREFIX } from '@/components/pets/constants';
 import DocumentSection from '@/components/pets/DocumentSection';
 
@@ -142,13 +143,21 @@ export default async function PetDetailPage({ params }: { params: Promise<Params
           <ArrowLeft className="h-4 w-4" />
           {fr ? 'Mes compagnons' : 'My pets'}
         </Link>
-        <Link
-          href={`/${locale}/client/pets/${pet.id}/edit`}
-          className="inline-flex items-center gap-1 text-sm text-charcoal/60 hover:text-[#C9A84C]"
-        >
-          <Edit className="h-4 w-4" />
-          {fr ? 'Modifier' : 'Edit'}
-        </Link>
+        <div className="flex items-center gap-3">
+          <SharePassportButton
+            petId={pet.id}
+            petName={pet.name}
+            locale={locale === 'en' ? 'en' : 'fr'}
+            variant="ghost"
+          />
+          <Link
+            href={`/${locale}/client/pets/${pet.id}/edit`}
+            className="inline-flex items-center gap-1 text-sm text-charcoal/60 hover:text-[#C9A84C]"
+          >
+            <Edit className="h-4 w-4" />
+            {fr ? 'Modifier' : 'Edit'}
+          </Link>
+        </div>
       </div>
 
       <PetPassportHero
