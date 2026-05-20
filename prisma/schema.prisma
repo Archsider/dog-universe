@@ -63,6 +63,8 @@ model User {
   endStayReportsSent     EndStayReport[]         @relation("EndStayReportSender")
   pushSubscriptions      PushSubscription[]
   lifetimeContracts      LifetimeContract[]
+  sponsoredReferrals     Referral[]              @relation("ReferralSponsor")
+  referredVia            Referral[]              @relation("ReferralReferee")
 
   @@index([deletedAt])
   @@index([role, isWalkIn]) // Hot path: admin pages filter by role='CLIENT' AND isWalkIn=false
@@ -1057,4 +1059,26 @@ model SmsLog {
   @@unique([phone, contentHash])
   @@index([phone, sentAt])
   @@index([sentAt])
+}
+
+// Parrainage Royal — Wave 9 feature #7.
+// HMAC-signed referral tokens (no DB row at issue time).  Rows are
+// created on register (status=SIGNED_UP) and flipped to REWARDED at
+// the filleul's 1st COMPLETED booking.
+model Referral {
+  id           String    @id @default(cuid())
+  sponsorId    String
+  refereeId    String?
+  refereeEmail String?
+  status       String    @default("SIGNED_UP") // PENDING | SIGNED_UP | REWARDED | EXPIRED
+  signedUpAt   DateTime?
+  rewardedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  sponsor User  @relation("ReferralSponsor", fields: [sponsorId], references: [id], onDelete: Cascade)
+  referee User? @relation("ReferralReferee", fields: [refereeId], references: [id], onDelete: SetNull)
+
+  @@unique([sponsorId, refereeId])
+  @@index([sponsorId, status])
+  @@index([refereeId])
 }

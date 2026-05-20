@@ -44,7 +44,8 @@ export type NotificationType =
   | 'PRODUCT_ORDER'             // admin receives when a client orders a product on an active booking
   | 'BOOKING_TIME_PROPOSED'     // client receives when admin proposes a specific time (arrival / taxi go / taxi return)
   | 'BOOKING_TIME_CONFIRMED'    // client receives when a time proposal is accepted (by either side)
-  | 'INVOICE_CANCELLED';        // client receives when one of their invoices is cancelled by admin
+  | 'INVOICE_CANCELLED'         // client receives when one of their invoices is cancelled by admin
+  | 'REFERRAL_REWARDED';        // sponsor + referee receive when a sponsored 1st booking completes (Parrainage Royal)
 
 export interface CreateNotificationData {
   userId: string;
