@@ -6,7 +6,8 @@ import userEvent from '@testing-library/user-event';
 
 // Stub Next.js router — Modal calls router.refresh() on success.
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 // Stub the autocomplete — we never click into Step 1's client picker

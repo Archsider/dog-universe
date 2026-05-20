@@ -19,8 +19,8 @@
 //   - Step 3 → confirm screen (read-only recap, anti one-click)
 //   - Confirm → POST → close + router.refresh + toast event
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { X, ArrowLeft, ArrowRight, Check, Loader2, Receipt } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import { createWalkinInvoice } from '@/lib/api-client';
@@ -37,8 +37,24 @@ interface Props {
 export default function WalkinInvoiceModal({ locale }: Props) {
   const fr = locale === 'fr';
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const form = useWalkinForm(open);
+
+  // Deep-link auto-open : QuickActionsBar (Wave 6) links to
+  // /admin/billing?walkin=open ; this picks that signal up and opens the
+  // modal on mount.  We then drop the param so a manual close doesn't
+  // re-open on refresh.
+  useEffect(() => {
+    if (searchParams?.get('walkin') === 'open' && !open) {
+      setOpen(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('walkin');
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function submit() {
     form.setError(null);
