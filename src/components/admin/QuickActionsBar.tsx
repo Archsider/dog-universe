@@ -25,13 +25,17 @@ export default function QuickActionsBar({ locale }: Props) {
       tone: 'gold',
     },
     {
+      // Auto-opens the WalkinInvoiceModal on /admin/billing via the
+      // ?walkin=open searchParam (see WalkinInvoiceModal.tsx useEffect).
       href: `/${locale}/admin/billing?walkin=open`,
       label: fr ? 'Walk-in' : 'Walk-in',
       icon: ShoppingBag,
       tone: 'emerald',
     },
     {
-      href: `/${locale}/admin/billing`,
+      // Lands on the billing dashboard with the unpaid filter focused so
+      // the operator can immediately pick which invoice to settle.
+      href: `/${locale}/admin/billing?status=PENDING`,
       label: fr ? 'Encaisser' : ar ? 'تحصيل' : 'Collect',
       icon: Wallet,
       tone: 'blue',
