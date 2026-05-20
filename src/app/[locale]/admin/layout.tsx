@@ -4,6 +4,8 @@ import { AdminSidebar } from '@/components/layout/AdminSidebar';
 import { AdminNotificationBell } from '@/components/layout/AdminNotificationBell';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { SessionWatcher } from '@/components/shared/SessionWatcher';
+import CommandPalette from '@/components/admin/CommandPalette';
+import QuickActionsBar from '@/components/admin/QuickActionsBar';
 import { prisma } from '@/lib/prisma';
 import { notDeleted } from '@/lib/prisma-soft';
 import { getCachedAuth } from '@/lib/cached-auth';
@@ -53,18 +55,26 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
       <AdminSidebar pendingCount={pendingCount} pendingClaimsCount={pendingClaimsCount} addonRequestCount={addonRequestCount} catalogSuggestionsCount={catalogSuggestionsCount} userRole={session.user.role} />
       <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-16 bg-white border-b border-ivory-200 flex items-center justify-between px-4 lg:px-6">
-          <div className="lg:hidden w-8" />
-          <div className="flex items-center gap-1 ml-auto">
-            <span className="text-xs text-gray-500 mr-2 hidden sm:block">Admin</span>
-            <AdminNotificationBell />
-            <LanguageSwitcher />
+        <header className="sticky top-0 z-30 bg-white border-b border-ivory-200">
+          <div className="h-16 flex items-center justify-between px-4 lg:px-6">
+            <div className="lg:hidden w-8" />
+            <div className="flex items-center gap-1 ml-auto">
+              <span className="text-xs text-gray-500 mr-2 hidden sm:block">Admin</span>
+              <AdminNotificationBell />
+              <LanguageSwitcher />
+            </div>
+          </div>
+          {/* Wave 6 Feature #3 — Quick Actions Bar */}
+          <div className="border-t border-ivory-200 bg-[#FEFCF9] px-4 lg:px-6">
+            <QuickActionsBar locale={locale} />
           </div>
         </header>
         <main className="relative flex-1 p-4 lg:p-8 bg-[#FEFCF9] min-h-screen">
           {/* Zellige discret — classe CSS (pas inline style : banni par style-src-attr none CSP) */}
           <div aria-hidden="true" className="absolute inset-0 pointer-events-none zellige-bg" />
           <SessionWatcher loginPath={`/${locale}/auth/login`} />
+          {/* Wave 6 Feature #2 — Cmd+K universal search */}
+          <CommandPalette locale={locale} />
           <div className="relative z-10">{children}</div>
         </main>
       </div>

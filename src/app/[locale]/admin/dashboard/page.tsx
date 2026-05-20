@@ -31,6 +31,8 @@ import { LongStaysCard } from './_components/LongStaysCard';
 import { InactiveClientsCard } from './_components/InactiveClientsCard';
 import { CriticalInvariantsCard } from './_components/CriticalInvariantsCard';
 import AdminGreeting from './_components/AdminGreeting';
+import StatsHero from '@/components/admin/StatsHero';
+import { loadStatsHero } from './_lib/stats-hero-data';
 
 // ISR : revalidation 60 s. Les mutations admin invalident via
 // `revalidateTag('admin-counts')` — pas un signal direct ici, mais le
@@ -49,7 +51,10 @@ export default async function AdminDashboardPage({ params }: PageProps) {
   }
 
   const labels = getDashboardLabels(locale);
-  const snapshot = await loadDashboardSnapshot();
+  const [snapshot, statsHero] = await Promise.all([
+    loadDashboardSnapshot(),
+    loadStatsHero(),
+  ]);
   const firstName = firstNameOf(session.user.name);
 
   return (
@@ -64,6 +69,17 @@ export default async function AdminDashboardPage({ params }: PageProps) {
           pending={snapshot.pending.count}
         />
       </header>
+
+      {/* Wave 6 Feature #6 — Stats Hero (CA + séjours + occupancy) */}
+      <StatsHero
+        monthRevenue={statsHero.monthRevenue}
+        monthRevenuePrev={statsHero.monthRevenuePrev}
+        monthStays={statsHero.monthStays}
+        monthStaysPrev={statsHero.monthStaysPrev}
+        occupancyDogPct={statsHero.occupancyDogPct}
+        occupancyCatPct={statsHero.occupancyCatPct}
+        locale={locale}
+      />
 
       {/* ── Zone 1 — Maintenant ── */}
       <section className="space-y-4">
