@@ -1458,7 +1458,97 @@ Ne jamais patcher `status=COMPLETED` manuellement sans recalcul prix.
 
 ---
 
+## ✅ ÉTAT — 2026-05-20 (session marathon 10 PRs)
+
+Audit engineering staff×5 → **87/100**. Cf [docs/AUDIT_2026_05_20.md](./docs/AUDIT_2026_05_20.md).
+
+### Features livrées cette session (mergé)
+
+| Wave | Sujet | PR |
+|---|---|---|
+| 1 | 8 P0 money paths + RGPD + Casa TZ + loyalty robustness | #185 |
+| 2 | 8 P1 races + double-fire + soft-delete consistency | #186 |
+| 3 | Perf + observability (findMany caps, logAction checkout) | #188 |
+| 4 | 4 invariants DB (anonymized_user, accepted_proposal, negative_paid, open_ended_overflow) | #189 |
+| 5 | 7 features UX client classe mondiale | #187 |
+| 5b | Polish greeting luxe + countdown bar + product UI refonte | #190 |
+| 6 | 6 features admin cockpit | #191 |
+| 6.1 | Walk-in deep-link `?walkin=open` | #192 |
+| 7 | Page maintenance ops | #193 |
+| 7.2 | Web Push + Storage orphans + mobile UX + E2E flake fix | #194 |
+
+### Modules nouveaux (sources de vérité)
+
+- `src/lib/prisma-soft.ts` → `contactable()` (deletedAt: null + anonymizedAt: null) pour crons RGPD
+- `src/lib/maintenance/{diagnostics,actions}.ts` → page `/admin/maintenance`
+- `src/lib/web-push.ts` → `pushToUser()` + `pushToAdmins()` (fail-soft sans VAPID)
+- `src/lib/storage-orphans.ts` → `findStorageOrphans()` + `deleteStorageOrphans()`
+- `src/components/shared/GreetingHeader.tsx` → greeting luxe partagé client+admin avec countdown bar
+- `src/components/admin/CommandPalette.tsx` → ⌘K universel sur `/admin/*`
+- `src/components/admin/QuickActionsBar.tsx` → sticky bar sous top header
+- `src/components/admin/StatsHero.tsx` → 4 cards animées CA/séjours/occupation
+- `src/lib/invariants/{rgpd,lifecycle}.ts` → 4 nouveaux invariants
+
+### Pages admin nouvelles
+
+- `/admin/maintenance` (SUPERADMIN) — diagnostics + purges + VACUUM + clear caches
+- `/admin/inbox` — backlog unifié
+- `/admin/activity` — timeline ActionLog par heure
+- `/client/wrapped` — Year Wrapped Spotify-style
+- `/client/bookings/[id]/briefing` — pre-stay briefing J-2
+- `/client/card` — Member Card standalone wallet-shortcut
+
+### Décisions clés cette session
+
+- **MV monthly_revenue_mv auto-refresh** sur `recordPayment` du mois courant (debounce 60s)
+- **Time-proposal partial UNIQUE index** atomic race guard
+- **Invoice CHECK `paidAmount >= -0.01`** defense vs refund overshoot
+- **Cascade SUPERSEDE étendue** PENDING+ACCEPTED au cancel
+- **VACUUM via DIRECT_URL** pg client bypass PgBouncer
+- **E2E continue-on-error** flakes prod ne bloquent plus merge gate
+- **Helper `contactable()`** systématique 5 crons outbound
+
+---
+
 ## ACTIONS MANUELLES EN ATTENTE
+
+### 🆕 Migrations à exécuter sur Supabase (2026-05-20)
+
+3 nouvelles migrations à passer (idempotentes, copier-coller dans SQL Editor) :
+
+1. `prisma/migrations/20260520_time_proposal_partial_unique/migration.sql` — partial UNIQUE index + auto-dedupe des PENDING dupliqués
+2. `prisma/migrations/20260520_invoice_paid_amount_lower_bound/migration.sql` — CHECK paidAmount ≥ -0.01
+3. `prisma/migrations/20260520_push_subscription/migration.sql` — table PushSubscription pour Web Push
+
+Après exécution → `/admin/health` → bouton **"Déjà appliquée"** sur chacune.
+
+### 🆕 Vars Vercel pour activer les features récentes
+
+**Geofencing arrival (PR #180)** :
+- `NEXT_PUBLIC_PENSION_LAT` = `31.640736507465107`
+- `NEXT_PUBLIC_PENSION_LNG` = `-8.201317751856138`
+
+**Web Push notifs (PR #194)** — générer keys :
+```bash
+npx web-push generate-vapid-keys
+```
+Puis :
+- `VAPID_PUBLIC_KEY` = clé publique
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` = même valeur
+- `VAPID_PRIVATE_KEY` = clé privée
+- `VAPID_SUBJECT` = `mailto:ops@doguniverse.ma`
+
+Puis `/admin/profile` → bouton **"Activer"** push.
+
+### 🧹 Cleanup SQL (1 row legacy)
+
+Pour faire passer l'invariant `accepted_proposal_orphaned` à 0 :
+```sql
+UPDATE "TimeProposal"
+SET status = 'SUPERSEDED', "publicToken" = NULL, "publicTokenExpiresAt" = NULL,
+    "respondedAt" = NOW(), "responseNote" = '[Auto-cleanup 2026-05-20] Booking went terminal pre-Wave-2 fix.'
+WHERE id = 'tp_legacy_txgo_cmp62pa2200023s5i6mgf3nag' AND status = 'ACCEPTED';
+```
 
 ### ⚠️ Migration 20260512 — User(role, isWalkIn) index (2026-05-12)
 À exécuter sur Supabase SQL Editor :
