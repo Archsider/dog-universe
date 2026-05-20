@@ -75,7 +75,10 @@ export interface AccountingBooking {
 }
 
 function nightsBetween(start: Date, end: Date): number {
-  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000));
+  // floor, not round — for partial-month overlap windows (countNightsInMonth)
+  // the window edges aren't midnight-aligned with stay boundaries, so
+  // Math.round over-allocates 0.5+ days as a full night (pro-rata drift).
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86_400_000));
 }
 
 function nightsOverlap(bStart: Date, bEnd: Date, wStart: Date, wEnd: Date): number {

@@ -25,14 +25,16 @@ export function CronTriggerButton({ name, isFr }: Props) {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
-        alert(isFr
+        const msg = isFr
           ? `Échec : ${j.error ?? r.statusText}`
-          : `Failed: ${j.error ?? r.statusText}`);
+          : `Failed: ${j.error ?? r.statusText}`;
+        try { window.dispatchEvent(new CustomEvent('toast', { detail: { kind: 'error', message: msg } })); } catch {}
         return;
       }
       router.refresh();
     } catch (e) {
-      alert(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+      const msg = `Erreur : ${e instanceof Error ? e.message : String(e)}`;
+      try { window.dispatchEvent(new CustomEvent('toast', { detail: { kind: 'error', message: msg } })); } catch {}
     } finally {
       setBusy(false);
     }
