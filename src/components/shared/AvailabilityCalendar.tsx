@@ -1,13 +1,14 @@
-/* eslint-disable dog-universe/no-getmonth-on-date-casa --
- * OK: client-side UI / calendar grid helpers. These operate either on
- * <input type="date"> values (already local-time) or on (year, month, day)
- * primitives previously extracted via casablancaYMD upstream. The Vercel UTC
- * runtime is not in scope here — the browser is.
- */
 'use client';
+
+// Casa-anchored: `getCurrentMonth` uses `casablancaYMD()` so an admin running
+// the page near midnight UTC (or from a non-Casa browser TZ) still sees the
+// month that a Casa wall clock would show. The internal calendar math
+// (addMonths) operates on the YYYY-MM string we produce ourselves — never on
+// the runtime's local Date components.
 
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { casablancaYMD } from '@/lib/dates-casablanca';
 
 interface DayData {
   date: string;
@@ -40,14 +41,17 @@ const FR_MONTHS = [
 const DAY_HEADERS = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
 
 function getCurrentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const { year, month } = casablancaYMD(new Date());
+  return `${year}-${String(month).padStart(2, '0')}`;
 }
 
 function addMonths(month: string, delta: number): string {
   const [y, m] = month.split('-').map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  // String-only month arithmetic — no Date object, no TZ ambiguity.
+  const total = y * 12 + (m - 1) + delta;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  return `${ny}-${String(nm).padStart(2, '0')}`;
 }
 
 function getMonthLabel(month: string): string {
@@ -58,9 +62,11 @@ function getMonthLabel(month: string): string {
 function getDaysInMonth(month: string): { date: string; dayOfWeek: number }[] {
   const [y, m] = month.split('-').map(Number);
   const days: { date: string; dayOfWeek: number }[] = [];
+  // eslint-disable-next-line dog-universe/no-getmonth-on-date-casa -- OK: round-trip local-time on a calendar-only computation (input Y/M, output day count). TZ shifts cancel out.
   const daysCount = new Date(y, m, 0).getDate();
   for (let d = 1; d <= daysCount; d++) {
     const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    // eslint-disable-next-line dog-universe/no-getmonth-on-date-casa -- OK: same round-trip local-time pattern — Y/M/D in, weekday out.
     const dow = new Date(y, m - 1, d).getDay(); // 0=Sun..6=Sat
     // Convert to Mon-first (0=Mon..6=Sun)
     const monFirst = dow === 0 ? 6 : dow - 1;
