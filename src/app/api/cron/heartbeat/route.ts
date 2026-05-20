@@ -144,6 +144,7 @@ export const GET = defineCron({
           const superadmins = await prisma.user.findMany({
             where: notDeleted({ role: 'SUPERADMIN', phone: { not: null } }),
             select: { phone: true },
+            take: 20, // defensive — DU has at most 2-3 SUPERADMIN in practice
           });
           const message =
             `🚨 Dog Universe: cron(s) jamais exécuté(s) depuis ≥${STALENESS_THRESHOLD_HOURS}h : ${staleCrons.join(', ')}. Voir docs/CRON_RECOVERY.md.`;

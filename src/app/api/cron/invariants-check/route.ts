@@ -78,6 +78,7 @@ export const GET = defineCron({
       const superadmins = await prisma.user.findMany({
         where: notDeleted({ role: 'SUPERADMIN', phone: { not: null } }),
         select: { phone: true },
+        take: 20, // defensive cap
       });
       const phones = superadmins
         .map((u) => u.phone)

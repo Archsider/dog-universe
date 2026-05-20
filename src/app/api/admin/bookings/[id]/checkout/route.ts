@@ -11,6 +11,7 @@ import { differenceInCalendarDays } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { notDeleted } from '@/lib/prisma-soft';
 import { logger } from '@/lib/logger';
+import { logAction, LOG_ACTIONS } from '@/lib/log';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -173,6 +174,25 @@ export async function POST(request: NextRequest, { params }: Params) {
         });
       }
     }
+
+    // Audit trail — money path requires it.  Until 2026-05-20 the
+    // checkout flow committed without leaving any record beyond the
+    // diff in the booking/invoice rows.  Now parity with walk-in /
+    // payments / cancel.
+    await logAction({
+      userId: session.user.id,
+      action: LOG_ACTIONS.BOOKING_COMPLETED,
+      entityType: 'Booking',
+      entityId: bookingId,
+      details: {
+        previousStatus: 'IN_PROGRESS',
+        endDate: endDate.toISOString(),
+        realNights,
+        boardingTotal: toNumber(boardingTotal),
+        newInvoiceAmount: toNumber(newInvoiceAmount),
+        invoiceId: booking.invoice?.id ?? null,
+      },
+    });
 
     return NextResponse.json({
       success: true,

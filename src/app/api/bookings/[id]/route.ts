@@ -155,6 +155,7 @@ async function patchImpl(request: Request, id: string): Promise<Response> {
       const admins = await prisma.user.findMany({
         where: { ...notDeleted(), role: { in: ['ADMIN', 'SUPERADMIN'] } },
         select: { id: true },
+        take: 50, // cap defensive — the DU team has < 10 admins in practice
       });
       const petNames = booking.bookingPets.map(bp => bp.pet.name).join(' et ') || 'animal';
       const clientName = booking.client.name ?? booking.client.email;
