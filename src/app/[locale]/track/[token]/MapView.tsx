@@ -18,6 +18,14 @@ const TRAIL_OPACITY = 0.6;
 const MAX_TRAIL_POINTS = 200;
 const INTERP_MAX_MS = 2000;
 
+// OSRM road-projected route — distinct visual treatment from the trail :
+// solid line in a deeper navy/charcoal, slightly thicker. The trail
+// (where the driver has been) stays gold ; the route (where the driver
+// is going) is the darker projected path.
+const ROUTE_COLOR = '#2A2520';
+const ROUTE_WEIGHT = 4;
+const ROUTE_OPACITY = 0.75;
+
 interface Props {
   center: [number, number];
   mapRef: React.MutableRefObject<LeafletMap | null>;
@@ -27,8 +35,14 @@ interface Props {
   heading?: number | null;
   /** Sequence of [lat, lng] points to render as a gold polyline trail. */
   trailPositions?: [number, number][];
+  /** OSRM road-projected route from driver to current destination. */
+  routePositions?: [number, number][];
+  /** Destination [lat, lng] — pickup or dropoff depending on trip phase. */
+  destination?: [number, number] | null;
   /** Localized label for the recenter button (defaults to FR). */
   recenterLabel?: string;
+  /** Localized label for the destination marker (defaults to FR). */
+  destinationLabel?: string;
 }
 
 export default function MapView({
@@ -38,7 +52,10 @@ export default function MapView({
   carIcon,
   heading,
   trailPositions,
+  routePositions,
+  destination,
   recenterLabel,
+  destinationLabel,
 }: Props) {
   // Smooth interpolation: animate marker between successive positions via
   // requestAnimationFrame instead of jumping. Each new `center` cancels the
@@ -52,6 +69,8 @@ export default function MapView({
   const followRef = useRef(true);
   const programmaticPanRef = useRef(false);
   const polylineRef = useRef<LeafletPolyline | null>(null);
+  const routePolylineRef = useRef<LeafletPolyline | null>(null);
+  const destinationMarkerRef = useRef<LeafletMarker | null>(null);
   const recenterBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // Update marker rotation when heading changes (independent from position).
@@ -196,6 +215,113 @@ export default function MapView({
       if (polylineRef.current) {
         try { polylineRef.current.remove(); } catch { /* noop */ }
         polylineRef.current = null;
+      }
+    };
+  }, []);
+
+  // OSRM road-projected route — refreshed on every `routePositions` change
+  // (the SSE 'eta' event fires every 30 s server-side). Same imperative
+  // pattern as the trail polyline above.
+  useEffect(() => {
+    let cancelled = false;
+    let attachRaf: number | null = null;
+    const attach = async () => {
+      if (cancelled) return;
+      const map = mapRef.current;
+      if (!map) {
+        attachRaf = requestAnimationFrame(attach);
+        return;
+      }
+      const points = routePositions ?? [];
+      if (points.length === 0) {
+        if (routePolylineRef.current) {
+          try { routePolylineRef.current.remove(); } catch { /* noop */ }
+          routePolylineRef.current = null;
+        }
+        return;
+      }
+      const L = await import('leaflet');
+      if (cancelled) return;
+      if (!routePolylineRef.current) {
+        routePolylineRef.current = L.polyline(points, {
+          color: ROUTE_COLOR,
+          weight: ROUTE_WEIGHT,
+          opacity: ROUTE_OPACITY,
+        }).addTo(map);
+      } else {
+        routePolylineRef.current.setLatLngs(points);
+      }
+    };
+    void attach();
+    return () => {
+      cancelled = true;
+      if (attachRaf !== null) cancelAnimationFrame(attachRaf);
+    };
+  }, [routePositions, mapRef]);
+
+  // Destination marker — pickup or dropoff depending on trip phase.
+  // Re-positions in place when destination changes (status transition or
+  // an admin edit on the booking).
+  useEffect(() => {
+    let cancelled = false;
+    let attachRaf: number | null = null;
+    const attach = async () => {
+      if (cancelled) return;
+      const map = mapRef.current;
+      if (!map) {
+        attachRaf = requestAnimationFrame(attach);
+        return;
+      }
+      if (!destination) {
+        if (destinationMarkerRef.current) {
+          try { destinationMarkerRef.current.remove(); } catch { /* noop */ }
+          destinationMarkerRef.current = null;
+        }
+        return;
+      }
+      const L = await import('leaflet');
+      if (cancelled) return;
+      // Inline divIcon — gold pin, brand colors, no extra asset to ship.
+      const icon = L.divIcon({
+        className: 'dog-universe-destination-pin',
+        html: `<div style="
+          width: 28px; height: 28px;
+          border-radius: 50%;
+          background: #C4974A;
+          border: 3px solid #FFFFFF;
+          box-shadow: 0 4px 12px rgba(196,151,74,0.5);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 14px; line-height: 1;
+        ">📍</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+      if (!destinationMarkerRef.current) {
+        const m = L.marker(destination, { icon, title: destinationLabel, alt: destinationLabel });
+        m.addTo(map);
+        destinationMarkerRef.current = m;
+      } else {
+        destinationMarkerRef.current.setLatLng(destination);
+        destinationMarkerRef.current.setIcon(icon);
+      }
+    };
+    void attach();
+    return () => {
+      cancelled = true;
+      if (attachRaf !== null) cancelAnimationFrame(attachRaf);
+    };
+  }, [destination, destinationLabel, mapRef]);
+
+  // Cleanup route polyline + destination marker on unmount.
+  useEffect(() => {
+    return () => {
+      if (routePolylineRef.current) {
+        try { routePolylineRef.current.remove(); } catch { /* noop */ }
+        routePolylineRef.current = null;
+      }
+      if (destinationMarkerRef.current) {
+        try { destinationMarkerRef.current.remove(); } catch { /* noop */ }
+        destinationMarkerRef.current = null;
       }
     };
   }, []);

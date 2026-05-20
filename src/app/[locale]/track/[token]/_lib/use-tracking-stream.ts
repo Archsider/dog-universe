@@ -16,6 +16,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { sseHealthFor, shouldRestartSse, SSE_LOST_MS } from '@/lib/taxi-gps';
+import { decodePolyline } from '@/lib/polyline';
 import { logger } from '@/lib/logger';
 
 const FALLBACK_POLL_MS = 10_000;
@@ -39,7 +40,36 @@ export interface TrackResponse {
   petSummary?: string;
   clientName?: string;
   petNames?: string;
+  /** Live ETA — populated by the SSE 'eta' event + the initial REST snapshot. */
+  eta?: { durationSec: number; distanceM: number; geometryPolyline: string } | null;
   error?: string;
+}
+
+/** Decoded ETA snapshot consumed by the map + UI. */
+export interface EtaSnapshot {
+  durationSec: number;
+  distanceM: number;
+  /** Decoded [lat, lng] route points from the OSRM polyline geometry. */
+  routePoints: [number, number][];
+  /** Last route point — the current destination (pickup OR dropoff). */
+  destination: [number, number] | null;
+  /** When the ETA was last computed (client clock, ms). */
+  receivedAt: number;
+}
+
+function snapshotFromEta(
+  raw: { durationSec: number; distanceM: number; geometryPolyline: string } | null | undefined,
+): EtaSnapshot | null {
+  if (!raw || typeof raw.geometryPolyline !== 'string') return null;
+  const routePoints = decodePolyline(raw.geometryPolyline);
+  if (routePoints.length === 0) return null;
+  return {
+    durationSec: raw.durationSec,
+    distanceM: raw.distanceM,
+    routePoints,
+    destination: routePoints[routePoints.length - 1] ?? null,
+    receivedAt: Date.now(),
+  };
 }
 
 export type ConnectionStatus = 'live' | 'reconnecting' | 'polling' | 'offline';
@@ -50,6 +80,8 @@ export interface UseTrackingStreamResult {
   status: TrackStatus;
   trail: [number, number][];
   connectionStatus: ConnectionStatus;
+  /** Latest ETA snapshot (live road route + duration). */
+  eta: EtaSnapshot | null;
 }
 
 export function useTrackingStream(token: string): UseTrackingStreamResult {
@@ -57,6 +89,7 @@ export function useTrackingStream(token: string): UseTrackingStreamResult {
   const [status, setStatus] = useState<TrackStatus>('loading');
   const [trail, setTrail] = useState<[number, number][]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('live');
+  const [eta, setEta] = useState<EtaSnapshot | null>(null);
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -106,6 +139,8 @@ export function useTrackingStream(token: string): UseTrackingStreamResult {
         const json = (await res.json()) as TrackResponse;
         if (aborted) return false;
         setData(json);
+        const snap = snapshotFromEta(json.eta);
+        if (snap) setEta(snap);
         setStatus(json.active ? 'ok' : 'inactive');
         return json.active === true;
       } catch {
@@ -138,6 +173,8 @@ export function useTrackingStream(token: string): UseTrackingStreamResult {
             const json = (await res.json()) as TrackResponse;
             if (!aborted) {
               setData((prev) => ({ ...prev, ...json }));
+              const snap = snapshotFromEta(json.eta);
+              if (snap) setEta(snap);
               setStatus(json.active ? 'ok' : 'inactive');
               lastSseEventAtRef.current = Date.now(); // keep UI freshness
             }
@@ -222,6 +259,22 @@ export function useTrackingStream(token: string): UseTrackingStreamResult {
           setConnectionStatus('live');
         } catch {
           /* malformed event — ignore */
+        }
+      });
+
+      es.addEventListener('eta', (ev) => {
+        if (aborted) return;
+        markEvent();
+        try {
+          const payload = JSON.parse((ev as MessageEvent).data) as {
+            durationSec: number;
+            distanceM: number;
+            geometryPolyline: string;
+          };
+          const snap = snapshotFromEta(payload);
+          if (snap) setEta(snap);
+        } catch {
+          /* malformed eta payload — ignore */
         }
       });
 
@@ -350,5 +403,5 @@ export function useTrackingStream(token: string): UseTrackingStreamResult {
     };
   }, [token]);
 
-  return { data, status, trail, connectionStatus };
+  return { data, status, trail, connectionStatus, eta };
 }

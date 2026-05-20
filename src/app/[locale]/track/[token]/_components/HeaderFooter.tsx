@@ -1,4 +1,37 @@
-import type { ConnectionStatus, TrackResponse } from '../_lib/use-tracking-stream';
+import type { ConnectionStatus, EtaSnapshot, TrackResponse } from '../_lib/use-tracking-stream';
+
+/**
+ * Localized ETA string, classe-mondiale style :
+ *   < 60s   → "Arrivée imminente" / "Arriving"
+ *   < 60min → "Arrivée dans 7 min" / "Arriving in 7 min"
+ *   ≥ 60min → "Arrivée dans 1h 12min" / "Arriving in 1h 12min"
+ */
+export function formatEta(durationSec: number, isFr: boolean): string {
+  if (!Number.isFinite(durationSec) || durationSec < 0) {
+    return isFr ? 'Calcul…' : 'Computing…';
+  }
+  if (durationSec < 60) {
+    return isFr ? 'Arrivée imminente' : 'Arriving';
+  }
+  const totalMin = Math.round(durationSec / 60);
+  if (totalMin < 60) {
+    return isFr ? `Arrivée dans ${totalMin} min` : `Arriving in ${totalMin} min`;
+  }
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  const tail = m > 0 ? ` ${m}min` : '';
+  return isFr ? `Arrivée dans ${h}h${tail}` : `Arriving in ${h}h${tail}`;
+}
+
+/** Format remaining road distance — adaptive precision (m below 1 km). */
+export function formatDistance(distanceM: number): string {
+  if (!Number.isFinite(distanceM) || distanceM < 0) return '';
+  if (distanceM < 1000) {
+    return `${Math.round(distanceM)} m`;
+  }
+  const km = distanceM / 1000;
+  return km >= 10 ? `${km.toFixed(1)} km` : `${km.toFixed(2)} km`;
+}
 
 export interface ConnectionBadge {
   dot: string;
@@ -136,5 +169,52 @@ export function TrackFooter({
         </span>
       </div>
     </footer>
+  );
+}
+
+interface EtaBannerProps {
+  isFr: boolean;
+  eta: EtaSnapshot;
+}
+
+/**
+ * Floating ETA banner — overlays the top of the map area, Uber/DoorDash style.
+ * Big-typography arrival time + remaining distance + a freshness dot that
+ * pulses when the snapshot is < 60s old (live route data confidence).
+ */
+export function EtaBanner({ isFr, eta }: EtaBannerProps) {
+  const ageMs = Date.now() - eta.receivedAt;
+  const fresh = ageMs < 60_000;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="absolute top-3 left-1/2 -translate-x-1/2 z-[450] w-[min(92vw,360px)] rounded-2xl bg-white/95 backdrop-blur-sm border border-[#C4974A]/30 shadow-[0_10px_30px_rgba(196,151,74,0.18)] px-4 py-3"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] uppercase tracking-[2px] text-[#C4974A] font-semibold flex items-center gap-1.5">
+            <span
+              className={`inline-block w-1.5 h-1.5 rounded-full ${fresh ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`}
+              aria-hidden
+            />
+            {isFr ? 'Trajet en cours' : 'Trip in progress'}
+          </div>
+          <div className="text-base sm:text-lg font-serif font-bold text-[#2A2520] mt-0.5 truncate">
+            {formatEta(eta.durationSec, isFr)}
+          </div>
+        </div>
+        {eta.distanceM > 0 && (
+          <div className="text-right shrink-0">
+            <div className="text-[10px] uppercase tracking-wider text-[#8A7E75]">
+              {isFr ? 'Distance' : 'Distance'}
+            </div>
+            <div className="text-sm sm:text-base font-medium text-[#C4974A] tabular-nums">
+              {formatDistance(eta.distanceM)}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
