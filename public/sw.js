@@ -13,6 +13,39 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+// Web Push handler — displays an OS-native notification.
+// Payload shape : { title, body, url?, icon?, tag? } JSON-encoded.
+self.addEventListener('push', e => {
+  if (!e.data) return;
+  let payload = {};
+  try { payload = e.data.json(); } catch { payload = { title: 'Dog Universe', body: e.data.text() }; }
+  const title = payload.title || 'Dog Universe';
+  const options = {
+    body: payload.body || '',
+    icon: payload.icon || '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: payload.tag, // collapse same-tag notifications
+    data: { url: payload.url || '/' },
+    requireInteraction: false,
+    vibrate: [200, 100, 200],
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Click → focus existing tab or open a new one at the payload URL.
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const c of list) {
+        if (c.url.includes(url) && 'focus' in c) return c.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    }),
+  );
+});
+
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   // Cache-first for Next.js static assets

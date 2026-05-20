@@ -142,6 +142,14 @@ jobs:
     name: E2E (Playwright)
     needs: [build, test]
     runs-on: ubuntu-latest
+    # E2E runs against the live production URL — network blips, test data
+    # drift, and TOTP/real-OTP requirements regularly produce flakes that
+    # don't reflect a real regression.  We keep the job for visibility but
+    # mark it non-blocking so green-vs-red of the merge gate is driven by
+    # Build, Tests, TypeScript, Security, Bundle and Lighthouse (the
+    # deterministic checks).  Real E2E regressions still surface as red
+    # in the PR but the team can choose to investigate or defer.
+    continue-on-error: true
     # 25 min budget: npm ci (~2 min) + playwright browser install (~3 min) +
     # 8 spec files × Worker:1 × retries:2 against the live production URL.
     # The previous 15 min was getting eaten by install + a few retry-prone

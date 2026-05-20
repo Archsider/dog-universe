@@ -67,7 +67,7 @@ export default function StatsHero({
   const staysDelta = pctDelta(monthStays, monthStaysPrev);
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
       <StatCard
         icon={<Wallet className="h-4 w-4" />}
         label={fr ? 'CA du mois' : ar ? 'إيرادات الشهر' : 'Month revenue'}
@@ -117,11 +117,11 @@ function StatCard({ icon, label, value, delta, accent, gauge, species }: StatCar
     <div className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm ${
       accent ? 'border-[#C4974A]/40 bg-gradient-to-br from-[#FFF9E8] to-white' : 'border-ivory-200 bg-white'
     }`}>
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[2px] font-semibold mb-2">
-        <span className={`p-1.5 rounded-md ${accent ? 'bg-[#C4974A]/20 text-[#8B6914]' : 'bg-ivory-100 text-charcoal/60'}`}>
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[1.5px] font-semibold mb-2">
+        <span className={`p-1.5 rounded-md shrink-0 ${accent ? 'bg-[#C4974A]/20 text-[#8B6914]' : 'bg-ivory-100 text-charcoal/60'}`}>
           {icon}
         </span>
-        <span className={accent ? 'text-[#8B6914]' : 'text-charcoal/50'}>{label}</span>
+        <span className={`truncate ${accent ? 'text-[#8B6914]' : 'text-charcoal/50'}`}>{label}</span>
       </div>
       <p className={`font-serif font-bold leading-tight ${accent ? 'text-[#1C1612] text-2xl' : 'text-charcoal text-2xl'}`}>
         {value}
