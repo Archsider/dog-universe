@@ -26,6 +26,7 @@ import {
   WaitingForFix,
 } from './_components/StatusViews';
 import {
+  EtaBanner,
   TrackFooter,
   TrackHeader,
   getConnectionBadge,
@@ -50,7 +51,7 @@ export default function TrackPage() {
   const token = params?.token ?? '';
 
   const carIcon = useCarIcon();
-  const { data, status, trail, connectionStatus } = useTrackingStream(token);
+  const { data, status, trail, connectionStatus, eta } = useTrackingStream(token);
 
   // Imperative Leaflet refs — handed to MapView for in-place updates
   // (setLatLng / flyTo) without re-rendering the parent.
@@ -83,15 +84,21 @@ export default function TrackPage() {
 
       <div className="flex-1 relative">
         {last ? (
-          <MapView
-            center={center}
-            mapRef={mapRef}
-            markerRef={markerRef}
-            carIcon={carIcon}
-            heading={last?.heading ?? null}
-            trailPositions={trail}
-            recenterLabel={isFr ? 'Recentrer' : 'Recenter'}
-          />
+          <>
+            <MapView
+              center={center}
+              mapRef={mapRef}
+              markerRef={markerRef}
+              carIcon={carIcon}
+              heading={last?.heading ?? null}
+              trailPositions={trail}
+              routePositions={eta?.routePoints}
+              destination={eta?.destination ?? null}
+              recenterLabel={isFr ? 'Recentrer' : 'Recenter'}
+              destinationLabel={isFr ? 'Destination' : 'Destination'}
+            />
+            {eta && <EtaBanner isFr={isFr} eta={eta} />}
+          </>
         ) : (
           <WaitingForFix isFr={isFr} />
         )}
