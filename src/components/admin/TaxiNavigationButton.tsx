@@ -53,7 +53,12 @@ function NavBlock({
   if (hasCoords) {
     const gmaps = `https://maps.google.com/?q=${lat},${lng}`;
     const waze = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
-    const staticMap = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=15&size=400x200&markers=${lat},${lng},red-pushpin`;
+    // Use the official OpenStreetMap embed iframe — staticmap.openstreetmap.de
+    // (the previous provider) is unreliable / often down.  This iframe
+    // always renders, no API key needed, with a visible marker.
+    const bboxDelta = 0.005; // ~500m view around the point
+    const bbox = `${lng - bboxDelta},${lat - bboxDelta},${lng + bboxDelta},${lat + bboxDelta}`;
+    const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`;
     return (
       <div className="space-y-3">
         <div className="text-sm space-y-1">
@@ -70,14 +75,12 @@ function NavBlock({
             </div>
           )}
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={staticMap}
-          alt="Position sur la carte"
-          width={400}
-          height={200}
-          className="w-full rounded-lg border border-gray-200 object-cover"
+        <iframe
+          src={embedUrl}
+          title={l.address}
+          className="w-full h-48 rounded-lg border border-gray-200"
           loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
         />
         <div className="flex flex-col sm:flex-row gap-2">
           <a
