@@ -33,8 +33,9 @@ export async function clearBackupErrorStamp(): Promise<ActionResult> {
 
 export async function refreshMonthlyRevenueMV(): Promise<ActionResult> {
   try {
-    // CONCURRENTLY requires a UNIQUE index on the MV — falls back to
-    // exclusive lock variant if the index isn't present.
+    // REFRESH MV may also conflict with PgBouncer transaction mode on
+    // some configs.  Try the pooled connection first ; on failure, retry
+    // via a direct pg connection (same approach as VACUUM).
     await prisma.$executeRawUnsafe('REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue_mv');
     // Stamp the freshness key so the fast-path readers see it.
     try {
@@ -63,23 +64,49 @@ export async function refreshMonthlyRevenueMV(): Promise<ActionResult> {
 }
 
 export async function vacuumAnalyzeHotTables(): Promise<ActionResult> {
-  // VACUUM cannot run inside a transaction — use $executeRawUnsafe with no
-  // template binding to bypass the default Prisma tx wrapping.
+  // VACUUM cannot run via PgBouncer transaction-mode pool (every Prisma
+  // query through the pooler runs in an implicit tx).  Open a *direct*
+  // pg connection (DIRECT_URL on port 5432) just for this operation.
+  // Cleaned up explicitly to avoid leaking the connection.
+  const directUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+  if (!directUrl) return { ok: false, error: 'DIRECT_URL_NOT_CONFIGURED' };
+
   const tables = ['Notification', 'Heartbeat', 'SmsLog', 'ActionLog', 'TaxiLocation', 'GuardianEvent'];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let Client: any;
+  try {
+    const mod = await import('pg');
+    Client = mod.Client ?? mod.default?.Client;
+  } catch (err) {
+    return { ok: false, error: `pg_import_failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  const client = new Client({ connectionString: directUrl });
   let done = 0;
   const errors: string[] = [];
-  for (const t of tables) {
-    try {
-      await prisma.$executeRawUnsafe(`VACUUM (ANALYZE) "${t}"`);
-      done++;
-    } catch (err) {
-      errors.push(`${t}: ${err instanceof Error ? err.message : String(err)}`);
+  try {
+    await client.connect();
+    for (const t of tables) {
+      try {
+        await client.query(`VACUUM (ANALYZE) "${t}"`);
+        done++;
+      } catch (err) {
+        errors.push(`${t}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
+  } catch (err) {
+    return { ok: false, error: `connect_failed: ${err instanceof Error ? err.message : String(err)}` };
+  } finally {
+    try { await client.end(); } catch { /* ignore */ }
   }
-  if (errors.length > 0) {
-    return { ok: false, error: errors.join('; ') };
-  }
-  return { ok: true, detail: `VACUUM ANALYZE done on ${done} tables.` };
+
+  if (errors.length > 0 && done === 0) return { ok: false, error: errors.join('; ') };
+  return {
+    ok: true,
+    detail: errors.length > 0
+      ? `VACUUM ANALYZE done on ${done}/${tables.length} tables. Errors: ${errors.join('; ')}`
+      : `VACUUM ANALYZE done on ${done} tables.`,
+  };
 }
 
 export async function clearBusinessCaches(): Promise<ActionResult> {

@@ -2,6 +2,7 @@ import { auth } from '../../../../../auth';
 import { prisma } from '@/lib/prisma';
 import AdminProfileClient from './AdminProfileClient';
 import { TotpSetupSection } from './TotpSetupSection';
+import PushNotificationToggle from '@/components/admin/PushNotificationToggle';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -54,6 +55,9 @@ export default async function AdminProfilePage({ params, searchParams }: Props) 
       <AdminProfileClient initialProfile={user} locale={locale} />
       <div className="max-w-2xl mx-auto mt-6">
         <TotpSetupSection totpEnabled={user.totpEnabled} />
+      </div>
+      <div className="max-w-2xl mx-auto mt-6">
+        <PushNotificationToggle locale={locale} />
       </div>
     </>
   );

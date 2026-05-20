@@ -226,6 +226,9 @@ jobs:
             # expressible in schema.prisma.
             "20260520_time_proposal_partial_unique"
             "20260520_invoice_paid_amount_lower_bound"
+            # Push subscriptions table — straightforward CREATE, drift due
+            # to schema.prisma column order vs SQL ADD column order.
+            "20260520_push_subscription"
           )
 
           for d in $(ls -1 "$MIG_DIR" | sort); do

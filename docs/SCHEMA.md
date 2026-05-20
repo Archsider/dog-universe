@@ -3,7 +3,7 @@
 > Généré automatiquement depuis `prisma/schema.prisma`. Ne pas éditer à la main.
 > Régénérer avec `node scripts/generate-schema-doc.mjs` (ou `npm run db:doc`).
 
-**41 modèles** · **8 enums** · 2026-05-19
+**42 modèles** · **8 enums** · 2026-05-20
 
 ## Sommaire
 
@@ -35,6 +35,7 @@
 - [EndStayReport](#endstayreport)
 - [DailyReport](#dailyreport)
 - [PreStayBriefing](#prestaybriefing)
+- [PushSubscription](#pushsubscription)
 - [RescheduleRequest](#reschedulerequest)
 - [AddonRequest](#addonrequest)
 - [PasswordResetToken](#passwordresettoken)
@@ -99,6 +100,7 @@
 | `benefitClaims` | `LoyaltyBenefitClaim[]` | — |  |
 | `revenueSummaries` | `MonthlyRevenueSummary[]` | — |  |
 | `reviews` | `Review[]` | — |  |
+| `pushSubscriptions` | `PushSubscription[]` | — |  |
 | `lifetimeContracts` | `LifetimeContract[]` | — |  |
 
 **Relations**
@@ -859,6 +861,32 @@
 
 **Indexes :**
 - `([submittedAt])`
+
+---
+
+## PushSubscription
+
+> a user can have several browsers/devices subscribed.  Wave 7.x
+
+| Champ | Type | Attributs | Commentaire |
+|---|---|---|---|
+| `id` | `String` | PK · default=`cuid(` |  |
+| `userId` | `String` | — |  |
+| `endpoint` | `String` | — |  |
+| `p256dh` | `String` | — |  |
+| `auth` | `String` | — |  |
+| `userAgent` | `String?` | — |  |
+| `createdAt` | `DateTime` | default=`now(` |  |
+| `lastUsed` | `DateTime` | default=`now(` |  |
+
+**Relations**
+
+- `user` → `User`
+
+**Uniques composites :** `([userId, endpoint])`
+
+**Indexes :**
+- `([userId])`
 
 ---
 

@@ -49,7 +49,10 @@ export default function QuickActionsBar({ locale }: Props) {
   ];
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto py-2 px-3 -mx-3 sm:mx-0 sm:px-0">
+    <div
+      className="flex items-center gap-2 overflow-x-auto py-2 -mx-4 px-4 lg:mx-0 lg:px-0"
+      style={{ scrollbarWidth: 'thin' }}
+    >
       {actions.map((a, i) => {
         const Icon = a.icon;
         const cls =

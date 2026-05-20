@@ -99,7 +99,23 @@ export async function notifyAdminsNewBooking(
   bookingId: string
 ) {
   const msg = NOTIFICATION_MESSAGES.BOOKING_REQUEST({ clientName, serviceTypeFr, serviceTypeEn, petNames, bookingRef });
-  return createAdminNotifications({ type: 'BOOKING_REQUEST', ...msg, metadata: { bookingId, bookingRef } });
+  const result = await createAdminNotifications({ type: 'BOOKING_REQUEST', ...msg, metadata: { bookingId, bookingRef } });
+
+  // Wave 7.2 — fan-out web push to every admin (fail-soft, never blocks).
+  // Empty if VAPID not configured ; only delivers to admins who opted-in.
+  void (async () => {
+    try {
+      const { pushToAdmins } = await import('@/lib/web-push');
+      await pushToAdmins({
+        title: `🐾 ${clientName} — nouvelle résa`,
+        body: `${petNames} · ${serviceTypeFr} · #${bookingRef}`,
+        url: `/fr/admin/reservations/${bookingId}`,
+        tag: `booking-${bookingId}`,
+      });
+    } catch { /* fail-soft */ }
+  })();
+
+  return result;
 }
 
 export async function notifyAdminsExtensionRequest(

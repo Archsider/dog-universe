@@ -61,6 +61,7 @@ model User {
   reviews                Review[]
   endStayReportsReceived EndStayReport[]         @relation("EndStayReportClient")
   endStayReportsSent     EndStayReport[]         @relation("EndStayReportSender")
+  pushSubscriptions      PushSubscription[]
   lifetimeContracts      LifetimeContract[]
 
   @@index([deletedAt])
@@ -772,6 +773,25 @@ model PreStayBriefing {
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@index([submittedAt])
+}
+
+// Web Push subscription — saves the browser endpoint + keys so the server
+// can fan-out push notifications.  One row per (userId, endpoint) pair —
+// a user can have several browsers/devices subscribed.  Wave 7.x
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  lastUsed  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
 }
 
 // Client-initiated reschedule request on a booking. Replaces the older pattern

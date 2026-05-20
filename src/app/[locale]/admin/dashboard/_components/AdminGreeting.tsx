@@ -94,19 +94,19 @@ export default function AdminGreeting({ firstName, locale, arrivalsToday, inPens
 
   return (
     <div className="relative">
-      <GreetingHeader
-        salutation={salutation(hourCasa(now), locale)}
-        firstName={firstName}
-        subtitle={buildSubtitle({ locale, ...live })}
-        variant="light"
-      />
-      <div className="absolute top-0 right-0 flex items-center gap-1.5 text-[10px] uppercase tracking-[2px] font-semibold text-emerald-700">
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 text-[10px] uppercase tracking-[2px] font-semibold text-emerald-700 bg-white/80 backdrop-blur-sm rounded-full px-2 py-0.5 shadow-sm">
         <span className="relative flex h-2 w-2">
           <span className={`absolute inline-flex h-full w-full rounded-full bg-emerald-400 ${isPulsing ? 'animate-ping' : 'opacity-75'}`} />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
         </span>
         Live
       </div>
+      <GreetingHeader
+        salutation={salutation(hourCasa(now), locale)}
+        firstName={firstName}
+        subtitle={buildSubtitle({ locale, ...live })}
+        variant="light"
+      />
     </div>
   );
 }
