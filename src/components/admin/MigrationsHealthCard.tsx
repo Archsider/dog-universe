@@ -82,7 +82,7 @@ export function MigrationsHealthCard({ isFr }: Props) {
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
-        alert(`Erreur : ${j.error ?? r.statusText}`);
+        try { window.dispatchEvent(new CustomEvent('toast', { detail: { kind: 'error', message: `Erreur : ${j.error ?? r.statusText}` } })); } catch {}
         return;
       }
       // Patch local state — flip status to 'ok' so the card shrinks.
@@ -98,7 +98,7 @@ export function MigrationsHealthCard({ isFr }: Props) {
         return { entries: newEntries, counts, pendingCount: counts.pending };
       });
     } catch (e) {
-      alert(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+      try { window.dispatchEvent(new CustomEvent('toast', { detail: { kind: 'error', message: `Erreur : ${e instanceof Error ? e.message : String(e)}` } })); } catch {}
     } finally {
       setMarkingName(null);
     }

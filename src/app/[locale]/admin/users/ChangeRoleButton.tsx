@@ -29,7 +29,8 @@ export default function ChangeRoleButton({ userId, currentRole, locale }: Props)
       if (!res.ok) throw new Error();
       router.refresh();
     } catch {
-      alert(locale === 'fr' ? 'Erreur lors du changement de rôle' : 'Error changing role');
+      const msg = locale === 'fr' ? 'Erreur lors du changement de rôle' : 'Error changing role';
+      try { window.dispatchEvent(new CustomEvent('toast', { detail: { kind: 'error', message: msg } })); } catch {}
     } finally {
       setLoading(false);
     }
