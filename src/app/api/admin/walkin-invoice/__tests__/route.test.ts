@@ -387,4 +387,35 @@ describe('POST /api/admin/walkin-invoice', () => {
     expect(r.body.invoiceId).toBeTruthy();
     expect(r.body.invoiceNumber).toBeTruthy();
   });
+
+  it('rejects ADMIN creating walkin for non-CLIENT target with 403 FORBIDDEN', async () => {
+    // Seed a SUPERADMIN row. ADMIN session is set in beforeEach.
+    const fakeCuid = 'c' + 'y'.repeat(24);
+    state.users.push({ id: fakeCuid, deletedAt: null, role: 'SUPERADMIN', name: 'Super', phone: null });
+    const r = await callPost({
+      clientId: fakeCuid,
+      paymentMethod: 'CASH',
+      items: [{ category: 'OTHER', description: 'A', quantity: 1, unitPrice: 100 }],
+    });
+    expect(r.status).toBe(403);
+    expect(r.body.error).toBe('FORBIDDEN');
+    // No side effects.
+    expect(state.bookings).toHaveLength(0);
+    expect(state.invoices).toHaveLength(0);
+    expect(recordPaymentMock).not.toHaveBeenCalled();
+    expect(sendSmsMock).not.toHaveBeenCalled();
+  });
+
+  it('SUPERADMIN can create walkin for any target role', async () => {
+    authMock.mockResolvedValueOnce({ user: { id: 'super1', role: 'SUPERADMIN' } });
+    const fakeCuid = 'c' + 'z'.repeat(24);
+    state.users.push({ id: fakeCuid, deletedAt: null, role: 'ADMIN', name: 'Other admin', phone: null });
+    const r = await callPost({
+      clientId: fakeCuid,
+      paymentMethod: 'CASH',
+      items: [{ category: 'OTHER', description: 'A', quantity: 1, unitPrice: 100 }],
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+  });
 });

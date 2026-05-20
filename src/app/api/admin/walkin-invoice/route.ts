@@ -175,7 +175,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'INVALID_PAYMENT_DATE' }, { status: 400 });
   }
 
-  const result = await withSpan(
+  type WalkinTxResult = {
+    bookingId: string;
+    invoiceId: string;
+    invoiceNumber: string;
+    total: number;
+    clientName: string;
+    clientPhone: string | null;
+  };
+  let result: WalkinTxResult;
+  try {
+    result = await withSpan<WalkinTxResult>(
     'api.walkin-invoice.create',
     {
       'user.role': session.user.role,
@@ -193,6 +203,13 @@ export async function POST(request: NextRequest) {
         });
         if (!client) {
           throw new WalkinError('CLIENT_NOT_FOUND', 404);
+        }
+        // Cross-role guard : ADMIN may only invoice CLIENT users. SUPERADMIN
+        // passes through. Mirrors sibling money routes (payments/route.ts:99,
+        // discount/route.ts:71) — without this, an ADMIN could attribute a
+        // paid invoice to another ADMIN or to a SUPERADMIN.
+        if (session.user.role === 'ADMIN' && client.role !== 'CLIENT') {
+          throw new WalkinError('FORBIDDEN', 403);
         }
 
         const year = casablancaYMD(paymentDate).year;
@@ -268,7 +285,16 @@ export async function POST(request: NextRequest) {
         };
       });
     },
-  );
+    );
+  } catch (err) {
+    // Map WalkinError to its declared HTTP status. Without this, every
+    // WalkinError (CLIENT_NOT_FOUND, FORBIDDEN, INVOICE_SEQUENCE_FAILED)
+    // bubbled as an unhandled 500 — masking the proper error code.
+    if (err instanceof WalkinError) {
+      return NextResponse.json({ error: err.code }, { status: err.status });
+    }
+    throw err;
+  }
 
   // ── recordPayment outside the tx — single canonical money insertion ───
   const pay = await recordPayment(

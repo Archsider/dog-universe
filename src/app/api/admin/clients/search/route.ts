@@ -57,7 +57,10 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
-    logger.error('admin-clients-search', 'GET (no query)', { count: clients.length });
+    // info, not error — happy-path telemetry. Vercel/Sentry classify by
+    // console method, so logger.error here would flood the dashboard the same
+    // way the /api/csp-report endpoint did (cf. CLAUDE.md, "CSP report flood").
+    logger.info('admin-clients-search', 'GET (no query)', { count: clients.length });
     return NextResponse.json({ clients });
   }
 
@@ -73,7 +76,8 @@ export async function GET(request: NextRequest) {
     take: 50,
   });
 
-  logger.error('admin-clients-search', 'GET (query)', { q: q.slice(0, 50), count: clients.length });
+  // info, not error — see comment above.
+  logger.info('admin-clients-search', 'GET (query)', { q: q.slice(0, 50), count: clients.length });
 
   return NextResponse.json({ clients });
 }
