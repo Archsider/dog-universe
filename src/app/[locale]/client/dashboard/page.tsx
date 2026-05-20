@@ -11,10 +11,11 @@ import { formatDateShort, formatMAD } from '@/lib/utils';
 import { RebookButton } from '@/components/client/RebookButton';
 import { waLink } from '@/lib/whatsapp';
 import { notDeleted } from '@/lib/prisma-soft';
-import { startOfTodayCasa } from '@/lib/dates-casablanca';
+import { startOfTodayCasa, daysUntilCasablanca } from '@/lib/dates-casablanca';
 import { buildGreeting } from './_lib/greeting';
 import TierUpCelebration from '@/components/client/TierUpCelebration';
 import HolographicWrapper from '@/components/shared/HolographicWrapper';
+import GreetingHeader from '@/components/shared/GreetingHeader';
 
 type Params = { locale: string };
 
@@ -163,18 +164,21 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
             ? { endDate: null, firstPetName: lastBooking.bookingPets?.[0]?.pet?.name ?? null }
             : null,
         });
+        const upcomingBoarding = upcomingBookings[0];
+        const days = upcomingBoarding
+          ? Math.max(0, daysUntilCasablanca(upcomingBoarding.startDate))
+          : null;
         return (
-          <div className="text-center sm:text-left">
-            <p className="text-[10px] uppercase tracking-[2px] text-[#8A7E75]">
-              {greeting.salutation}
-            </p>
-            <h1 className="font-serif text-4xl font-bold text-[#1C1612] mt-1 leading-tight">
-              {firstName}
-              {lastName && <> <span className="italic text-[#C4974A]">{lastName}</span></>}
-            </h1>
-            <div className="w-10 h-[2px] bg-[#C4974A] mt-3 mx-auto sm:mx-0" />
-            <p className="text-sm text-[#7A6E65] mt-3">{greeting.subtitle}</p>
-          </div>
+          <GreetingHeader
+            salutation={greeting.salutation}
+            firstName={firstName}
+            lastName={lastName}
+            subtitle={greeting.subtitle}
+            variant="light"
+            countdown={days !== null && upcomingBoarding && upcomingBoarding.status !== 'IN_PROGRESS'
+              ? { days, petName: upcomingBoarding.bookingPets?.[0]?.pet?.name ?? null, locale }
+              : undefined}
+          />
         );
       })()}
       {/* End greeting */}

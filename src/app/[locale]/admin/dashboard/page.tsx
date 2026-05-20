@@ -30,6 +30,7 @@ import { VaccinesCard } from './_components/VaccinesCard';
 import { LongStaysCard } from './_components/LongStaysCard';
 import { InactiveClientsCard } from './_components/InactiveClientsCard';
 import { CriticalInvariantsCard } from './_components/CriticalInvariantsCard';
+import AdminGreeting from './_components/AdminGreeting';
 
 // ISR : revalidation 60 s. Les mutations admin invalident via
 // `revalidateTag('admin-counts')` — pas un signal direct ici, mais le
@@ -53,10 +54,15 @@ export default async function AdminDashboardPage({ params }: PageProps) {
 
   return (
     <div className="space-y-8">
-      {/* ── Header ── */}
+      {/* ── Header — luxe greeting (Wave 5 polish round 2) ── */}
       <header>
-        <h1 className="text-2xl font-bold text-charcoal">{labels.title}</h1>
-        <p className="text-sm text-gray-500 mt-1">{labels.greeting(firstName)}</p>
+        <AdminGreeting
+          firstName={firstName}
+          locale={locale}
+          arrivalsToday={snapshot.today.checkIns.length}
+          inPension={snapshot.pension.dogsIn + snapshot.pension.catsIn}
+          pending={snapshot.pending.count}
+        />
       </header>
 
       {/* ── Zone 1 — Maintenant ── */}
