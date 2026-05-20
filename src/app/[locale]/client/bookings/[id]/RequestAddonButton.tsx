@@ -128,7 +128,7 @@ export default function RequestAddonButton({ bookingId, locale }: Props) {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {SERVICES.map(({ value, icon: Icon }) => {
           const selected = serviceType === value;
           return (

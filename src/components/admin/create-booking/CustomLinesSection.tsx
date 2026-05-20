@@ -37,7 +37,10 @@ export function CustomLinesSection({
       {showCustomLines && (
         <div className="space-y-2">
           {customLines.map((line, i) => (
-            <div key={i} className="grid grid-cols-[1fr_60px_90px_32px] gap-2 items-center">
+            // Mobile : description on top, then qty + unit price + delete inline.
+            // Keeps all 4 controls accessible without squeezing the price input.
+            // Desktop ≥ sm : restores the original 4-column inline layout.
+            <div key={i} className="flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_60px_90px_32px] sm:gap-2 sm:items-center">
               <input
                 type="text"
                 value={line.description}
@@ -45,29 +48,33 @@ export function CustomLinesSection({
                 placeholder={fr ? 'Description…' : 'Description…'}
                 className="border border-gray-200 rounded-lg text-xs px-2 py-1.5 focus:outline-none focus:border-gold-400"
               />
-              <input
-                type="number"
-                min={1}
-                value={line.quantity}
-                onChange={e => updateCustomLine(i, 'quantity', parseInt(e.target.value) || 1)}
-                className="border border-gray-200 rounded-lg text-xs px-2 py-1.5 text-center focus:outline-none focus:border-gold-400"
-              />
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={line.unitPrice === 0 ? '' : line.unitPrice}
-                onChange={e => updateCustomLine(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                placeholder="P.U. MAD"
-                className="border border-gray-200 rounded-lg text-xs px-2 py-1.5 text-right focus:outline-none focus:border-gold-400"
-              />
-              <button
-                type="button"
-                onClick={() => removeCustomLine(i)}
-                className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-2 sm:contents">
+                <input
+                  type="number"
+                  min={1}
+                  value={line.quantity}
+                  onChange={e => updateCustomLine(i, 'quantity', parseInt(e.target.value) || 1)}
+                  aria-label={fr ? 'Quantité' : 'Quantity'}
+                  className="w-16 sm:w-auto border border-gray-200 rounded-lg text-xs px-2 py-1.5 text-center focus:outline-none focus:border-gold-400"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={line.unitPrice === 0 ? '' : line.unitPrice}
+                  onChange={e => updateCustomLine(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                  placeholder="P.U. MAD"
+                  className="flex-1 sm:flex-none border border-gray-200 rounded-lg text-xs px-2 py-1.5 text-right focus:outline-none focus:border-gold-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeCustomLine(i)}
+                  aria-label={fr ? 'Supprimer la ligne' : 'Delete line'}
+                  className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 shrink-0"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           ))}
           <button

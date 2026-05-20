@@ -54,7 +54,7 @@ export function TaxiDetailsStep({ locale, l, today, taxi }: TaxiDetailsStepProps
     <div className="space-y-5">
       <div>
         <Label>{l.taxiTypeLabel}</Label>
-        <div className="grid grid-cols-3 gap-2 mt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
           {([['STANDARD', l.standard, TAXI_PRICES.STANDARD], ['VET', l.vet, TAXI_PRICES.VET], ['AIRPORT', l.airport, TAXI_PRICES.AIRPORT]] as const).map(([type, label, price]) => (
             <button
               key={type}

@@ -272,7 +272,7 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
       )}
 
       {/* Stats — premium cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {dashboardStats.map((stat, i) => (
           <div
             key={i}

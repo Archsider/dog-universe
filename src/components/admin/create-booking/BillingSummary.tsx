@@ -36,7 +36,7 @@ export function BillingSummary({
         </p>
       ) : (
         <div className="border border-ivory-200 rounded-xl overflow-hidden">
-          <div className="bg-ivory-50 px-3 py-2 grid grid-cols-[1fr_44px_80px_72px] gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+          <div className="bg-ivory-50 px-3 py-2 hidden sm:grid sm:grid-cols-[1fr_44px_80px_72px] gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
             <span>{fr ? 'Description' : 'Description'}</span>
             <span className="text-center">{fr ? 'Qté' : 'Qty'}</span>
             <span className="text-right">{fr ? 'P.U.' : 'Unit'}</span>
@@ -45,12 +45,22 @@ export function BillingSummary({
           {allLines.map((line, i) => (
             <div
               key={i}
-              className="px-3 py-2 grid grid-cols-[1fr_44px_80px_72px] gap-2 border-t border-ivory-100 text-xs items-center"
+              className="px-3 py-2 flex flex-col gap-1 border-t border-ivory-100 text-xs sm:grid sm:grid-cols-[1fr_44px_80px_72px] sm:gap-2 sm:items-center"
             >
-              <span className="text-charcoal">{line.description}</span>
-              <span className="text-center text-gray-500">{line.quantity}</span>
-              <span className="text-right text-gray-500">{formatMAD(line.unitPrice)}</span>
-              <span className="text-right font-medium text-charcoal">{formatMAD(line.total)}</span>
+              {/* Mobile : description on its own line, then qty × unit = total in a single readable row.
+                  Desktop ≥ sm : restores the 4-column table layout. */}
+              <span className="text-charcoal font-medium sm:font-normal">{line.description}</span>
+              <div className="flex items-center justify-between sm:contents text-gray-500">
+                <span className="sm:text-center">
+                  <span className="sm:hidden text-gray-400 mr-1">{fr ? 'Qté' : 'Qty'} ·</span>
+                  {line.quantity}
+                </span>
+                <span className="sm:text-right">
+                  <span className="sm:hidden text-gray-400 mr-1">{fr ? 'P.U.' : 'Unit'} ·</span>
+                  {formatMAD(line.unitPrice)}
+                </span>
+                <span className="sm:text-right font-bold text-charcoal sm:font-medium">{formatMAD(line.total)}</span>
+              </div>
             </div>
           ))}
           <div className="px-3 py-2.5 border-t border-gold-200/60 bg-ivory-50 flex justify-between items-center">

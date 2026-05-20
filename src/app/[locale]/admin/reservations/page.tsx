@@ -430,7 +430,7 @@ async function HistoryView({
         type={typeFilter ?? ''}
         noInvoice={noInvoice}
       />
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <Stat label={fr ? 'Réservations' : 'Bookings'} value={String(stats._count._all)} />
         <Stat label={fr ? 'CA' : 'Revenue'} value={`${Math.round(revenue).toLocaleString(fr ? 'fr-MA' : 'en-GB')} MAD`} />
         <Stat label={fr ? 'Taux annulation' : 'Cancel rate'} value={`${cancelRate}%`} />

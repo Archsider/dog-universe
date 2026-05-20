@@ -97,7 +97,7 @@ export function RestoreResultDialog({ isFr, result, onClose }: ResultProps) {
             <div className="text-sm space-y-3">
               {result && (
                 <>
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
                     <div className="rounded-lg bg-emerald-50 border border-emerald-200 py-2">
                       <p className="text-2xl font-semibold text-emerald-700 tabular-nums">
                         {result.totals.inserted}

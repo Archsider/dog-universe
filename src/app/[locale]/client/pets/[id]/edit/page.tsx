@@ -224,7 +224,7 @@ export default function EditPetPage() {
               <Input id="name" value={form.name} onChange={set('name')} required className="mt-1" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>{t3('Espèce', 'النوع', 'Species')} *</Label>
                 <Select value={form.species} onValueChange={setSel('species')}>
@@ -251,7 +251,7 @@ export default function EditPetPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="breed">{t3('Race', 'السلالة', 'Breed')}</Label>
                 <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder="Golden Retriever..." />
@@ -262,7 +262,7 @@ export default function EditPetPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="weight">{t3('Poids (kg)', 'الوزن (كغ)', 'Weight (kg)')}</Label>
                 <Input id="weight" type="number" min="0" step="0.1" value={form.weight} onChange={set('weight')} className="mt-1" placeholder="4.5" />
@@ -281,7 +281,7 @@ export default function EditPetPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="microchip">{t3('N° de puce électronique', 'رقم الشريحة الإلكترونية', 'Microchip number')}</Label>
                 <Input id="microchip" value={form.microchipNumber} onChange={set('microchipNumber')} className="mt-1" placeholder="250268500000000" />
@@ -298,7 +298,7 @@ export default function EditPetPage() {
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
               {t3('Vétérinaire', 'الطبيب البيطري', 'Veterinarian')}
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="vetName">{t3('Nom du vétérinaire', 'اسم الطبيب البيطري', 'Vet name')}</Label>
                 <Input id="vetName" value={form.vetName} onChange={set('vetName')} className="mt-1" placeholder="Dr. Martin" />
@@ -356,7 +356,7 @@ export default function EditPetPage() {
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
               {t3('Antiparasitaire', 'مضاد الطفيليات', 'Anti-parasitic treatment')}
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="antiDate">{t3('Dernière application', 'تاريخ آخر علاج', 'Last treatment date')} *</Label>
                 <Input id="antiDate" type="date" value={form.lastAntiparasiticDate} onChange={set('lastAntiparasiticDate')} className="mt-1" max={new Date().toISOString().split('T')[0]} />

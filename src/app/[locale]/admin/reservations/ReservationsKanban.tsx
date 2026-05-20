@@ -92,7 +92,7 @@ export function ReservationsKanban({ bookings: initialBookings, locale }: Props)
   );
 
   const mobileGrid = (
-    <div className="flex gap-3 overflow-x-auto pb-4">
+    <div className="flex flex-col gap-3 md:flex-row md:overflow-x-auto pb-4">
       {colList.map(({ col, colBookings }) => (
         <MobileColumn key={col.status} col={col} bookings={colBookings} locale={locale} pipeline={pipeline} applyTransition={applyTransition} />
       ))}
@@ -110,7 +110,7 @@ export function ReservationsKanban({ bookings: initialBookings, locale }: Props)
       {toggle}
       <KanbanErrorBoundary fallback={mobileGrid}>
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="flex gap-3 overflow-x-auto pb-4">
+          <div className="flex flex-col gap-3 md:flex-row md:overflow-x-auto pb-4">
             {colList.map(({ col, colBookings }) => (
               <DesktopColumn key={col.status} col={col} bookings={colBookings} locale={locale} pipeline={pipeline} applyTransition={applyTransition} />
             ))}
