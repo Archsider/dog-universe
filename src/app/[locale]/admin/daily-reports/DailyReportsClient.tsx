@@ -86,7 +86,7 @@ export default function DailyReportsClient({ locale, date, initialReports }: Pro
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <KpiPill label={fr ? 'À envoyer' : 'To send'}    value={drafts.length}  tone="draft" />
         <KpiPill label={fr ? 'Envoyées'  : 'Sent'}       value={sent.length}    tone="sent" />
         <KpiPill label={fr ? 'Ignorées'  : 'Skipped'}    value={skipped.length} tone="muted" />

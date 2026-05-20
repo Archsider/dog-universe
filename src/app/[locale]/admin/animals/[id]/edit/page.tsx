@@ -261,7 +261,7 @@ export default function AdminEditPetPage() {
               <Input id="name" value={form.name} onChange={set('name')} required className="mt-1" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>{fr ? 'Espèce' : 'Species'} *</Label>
                 <Select value={form.species} onValueChange={setSel('species')}>
@@ -288,7 +288,7 @@ export default function AdminEditPetPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="breed">{fr ? 'Race' : 'Breed'}</Label>
                 <Input id="breed" value={form.breed} onChange={set('breed')} className="mt-1" placeholder="Golden Retriever..." />
@@ -299,7 +299,7 @@ export default function AdminEditPetPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="weight">{fr ? 'Poids (kg)' : 'Weight (kg)'}</Label>
                 <Input id="weight" type="number" min="0" step="0.1" value={form.weight} onChange={set('weight')} className="mt-1" placeholder="4.5" />
@@ -318,7 +318,7 @@ export default function AdminEditPetPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="microchip">{fr ? 'N° de puce électronique' : 'Microchip number'}</Label>
                 <Input id="microchip" value={form.microchipNumber} onChange={set('microchipNumber')} className="mt-1" placeholder="250268500000000" />
@@ -363,7 +363,7 @@ export default function AdminEditPetPage() {
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
               {fr ? 'Vétérinaire' : 'Veterinarian'}
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="vetName">{fr ? 'Nom du vétérinaire' : 'Vet name'}</Label>
                 <Input id="vetName" value={form.vetName} onChange={set('vetName')} className="mt-1" placeholder="Dr. Benali" />
@@ -421,7 +421,7 @@ export default function AdminEditPetPage() {
             <h3 className="text-sm font-semibold text-charcoal/60 uppercase tracking-wide border-b pb-2">
               {fr ? 'Antiparasitaire' : 'Anti-parasitic treatment'}
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="antiDate">{fr ? 'Dernière application' : 'Last treatment date'}</Label>
                 <Input id="antiDate" type="date" value={form.lastAntiparasiticDate} onChange={set('lastAntiparasiticDate')} className="mt-1" max={new Date().toISOString().split('T')[0]} />
@@ -449,7 +449,7 @@ export default function AdminEditPetPage() {
                 <Input id="antiCustom" value={form.antiparasiticCustomProduct} onChange={set('antiparasiticCustomProduct')} className="mt-1" placeholder={fr ? 'Ex: Seresto, Advantix...' : 'Ex: Seresto, Advantix...'} />
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="antiDuration">
                   {fr ? 'Durée protection (jours, optionnel)' : 'Protection duration (days, optional)'}

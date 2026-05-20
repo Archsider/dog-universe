@@ -36,7 +36,7 @@ export function BillingSummary({
         </p>
       ) : (
         <div className="border border-ivory-200 rounded-xl overflow-hidden">
-          <div className="bg-ivory-50 px-3 py-2 grid grid-cols-[1fr_44px_80px_72px] gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+          <div className="bg-ivory-50 px-3 py-2 hidden sm:grid sm:grid-cols-[1fr_44px_80px_72px] gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
             <span>{fr ? 'Description' : 'Description'}</span>
             <span className="text-center">{fr ? 'Qté' : 'Qty'}</span>
             <span className="text-right">{fr ? 'P.U.' : 'Unit'}</span>
@@ -45,7 +45,7 @@ export function BillingSummary({
           {allLines.map((line, i) => (
             <div
               key={i}
-              className="px-3 py-2 grid grid-cols-[1fr_44px_80px_72px] gap-2 border-t border-ivory-100 text-xs items-center"
+              className="px-3 py-2 hidden sm:grid sm:grid-cols-[1fr_44px_80px_72px] gap-2 border-t border-ivory-100 text-xs items-center"
             >
               <span className="text-charcoal">{line.description}</span>
               <span className="text-center text-gray-500">{line.quantity}</span>

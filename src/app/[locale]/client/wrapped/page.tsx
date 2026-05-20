@@ -174,7 +174,7 @@ export default async function WrappedPage({ params, searchParams }: {
         </div>
 
         {empty ? (
-          <div className="rounded-2xl border border-[#D4AF37]/20 bg-white/5 p-8 text-center">
+          <div className="rounded-2xl border border-[#D4AF37]/20 bg-white/5 p-5 sm:p-8 text-center">
             <PawPrint className="h-12 w-12 mx-auto text-[#D4AF37]/40 mb-3" />
             <p className="text-[#F5EDD8]/70 text-sm">
               {fr
@@ -243,7 +243,7 @@ export default async function WrappedPage({ params, searchParams }: {
                     </p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {stayPhotos.slice(0, 9).map((p) => (
                     <div key={p.id} className="aspect-square rounded-lg overflow-hidden bg-black/30">
                       {/* eslint-disable-next-line @next/next/no-img-element */}

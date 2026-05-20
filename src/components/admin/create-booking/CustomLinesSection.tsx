@@ -37,7 +37,7 @@ export function CustomLinesSection({
       {showCustomLines && (
         <div className="space-y-2">
           {customLines.map((line, i) => (
-            <div key={i} className="grid grid-cols-[1fr_60px_90px_32px] gap-2 items-center">
+            <div key={i} className="grid grid-cols-[1fr_44px_28px] sm:grid-cols-[1fr_60px_90px_32px] gap-2 items-center">
               <input
                 type="text"
                 value={line.description}

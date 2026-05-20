@@ -65,7 +65,7 @@ export function ProductFormModal({
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label={t('Marque', 'Brand', locale)}>
               <input
                 value={form.brand}
@@ -109,7 +109,7 @@ export function ProductFormModal({
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label={t('Prix de vente (MAD) *', 'Sale price (MAD) *', locale)}>
               <input
                 type="number"
@@ -142,7 +142,7 @@ export function ProductFormModal({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label={t('Stock *', 'Stock *', locale)}>
               <input
                 type="number"
@@ -167,7 +167,7 @@ export function ProductFormModal({
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label={t('Espèce cible', 'Target species', locale)}>
               <select
                 value={form.targetSpecies}
@@ -194,7 +194,7 @@ export function ProductFormModal({
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label={t('Fournisseur', 'Supplier', locale)}>
               <input
                 value={form.supplier}

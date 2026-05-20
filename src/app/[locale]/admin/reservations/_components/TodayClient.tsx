@@ -110,7 +110,7 @@ export default function TodayClient({ snapshot, pricing, locale }: Props) {
         ) : (
           <ul className="divide-y divide-ivory-100">
             {snapshot.arrivals.map((b) => (
-              <li key={b.id} className="py-3 grid grid-cols-[60px_1fr_auto] gap-3 items-center">
+              <li key={b.id} className="py-3 flex flex-col gap-2 sm:grid sm:grid-cols-[60px_1fr_auto] sm:gap-3 sm:items-center">
                 <span className="text-sm font-mono text-blue-700">{b.arrivalTime ?? '—'}</span>
                 <div className="min-w-0">
                   <Link href={`/${locale}/admin/reservations/${b.id}`} className="block">
@@ -130,7 +130,7 @@ export default function TodayClient({ snapshot, pricing, locale }: Props) {
                   type="button"
                   onClick={() => checkIn(b)}
                   disabled={busyId === b.id || pending}
-                  className="px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                  className="w-full sm:w-auto px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
                 >
                   {fr ? 'Check-in' : 'Check in'}
                 </button>
@@ -153,25 +153,29 @@ export default function TodayClient({ snapshot, pricing, locale }: Props) {
         ) : (
           <ul className="divide-y divide-ivory-100">
             {snapshot.departures.map((b) => (
-              <li key={b.id} className="py-3 grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center">
-                <span className="text-sm font-mono text-amber-700">
-                  {b.endDate ? new Date(b.endDate).toLocaleTimeString(fr ? 'fr-MA' : 'en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                </span>
-                <Link href={`/${locale}/admin/reservations/${b.id}`} className="min-w-0">
-                  <p className="text-sm font-medium text-charcoal truncate hover:underline">{b.client.name}</p>
-                  <p className="text-xs text-gray-500 truncate">{b.pets.map((p) => p.name).join(', ')}</p>
-                </Link>
-                <div className="text-right text-xs">
-                  <p className="text-gray-500">{nightsLabel(b, fr)}</p>
-                  <p className="font-medium text-charcoal">{formatMAD(b.liveTotal ?? b.invoiceAmount ?? b.totalPrice)}</p>
+              <li key={b.id} className="py-3 flex flex-col gap-2 sm:grid sm:grid-cols-[60px_1fr_auto_auto] sm:gap-3 sm:items-center">
+                <div className="flex items-center justify-between sm:contents">
+                  <span className="text-sm font-mono text-amber-700">
+                    {b.endDate ? new Date(b.endDate).toLocaleTimeString(fr ? 'fr-MA' : 'en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </span>
+                  <Link href={`/${locale}/admin/reservations/${b.id}`} className="min-w-0 flex-1 ml-3 sm:ml-0">
+                    <p className="text-sm font-medium text-charcoal truncate hover:underline">{b.client.name}</p>
+                    <p className="text-xs text-gray-500 truncate">{b.pets.map((p) => p.name).join(', ')}</p>
+                  </Link>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setCloseFor(b)}
-                  className="px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-medium hover:bg-amber-700"
-                >
-                  {fr ? 'Clôturer' : 'Close'}
-                </button>
+                <div className="flex items-center justify-between gap-3 sm:contents">
+                  <div className="text-left sm:text-right text-xs">
+                    <span className="text-gray-500">{nightsLabel(b, fr)}</span>
+                    <span className="font-medium text-charcoal ml-2 sm:ml-0 sm:block">{formatMAD(b.liveTotal ?? b.invoiceAmount ?? b.totalPrice)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCloseFor(b)}
+                    className="px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 shrink-0"
+                  >
+                    {fr ? 'Clôturer' : 'Close'}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

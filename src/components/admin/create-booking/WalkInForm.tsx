@@ -61,7 +61,7 @@ export function WalkInForm({
         </div>
         <div className="space-y-2">
           {walkInPets.map((p, i) => (
-            <div key={i} className="grid grid-cols-[1fr_90px_140px_28px] gap-2 items-center">
+            <div key={i} className="flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_90px_140px_28px] sm:items-center">
               <input
                 type="text"
                 value={p.name}

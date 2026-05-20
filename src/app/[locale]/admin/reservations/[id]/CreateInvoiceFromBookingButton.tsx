@@ -108,7 +108,7 @@ export default function CreateInvoiceFromBookingButton({ bookingId, clientId, lo
 
             <div className="border border-ivory-200 rounded-xl overflow-hidden mb-5">
               {/* Header */}
-              <div className="bg-ivory-50 px-4 py-2 grid grid-cols-[1fr_48px_120px_80px] gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              <div className="bg-ivory-50 hidden sm:grid px-4 py-2 sm:grid-cols-[1fr_48px_120px_80px] gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
                 <span>Description</span>
                 <span className="text-center">{isFr ? 'Qté' : 'Qty'}</span>
                 <span className="text-right">{isFr ? 'P.U. (MAD)' : 'Unit (MAD)'}</span>
@@ -120,7 +120,7 @@ export default function CreateInvoiceFromBookingButton({ bookingId, clientId, lo
                   <Loader2 className="h-5 w-5 animate-spin text-gold-400" />
                 </div>
               ) : items.map((item, i) => (
-                <div key={i} className="px-4 py-3 grid grid-cols-[1fr_48px_120px_80px] gap-2 border-t border-ivory-100 text-sm items-center">
+                <div key={i} className="px-4 py-3 flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_48px_120px_80px] border-t border-ivory-100 text-sm sm:items-center">
                   <span className="text-charcoal text-xs">{item.description}</span>
                   <span className="text-center text-gray-500">{item.quantity}</span>
                   <input
