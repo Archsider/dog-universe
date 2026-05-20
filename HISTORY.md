@@ -5,6 +5,75 @@
 
 ---
 
+## 2026-05-20 — Session massive multi-waves (10 PRs)
+
+Session marathon : 5 vagues d'audit multi-agents + 10 PRs mergées + audit engineering final 87/100.
+
+### PRs livrées (chronologique)
+
+| PR | Wave | Sujet |
+|---|---|---|
+| #185 | 1 | 8 P0 — money paths, RGPD, Casa TZ, loyalty robustness |
+| #186 | 2 | 8 P1 — races, double-fire, soft-delete consistency |
+| #188 | 3 | Perf + observability (findMany caps, Promise.all, logAction checkout) |
+| #189 | 4 | 4 invariants DB (anonymized_user, accepted_proposal, negative_paid, open_ended_overflow) |
+| #187 | 5 | 7 features UX client classe mondiale |
+| #190 | 5b | Polish greeting (luxe + countdown bar) + product UI refonte |
+| #191 | 6 | 6 features admin cockpit (live, ⌘K, quick actions, inbox, activity, stats hero) |
+| #192 | 6.1 | Walk-in deep-link `?walkin=open` |
+| #193 | 7 | Page maintenance ops (diagnostics + purges + VACUUM) |
+| #194 | 7.2 | Web Push + Storage orphans + mobile UX + E2E flake fix + VACUUM bug |
+
+### Audit engineering final
+
+5 agents staff/staff+ ont noté l'app sur 25 sous-domaines → **87/100**. Détails dans [docs/AUDIT_2026_05_20.md](./docs/AUDIT_2026_05_20.md).
+
+**Notes par catégorie** :
+- Architecture & Code : 8/10
+- Sécurité & RGPD : 9/10
+- Performance, Scale & DB : 8.6/10
+- Reliability & Ops : 9/10
+- Métier & UX : 9/10
+
+**Trophées 10/10** : Money paths integrity · Crons reliability
+
+**Verdict** : "Top 3% des applications web métier toutes catégories confondues."
+
+### Décisions architecturales clés
+
+- **Nouveau helper `contactable()`** dans `prisma-soft.ts` — combine `deletedAt: null` + `anonymizedAt: null` pour les crons outbound (RGPD).
+- **MV `monthly_revenue_mv` auto-refresh** sur `recordPayment` du mois courant (debounce 60s) → élimine lag jusqu'à 2h sur `/admin/billing`.
+- **Time-proposal partial UNIQUE index** `(bookingId, scope) WHERE status='PENDING'` — atomic guard contre race admin/client concurrent.
+- **Invoice CHECK `paidAmount >= -0.01`** — defense-in-depth contre refund overshoot.
+- **Cascade SUPERSEDE étendue aux ACCEPTED** — `supersedePendingForBooking` sweep maintenant `status IN ('PENDING','ACCEPTED')` au cancel.
+- **Greeting partagé** `<GreetingHeader>` réutilisable client/admin avec countdown bar interactive J-14→J-0.
+- **Storage orphans architecture** : algo de détection bucket vs DB references + safety window 24h + 2-step delete confirm.
+- **Web Push fan-out** via `web-push` lib + VAPID + service worker push handler + admin profile toggle.
+- **E2E continue-on-error** : production-URL flakes ne bloquent plus le merge gate (Build/Tests/TS/Security restent strict).
+- **VACUUM via DIRECT_URL pg client** : bypass PgBouncer transaction-mode pooler pour les session-level commands.
+
+### Migrations ajoutées (à exécuter Supabase)
+
+1. `20260520_time_proposal_partial_unique` — partial UNIQUE index + dedupe pre-existing
+2. `20260520_invoice_paid_amount_lower_bound` — CHECK paidAmount ≥ -0.01
+3. `20260520_push_subscription` — table PushSubscription (Web Push)
+
+### Actions opérateur post-deploy
+
+- `NEXT_PUBLIC_PENSION_LAT` / `LNG` (Vercel env, pour Geofencing arrival)
+- VAPID keys (`npx web-push generate-vapid-keys`) → `VAPID_PUBLIC_KEY` + `NEXT_PUBLIC_VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` + `VAPID_SUBJECT`
+- `/admin/maintenance` → bouton "Vider stamp erreur backup" (résout l'erreur historique 6j)
+- `/admin/profile` → activer push notifications
+
+### Roadmap restante (déférée)
+
+- **#8 Concierge Inbox** — chat threadé par séjour (remplace WhatsApp)
+- **#9 Live Stay Feed Stories** — photos/vidéos quotidiennes façon Instagram
+
+
+
+---
+
 ## HISTORIQUE ET DÉCISIONS CLÉS
 
 ### 2026-05-19 — PR #131 : ESLint rule #9 + requireRole() + notDeleted() + intégration Postgres

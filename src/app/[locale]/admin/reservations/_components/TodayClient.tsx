@@ -235,7 +235,11 @@ export default function TodayClient({ snapshot, pricing, locale }: Props) {
           <ul className="divide-y divide-ivory-100">
             {snapshot.pending.map((b) => (
               <li key={b.id} className="py-3 space-y-2">
-                <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
+                {/* Mobile : text + actions stack vertically (actions full-width row).
+                    Desktop ≥ sm : 3-col grid as before.  Stops the green
+                    Valider button from getting clipped off the right edge
+                    on 360 px viewports. */}
+                <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_auto_auto] sm:items-center">
                   <Link href={`/${locale}/admin/reservations/${b.id}`} className="min-w-0">
                     <p className="text-sm font-medium text-charcoal truncate hover:underline">{b.client.name}</p>
                     <p className="text-xs text-gray-500 truncate">
@@ -243,22 +247,24 @@ export default function TodayClient({ snapshot, pricing, locale }: Props) {
                       {b.endDate ? ` → ${new Date(b.endDate).toLocaleDateString(fr ? 'fr-MA' : 'en-GB')}` : ''}
                     </p>
                   </Link>
-                  <button
-                    type="button"
-                    onClick={() => setRejectingId(b.id)}
-                    disabled={busyId === b.id || pending}
-                    className="px-3 py-1.5 rounded-md border border-red-200 text-red-700 text-xs font-medium hover:bg-red-50 disabled:opacity-50 flex items-center gap-1"
-                  >
-                    <XCircle className="h-3 w-3" />{fr ? 'Refuser' : 'Reject'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => validate(b)}
-                    disabled={busyId === b.id || pending}
-                    className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
-                  >
-                    <CheckCircle2 className="h-3 w-3" />{fr ? 'Valider' : 'Validate'}
-                  </button>
+                  <div className="flex gap-2 sm:contents">
+                    <button
+                      type="button"
+                      onClick={() => setRejectingId(b.id)}
+                      disabled={busyId === b.id || pending}
+                      className="flex-1 sm:flex-none px-3 py-1.5 rounded-md border border-red-200 text-red-700 text-xs font-medium hover:bg-red-50 disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      <XCircle className="h-3 w-3" />{fr ? 'Refuser' : 'Reject'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => validate(b)}
+                      disabled={busyId === b.id || pending}
+                      className="flex-1 sm:flex-none px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      <CheckCircle2 className="h-3 w-3" />{fr ? 'Valider' : 'Validate'}
+                    </button>
+                  </div>
                 </div>
                 {rejectingId === b.id && (
                   <div className="bg-red-50 border border-red-200 rounded-md p-2 space-y-2">
