@@ -43,8 +43,11 @@ export function AValiderCard({ locale, snapshot, labels }: Props) {
           </p>
         </div>
       </div>
+      {/* Deep-link to the Today tab + anchor on the pending section so the
+          admin lands directly on the inline Refuser/Valider list — not on
+          the full reservations table mixed with confirmed/past stays. */}
       <Link
-        href={`/${locale}/admin/reservations?status=PENDING`}
+        href={`/${locale}/admin/reservations?view=today#pending`}
         className="block w-full text-center px-4 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium transition-colors"
       >
         {labels.pendingCta(count)}

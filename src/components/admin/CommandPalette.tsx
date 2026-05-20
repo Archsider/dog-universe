@@ -46,7 +46,9 @@ export default function CommandPalette({ locale }: Props) {
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Global keyboard shortcut Cmd+K / Ctrl+K
+  // Global keyboard shortcut Cmd+K / Ctrl+K + global custom event so other
+  // components (e.g. mobile search button in the admin top bar) can open
+  // the palette without a keyboard.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -55,8 +57,15 @@ export default function CommandPalette({ locale }: Props) {
       }
       if (e.key === 'Escape') setOpen(false);
     }
+    function onCustomOpen() {
+      setOpen(true);
+    }
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('command-palette:open', onCustomOpen);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('command-palette:open', onCustomOpen);
+    };
   }, []);
 
   // Focus the input on open

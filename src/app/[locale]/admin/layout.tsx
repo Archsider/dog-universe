@@ -6,6 +6,7 @@ import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { SessionWatcher } from '@/components/shared/SessionWatcher';
 import CommandPalette from '@/components/admin/CommandPalette';
 import QuickActionsBar from '@/components/admin/QuickActionsBar';
+import HeaderSearchButton from '@/components/admin/HeaderSearchButton';
 import { prisma } from '@/lib/prisma';
 import { notDeleted } from '@/lib/prisma-soft';
 import { getCachedAuth } from '@/lib/cached-auth';
@@ -56,8 +57,12 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
       <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-white border-b border-ivory-200">
-          <div className="h-16 flex items-center justify-between px-4 lg:px-6">
+          <div className="h-16 flex items-center justify-between gap-2 px-4 lg:px-6">
             <div className="lg:hidden w-8" />
+            {/* Search bar — visible icon on mobile + full pill on desktop.
+                Wave 7.3 — user feedback 'pas de recherche visible sur mobile'.
+                The component handles mobile vs desktop layout internally. */}
+            <HeaderSearchButton locale={locale} />
             <div className="flex items-center gap-1 ml-auto">
               <span className="text-xs text-gray-500 mr-2 hidden sm:block">Admin</span>
               <AdminNotificationBell />
