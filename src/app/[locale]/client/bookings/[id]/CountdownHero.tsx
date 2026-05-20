@@ -51,10 +51,20 @@ export default function CountdownHero({ bookingId, startDate, petName, locale }:
   const [mood, setMood] = useState<MoodState>({ toy: false, treat: false, music: false });
 
   useEffect(() => {
-    // Tick once per minute — enough granularity, doesn't drain battery.
-    const t = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(t);
-  }, []);
+    // Skip ticking entirely if we're already in 'past' phase — the component
+    // returns null below, but a running interval would still fire forever
+    // and drain battery on a phone left on the screen.
+    const target0 = new Date(startDate);
+    if (diffCountdown(target0, new Date()).phase === 'past') return;
+    // Tick once per minute — enough granularity. Stop self-tick once we
+    // transition into 'past' so a long-lived tab doesn't keep firing.
+    const id = setInterval(() => {
+      const newNow = new Date();
+      setNow(newNow);
+      if (diffCountdown(target0, newNow).phase === 'past') clearInterval(id);
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [startDate]);
 
   useEffect(() => {
     try {

@@ -1,11 +1,9 @@
-/* eslint-disable dog-universe/no-getmonth-on-date-casa --
- * OK: client-side UI / calendar grid helpers. These operate either on
- * <input type="date"> values (already local-time) or on (year, month, day)
- * primitives previously extracted via casablancaYMD upstream. The Vercel UTC
- * runtime is not in scope here — the browser is.
- */
 // Types, constants, and pure helpers for ReservationsList.
 // No 'use client' — neutral file (no React hooks).
+// Date display helpers (formatShort) are Casa-anchored via casablancaYMD
+// so a server-rendered row near the Casa midnight boundary doesn't drop a day.
+
+import { casablancaYMD } from '@/lib/dates-casablanca';
 
 export type ReservationRow = {
   id: string;
@@ -73,9 +71,9 @@ const FR_MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'a
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function formatShort(iso: string, locale: string): string {
-  const d = new Date(iso);
+  const { month, day } = casablancaYMD(iso);
   const months = locale === 'fr' ? FR_MONTHS : EN_MONTHS;
-  return `${d.getDate()} ${months[d.getMonth()]}`;
+  return `${day} ${months[month - 1]}`;
 }
 
 export function nightsBetween(startIso: string, endIso: string): number {
