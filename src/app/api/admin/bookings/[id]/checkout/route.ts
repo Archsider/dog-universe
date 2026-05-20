@@ -111,8 +111,13 @@ export async function POST(request: NextRequest, { params }: Params) {
       'api.booking.checkout',
       { entityId: bookingId, userId: session.user.id, realNights, amount: toNumber(newInvoiceAmount), pets: booking.bookingPets.length },
       () => prisma.$transaction(async (tx) => {
-      await tx.booking.update({
-        where: { id: bookingId },
+      // Optimistic lock — guards against double-checkout race :
+      // Two admins clicking 'Clôturer' at the same time would both pass
+      // the prior fetch and both run deleteMany/createMany on the items
+      // (Invoice.amount recomputed twice, allocation rejoue, money drift).
+      // With version in WHERE, the second tx throws P2025 caught below.
+      const updated = await tx.booking.updateMany({
+        where: { id: bookingId, version: booking.version },
         data: {
           endDate,
           isOpenEnded: false,
@@ -120,6 +125,9 @@ export async function POST(request: NextRequest, { params }: Params) {
           version: { increment: 1 },
         },
       });
+      if (updated.count === 0) {
+        throw new Error('VERSION_CONFLICT');
+      }
 
       if (booking.invoice) {
         // Replace all BOARDING items with the freshly computed per-pet lines.
@@ -202,6 +210,10 @@ export async function POST(request: NextRequest, { params }: Params) {
       invoiceAmount: toNumber(newInvoiceAmount),
     });
   } catch (err) {
+    // Optimistic lock — second concurrent checkout caught here.
+    if (err instanceof Error && err.message === 'VERSION_CONFLICT') {
+      return NextResponse.json({ error: 'VERSION_CONFLICT' }, { status: 409 });
+    }
     // H10 — paidAmount > new total after BOARDING items rewrite.
     if (isPaidExceedsCheckViolation(err)) {
       return NextResponse.json(PAID_EXCEEDS_PAYLOAD, { status: 409 });

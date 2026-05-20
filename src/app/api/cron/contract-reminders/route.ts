@@ -12,7 +12,9 @@ export const GET = defineCron({
   period: 'weekly',
   fn: async ({ logger }) => {
     const unsigned = await prisma.user.findMany({
-      where: notDeleted({ role: 'CLIENT', isWalkIn: false, contract: null }), // Walk-in clients have no portal access — skip.
+      // Walk-in clients have no portal access — skip.
+      // RGPD : `anonymizedAt: null` blocks reminders to right-to-be-forgotten users.
+      where: { ...notDeleted({ role: 'CLIENT', isWalkIn: false, contract: null }), anonymizedAt: null },
       select: { id: true, name: true, email: true, language: true, phone: true },
       take: 500,
     });

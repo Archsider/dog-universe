@@ -8,7 +8,7 @@
 // pre-fill what we need to know about their pet.
 
 import { prisma } from '@/lib/prisma';
-import { notDeleted } from '@/lib/prisma-soft';
+import { notDeleted, contactable } from '@/lib/prisma-soft';
 import { defineCron } from '@/lib/cron-runner';
 import { getEmailTemplate } from '@/lib/email';
 import { enqueueEmail } from '@/lib/queues';
@@ -40,6 +40,7 @@ export const GET = defineCron({
         serviceType: 'BOARDING',
         startDate: { gte: lowerBound, lte: upperBound },
         preStayBriefing: null, // not already invited
+        client: contactable(), // RGPD : skip anonymized users
       },
       select: {
         id: true,

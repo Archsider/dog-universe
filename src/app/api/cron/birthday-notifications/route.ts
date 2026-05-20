@@ -2,6 +2,7 @@ import { parseMetadata } from '@/lib/notifications/metadata';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { enqueueSms } from '@/lib/queues';
+import { createNotification } from '@/lib/notifications/core';
 import { defineCron } from '@/lib/cron-runner';
 import { casablancaYMD, startOfDayCasa } from '@/lib/dates-casablanca';
 
@@ -57,6 +58,7 @@ export const GET = defineCron({
       WHERE p."dateOfBirth" IS NOT NULL
         AND p."deletedAt" IS NULL
         AND u."deletedAt" IS NULL
+        AND u."anonymizedAt" IS NULL    -- RGPD : never send to anonymized users
         AND (
           (EXTRACT(MONTH FROM p."dateOfBirth") = ${month} AND EXTRACT(DAY FROM p."dateOfBirth") = ${day})
           ${feb29Clause}
@@ -97,17 +99,18 @@ export const GET = defineCron({
       const speciesFr = pet.species === 'DOG' ? 'chien' : 'chat';
       const speciesEn = pet.species === 'DOG' ? 'dog' : 'cat';
 
+      // RGPD: go through createNotification (NOT prisma.notification.create direct)
+      // so the anonymizedAt guard in notifications/core.ts catches anonymized
+      // users who somehow slipped past the SQL filter above.
       const ops: Promise<unknown>[] = [
-        prisma.notification.create({
-          data: {
-            userId: pet.ownerId,
-            type: 'PET_BIRTHDAY',
-            titleFr: `🎂 Joyeux anniversaire ${pet.name} !`,
-            titleEn: `🎂 Happy Birthday ${pet.name}!`,
-            messageFr: `Votre ${speciesFr} ${pet.name} fête ses ${age} an${age > 1 ? 's' : ''} aujourd'hui ! Pensez à lui faire une petite gâterie 🐾`,
-            messageEn: `Your ${speciesEn} ${pet.name} turns ${age} today! Don't forget to give them a little treat 🐾`,
-            metadata: JSON.stringify({ petId: pet.id, age }),
-          },
+        createNotification({
+          userId: pet.ownerId,
+          type: 'PET_BIRTHDAY',
+          titleFr: `🎂 Joyeux anniversaire ${pet.name} !`,
+          titleEn: `🎂 Happy Birthday ${pet.name}!`,
+          messageFr: `Votre ${speciesFr} ${pet.name} fête ses ${age} an${age > 1 ? 's' : ''} aujourd'hui ! Pensez à lui faire une petite gâterie 🐾`,
+          messageEn: `Your ${speciesEn} ${pet.name} turns ${age} today! Don't forget to give them a little treat 🐾`,
+          metadata: { petId: pet.id, age: String(age) },
         }),
       ];
 
