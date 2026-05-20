@@ -105,7 +105,7 @@ export default function ClientProductOrder({ bookingId, locale, initialItems }: 
   async function addProduct(p: CatalogProduct) {
     setAdding(p.id);
     try {
-      const r = await fetch(`/api/client/bookings/${bookingId}/order-product`, {
+      const r = await fetch(`/api/client/bookings/${bookingId}/add-product`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ productId: p.id, quantity: 1 }),
