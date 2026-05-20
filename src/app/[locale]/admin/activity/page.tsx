@@ -118,16 +118,21 @@ export default async function AdminActivityPage({
               : `${targetDay} · ${entries.length}`}
           </p>
         </div>
-        <input
-          type="date"
-          defaultValue={targetDay}
-          className="px-3 py-1.5 rounded-lg border border-ivory-200 text-sm"
-          onChange={(e) => {
-            if (typeof window !== 'undefined') {
-              window.location.href = `/${locale}/admin/activity?day=${e.target.value}`;
-            }
-          }}
-        />
+        {/* Native form GET — server-friendly, no JS handler needed. */}
+        <form method="GET" action={`/${locale}/admin/activity`} className="flex items-center gap-2">
+          <input
+            type="date"
+            name="day"
+            defaultValue={targetDay}
+            className="px-3 py-1.5 rounded-lg border border-ivory-200 text-sm"
+          />
+          <button
+            type="submit"
+            className="px-3 py-1.5 rounded-lg bg-charcoal text-white text-sm font-medium hover:bg-charcoal/90"
+          >
+            {fr ? 'Voir' : 'View'}
+          </button>
+        </form>
       </header>
 
       {entries.length === 0 ? (
