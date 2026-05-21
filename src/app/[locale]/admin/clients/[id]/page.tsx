@@ -321,9 +321,13 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
                   const remaining = Math.max(0, invAmount - invPaidAmount);
                   const invStatusColor = inv.status === 'PAID' ? 'text-green-700 bg-green-50' : inv.status === 'PARTIALLY_PAID' ? 'text-orange-600 bg-orange-50' : 'text-amber-700 bg-amber-50';
                   return (
-                    <div key={inv.id} className="flex items-center justify-between py-2 border-b border-ivory-100 last:border-0">
+                    <Link
+                      key={inv.id}
+                      href={`/${locale}/admin/billing?invoiceId=${inv.id}`}
+                      className="flex items-center justify-between py-2 border-b border-ivory-100 last:border-0 -mx-2 px-2 rounded-lg hover:bg-ivory-50 transition-colors group"
+                    >
                       <div>
-                        <span className="font-mono text-xs font-semibold text-charcoal">{inv.invoiceNumber}</span>
+                        <span className="font-mono text-xs font-semibold text-charcoal group-hover:text-gold-700">{inv.invoiceNumber}</span>
                         <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${invStatusColor}`}>{invStatusLbls[inv.status] || inv.status}</span>
                         <div className="text-xs text-gray-400 mt-0.5">
                           {formatMAD(invAmount)}
@@ -333,7 +337,7 @@ export default async function AdminClientDetailPage({ params }: PageProps) {
                         </div>
                       </div>
                       <span className="text-xs text-gray-400">{formatDate(inv.issuedAt, locale)}</span>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
