@@ -179,6 +179,7 @@ export default function FeatureFlagsClient({ locale, initialFlags }: Props) {
       </div>
 
       <div className="bg-white rounded-xl border border-[#F0D98A]/40 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
             <tr>
@@ -234,6 +235,7 @@ export default function FeatureFlagsClient({ locale, initialFlags }: Props) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {editing && (
