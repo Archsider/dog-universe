@@ -9,14 +9,18 @@
 // component is pure presentation + the Recharts client island.
 
 import { useMemo } from 'react';
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-} from 'recharts';
+import dynamic from 'next/dynamic';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
 import type { PerformanceData, PerfKpi } from './performance-data';
 
-const ACCENT = '#B8842D';
+// Recharts is NOT server-render-safe in this codebase — load the chart
+// island client-only (ssr: false), exactly like AnalyticsCharts. A static
+// recharts import here crashed /admin/analytics on SSR (digest error).
+const PerformanceRevenueChart = dynamic(() => import('./PerformanceRevenueChart'), {
+  ssr: false,
+  loading: () => <div className="h-[200px] w-full rounded-lg bg-gray-50 animate-pulse" />,
+});
 
 function DeltaBadge({ delta }: { delta: number | null }) {
   if (delta === null || Math.abs(delta) < 0.05) {
@@ -82,33 +86,10 @@ export default function PerformanceDashboard({ fr, data }: Props) {
         <KpiCard label={fr ? 'Nouvelles familles' : 'New families'} kpi={kpis.newFamilies} />
       </div>
 
-      {/* Revenue chart — 12 months */}
+      {/* Revenue chart — 12 months (client-only recharts island) */}
       <div className="rounded-xl border border-[#E2C048]/30 bg-white p-4">
         <p className="text-xs text-gray-500 mb-3">{fr ? 'Évolution des revenus · 12 mois' : 'Revenue evolution · 12 months'}</p>
-        <div className="h-[200px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
-              <defs>
-                <linearGradient id="perfRev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={ACCENT} stopOpacity={0.18} />
-                  <stop offset="100%" stopColor={ACCENT} stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00000008" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#888780' }} axisLine={false} tickLine={false} />
-              <YAxis
-                tick={{ fontSize: 10, fill: '#888780' }} axisLine={false} tickLine={false} width={48}
-                tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
-              />
-              <Tooltip
-                formatter={(v) => [formatMAD(Number(v) || 0), fr ? 'Revenus' : 'Revenue']}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E2C04840' }}
-                labelStyle={{ color: '#5F5E5A' }}
-              />
-              <Area type="monotone" dataKey="value" stroke={ACCENT} strokeWidth={1.75} fill="url(#perfRev)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <PerformanceRevenueChart fr={fr} data={chartData} />
       </div>
 
       {/* Category breakdown */}
