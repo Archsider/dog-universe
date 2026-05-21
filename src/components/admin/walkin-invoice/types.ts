@@ -13,7 +13,7 @@ export type ItemCategory =
 
 export type PaymentMethod = 'CASH' | 'CARD' | 'CHECK' | 'TRANSFER';
 
-export type ClientMode = 'existing' | 'anonymous';
+export type ClientMode = 'existing' | 'new' | 'anonymous';
 
 export interface WalkinItem {
   id: string; // local row key
@@ -28,6 +28,20 @@ export interface WalkinItem {
    * picking an existing catalog row or quick-creating a new one).
    */
   productId?: string | null;
+  /**
+   * Smart pet-context (UI only — NOT sent to the server). Captured for
+   * service categories (BOARDING / GROOMING / PET_TAXI) to derive the
+   * description + unit price via `deriveWalkinLine`. The derived values
+   * are baked into `description` / `unitPrice` before submit, so the
+   * server contract is unchanged.
+   */
+  species?: 'DOG' | 'CAT';
+  petName?: string;
+  /** Count of nights OR months, per billingUnit (BOARDING). */
+  nights?: number;
+  billingUnit?: 'NIGHT' | 'MONTH';
+  groomingSize?: 'SMALL' | 'LARGE';
+  taxiType?: 'STANDARD' | 'VET' | 'AIRPORT';
 }
 
 export const CATEGORY_LABELS: Record<ItemCategory, { fr: string; en: string }> = {
