@@ -110,8 +110,26 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
     try {
       let resolvedClientId = clientId;
       if (clientId === 'WALK_IN') {
-        const wiRes = await fetch('/api/admin/walkin-clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: walkInName.trim(), phone: walkInPhone.trim() || null }) });
-        if (!wiRes.ok) throw new Error(fr ? 'Erreur création client de passage.' : 'Failed to create walk-in client.');
+        // Normalise le téléphone : retire espaces / tirets / points / parenthèses
+        // pour que "06 12 34 56 78" passe la regex marocaine stricte du serveur.
+        const cleanedPhone = walkInPhone.replace(/[\s.\-()]/g, '');
+        const wiRes = await fetch('/api/admin/walkin-clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: walkInName.trim(), phone: cleanedPhone || null }),
+        });
+        if (!wiRes.ok) {
+          // Surface le VRAI code serveur au lieu d'un message générique.
+          const data = await wiRes.json().catch(() => ({} as { error?: string }));
+          const code = (data as { error?: string }).error;
+          throw new Error(
+            code === 'INVALID_PHONE_FORMAT'
+              ? (fr ? 'Téléphone invalide — format attendu : 0612345678 ou +212612345678.' : 'Invalid phone — expected 0612345678 or +212612345678.')
+              : code === 'INVALID_INPUT'
+              ? (fr ? 'Nom du client de passage invalide.' : 'Invalid walk-in client name.')
+              : (fr ? `Erreur création client de passage${code ? ` (${code})` : ''}.` : `Failed to create walk-in client${code ? ` (${code})` : ''}.`),
+          );
+        }
         resolvedClientId = (await wiRes.json()).id;
       }
       const body: Record<string, unknown> = {
