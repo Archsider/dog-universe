@@ -1,5 +1,7 @@
 import React from 'react';
+import Link from 'next/link';
 import { formatMAD } from '@/lib/utils';
+import type { BuildQSFn } from './billing-utils';
 
 interface PaymentMethodStat {
   paymentMethod: string;
@@ -10,6 +12,10 @@ interface PaymentMethodStat {
 interface BillingPaymentMethodsProps {
   locale: string;
   paymentMethodStats: PaymentMethodStat[];
+  /** Currently filtered method ('' = none). */
+  activeMethod: string;
+  /** Builds the billing URL with overrides (month/status/paymentMethod…). */
+  buildQS: BuildQSFn;
 }
 
 const METHOD_CONFIG: Record<string, { labelFr: string; labelEn: string; svg: React.ReactNode }> = {
@@ -54,7 +60,7 @@ const METHOD_CONFIG: Record<string, { labelFr: string; labelEn: string; svg: Rea
   },
 };
 
-export function BillingPaymentMethods({ locale, paymentMethodStats }: BillingPaymentMethodsProps) {
+export function BillingPaymentMethods({ locale, paymentMethodStats, activeMethod, buildQS }: BillingPaymentMethodsProps) {
   const isFr = locale === 'fr';
 
   if (paymentMethodStats.length === 0) return null;
@@ -62,37 +68,54 @@ export function BillingPaymentMethods({ locale, paymentMethodStats }: BillingPay
   const totalPaidByMethod = paymentMethodStats.reduce((s, r) => s + Number(r._sum.amount ?? 0), 0) || 1;
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      {(['CASH', 'CARD', 'CHECK', 'TRANSFER'] as const).map(method => {
-        const stat = paymentMethodStats.find(s => s.paymentMethod === method);
-        const amount = Number(stat?._sum.amount ?? 0);
-        const count = stat?._count.id ?? 0;
-        const pct = Math.round((amount / totalPaidByMethod) * 100);
-        const cfg = METHOD_CONFIG[method];
-        return (
-          <div
-            key={method}
-            className="bg-white rounded-xl border border-[rgba(196,151,74,0.25)] p-4 hover:border-[#C4974A] transition-colors"
-          >
-            <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-9 h-9 rounded-lg border border-[rgba(196,151,74,0.3)] text-[#C4974A] flex items-center justify-center flex-shrink-0">
-                {cfg.svg}
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {(['CASH', 'CARD', 'CHECK', 'TRANSFER'] as const).map(method => {
+          const stat = paymentMethodStats.find(s => s.paymentMethod === method);
+          const amount = Number(stat?._sum.amount ?? 0);
+          const count = stat?._count.id ?? 0;
+          const pct = Math.round((amount / totalPaidByMethod) * 100);
+          const cfg = METHOD_CONFIG[method];
+          const isActive = activeMethod === method;
+          // Toggle : clicking the active method clears the filter. Reset page.
+          const href = buildQS({ paymentMethod: isActive ? null : method, page: null });
+          return (
+            <Link
+              key={method}
+              href={href}
+              aria-pressed={isActive}
+              title={isFr ? `Voir les factures · ${cfg.labelFr}` : `View invoices · ${cfg.labelEn}`}
+              className={`block bg-white rounded-xl border p-4 transition-colors ${
+                isActive
+                  ? 'border-[#C4974A] ring-2 ring-[#C4974A]/30 bg-[#FBF5E0]/40'
+                  : 'border-[rgba(196,151,74,0.25)] hover:border-[#C4974A]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="w-9 h-9 rounded-lg border border-[rgba(196,151,74,0.3)] text-[#C4974A] flex items-center justify-center flex-shrink-0">
+                  {cfg.svg}
+                </div>
+                <span className="text-sm font-medium text-[#2A2520]">
+                  {isFr ? cfg.labelFr : cfg.labelEn}
+                </span>
               </div>
-              <span className="text-sm font-medium text-[#2A2520]">
-                {isFr ? cfg.labelFr : cfg.labelEn}
-              </span>
-            </div>
-            <p className="text-xl font-bold text-[#2A2520]">{formatMAD(amount)}</p>
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-xs text-[#8A7E75]">{count} {isFr ? 'paiement(s)' : 'payment(s)'}</p>
-              <span className="text-xs font-bold text-[#C4974A]">{pct}%</span>
-            </div>
-            <div className="h-1 bg-[#C4974A]/10 rounded-full mt-2.5 overflow-hidden">
-              <div className="h-1 rounded-full bg-[#C4974A] transition-all" style={{ width: `${pct}%` }} />
-            </div>
-          </div>
-        );
-      })}
+              <p className="text-xl font-bold text-[#2A2520] tabular-nums">{formatMAD(amount)}</p>
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-xs text-[#8A7E75]">{count} {isFr ? 'paiement(s)' : 'payment(s)'}</p>
+                <span className="text-xs font-bold text-[#C4974A] tabular-nums">{pct}%</span>
+              </div>
+              <div className="h-1 bg-[#C4974A]/10 rounded-full mt-2.5 overflow-hidden">
+                <div className="h-1 rounded-full bg-[#C4974A] transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <p className="mt-2 text-[10px] uppercase tracking-wider text-[#C4974A]/70">
+                {isActive
+                  ? (isFr ? '✓ Filtre actif — cliquer pour retirer' : '✓ Active filter — click to clear')
+                  : (isFr ? 'Cliquer → voir les factures' : 'Click → view invoices')}
+              </p>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }

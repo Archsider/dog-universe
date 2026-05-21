@@ -184,7 +184,7 @@ export default async function AdminBillingPage(props: PageProps) {
       </div>
       <MonthNavigator locale={locale} currentMonth={selectedMonth} />
       <BillingKpis locale={locale} kpiTotalBilled={kpiTotalBilled} kpiCollected={kpiCollected} kpiRemaining={kpiRemaining} invoiceCount={invoiceCount} />
-      <BillingPaymentMethods locale={locale} paymentMethodStats={paymentMethodStats} />
+      <BillingPaymentMethods locale={locale} paymentMethodStats={paymentMethodStats} activeMethod={paymentMethod} buildQS={buildQS} />
       <BillingStatusFilters locale={locale} status={status} buildQS={buildQS} />
       <BillingInvoicesTable
         locale={locale} invoices={invoices} invoiceCount={invoiceCount}
