@@ -124,7 +124,7 @@ export default function CreateStandaloneInvoiceModal({ clients, locale, onCreate
           const code = (data as { error?: string }).error;
           throw new Error(
             code === 'INVALID_PHONE_FORMAT'
-              ? (fr ? 'Téléphone invalide — format attendu : 0612345678 ou +212612345678.' : 'Invalid phone — expected 0612345678 or +212612345678.')
+              ? (fr ? 'Téléphone invalide — 6 à 15 chiffres, « + » optionnel.' : 'Invalid phone — 6 to 15 digits, optional "+".')
               : code === 'INVALID_INPUT'
               ? (fr ? 'Nom du client de passage invalide.' : 'Invalid walk-in client name.')
               : (fr ? `Erreur création client de passage${code ? ` (${code})` : ''}.` : `Failed to create walk-in client${code ? ` (${code})` : ''}.`),

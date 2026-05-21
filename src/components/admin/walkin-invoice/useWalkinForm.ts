@@ -154,9 +154,12 @@ export function useWalkinForm(open: boolean): UseWalkinFormResult {
 
   // Validation flags
   // existing → a client must be picked. new → a name is required (phone
-  // optional, but if filled must be a valid Moroccan number — mirror of the
-  // server regex in /api/admin/walkin-clients). anonymous → always valid.
-  const newPhoneValid = !newClientPhone.trim() || /^(\+212|0)[5-7]\d{8}$/.test(newClientPhone.replace(/\s/g, ''));
+  // optional, but if filled must be a plausible phone — mirror of the loose
+  // server regex in /api/admin/walkin-clients). A walk-in phone is just a
+  // contact note (no login, no portal), so we tolerate foreign / landline /
+  // unusual formats : 6–15 digits with an optional leading "+".
+  const newPhoneValid =
+    !newClientPhone.trim() || /^\+?\d{6,15}$/.test(newClientPhone.replace(/[\s.\-()]/g, ''));
   const step1Valid =
     clientMode === 'existing' ? !!clientId
     : clientMode === 'new' ? newClientName.trim().length > 0 && newPhoneValid
