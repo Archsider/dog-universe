@@ -60,12 +60,24 @@ export async function POST(request: NextRequest, { params }: Params) {
   });
 
   if (!booking) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
-  if (!booking.isOpenEnded) {
-    return NextResponse.json({ error: 'NOT_OPEN_ENDED' }, { status: 400 });
+  // Checkout est possible pour tout séjour physiquement présent (IN_PROGRESS),
+  // qu'il soit open-ended (walk-in date inconnue) OU à dates fixes. Le
+  // CloseStayDialog des "Départs du jour" cible des séjours normaux — l'ancien
+  // garde `!isOpenEnded → 400` les bloquait (bug clôture impossible).
+  if (booking.status !== 'IN_PROGRESS') {
+    return NextResponse.json({ error: 'NOT_IN_PROGRESS' }, { status: 400 });
   }
   if (endDate.getTime() < booking.startDate.getTime()) {
     return NextResponse.json({ error: 'END_BEFORE_START' }, { status: 400 });
   }
+
+  // Seuls les séjours open-ended recalculent la facture (les dates étaient
+  // inconnues à la réservation → la clôture est le moment de tarification
+  // canonique). Un séjour à dates fixes conserve sa facture déjà émise (avec
+  // ses éventuelles remises) : l'admin a validé le montant à la réservation,
+  // la clôture ne fait qu'enregistrer la date/heure réelle de sortie et passer
+  // le statut à COMPLETED. Recalculer écraserait les remises (drift money path).
+  const recomputeInvoice = booking.isOpenEnded;
 
   // Nuits réelles = différence en jours calendaires Casablanca (jamais en
   // arithmétique milliseconde — DST/changement d'heure légale + édge cases
@@ -104,7 +116,11 @@ export async function POST(request: NextRequest, { params }: Params) {
       nonBoardingItemsTotal = nonBoardingItemsTotal.plus(toNumber(item.total));
     }
   }
-  const newInvoiceAmount = boardingTotal.plus(nonBoardingItemsTotal);
+  // Pour un séjour normal on ne recalcule pas : le montant final = facture
+  // déjà émise (ou totalPrice si pas de facture legacy).
+  const newInvoiceAmount = recomputeInvoice
+    ? boardingTotal.plus(nonBoardingItemsTotal)
+    : new Prisma.Decimal(toNumber(booking.invoice?.amount ?? booking.totalPrice));
 
   try {
     await withSpan(
@@ -129,7 +145,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         throw new Error('VERSION_CONFLICT');
       }
 
-      if (booking.invoice) {
+      if (recomputeInvoice && booking.invoice) {
         // Replace all BOARDING items with the freshly computed per-pet lines.
         await tx.invoiceItem.deleteMany({
           where: { invoiceId: booking.invoice.id, category: 'BOARDING' },
@@ -171,7 +187,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     // showed stale paid status and the trigger-recomputed `amount` no
     // longer matched the cached `paidAmount`.  Allocation opens its own
     // Serializable tx ; safe to run post-checkout commit.
-    if (booking.invoice) {
+    if (recomputeInvoice && booking.invoice) {
       try {
         const { allocatePayments } = await import('@/lib/payments');
         await allocatePayments(booking.invoice.id);

@@ -133,12 +133,30 @@ describe('POST /api/admin/bookings/[id]/checkout', () => {
     expect(res.status).toBe(404);
   });
 
-  it('400 NOT_OPEN_ENDED when booking is not open-ended', async () => {
+  it('400 NOT_IN_PROGRESS when booking is already terminal', async () => {
     mocks.auth.mockResolvedValue(adminSession);
-    mocks.prisma.booking.findFirst.mockResolvedValue({ ...openBookingRow, isOpenEnded: false });
+    mocks.prisma.booking.findFirst.mockResolvedValue({ ...openBookingRow, status: 'COMPLETED' });
     const res = await POST(makeReq({ endDate: '2026-05-10' }), { params: Promise.resolve({ id: 'b1' }) });
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'NOT_OPEN_ENDED' });
+    expect(await res.json()).toEqual({ error: 'NOT_IN_PROGRESS' });
+  });
+
+  it('non-open-ended IN_PROGRESS booking checks out successfully (no recompute)', async () => {
+    mocks.auth.mockResolvedValue(adminSession);
+    // Fixed-date stay : isOpenEnded false but physically present. Must close
+    // without recomputing the (already-issued, possibly discounted) invoice.
+    mocks.prisma.booking.findFirst.mockResolvedValue({
+      ...openBookingRow,
+      isOpenEnded: false,
+      totalPrice: new Prisma.Decimal(1780),
+      invoice: { id: 'inv1', amount: new Prisma.Decimal(1780), items: [] },
+    });
+    const res = await POST(makeReq({ endDate: '2026-05-10' }), { params: Promise.resolve({ id: 'b1' }) });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    // Amount preserved (invoice not recomputed for a fixed-date stay).
+    expect(json.invoiceAmount).toBe(1780);
   });
 
   it('400 END_BEFORE_START when endDate < startDate', async () => {
