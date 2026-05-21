@@ -69,8 +69,11 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
               <LanguageSwitcher />
             </div>
           </div>
-          {/* Wave 6 Feature #3 — Quick Actions Bar */}
-          <div className="border-t border-ivory-200 bg-[#FEFCF9] px-4 lg:px-6">
+          {/* Wave 6 Feature #3 — Quick Actions Bar.
+              pl-14 sur mobile pour laisser de la place au bouton hamburger
+              fixed top-4 left-4 (AdminSidebar) qui sinon recouvre la 1ère
+              action — bug audit screenshot 2026-05-21. */}
+          <div className="border-t border-ivory-200 bg-[#FEFCF9] pl-14 pr-4 lg:px-6">
             <QuickActionsBar locale={locale} />
           </div>
         </header>

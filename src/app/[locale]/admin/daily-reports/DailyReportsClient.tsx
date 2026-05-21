@@ -48,14 +48,24 @@ interface Props {
   locale: string;
   date: string;
   initialReports: ReportRow[];
+  petsInPensionCount: number;
+  canTriggerCron: boolean;
 }
 
 const NOTE_MAX = 280;
 
-export default function DailyReportsClient({ locale, date, initialReports }: Props) {
+export default function DailyReportsClient({
+  locale,
+  date,
+  initialReports,
+  petsInPensionCount,
+  canTriggerCron,
+}: Props) {
   const fr = locale === 'fr';
   const router = useRouter();
   const [reports, setReports] = useState(initialReports);
+  const [busyTrigger, setBusyTrigger] = useState(false);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const drafts = reports.filter(r => r.status === 'DRAFT');
@@ -92,7 +102,7 @@ export default function DailyReportsClient({ locale, date, initialReports }: Pro
         <KpiPill label={fr ? 'Ignorées'  : 'Skipped'}    value={skipped.length} tone="muted" />
       </div>
 
-      {reports.length === 0 && (
+      {reports.length === 0 && petsInPensionCount === 0 && (
         <div className="rounded-2xl border border-dashed border-[#C4974A]/40 p-8 text-center bg-white">
           <p className="text-4xl mb-2" aria-hidden>🌙</p>
           <p className="text-sm text-charcoal/60">
@@ -105,6 +115,56 @@ export default function DailyReportsClient({ locale, date, initialReports }: Pro
               ? 'Les brouillons sont créés automatiquement à 16h Casa.'
               : 'Drafts are created automatically at 16:00 Casablanca time.'}
           </p>
+        </div>
+      )}
+
+      {reports.length === 0 && petsInPensionCount > 0 && (
+        <div className="rounded-2xl border border-dashed border-amber-300 p-6 sm:p-8 text-center bg-amber-50/50">
+          <p className="text-4xl mb-2" aria-hidden>⏳</p>
+          <p className="text-sm text-charcoal font-medium">
+            {fr
+              ? `${petsInPensionCount} animal·aux en pension — brouillons pas encore générés.`
+              : `${petsInPensionCount} pet${petsInPensionCount > 1 ? 's' : ''} in boarding — drafts not generated yet.`}
+          </p>
+          <p className="text-xs text-charcoal/60 mt-2">
+            {fr
+              ? 'Le cron tourne automatiquement à 16h Casa. Tu peux aussi générer maintenant :'
+              : 'The cron runs automatically at 16:00 Casablanca time. Or trigger it now:'}
+          </p>
+          {canTriggerCron && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (busyTrigger) return;
+                setBusyTrigger(true);
+                setTriggerError(null);
+                try {
+                  const r = await fetch('/api/admin/cron-trigger/daily-report-drafts', { method: 'POST' });
+                  if (!r.ok) {
+                    setTriggerError(fr ? 'Erreur — réessayez' : 'Error — try again');
+                    return;
+                  }
+                  router.refresh();
+                } finally {
+                  setBusyTrigger(false);
+                }
+              }}
+              disabled={busyTrigger}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-medium"
+            >
+              {busyTrigger
+                ? (fr ? 'Génération…' : 'Generating…')
+                : (fr ? 'Générer les brouillons maintenant' : 'Generate drafts now')}
+            </button>
+          )}
+          {!canTriggerCron && (
+            <p className="text-xs text-charcoal/50 italic mt-3">
+              {fr ? '(Le déclenchement manuel est réservé au SUPERADMIN)' : '(Manual trigger is SUPERADMIN-only)'}
+            </p>
+          )}
+          {triggerError && (
+            <p className="text-xs text-red-600 mt-2">{triggerError}</p>
+          )}
         </div>
       )}
 
