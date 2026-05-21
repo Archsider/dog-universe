@@ -115,8 +115,18 @@ export async function sendSMS(
   }
 }
 
-// SMS admin — envoie au numéro ADMIN_PHONE
+// SMS admin — envoie au numéro ADMIN_PHONE.
+//
+// Self-gateway guard : la passerelle (sms-gate.app) tourne sur le SIM du
+// téléphone de l'admin. Quand ce SIM == ADMIN_PHONE (cas solo-founder), CHAQUE
+// notif admin est le téléphone qui s'écrit à lui-même → Google Messages
+// l'affiche 2× (bulle envoyée + reçue). `ADMIN_SMS_DISABLED=true` coupe ces
+// auto-SMS inutiles — l'admin voit les mêmes events dans le cockpit /admin
+// (+ web push). Lu via process.env directement : ADMIN_* n'est pas dans le
+// schéma Zod de env.ts (stripped en mode validation active).
 export async function sendAdminSMS(message: string): Promise<boolean> {
+  const disabled = process.env.ADMIN_SMS_DISABLED
+  if (disabled === 'true' || disabled === '1') return false
   const adminPhone = env.ADMIN_PHONE
   if (!adminPhone) return false
   return sendSMS(adminPhone, message)
