@@ -28,6 +28,9 @@ export interface DashboardLabels {
   arrivalsCount: (n: number) => string;
   departuresTitle: string;
   departuresCount: (n: number) => string;
+  recentDeparturesTitle: string;
+  recentDeparturesCount: (n: number) => string;
+  noRecentDepartures: string;
   birthdaysTitle: string;
   viewAll: string;
   // Zone 3 — Alertes & rappels
@@ -82,6 +85,9 @@ const fr: DashboardLabels = {
   arrivalsCount: (n) => `${n} prochaine${n > 1 ? 's' : ''} (J → J+7)`,
   departuresTitle: 'Départs prévus',
   departuresCount: (n) => `${n} prochain${n > 1 ? 's' : ''} (J → J+7)`,
+  recentDeparturesTitle: 'Récemment partis',
+  recentDeparturesCount: (n) => `${n} sur 7 jours (J-7 → J)`,
+  noRecentDepartures: 'Aucun départ récent',
   birthdaysTitle: 'Anniversaires cette semaine',
   viewAll: 'Voir tout →',
   zoneAlerts: 'Alertes & rappels',
@@ -132,6 +138,9 @@ const en: DashboardLabels = {
   arrivalsCount: (n) => `${n} upcoming (today → +7)`,
   departuresTitle: 'Expected departures',
   departuresCount: (n) => `${n} upcoming (today → +7)`,
+  recentDeparturesTitle: 'Recently left',
+  recentDeparturesCount: (n) => `${n} over 7 days (−7 → today)`,
+  noRecentDepartures: 'No recent departures',
   birthdaysTitle: 'Birthdays this week',
   viewAll: 'View all →',
   zoneAlerts: 'Alerts & reminders',

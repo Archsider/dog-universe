@@ -7,7 +7,10 @@ import type { UpcomingSnapshot, UpcomingMovement } from '../shapes';
 export async function loadUpcoming(): Promise<UpcomingSnapshot> {
   const start = startOfTodayCasa();
   const horizon = new Date(start.getTime() + 7 * 86_400_000 - 1);
-  const [arrivalsRaw, departuresRaw, totalArrivals, totalDepartures] = await Promise.all([
+  // "Récemment partis" look-back : J-7 → fin de journée d'aujourd'hui.
+  const pastStart = new Date(start.getTime() - 7 * 86_400_000);
+  const endOfToday = new Date(start.getTime() + 86_400_000 - 1);
+  const [arrivalsRaw, departuresRaw, totalArrivals, totalDepartures, recentDeparturesRaw, totalRecentDepartures] = await Promise.all([
     prisma.booking.findMany({
       where: notDeleted<Prisma.BookingWhereInput>({
         serviceType: 'BOARDING',
@@ -52,6 +55,30 @@ export async function loadUpcoming(): Promise<UpcomingSnapshot> {
         endDate: { gte: start, lte: horizon },
       }),
     }),
+    // Récemment partis : séjours COMPLETED dont la sortie est dans les 7
+    // derniers jours (J-7 → aujourd'hui). Tri du plus récent au plus ancien.
+    prisma.booking.findMany({
+      where: notDeleted<Prisma.BookingWhereInput>({
+        serviceType: 'BOARDING',
+        status: 'COMPLETED',
+        endDate: { gte: pastStart, lte: endOfToday },
+      }),
+      select: {
+        id: true,
+        endDate: true,
+        client: { select: { name: true } },
+        bookingPets: { select: { pet: { select: { name: true } } } },
+      },
+      orderBy: { endDate: 'desc' },
+      take: 3,
+    }),
+    prisma.booking.count({
+      where: notDeleted<Prisma.BookingWhereInput>({
+        serviceType: 'BOARDING',
+        status: 'COMPLETED',
+        endDate: { gte: pastStart, lte: endOfToday },
+      }),
+    }),
   ]);
 
   const ymdString = (d: Date | null): string => {
@@ -72,11 +99,19 @@ export async function loadUpcoming(): Promise<UpcomingSnapshot> {
     petName: b.bookingPets[0]?.pet?.name ?? '',
     dateYmd: ymdString(b.endDate),
   }));
+  const recentDepartures: UpcomingMovement[] = recentDeparturesRaw.map((b) => ({
+    bookingId: b.id,
+    clientName: b.client.name ?? '',
+    petName: b.bookingPets[0]?.pet?.name ?? '',
+    dateYmd: ymdString(b.endDate),
+  }));
 
   return {
     arrivals,
     departures,
+    recentDepartures,
     totalArrivals,
     totalDepartures,
+    totalRecentDepartures,
   };
 }
