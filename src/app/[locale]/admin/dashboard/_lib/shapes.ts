@@ -74,8 +74,11 @@ export interface UpcomingMovement {
 export interface UpcomingSnapshot {
   arrivals: UpcomingMovement[];
   departures: UpcomingMovement[];
+  /** Animals that already left (COMPLETED) in the last 7 days, J-7 → J. */
+  recentDepartures: UpcomingMovement[];
   totalArrivals: number;
   totalDepartures: number;
+  totalRecentDepartures: number;
 }
 
 export interface VaccineExpiry {
