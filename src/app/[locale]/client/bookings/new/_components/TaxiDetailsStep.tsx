@@ -5,6 +5,7 @@ import { useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { AddressAutocomplete } from '@/components/shared/AddressAutocomplete';
 import { toast } from '@/hooks/use-toast';
 import { formatMAD } from '@/lib/utils';
 import { TAXI_PRICES, type TaxiType } from '../_lib/types';
@@ -116,7 +117,19 @@ export function TaxiDetailsStep({ locale, l, today, taxi }: TaxiDetailsStepProps
             {taxi.geolocating ? l.locating : l.useMyLocation}
           </button>
         </div>
-        <Input id="pickup" value={taxi.pickupAddress} onChange={e => taxi.setPickupAddress(e.target.value)} placeholder="Gueliz, Marrakech" className="mt-1" />
+        <AddressAutocomplete
+          id="pickup"
+          value={taxi.pickupAddress}
+          onChange={taxi.setPickupAddress}
+          onSelect={(label, lat, lng) => {
+            taxi.setPickupAddress(label);
+            taxi.setPickupLat(lat);
+            taxi.setPickupLng(lng);
+          }}
+          locale={locale}
+          placeholder="Gueliz, Marrakech"
+          className="mt-1"
+        />
         <div className="mt-2">
           <PinPicker
             lat={taxi.pickupLat}

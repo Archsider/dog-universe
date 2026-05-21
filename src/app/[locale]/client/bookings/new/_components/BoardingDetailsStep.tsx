@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { AvailabilityCalendar } from '@/components/shared/AvailabilityCalendar';
+import { AddressAutocomplete } from '@/components/shared/AddressAutocomplete';
 import { GROOMING_PRICES, TAXI_ADDON_PRICE, type Pet, type PetSize } from '../_lib/types';
 import { pick, type WizardLabels } from '../_lib/i18n';
 import type { BoardingState, TaxiAddonState } from '../_lib/use-form-state';
@@ -82,9 +83,15 @@ function TaxiAddon({ locale, l, today, state, idPrefix, title, dateLabel }: Addo
                 {state.geolocating ? l.locating : l.useMyLocation}
               </button>
             </div>
-            <Input
+            <AddressAutocomplete
               value={state.address}
-              onChange={e => state.setAddress(e.target.value)}
+              onChange={state.setAddress}
+              onSelect={(label, lat, lng) => {
+                state.setAddress(label);
+                state.setLat(lat);
+                state.setLng(lng);
+              }}
+              locale={locale}
               placeholder={l.taxiAddressPlaceholder}
               className="text-sm"
             />
