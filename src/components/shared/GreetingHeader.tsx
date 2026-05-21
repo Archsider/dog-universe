@@ -10,14 +10,16 @@
 // 'rajouter une barre interactive').
 
 import { Sparkles } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 interface Props {
   salutation: string;
   /** Display name (first + optional last italic). */
   firstName: string;
   lastName?: string | null;
-  /** Contextual single-line subtitle (already locale-aware). */
-  subtitle: string;
+  /** Contextual single-line subtitle (already locale-aware). May be plain
+   *  text or interactive nodes (e.g. the in-pension popover trigger). */
+  subtitle: ReactNode;
   /** Tweak the dark mode of the band — admin uses dark, client uses light. */
   variant?: 'light' | 'dark';
   align?: 'left' | 'center';
