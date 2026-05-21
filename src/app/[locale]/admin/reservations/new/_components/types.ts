@@ -47,6 +47,13 @@ export type Translations = {
   cat: string;
   dob: string;
   breed: string;
+  addPetForClient: string;
+  confirmAddPet: string;
+  addingPet: string;
+  petAddedSuccess: string;
+  dobRequiredLabel: string;
+  dobRequiredPet: string;
+  petNameRequiredMsg: string;
   serviceSection: string;
   boarding: string;
   taxi: string;
