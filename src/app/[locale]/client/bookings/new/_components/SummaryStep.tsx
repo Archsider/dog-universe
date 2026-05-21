@@ -24,6 +24,7 @@ export interface SummaryStepProps {
   nights: number;
   taxiType: TaxiType;
   pickupAddress: string;
+  pickupPlaceName?: string;
   dropoffAddress: string;
   priceItems: PriceItem[];
   total: number;
@@ -31,7 +32,7 @@ export interface SummaryStepProps {
 
 export function SummaryStep({
   locale, l, bookingType, selectedPetObjects, checkIn, checkOut, nights,
-  taxiType, pickupAddress, dropoffAddress, priceItems, total,
+  taxiType, pickupAddress, pickupPlaceName, dropoffAddress, priceItems, total,
 }: SummaryStepProps) {
   return (
     <div className="space-y-4">
@@ -63,6 +64,12 @@ export function SummaryStep({
               <span className="text-gray-500">{l.taxiTypeLabel}</span>
               <span className="font-medium text-charcoal">{taxiType === 'STANDARD' ? l.standard : taxiType === 'VET' ? l.vet : l.airport}</span>
             </div>
+            {pickupPlaceName && pickupPlaceName.trim().length > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">🏡 {l.placeName}</span>
+                <span className="font-medium text-charcoal text-right max-w-[60%]">{pickupPlaceName}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">{l.pickup}</span>
               <span className="font-medium text-charcoal text-right max-w-[60%]">{pickupAddress}</span>

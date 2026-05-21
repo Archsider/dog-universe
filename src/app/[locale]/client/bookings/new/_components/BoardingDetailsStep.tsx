@@ -89,6 +89,22 @@ function TaxiAddon({ locale, l, today, state, idPrefix, title, dateLabel }: Addo
               className="text-sm"
             />
           </div>
+          {/* Champ OBLIGATOIRE — nom résidence/villa pour la sécurité. */}
+          <div className="col-span-2 rounded-lg border-2 border-gold-300 bg-gold-50/60 p-2.5">
+            <Label htmlFor={`${idPrefix}-place`} className="text-xs text-charcoal font-medium">
+              🏡 {l.placeName} *
+            </Label>
+            <Input
+              id={`${idPrefix}-place`}
+              value={state.placeName}
+              onChange={e => state.setPlaceName(e.target.value)}
+              placeholder={l.placeNamePlaceholder}
+              className="mt-1 text-sm bg-white"
+              maxLength={160}
+              required
+            />
+            <p className="text-[11px] text-charcoal/60 mt-1">{l.placeNameHint}</p>
+          </div>
         </div>
       )}
     </div>

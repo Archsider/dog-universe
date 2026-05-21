@@ -25,6 +25,7 @@ export function useFormState(initialSelectedPets: string[]) {
   const [taxiGoDate, setTaxiGoDate] = useState('');
   const [taxiGoTime, setTaxiGoTime] = useState('');
   const [taxiGoAddress, setTaxiGoAddress] = useState('');
+  const [taxiGoPlaceName, setTaxiGoPlaceName] = useState('');
   const [taxiGoLat, setTaxiGoLat] = useState<number | null>(null);
   const [taxiGoLng, setTaxiGoLng] = useState<number | null>(null);
   const [geolocatingGo, setGeolocatingGo] = useState(false);
@@ -34,6 +35,7 @@ export function useFormState(initialSelectedPets: string[]) {
   const [taxiReturnDate, setTaxiReturnDate] = useState('');
   const [taxiReturnTime, setTaxiReturnTime] = useState('');
   const [taxiReturnAddress, setTaxiReturnAddress] = useState('');
+  const [taxiReturnPlaceName, setTaxiReturnPlaceName] = useState('');
   const [taxiReturnLat, setTaxiReturnLat] = useState<number | null>(null);
   const [taxiReturnLng, setTaxiReturnLng] = useState<number | null>(null);
   const [geolocatingReturn, setGeolocatingReturn] = useState(false);
@@ -43,6 +45,9 @@ export function useFormState(initialSelectedPets: string[]) {
   const [taxiDate, setTaxiDate] = useState('');
   const [taxiTime, setTaxiTime] = useState('');
   const [pickupAddress, setPickupAddress] = useState('');
+  // Nom résidence/villa/n° appart — OBLIGATOIRE. Le GPS Nominatim n'est pas
+  // assez précis ; ce nom est ce que la sécurité demande au chauffeur.
+  const [pickupPlaceName, setPickupPlaceName] = useState('');
   const [pickupLat, setPickupLat] = useState<number | null>(null);
   const [pickupLng, setPickupLng] = useState<number | null>(null);
   const [geolocating, setGeolocating] = useState(false);
@@ -61,6 +66,7 @@ export function useFormState(initialSelectedPets: string[]) {
       date: taxiGoDate, setDate: setTaxiGoDate,
       time: taxiGoTime, setTime: setTaxiGoTime,
       address: taxiGoAddress, setAddress: setTaxiGoAddress,
+      placeName: taxiGoPlaceName, setPlaceName: setTaxiGoPlaceName,
       lat: taxiGoLat, setLat: setTaxiGoLat,
       lng: taxiGoLng, setLng: setTaxiGoLng,
       geolocating: geolocatingGo, setGeolocating: setGeolocatingGo,
@@ -70,6 +76,7 @@ export function useFormState(initialSelectedPets: string[]) {
       date: taxiReturnDate, setDate: setTaxiReturnDate,
       time: taxiReturnTime, setTime: setTaxiReturnTime,
       address: taxiReturnAddress, setAddress: setTaxiReturnAddress,
+      placeName: taxiReturnPlaceName, setPlaceName: setTaxiReturnPlaceName,
       lat: taxiReturnLat, setLat: setTaxiReturnLat,
       lng: taxiReturnLng, setLng: setTaxiReturnLng,
       geolocating: geolocatingReturn, setGeolocating: setGeolocatingReturn,
@@ -79,6 +86,7 @@ export function useFormState(initialSelectedPets: string[]) {
       date: taxiDate, setDate: setTaxiDate,
       time: taxiTime, setTime: setTaxiTime,
       pickupAddress, setPickupAddress,
+      pickupPlaceName, setPickupPlaceName,
       pickupLat, setPickupLat, pickupLng, setPickupLng,
       geolocating, setGeolocating,
       dropoffAddress, setDropoffAddress,

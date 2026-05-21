@@ -118,12 +118,14 @@ export default function NewBookingPage() {
       for (const addon of [taxiGo, taxiReturn]) {
         if (!addon.enabled) continue;
         if (!addon.date || !addon.time || !addon.address) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
+        if (!addon.placeName.trim()) { toast({ title: l.placeNameRequired, variant: 'destructive' }); return false; }
         if (!isValidTaxiDate(addon.date)) { toast({ title: l.sundayNotAllowed, variant: 'destructive' }); return false; }
         if (!isValidTaxiTime(addon.time)) { toast({ title: l.invalidTime, variant: 'destructive' }); return false; }
       }
     }
     if (step === 3 && bookingType === 'PET_TAXI') {
       if (!taxi.date || !taxi.time || !taxi.pickupAddress || !taxi.dropoffAddress) { toast({ title: l.fillAllFields, variant: 'destructive' }); return false; }
+      if (!taxi.pickupPlaceName.trim()) { toast({ title: l.placeNameRequired, variant: 'destructive' }); return false; }
       if (!isValidTaxiDate(taxi.date)) { toast({ title: l.sundayNotAllowed, variant: 'destructive' }); return false; }
       if (!isValidTaxiTime(taxi.time)) { toast({ title: l.invalidTime, variant: 'destructive' }); return false; }
     }
@@ -139,6 +141,9 @@ export default function NewBookingPage() {
     }
     if (bookingType === 'PET_TAXI' && (!taxi.date || !taxi.time || !taxi.pickupAddress || !taxi.dropoffAddress)) {
       toast({ title: l.fillAllFields, variant: 'destructive' }); setStep(3); return;
+    }
+    if (bookingType === 'PET_TAXI' && !taxi.pickupPlaceName.trim()) {
+      toast({ title: l.placeNameRequired, variant: 'destructive' }); setStep(3); return;
     }
     setSubmitting(true);
     try {
@@ -227,7 +232,7 @@ export default function NewBookingPage() {
             locale={locale} l={l} bookingType={bookingType}
             selectedPetObjects={selectedPetObjects}
             checkIn={boarding.checkIn} checkOut={boarding.checkOut} nights={nights}
-            taxiType={taxi.type} pickupAddress={taxi.pickupAddress} dropoffAddress={taxi.dropoffAddress}
+            taxiType={taxi.type} pickupAddress={taxi.pickupAddress} pickupPlaceName={taxi.pickupPlaceName} dropoffAddress={taxi.dropoffAddress}
             priceItems={priceItems} total={total}
           />
         )}
