@@ -15,10 +15,15 @@ function getRatelimiter() {
   const redis = new Redis({ url, token });
 
   return {
-    // Auth endpoints: 10 attempts per 15 minutes per IP
+    // Auth endpoints: 30 attempts per 15 minutes per IP.
+    // Bumped from 10 (2026-05-21) — the sole operator was locked out of login
+    // when the client auto-retried `/api/auth/callback/credentials` (~1 req/17s).
+    // 30/15min is still a hard cap against credential brute-force (bcrypt cost
+    // + 250ms response floor make it useless at this rate) but leaves room for
+    // a flaky re-auth loop on a single office IP.
     auth: new Ratelimit({
       redis,
-      limiter: Ratelimit.slidingWindow(10, '15 m'),
+      limiter: Ratelimit.slidingWindow(30, '15 m'),
       prefix: 'rl:auth',
     }),
     // TOTP endpoints (setup / verify-setup / disable / validate) :
@@ -90,12 +95,15 @@ function getRatelimiter() {
     }),
     // Tier 2 hardening (2026-05-09) — granular buckets for sensitive routes:
     //
-    // payment: 5 / 60 min — POST /api/invoices/[id]/payments. Recording a
-    // payment is a high-value comptable operation; brute-force or accidental
-    // double-submits should be hard-capped per user.
+    // payment: 60 / 60 min — POST /api/invoices/[id]/payments.
+    // Bumped from 5 (2026-05-21) — 5/h locked the sole founder out mid-billing
+    // session ("Too many requests" while recording legitimate payments). The
+    // double-payment / overpayment guard lives in recordPayment (server-side),
+    // NOT in this bucket — so a higher cap is safe. 60/h is per-user (composite
+    // key) and still bounds a runaway retry loop or a leaked admin token.
     payment: new Ratelimit({
       redis,
-      limiter: Ratelimit.slidingWindow(5, '60 m'),
+      limiter: Ratelimit.slidingWindow(60, '60 m'),
       prefix: 'rl:payment',
     }),
     // invoiceCreate: 20 / 60 min — POST /api/admin/invoices and the future

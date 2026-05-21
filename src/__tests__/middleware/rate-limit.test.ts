@@ -13,7 +13,7 @@ import {
  * a sensitive route to the generic adminMutation (300/h) bucket.
  */
 describe('rate-limit route → bucket mapping', () => {
-  describe('payment bucket (5 / 60 min)', () => {
+  describe('payment bucket (60 / 60 min)', () => {
     it('routes /api/invoices/{id}/payments to payment bucket', () => {
       expect(getDynamicLimitBucket('/api/invoices/abc123/payments')).toBe('payment');
     });
