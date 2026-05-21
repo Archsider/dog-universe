@@ -96,7 +96,8 @@
       "register": "إنشاء حساب",
       "errors": {
         "invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
-        "accountDisabled": "هذا الحساب معطل"
+        "accountDisabled": "هذا الحساب معطل",
+        "tooManyAttempts": "محاولات تسجيل دخول كثيرة جدًا. يرجى الانتظار بضع دقائق قبل المحاولة مرة أخرى."
       }
     },
     "register": {

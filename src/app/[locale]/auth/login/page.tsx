@@ -59,7 +59,11 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(t('errors.invalidCredentials'));
+        // A 429 from the rate-limit middleware was previously masked as
+        // "invalid credentials" → the user kept retrying (thinking they
+        // fat-fingered the password), staying locked out and hammering the
+        // bucket every ~20 s. Surface the real cause so they WAIT instead.
+        setError(result.status === 429 ? t('errors.tooManyAttempts') : t('errors.invalidCredentials'));
         setLoading(false);
         return;
       }
