@@ -96,7 +96,8 @@
       "register": "Create an account",
       "errors": {
         "invalidCredentials": "Invalid email or password",
-        "accountDisabled": "This account is disabled"
+        "accountDisabled": "This account is disabled",
+        "tooManyAttempts": "Too many sign-in attempts. Please wait a few minutes before trying again (no need to keep clicking)."
       }
     },
     "register": {

@@ -96,7 +96,8 @@
       "register": "Créer un compte",
       "errors": {
         "invalidCredentials": "Email ou mot de passe incorrect",
-        "accountDisabled": "Ce compte est désactivé"
+        "accountDisabled": "Ce compte est désactivé",
+        "tooManyAttempts": "Trop de tentatives de connexion. Patientez quelques minutes avant de réessayer (inutile de recliquer)."
       }
     },
     "register": {
