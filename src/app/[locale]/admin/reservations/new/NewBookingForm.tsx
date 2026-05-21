@@ -23,7 +23,7 @@ import {
   calculateTaxiPrice,
   type PricingSettings,
 } from '@/lib/pricing-rules';
-import type { ClientLite, InitialStatus, Species, Translations, WalkInPet } from './_components/types';
+import type { ClientLite, InitialStatus, PetLite, Species, Translations, WalkInPet } from './_components/types';
 import { ClientSection } from './_components/ClientSection';
 import { PetsSection } from './_components/PetsSection';
 import { DatesSection } from './_components/DatesSection';
@@ -52,6 +52,13 @@ const L: Record<'fr' | 'en', Translations> = {
     cat: 'Chat',
     dob: 'Date de naissance (optionnel)',
     breed: 'Race (optionnel)',
+    addPetForClient: 'Ajouter un animal à ce client',
+    confirmAddPet: "Ajouter l'animal",
+    addingPet: 'Ajout…',
+    petAddedSuccess: 'Animal ajouté',
+    dobRequiredLabel: 'Date de naissance *',
+    dobRequiredPet: 'La date de naissance est obligatoire.',
+    petNameRequiredMsg: "Le nom de l'animal est obligatoire.",
     serviceSection: 'Service',
     boarding: 'Pension',
     taxi: 'Pet Taxi',
@@ -106,6 +113,13 @@ const L: Record<'fr' | 'en', Translations> = {
     cat: 'Cat',
     dob: 'Date of birth (optional)',
     breed: 'Breed (optional)',
+    addPetForClient: 'Add a pet for this client',
+    confirmAddPet: 'Add pet',
+    addingPet: 'Adding…',
+    petAddedSuccess: 'Pet added',
+    dobRequiredLabel: 'Date of birth *',
+    dobRequiredPet: 'Date of birth is required.',
+    petNameRequiredMsg: 'Pet name is required.',
     serviceSection: 'Service',
     boarding: 'Boarding',
     taxi: 'Pet Taxi',
@@ -151,6 +165,9 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
   const t = (L as Record<string, Translations>)[locale] ?? L.fr;
 
   // ── Client ────────────────────────────────────────────────────────────
+  // Local copy of the client list so a pet created inline (for a client who
+  // had none) is reflected immediately without a full page refresh.
+  const [clientList, setClientList] = useState<ClientLite[]>(clients);
   const [walkInMode, setWalkInMode] = useState(false);
   const [search, setSearch] = useState('');
   const [clientId, setClientId] = useState('');
@@ -183,7 +200,16 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
   // children where needed).
   const effectiveIsOpenEnded = isOpenEnded && initialStatus !== 'COMPLETED';
 
-  const selectedClient = clients.find((c) => c.id === clientId) ?? null;
+  const selectedClient = clientList.find((c) => c.id === clientId) ?? null;
+
+  // A pet was just created for the selected client → inject it into the local
+  // list and auto-select it so the operator can submit straight away.
+  function handlePetCreated(pet: PetLite) {
+    setClientList((prev) =>
+      prev.map((c) => (c.id === clientId ? { ...c, pets: [...c.pets, pet] } : c)),
+    );
+    setSelectedPetIds((prev) => (prev.includes(pet.id) ? prev : [...prev, pet.id]));
+  }
 
   const calendarSpecies: Species = useMemo(() => {
     if (walkInMode) return walkInPets[0]?.species ?? 'DOG';
@@ -318,7 +344,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
     <form onSubmit={handleSubmit} className="space-y-6">
       <ClientSection
         t={t}
-        clients={clients}
+        clients={clientList}
         walkInMode={walkInMode}
         setWalkInMode={setWalkInMode}
         search={search}
@@ -338,6 +364,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
         togglePet={togglePet}
         walkInPets={walkInPets}
         setWalkInPets={setWalkInPets}
+        onPetCreated={handlePetCreated}
       />
 
       {/* Service section — small, kept inline */}
