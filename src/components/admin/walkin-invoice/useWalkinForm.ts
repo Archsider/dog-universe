@@ -16,6 +16,13 @@ function newItemId(): string {
   return `it_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().replace(/-/g, '');
+  }
+  return `walkin_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
+}
+
 /** Today in Casa, formatted as YYYY-MM-DD for the <input type="date"> default. */
 export function todayCasaYmd(): string {
   const { year, month, day } = casablancaYMD(new Date());
@@ -47,6 +54,11 @@ export interface UseWalkinFormResult {
   setClientId: (id: string) => void;
   anonName: string;
   setAnonName: (n: string) => void;
+  // New-client mode (creates a persistent walk-in User)
+  newClientName: string;
+  setNewClientName: (n: string) => void;
+  newClientPhone: string;
+  setNewClientPhone: (p: string) => void;
 
   // Step 2
   items: WalkinItem[];
@@ -73,6 +85,11 @@ export interface UseWalkinFormResult {
   step1Valid: boolean;
   step2Valid: boolean;
   step3Valid: boolean;
+
+  // Stable idempotency key for THIS form session — reused across retries
+  // so a network blip + re-submit returns the replay instead of creating
+  // a duplicate paid invoice. Rotated on each modal open.
+  idempotencyKey: string;
 }
 
 export function useWalkinForm(open: boolean): UseWalkinFormResult {
@@ -82,6 +99,8 @@ export function useWalkinForm(open: boolean): UseWalkinFormResult {
   const [clientMode, setClientMode] = useState<ClientMode>('existing');
   const [clientId, setClientId] = useState<string>('');
   const [anonName, setAnonName] = useState<string>('');
+  const [newClientName, setNewClientName] = useState<string>('');
+  const [newClientPhone, setNewClientPhone] = useState<string>('');
 
   // Step 2
   const [items, setItems] = useState<WalkinItem[]>([makeInitialItem()]);
@@ -90,6 +109,11 @@ export function useWalkinForm(open: boolean): UseWalkinFormResult {
   const [paymentDate, setPaymentDate] = useState<string>(todayCasaYmd());
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [notes, setNotes] = useState<string>('');
+
+  // One stable idempotency key per form session (bug fix : the api-client
+  // used to mint a fresh key on every call, so a retry after a lost
+  // response created a 2nd paid invoice). Rotated on modal open below.
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => newIdempotencyKey());
 
   // Submit
   const [submitting, setSubmitting] = useState(false);
@@ -108,6 +132,8 @@ export function useWalkinForm(open: boolean): UseWalkinFormResult {
       setClientMode('existing');
       setClientId('');
       setAnonName('');
+      setNewClientName('');
+      setNewClientPhone('');
       setItems([makeInitialItem()]);
       setPaymentDate(todayCasaYmd());
       setPaymentMethod('CASH');
@@ -115,6 +141,9 @@ export function useWalkinForm(open: boolean): UseWalkinFormResult {
       setSubmitting(false);
       setError(null);
       setConfirming(false);
+      // Fresh idempotency key for the next session — a brand-new invoice,
+      // not a replay of the previous one.
+      setIdempotencyKey(newIdempotencyKey());
     }
   }, [open]);
 
@@ -124,7 +153,14 @@ export function useWalkinForm(open: boolean): UseWalkinFormResult {
   }, [items]);
 
   // Validation flags
-  const step1Valid = clientMode === 'existing' ? !!clientId : true;
+  // existing → a client must be picked. new → a name is required (phone
+  // optional, but if filled must be a valid Moroccan number — mirror of the
+  // server regex in /api/admin/walkin-clients). anonymous → always valid.
+  const newPhoneValid = !newClientPhone.trim() || /^(\+212|0)[5-7]\d{8}$/.test(newClientPhone.replace(/\s/g, ''));
+  const step1Valid =
+    clientMode === 'existing' ? !!clientId
+    : clientMode === 'new' ? newClientName.trim().length > 0 && newPhoneValid
+    : true;
   const step2Valid = useMemo(() => {
     if (items.length === 0) return false;
     if (items.some((it) => !it.description.trim() || it.quantity <= 0)) return false;
@@ -157,9 +193,11 @@ export function useWalkinForm(open: boolean): UseWalkinFormResult {
   return {
     step, setStep, confirming, setConfirming,
     clientMode, setClientMode, clientId, setClientId, anonName, setAnonName,
+    newClientName, setNewClientName, newClientPhone, setNewClientPhone,
     items, addItem, removeItem, updateItem, total,
     paymentDate, setPaymentDate, paymentMethod, setPaymentMethod, notes, setNotes,
     submitting, setSubmitting, error, setError,
     step1Valid, step2Valid, step3Valid,
+    idempotencyKey,
   };
 }

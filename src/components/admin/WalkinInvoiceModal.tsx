@@ -60,8 +60,36 @@ export default function WalkinInvoiceModal({ locale }: Props) {
     form.setError(null);
     form.setSubmitting(true);
     try {
+      // "New client" mode : create (or de-dupe by phone) a persistent
+      // walk-in User first, then attach the invoice to its id. Falls back
+      // to an explicit error if creation fails — never silently anonymise.
+      let resolvedClientId: string | null = form.clientMode === 'existing' ? form.clientId : null;
+      if (form.clientMode === 'new') {
+        const res = await fetch('/api/admin/walkin-clients', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: form.newClientName.trim(),
+            phone: form.newClientPhone.trim() || null,
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          form.setError((j as { error?: string }).error || 'CLIENT_CREATE_FAILED');
+          form.setSubmitting(false);
+          return;
+        }
+        const created = await res.json();
+        resolvedClientId = created.id as string;
+        if (!resolvedClientId) {
+          form.setError('CLIENT_CREATE_FAILED');
+          form.setSubmitting(false);
+          return;
+        }
+      }
+
       const body: WalkinInvoiceBody = {
-        clientId: form.clientMode === 'existing' ? form.clientId : null,
+        clientId: resolvedClientId,
         clientName: form.clientMode === 'anonymous' && form.anonName.trim() ? form.anonName.trim() : null,
         paymentDate: new Date(`${form.paymentDate}T12:00:00+01:00`).toISOString(),
         paymentMethod: form.paymentMethod,
@@ -77,7 +105,7 @@ export default function WalkinInvoiceModal({ locale }: Props) {
         })),
         notes: form.notes.trim() || null,
       };
-      const result = await createWalkinInvoice(body);
+      const result = await createWalkinInvoice(body, { idempotencyKey: form.idempotencyKey });
       if (!result.ok) {
         form.setError(result.error.code || 'UNKNOWN_ERROR');
         form.setSubmitting(false);
@@ -160,6 +188,10 @@ export default function WalkinInvoiceModal({ locale }: Props) {
                   onClientIdChange={form.setClientId}
                   anonName={form.anonName}
                   onAnonNameChange={form.setAnonName}
+                  newClientName={form.newClientName}
+                  onNewClientNameChange={form.setNewClientName}
+                  newClientPhone={form.newClientPhone}
+                  onNewClientPhoneChange={form.setNewClientPhone}
                 />
               )}
               {form.step === 2 && (
@@ -193,6 +225,8 @@ export default function WalkinInvoiceModal({ locale }: Props) {
                   clientLabel={
                     form.clientMode === 'existing'
                       ? (fr ? 'Client existant sélectionné' : 'Existing client selected')
+                      : form.clientMode === 'new'
+                      ? (form.newClientName.trim() + (form.newClientPhone.trim() ? ` · ${form.newClientPhone.trim()}` : '') + (fr ? ' (nouveau)' : ' (new)'))
                       : form.anonName.trim() || (fr ? 'Anonyme' : 'Anonymous')
                   }
                   itemCount={form.items.length}
