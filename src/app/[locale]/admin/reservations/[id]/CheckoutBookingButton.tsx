@@ -44,8 +44,10 @@ export default function CheckoutBookingButton({ bookingId, locale }: CheckoutBoo
       setError(
         code === 'END_BEFORE_START'
           ? t('La date doit être après le début du séjour', 'End must be after start')
-          : code === 'NOT_OPEN_ENDED'
-          ? t("Ce séjour n'est pas ouvert", 'Booking is not open-ended')
+          : code === 'NOT_IN_PROGRESS'
+          ? t("Ce séjour n'est pas en cours (déjà clôturé ou annulé).", 'Stay is not in progress (already closed or cancelled).')
+          : code === 'VERSION_CONFLICT'
+          ? t('Le séjour a été modifié entre-temps. Rouvrez la fiche et réessayez.', 'The stay changed meanwhile. Reopen and retry.')
           : t('Échec de la clôture', 'Checkout failed'),
       );
     } finally {

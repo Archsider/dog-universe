@@ -113,10 +113,10 @@ export default function CloseStayDialog({ open, onClose, booking, pricing, local
       setError(
         code === 'END_BEFORE_START'
           ? fr ? 'La date doit être après le début du séjour' : 'End must be after start'
-          : code === 'NOT_OPEN_ENDED'
-          ? booking.isOpenEnded
-            ? fr ? 'Erreur d\'état' : 'State error'
-            : fr ? 'Ce séjour n\'est pas ouvert' : 'Stay is not open-ended'
+          : code === 'NOT_IN_PROGRESS'
+          ? fr ? 'Ce séjour n\'est pas en cours (déjà clôturé ou annulé).' : 'Stay is not in progress (already closed or cancelled).'
+          : code === 'VERSION_CONFLICT'
+          ? fr ? 'Le séjour a été modifié entre-temps. Rouvrez la fiche et réessayez.' : 'The stay changed meanwhile. Reopen and retry.'
           : fr ? 'Échec de la clôture' : 'Checkout failed',
       );
     } finally {
@@ -164,12 +164,14 @@ export default function CloseStayDialog({ open, onClose, booking, pricing, local
             type="datetime-local"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            disabled={!booking.isOpenEnded || submitting}
+            disabled={submitting}
             className="w-full border border-ivory-200 rounded-md px-3 py-2 text-sm disabled:bg-ivory-50 disabled:text-gray-500"
           />
           {!booking.isOpenEnded && (
             <p className="text-xs text-gray-400 mt-1">
-              {fr ? 'Date connue à la réservation — non modifiable.' : 'Locked at booking — not editable.'}
+              {fr
+                ? 'Ajustez si la sortie réelle diffère. Le montant reste celui de la facture.'
+                : 'Adjust if the real exit differs. The amount stays the invoiced one.'}
             </p>
           )}
         </div>
