@@ -163,7 +163,7 @@ export default function QueueMonitorClient({ locale, queues, redisError }: Props
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-charcoal">
             {isFr ? 'File de traitement asynchrone' : 'Async Job Queues'}

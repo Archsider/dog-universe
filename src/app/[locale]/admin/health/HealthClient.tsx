@@ -68,7 +68,7 @@ export default function HealthClient({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-serif font-semibold text-charcoal">
             {isFr ? 'Santé du système' : 'System Health'}

@@ -161,7 +161,7 @@ export default function DiagnosticsClient({ locale, sessionEmail }: { locale: st
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <Activity className="h-6 w-6 text-[#C4974A]" />
           <h1 className="text-2xl font-semibold text-charcoal">
