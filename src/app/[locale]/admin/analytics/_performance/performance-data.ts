@@ -48,12 +48,13 @@ export interface PerformanceData {
 const MONTH_LABELS_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
 const MONTH_FULL_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 
-// Brand palette (bronze gold dominant). Mirrors the brief.
+// Brand palette — bronze gold dominant, then distinct warm/cool accents so
+// the four categories stay legible (the old palette was 3 greys → washed out).
 const CAT_META: { key: PerfCategory['key']; labelFr: string; color: string }[] = [
-  { key: 'boarding', labelFr: 'Pension', color: '#B8842D' },
-  { key: 'croquettes', labelFr: 'Croquettes', color: '#5F5E5A' },
-  { key: 'taxi', labelFr: 'Taxi', color: '#888780' },
-  { key: 'grooming', labelFr: 'Toilettage', color: '#B4B2A9' },
+  { key: 'boarding', labelFr: 'Pension', color: '#B8842D' },     // bronze gold
+  { key: 'croquettes', labelFr: 'Croquettes', color: '#C25E3A' },// terracotta
+  { key: 'taxi', labelFr: 'Taxi', color: '#3E7CB1' },            // deep blue
+  { key: 'grooming', labelFr: 'Toilettage', color: '#8A6BA3' },  // muted purple
 ];
 
 function monthEntry(rows: MonthlyEntry[], monthIndex0: number): MonthlyEntry {
