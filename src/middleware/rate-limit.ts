@@ -207,6 +207,7 @@ export const RATE_LIMITED_ROUTES_ANY_METHOD: Record<string, 'rgpd' | 'geocode'> 
   '/api/user/export': 'rgpd',          // GET — full DB read
   '/api/user/anonymize': 'rgpd',       // POST — transactional write
   '/api/geocode/reverse': 'geocode',   // GET — proxies Nominatim (1 req/s fair use)
+  '/api/geocode/search': 'geocode',    // GET — proxies Nominatim search (autocomplete)
 };
 
 // Routes dynamiques (avec [params]) — match par suffixe de path
