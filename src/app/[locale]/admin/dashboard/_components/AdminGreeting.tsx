@@ -6,8 +6,9 @@
 //
 // Source : Wave 6 (Admin classe mondiale, Feature #1).
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import GreetingHeader from '@/components/shared/GreetingHeader';
+import InPensionPopover from './InPensionPopover';
 
 interface InitialProps {
   firstName: string;
@@ -46,15 +47,35 @@ function salutation(hour: number, locale: string): string {
   return fr ? 'Bonsoir' : ar ? 'مساء الخير' : 'Good evening';
 }
 
-function buildSubtitle(s: { locale: string; arrivalsToday: number; inPension: number; pending: number }): string {
+function renderSubtitle(s: { locale: string; arrivalsToday: number; inPension: number; pending: number }): ReactNode {
   const fr = s.locale === 'fr';
   const ar = s.locale === 'ar';
-  const parts: string[] = [];
-  if (s.arrivalsToday > 0) parts.push(fr ? `${s.arrivalsToday} arrivée${s.arrivalsToday > 1 ? 's' : ''} aujourd'hui` : ar ? `${s.arrivalsToday} وصول اليوم` : `${s.arrivalsToday} arrival${s.arrivalsToday > 1 ? 's' : ''} today`);
-  if (s.inPension > 0)     parts.push(fr ? `${s.inPension} dans nos murs` : ar ? `${s.inPension} داخل البنسيون` : `${s.inPension} on site`);
-  if (s.pending > 0)       parts.push(fr ? `${s.pending} à valider` : ar ? `${s.pending} في الانتظار` : `${s.pending} to validate`);
-  if (parts.length === 0)  return fr ? 'Pension calme aujourd\'hui ✨' : ar ? 'هادئ اليوم ✨' : 'Quiet day in the pension ✨';
-  return parts.join(' · ');
+  const parts: ReactNode[] = [];
+  if (s.arrivalsToday > 0) {
+    parts.push(
+      <span key="arrivals">
+        {fr ? `${s.arrivalsToday} arrivée${s.arrivalsToday > 1 ? 's' : ''} aujourd'hui` : ar ? `${s.arrivalsToday} وصول اليوم` : `${s.arrivalsToday} arrival${s.arrivalsToday > 1 ? 's' : ''} today`}
+      </span>,
+    );
+  }
+  // "X dans nos murs" is interactive → hover/tap opens the gold guest list.
+  if (s.inPension > 0) {
+    parts.push(<InPensionPopover key="in-pension" count={s.inPension} locale={s.locale} />);
+  }
+  if (s.pending > 0) {
+    parts.push(
+      <span key="pending">
+        {fr ? `${s.pending} à valider` : ar ? `${s.pending} في الانتظار` : `${s.pending} to validate`}
+      </span>,
+    );
+  }
+  if (parts.length === 0) {
+    return fr ? 'Pension calme aujourd\'hui ✨' : ar ? 'هادئ اليوم ✨' : 'Quiet day in the pension ✨';
+  }
+  // Join with gold middots, keeping each part a distinct node.
+  return parts.flatMap((node, i) =>
+    i === 0 ? [node] : [<span key={`sep-${i}`} className="px-1.5 text-[#C4974A]/40">·</span>, node],
+  );
 }
 
 export default function AdminGreeting({ firstName, locale, arrivalsToday, inPension, pending }: InitialProps) {
@@ -104,7 +125,7 @@ export default function AdminGreeting({ firstName, locale, arrivalsToday, inPens
       <GreetingHeader
         salutation={salutation(hourCasa(now), locale)}
         firstName={firstName}
-        subtitle={buildSubtitle({ locale, ...live })}
+        subtitle={renderSubtitle({ locale, ...live })}
         variant="light"
       />
     </div>
