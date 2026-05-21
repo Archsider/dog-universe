@@ -123,7 +123,7 @@ export function RestoreResultDialog({ isFr, result, onClose }: ResultProps) {
                       </p>
                     </div>
                   </div>
-                  <div className="border-t border-ivory-200 pt-3 max-h-64 overflow-y-auto">
+                  <div className="border-t border-ivory-200 pt-3 max-h-64 overflow-auto">
                     <table className="w-full text-xs">
                       <thead className="text-charcoal/50">
                         <tr>

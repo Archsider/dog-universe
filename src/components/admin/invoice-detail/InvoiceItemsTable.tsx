@@ -12,6 +12,7 @@ export function InvoiceItemsView({ invoice, isFr }: { invoice: InvoiceData; isFr
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
         {isFr ? 'Lignes de facture' : 'Line items'}
       </p>
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-ivory-100">
@@ -49,6 +50,7 @@ export function InvoiceItemsView({ invoice, isFr }: { invoice: InvoiceData; isFr
           </tr>
         </tfoot>
       </table>
+      </div>
       <p className="mt-3 pt-3 border-t border-ivory-100 text-center text-xs text-gray-400 italic">
         Dog Universe Marrakech — {isFr ? 'Merci de votre confiance 🐾' : 'Thank you for your trust 🐾'}
       </p>

@@ -202,6 +202,7 @@ export default async function StatusPage() {
         {incidents.length === 0 ? (
           <p style={{ color: '#6b7280', fontStyle: 'italic' }}>Aucun incident enregistré sur 30 jours.</p>
         ) : (
+          <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>
@@ -236,6 +237,7 @@ export default async function StatusPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 
