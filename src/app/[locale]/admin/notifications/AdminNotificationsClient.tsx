@@ -83,7 +83,7 @@ export default function AdminNotificationsClient({ initialNotifications, locale 
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
           {unreadCount > 0 && (

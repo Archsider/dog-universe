@@ -51,7 +51,7 @@ export default async function AdminAnimalsPage(props: PageProps) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
         <h1 className="text-2xl font-serif font-bold text-charcoal">{l.title}</h1>
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">{pets.length}</span>
