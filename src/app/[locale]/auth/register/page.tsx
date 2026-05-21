@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
@@ -38,6 +38,10 @@ export default function RegisterPage() {
   const t = useTranslations('auth.register');
   const locale = useLocale();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Parrainage Royal — captured from /sponsor/[token] landing redirect.
+  // Forwarded to /api/register so the Referral row is created in the same tx.
+  const sponsorToken = searchParams?.get('sponsor') ?? null;
 
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', password: '', confirmPassword: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -84,6 +88,7 @@ export default function RegisterPage() {
           phone: form.phone.trim(),
           password: form.password,
           language: locale,
+          sponsorToken: sponsorToken ?? undefined,
         }),
       });
 

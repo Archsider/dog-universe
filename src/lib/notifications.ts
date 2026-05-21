@@ -65,3 +65,7 @@ export {
   createEndStayReportNotification,
   notifyAdminsNewClient,
 } from './notifications/misc';
+
+export {
+  createReferralRewardedNotification,
+} from './notifications/referral';

@@ -414,6 +414,30 @@ async function runStatusSideEffectsImpl(args: RunStatusSideEffectsArgs) {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+
+    // Parrainage Royal — reward the sponsor (if any) on the referee's 1st
+    // COMPLETED booking. Fail-soft : a glitch here never blocks the
+    // status transition. Notifs to both parties are fired post-commit.
+    try {
+      const { rewardReferralIfApplicable } = await import('@/lib/referral');
+      const { createReferralRewardedNotification } = await import('@/lib/notifications');
+      const reward = await rewardReferralIfApplicable(booking.clientId);
+      if (reward.rewarded && reward.sponsorId && reward.refereeId) {
+        // Sponsor + referee both notified.  The notif helper is bilingual
+        // and silently swallows failures (we don't want a notif glitch
+        // to surface as a booking transition error).
+        await Promise.allSettled([
+          createReferralRewardedNotification(reward.sponsorId, 'sponsor'),
+          createReferralRewardedNotification(reward.refereeId, 'referee'),
+        ]);
+      }
+    } catch (err) {
+      logger.error('booking-referral', 'reward_failed', {
+        refereeId: booking.clientId,
+        bookingId: booking.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   } else if (newStatus === 'IN_PROGRESS') {
     await createBookingInProgressNotification(
       booking.clientId,

@@ -5,6 +5,7 @@ import { logAction, LOG_ACTIONS } from '@/lib/log';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { notifyAdminsNewClient } from '@/lib/notifications';
 import { registerSchema, formatZodError } from '@/lib/validation';
+import { createReferralFromToken } from '@/lib/referral';
 import { APP_URL } from '@/lib/config';
 import { logger } from '@/lib/logger';
 
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json(formatZodError(parsed.error), { status: 400 });
     }
-    const { firstName, lastName, email, phone, password, language } = parsed.data;
+    const { firstName, lastName, email, phone, password, language, sponsorToken } = parsed.data;
     const name = `${firstName} ${lastName}`;
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -46,6 +47,21 @@ export async function POST(request: Request) {
           isOverride: false,
         },
       });
+
+      // Parrainage Royal — wire the referral row in the same tx so a
+      // crash mid-flow doesn't leave an orphan user without their sponsor
+      // attribution.  Fail-soft : a bogus / self-referral / duplicate
+      // token just skips, the user is still created.
+      if (sponsorToken) {
+        try {
+          await createReferralFromToken(
+            { refereeId: newUser.id, refereeEmail: newUser.email, token: sponsorToken },
+            tx,
+          );
+        } catch {
+          /* swallow — never block the registration */
+        }
+      }
 
       return newUser;
     });

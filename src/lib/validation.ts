@@ -50,6 +50,16 @@ export const registerSchema = z.object({
     .transform(v => (v === '' ? null : v ?? null)),
   password: strongPassword(),
   language: z.enum(['fr', 'en']).optional(),
+  // Optional Parrainage Royal token captured from /sponsor/[token] landing.
+  // Verified server-side ; bogus value just skips referral creation.
+  sponsorToken: z
+    .string()
+    .max(256)
+    .transform(v => v.trim())
+    .or(z.literal(''))
+    .or(z.null())
+    .or(z.undefined())
+    .transform(v => (v === '' ? null : v ?? null)),
 });
 
 // Demande de reset password (email seulement, anti-enumeration)
