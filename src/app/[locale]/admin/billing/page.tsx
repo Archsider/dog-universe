@@ -121,7 +121,7 @@ export default async function AdminBillingPage(props: PageProps) {
       orderBy, skip: (page - 1) * limit, take: limit,
     }),
     prisma.invoice.count({ where: listWhere }),
-    prisma.invoice.aggregate({ where: monthWhere, _sum: { amount: true } }),
+    prisma.invoice.aggregate({ where: monthWhere, _sum: { amount: true, paidAmount: true } }),
     // KPI "Total Encaissé" — Sémantique B canonical (cash basis pure).
     // Reads the MV via getMonthlyRevenueByCategory which excludes only
     // CANCELLED + paidAmount = 0 ; aligns with the comptable's bank
@@ -139,8 +139,17 @@ export default async function AdminBillingPage(props: PageProps) {
   ]);
 
   const kpiTotalBilled = toNumber(billedAgg._sum.amount ?? 0);
+  // CAISSE (Sémantique B) — cash réellement encaissé ce mois (paymentDate).
+  // Réconcilie avec le relevé bancaire. Base DIFFÉRENTE de l'AR ci-dessous :
+  // ne JAMAIS diviser l'un par l'autre (audit 2026-05-21 — c'était le bug du
+  // "% du facturé" qui comparait caisse / engagement).
   const kpiCollected = collectedTotal;
-  const kpiRemaining = Math.max(0, kpiTotalBilled - kpiCollected);
+  // ENGAGEMENT / AR — déjà réglé (cumul, tous mois) sur les factures du mois,
+  // et vrai impayé. Même ensemble que la liste → Facturé = Réglé + Reste.
+  // Le ratio de recouvrement (Réglé / Facturé) est ainsi calculé sur le MÊME
+  // ensemble (cohérent), contrairement à l'ancien Encaissé-caisse / Facturé.
+  const kpiSettled = toNumber(billedAgg._sum.paidAmount ?? 0);
+  const kpiRemaining = Math.max(0, kpiTotalBilled - kpiSettled);
   const paymentMethodStats = methodGrouped
     .filter(g => (g._count.id ?? 0) > 0)
     .map(g => ({ paymentMethod: g.paymentMethod, _sum: { amount: toNumber(g._sum.amount ?? 0) }, _count: { id: g._count.id ?? 0 } }));
@@ -183,7 +192,7 @@ export default async function AdminBillingPage(props: PageProps) {
         </div>
       </div>
       <MonthNavigator locale={locale} currentMonth={selectedMonth} />
-      <BillingKpis locale={locale} kpiTotalBilled={kpiTotalBilled} kpiCollected={kpiCollected} kpiRemaining={kpiRemaining} invoiceCount={invoiceCount} />
+      <BillingKpis locale={locale} kpiTotalBilled={kpiTotalBilled} kpiCollected={kpiCollected} kpiSettled={kpiSettled} kpiRemaining={kpiRemaining} invoiceCount={invoiceCount} />
       <BillingPaymentMethods locale={locale} paymentMethodStats={paymentMethodStats} activeMethod={paymentMethod} buildQS={buildQS} />
       <BillingStatusFilters locale={locale} status={status} buildQS={buildQS} />
       <BillingInvoicesTable
