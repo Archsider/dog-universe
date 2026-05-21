@@ -71,6 +71,15 @@ function getRatelimiter() {
       limiter: Ratelimit.slidingWindow(5, '60 m'),
       prefix: 'rl:rgpd',
     }),
+    // Concierge Chat IA — 15 msg / 60 min / user. Each message hits
+    // Anthropic (~$0.0001), so the cap is dollar-bounded too. Composite
+    // IP+userId key in middleware ensures authenticated users get per-user
+    // limit (no VPN bypass).
+    concierge: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(15, '60 m'),
+      prefix: 'rl:concierge',
+    }),
     // Addon requests (PET_TAXI / TOILETTAGE / AUTRE on an existing booking):
     // 10 per hour per IP. The route already caps 3 per booking; this prevents
     // an attacker from spam-creating bookings just to spam addon-request.
@@ -143,7 +152,7 @@ function getRatelimiter() {
 export const limiter = getRatelimiter();
 
 // Bucket name for routes that should be rate-limited only on POST (default).
-type ExactBucket = 'auth' | 'totp' | 'passwordReset' | 'bookings' | 'uploads';
+type ExactBucket = 'auth' | 'totp' | 'passwordReset' | 'bookings' | 'uploads' | 'concierge';
 
 export const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
   '/api/auth/signin': 'auth',
@@ -166,6 +175,8 @@ export const RATE_LIMITED_ROUTES: Record<string, ExactBucket> = {
   // to create a fresh bucket for two rarely-used endpoints.
   '/api/admin/diagnostics/test-email': 'passwordReset',
   '/api/admin/diagnostics/test-sms': 'passwordReset',
+  // Concierge Chat IA — Anthropic-backed, dollar-bounded
+  '/api/concierge/chat': 'concierge',
 };
 
 type DynamicBucket =

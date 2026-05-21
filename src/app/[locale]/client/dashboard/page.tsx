@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { MemberCard } from '@/components/shared/MemberCard';
 import { ReferralWidget } from '@/components/client/ReferralWidget';
+import { ConciergeChat } from '@/components/client/ConciergeChat';
 import { Grade } from '@/lib/loyalty';
 import { PawPrint, Calendar, FileText, History, CheckCircle, AlertCircle } from 'lucide-react';
 import { formatDateShort, formatMAD } from '@/lib/utils';
@@ -214,6 +215,14 @@ export default async function ClientDashboard({ params }: { params: Promise<Para
           Lazy-loads its own status via /api/referrals on mount. Hidden for
           walk-in clients (their session won't reach this page anyway). */}
       <ReferralWidget locale={locale === 'en' ? 'en' : 'fr'} />
+
+      {/* Concierge Chat IA — floating bubble bottom-right. Self-gated by
+          the `concierge-chat` feature flag ; renders nothing if disabled.
+          ANTHROPIC_API_KEY must be set in prod for the route to respond. */}
+      <ConciergeChat
+        locale={locale === 'en' ? 'en' : 'fr'}
+        clientFirstName={(session.user.name ?? '').split(/\s+/)[0] || null}
+      />
 
       {/* Year Wrapped link (Feature #7 Wave 5) — visible only for clients
           with at least 1 stay this year ; otherwise the page would be a
