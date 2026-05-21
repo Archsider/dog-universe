@@ -87,7 +87,79 @@ export function BillingInvoicesTable({
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto">
+          {/* Mobile : carte par facture (le tableau 780px forçait un scroll
+              horizontal qui cachait les boutons d'action — bug audit
+              2026-05-21). Desktop ≥ sm : tableau classique. */}
+          <ul className="sm:hidden divide-y divide-[rgba(196,151,74,0.1)]">
+            {invoices.map(inv => {
+              const invAmount = Number(inv.amount);
+              const invPaidAmount = Number(inv.paidAmount);
+              const remaining = Math.max(0, invAmount - invPaidAmount);
+              const serviceLabel =
+                inv.serviceType === 'PRODUCT_SALE'
+                  ? (isFr ? 'Croquettes / Produits' : 'Croquettes / Products')
+                  : inv.booking?.serviceType === 'BOARDING'
+                    ? (isFr ? 'Pension' : 'Boarding')
+                    : inv.booking?.serviceType === 'PET_TAXI'
+                      ? (isFr ? 'Taxi animalier' : 'Pet Taxi')
+                      : inv.booking?.serviceType ?? '';
+              const statusStyle = STATUS_STYLE[inv.status] ?? STATUS_STYLE['CANCELLED'];
+              return (
+                <li
+                  key={inv.id}
+                  id={`invoice-card-${inv.id}`}
+                  className={`p-4 ${highlightInvoiceId === inv.id ? 'invoice-row-highlight' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0">
+                      <span className="font-mono text-sm font-bold text-[#9A7235]">{inv.invoiceNumber}</span>
+                      {serviceLabel && <p className="text-xs text-[#8A7E75] mt-0.5">{serviceLabel}</p>}
+                      <Link href={`/${locale}/admin/clients/${inv.client.id}`} className="block text-sm text-[#2A2520] font-medium mt-1 truncate">
+                        {inv.clientDisplayName ?? inv.client.name}
+                      </Link>
+                      <p className="text-[11px] text-[#8A7E75] mt-0.5">{formatDate(inv.issuedAt, locale)}</p>
+                    </div>
+                    <span
+                      className="shrink-0 inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold border whitespace-nowrap"
+                      style={{ backgroundColor: statusStyle.bg, color: statusStyle.color, borderColor: statusStyle.border }}
+                    >
+                      {statusLbls[inv.status] || inv.status}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 text-sm mb-3">
+                    <span className="font-bold text-[#2A2520]">{formatMAD(inv.amount as number)}</span>
+                    {remaining > 0
+                      ? <span className="text-xs font-semibold text-[#B45309]">{isFr ? 'Reste' : 'Due'} {formatMAD(remaining)}</span>
+                      : invPaidAmount > 0
+                        ? <span className="text-xs font-semibold text-[#1A7A45]">{isFr ? 'Payée' : 'Paid'}</span>
+                        : null}
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <Link href={`/${locale}/admin/invoices/${inv.id}`} title={isFr ? 'Fiche facture' : 'Invoice details'} className="p-2 text-[#8A7E75] hover:text-[#C4974A] rounded border border-[rgba(196,151,74,0.2)]">
+                      <Pencil className="h-4 w-4" />
+                    </Link>
+                    <a href={`/api/invoices/${inv.id}/pdf?view=1`} target="_blank" rel="noopener noreferrer" title={isFr ? 'Aperçu' : 'Preview'} className="p-2 text-[#8A7E75] hover:text-[#C4974A] rounded border border-[rgba(196,151,74,0.2)]">
+                      <Eye className="h-4 w-4" />
+                    </a>
+                    <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener noreferrer" title={isFr ? 'Télécharger' : 'Download'} className="p-2 text-[#8A7E75] hover:text-[#C4974A] rounded border border-[rgba(196,151,74,0.2)]">
+                      <Download className="h-4 w-4" />
+                    </a>
+                    <ResendInvoiceButton invoiceId={inv.id} locale={locale} />
+                    <PaymentModal
+                      invoiceId={inv.id}
+                      currentStatus={inv.status}
+                      locale={locale}
+                      invoiceAmount={invAmount}
+                      paidAmount={invPaidAmount}
+                      isWalkIn={inv.client.isWalkIn}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="overflow-x-auto hidden sm:block">
             <table className="w-full min-w-[780px]">
               <thead>
                 <tr className="border-b border-[rgba(196,151,74,0.1)]">

@@ -77,7 +77,12 @@ export default async function AdminLayout({ children, params }: LayoutProps) {
             <QuickActionsBar locale={locale} />
           </div>
         </header>
-        <main className="relative flex-1 p-4 lg:p-8 bg-[#FEFCF9] min-h-screen">
+        <main className="relative flex-1 p-4 lg:p-8 bg-[#FEFCF9] min-h-screen overflow-x-hidden">
+          {/* overflow-x-hidden : empêche un élément large isolé de créer un
+              scroll horizontal de page qui clippe badges/boutons au bord
+              droit (bug audit mobile 2026-05-21). Les tableaux qui ont besoin
+              de scroll (billing, maintenance) ont leur propre overflow-x-auto
+              interne — non affecté par ce clip parent. */}
           {/* Zellige discret — classe CSS (pas inline style : banni par style-src-attr none CSP) */}
           <div aria-hidden="true" className="absolute inset-0 pointer-events-none zellige-bg" />
           <SessionWatcher loginPath={`/${locale}/auth/login`} />

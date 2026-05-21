@@ -42,6 +42,11 @@ function buildCsp(): { nonce: string; csp: string } {
       ? "connect-src 'self' https://*.supabase.co https://supabase.co wss://*.supabase.co https://*.tile.openstreetmap.org https://*.sentry.io ws://localhost:* http://localhost:*"
       : "connect-src 'self' https://*.supabase.co https://supabase.co wss://*.supabase.co https://*.tile.openstreetmap.org https://*.sentry.io",
     "frame-ancestors 'none'",
+    // frame-src : autorise l'iframe de preview carto OpenStreetMap embed
+    // (TaxiNavigationButton). Sans cette directive, default-src 'self'
+    // bloque l'iframe cross-origin → carte cassée (bug audit 2026-05-21,
+    // régression silencieuse depuis le switch img→iframe commit baf95e4).
+    "frame-src 'self' https://www.openstreetmap.org",
     "base-uri 'self'",
     "form-action 'self'",
     'report-uri /api/csp-report',
