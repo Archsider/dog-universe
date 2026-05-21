@@ -13,7 +13,11 @@ interface Props {
 }
 
 export function UpcomingCards({ locale, snapshot, labels }: Props) {
-  const { arrivals, departures, recentDepartures, totalArrivals, totalDepartures, totalRecentDepartures } = snapshot;
+  const { arrivals, departures, totalArrivals, totalDepartures } = snapshot;
+  // Defensive : a stale ISR snapshot rendered just after deploy may predate
+  // these fields → guard against undefined.map crashing the whole dashboard.
+  const recentDepartures = snapshot.recentDepartures ?? [];
+  const totalRecentDepartures = snapshot.totalRecentDepartures ?? 0;
   const fr = locale === 'fr' ? 'fr' : 'en';
 
   return (
