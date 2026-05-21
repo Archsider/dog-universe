@@ -19,6 +19,8 @@ import { toNumber } from '@/lib/decimal';
 // AnalyticsCharts is a 'use client' component that already lazy-loads its
 // Recharts sub-components internally via next/dynamic — no outer wrapper needed.
 import AnalyticsCharts from './AnalyticsCharts';
+import { getPerformanceData } from './_performance/performance-data';
+import PerformanceDashboard from './_performance/PerformanceDashboard';
 
 // Cache ISR — analytics agrègent sur tout le mois ; recalculer toutes les 60 s
 // suffit. Mutations comptables (paiement, statut booking) invalident via
@@ -291,6 +293,8 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
     { month: 'long', year: 'numeric' },
   );
 
+  const perfData = await getPerformanceData(currentYear, currentMonthNum);
+
   return (
     <div>
       <div className="mb-6">
@@ -300,6 +304,12 @@ export default async function AdminAnalyticsPage({ params }: PageProps) {
         <p className="text-sm text-charcoal/50 mt-0.5 capitalize">
           {locale === 'en' ? 'Overview' : 'Vue d\'ensemble'} — {monthName}
         </p>
+      </div>
+
+      {/* Wave — PerformanceDashboard classe-mondiale (KPI + chart 12 mois +
+          détail catégories). Additif au-dessus des blocs existants. */}
+      <div className="mb-8">
+        <PerformanceDashboard fr={locale !== 'en'} data={perfData} />
       </div>
 
       <AnalyticsCharts
