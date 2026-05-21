@@ -1,6 +1,7 @@
 import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { notDeleted } from '@/lib/prisma-soft';
 import { todayCasaYmd } from '@/lib/daily-reports';
 import DailyReportsClient from './DailyReportsClient';
 
@@ -20,6 +21,23 @@ export default async function DailyReportsPage({ params, searchParams }: PagePro
   const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date)
     ? sp.date
     : todayCasaYmd();
+
+  // Compte les animaux réellement présents en pension (IN_PROGRESS BOARDING)
+  // — utilisé pour différencier le vrai empty state ("aucun animal") du
+  // cas "les brouillons n'ont pas encore été générés par le cron 16h".
+  // Le screenshot 2026-05-21 01:45 montrait l'empty state alors qu'il y
+  // avait des animaux — la copy était trompeuse.
+  const petsInPensionCount = await prisma.bookingPet.count({
+    where: {
+      booking: {
+        ...notDeleted(),
+        status: 'IN_PROGRESS',
+        serviceType: 'BOARDING',
+      },
+      // eslint-disable-next-line dog-universe/no-inline-deletedAt-null -- OK: nested filter on Pet, notDeleted() targets top-level queries
+      pet: { deletedAt: null },
+    },
+  });
 
   const reports = await prisma.dailyReport.findMany({
     where: { date },
@@ -70,11 +88,15 @@ export default async function DailyReportsPage({ params, searchParams }: PagePro
     sentAt: r.sentAt ? r.sentAt.toISOString() : null,
   }));
 
+  const isSuperadmin = session.user.role === 'SUPERADMIN';
+
   return (
     <DailyReportsClient
       locale={locale}
       date={date}
       initialReports={serialized}
+      petsInPensionCount={petsInPensionCount}
+      canTriggerCron={isSuperadmin}
     />
   );
 }

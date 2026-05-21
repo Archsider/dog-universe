@@ -106,9 +106,12 @@ export default function MaintenanceClient({ locale, initialDiagnostics }: Props)
             const loading = busy === a.key;
             return (
               <div key={a.key} className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+                {/* Mobile: stack button below text (sinon le bouton est
+                    poussé off-screen par la description longue).
+                    Desktop: layout inline horizontal. */}
                 <div className="flex items-start gap-3">
                   <Icon className="h-5 w-5 text-emerald-700 shrink-0 mt-0.5" />
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <p className="font-semibold text-charcoal text-sm">{a.label}</p>
                     <p className="text-xs text-charcoal/60 mt-0.5">{a.desc}</p>
                     {r && (
@@ -117,15 +120,15 @@ export default function MaintenanceClient({ locale, initialDiagnostics }: Props)
                       </p>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void runAction(a.key, false)}
-                    disabled={loading}
-                    className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
-                  >
-                    {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Lancer'}
-                  </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => void runAction(a.key, false)}
+                  disabled={loading}
+                  className="mt-3 w-full sm:w-auto sm:float-right inline-flex items-center justify-center gap-1.5 px-4 py-2 sm:py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Lancer'}
+                </button>
               </div>
             );
           })}
@@ -139,8 +142,10 @@ export default function MaintenanceClient({ locale, initialDiagnostics }: Props)
           <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
           <span className="text-[10px] text-red-700/70">irréversibles — confirmation requise</span>
         </div>
-        <div className="rounded-xl border border-red-200 bg-red-50/30 overflow-hidden">
-          <table className="w-full text-sm">
+        {/* overflow-x-auto sur mobile pour que le bouton "Purger" reste
+            accessible — sinon il sort de l'écran sur narrow viewport. */}
+        <div className="rounded-xl border border-red-200 bg-red-50/30 overflow-x-auto">
+          <table className="w-full min-w-[600px] text-sm">
             <thead className="bg-red-50">
               <tr>
                 <th className="text-left px-4 py-2 text-[10px] uppercase tracking-wider font-semibold text-red-900">Table</th>
