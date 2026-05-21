@@ -16,16 +16,17 @@ import { withSpan } from '@/lib/observability';
 
 const walkInSchema = z.object({
   name: z.string().trim().min(1).max(100),
-  // Normalise avant de valider : retire espaces / tirets / points / parenthèses
-  // ("06 12 34 56 78", "06-12-34-56-78" → "0612345678") pour tolérer la saisie
-  // réelle. Empty après nettoyage = pas de téléphone (autorisé). Le format reste
-  // strict (mobile marocain 0/+212 + 5/6/7 + 8 chiffres).
+  // Walk-in phone = simple contact note (pas un login, pas de portail). On
+  // tolère TOUT numéro plausible : étranger, fixe, ou marocain — pas de
+  // format imposé qui bloquerait la création du client. Normalise (strip
+  // séparateurs) puis accepte 6–15 chiffres avec un éventuel "+". Empty =
+  // pas de téléphone. La dédup utilise les 8 derniers chiffres.
   phone: z
     .string()
     .trim()
     .max(40)
     .transform((s) => s.replace(/[\s.\-()]/g, ''))
-    .refine((s) => s === '' || /^(\+212|0)[5-7]\d{8}$/.test(s), 'INVALID_PHONE_FORMAT')
+    .refine((s) => s === '' || /^\+?\d{6,15}$/.test(s), 'INVALID_PHONE_FORMAT')
     .transform((s) => (s === '' ? null : s))
     .optional()
     .nullable(),

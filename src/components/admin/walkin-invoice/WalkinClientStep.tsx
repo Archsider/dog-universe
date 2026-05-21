@@ -32,7 +32,11 @@ export default function WalkinClientStep({
   anonName, onAnonNameChange,
   newClientName, onNewClientNameChange, newClientPhone, onNewClientPhoneChange,
 }: Props) {
-  const phoneValid = !newClientPhone.trim() || /^(\+212|0)[5-7]\d{8}$/.test(newClientPhone.replace(/\s/g, ''));
+  // Loose : a walk-in phone is a contact note, not a login. Tolerate foreign /
+  // landline / unusual formats — mirror of the server regex in
+  // /api/admin/walkin-clients. 6–15 digits with an optional leading "+".
+  const phoneValid =
+    !newClientPhone.trim() || /^\+?\d{6,15}$/.test(newClientPhone.replace(/[\s.\-()]/g, ''));
 
   return (
     <div className="space-y-4">
@@ -94,7 +98,7 @@ export default function WalkinClientStep({
             />
             {!phoneValid && (
               <p className="text-xs text-red-600 mt-1">
-                {fr ? 'Format invalide (ex : 0612345678 ou +212612345678).' : 'Invalid format (e.g. 0612345678 or +212612345678).'}
+                {fr ? 'Numéro invalide — 6 à 15 chiffres, "+" optionnel.' : 'Invalid number — 6 to 15 digits, optional "+".'}
               </p>
             )}
           </div>
