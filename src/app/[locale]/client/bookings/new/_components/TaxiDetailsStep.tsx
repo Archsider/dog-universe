@@ -127,6 +127,23 @@ export function TaxiDetailsStep({ locale, l, today, taxi }: TaxiDetailsStepProps
           />
         </div>
       </div>
+      {/* Champ OBLIGATOIRE — nom résidence/villa que la sécurité demande au
+          chauffeur. Le GPS Nominatim n'est pas assez précis. */}
+      <div className="rounded-lg border-2 border-gold-300 bg-gold-50/60 p-3">
+        <Label htmlFor="pickup-place" className="text-charcoal font-medium">
+          🏡 {l.placeName} *
+        </Label>
+        <Input
+          id="pickup-place"
+          value={taxi.pickupPlaceName}
+          onChange={e => taxi.setPickupPlaceName(e.target.value)}
+          placeholder={l.placeNamePlaceholder}
+          className="mt-1 bg-white"
+          maxLength={160}
+          required
+        />
+        <p className="text-xs text-charcoal/60 mt-1.5">{l.placeNameHint}</p>
+      </div>
       <div>
         <Label htmlFor="dropoff">{l.dropoff} *</Label>
         <Input id="dropoff" value={taxi.dropoffAddress} onChange={e => taxi.setDropoffAddress(e.target.value)} placeholder="Aéroport Menara" className="mt-1" />

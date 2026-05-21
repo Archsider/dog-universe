@@ -12,6 +12,20 @@ export interface BuildPayloadCtx {
   taxi: TaxiState;
 }
 
+/**
+ * Préfixe l'adresse géocodée par le nom écrit de la résidence/villa (que la
+ * sécurité demande au chauffeur). Le nom passe en TÊTE pour être visible
+ * dans la nav admin, le SMS chauffeur et la fiche réservation.
+ * Format : "Résidence Al Andalous, Villa 12 — Gueliz, Marrakech".
+ */
+function withPlaceName(placeName: string | undefined, address: string): string | null {
+  const name = (placeName ?? '').trim();
+  const addr = (address ?? '').trim();
+  if (name && addr) return `${name} — ${addr}`;
+  if (name) return name;
+  return addr || null;
+}
+
 export function buildBookingPayload(ctx: BuildPayloadCtx): Record<string, unknown> {
   const { bookingType, selectedPets, total, dogPets, boarding, taxiGo, taxiReturn, taxi } = ctx;
   const body: Record<string, unknown> = {
@@ -40,13 +54,13 @@ export function buildBookingPayload(ctx: BuildPayloadCtx): Record<string, unknow
     body.taxiGoEnabled = taxiGo.enabled;
     body.taxiGoDate = taxiGo.enabled ? taxiGo.date : null;
     body.taxiGoTime = taxiGo.enabled ? taxiGo.time : null;
-    body.taxiGoAddress = taxiGo.enabled ? taxiGo.address : null;
+    body.taxiGoAddress = taxiGo.enabled ? withPlaceName(taxiGo.placeName, taxiGo.address) : null;
     body.taxiGoLat = taxiGo.enabled ? taxiGo.lat : null;
     body.taxiGoLng = taxiGo.enabled ? taxiGo.lng : null;
     body.taxiReturnEnabled = taxiReturn.enabled;
     body.taxiReturnDate = taxiReturn.enabled ? taxiReturn.date : null;
     body.taxiReturnTime = taxiReturn.enabled ? taxiReturn.time : null;
-    body.taxiReturnAddress = taxiReturn.enabled ? taxiReturn.address : null;
+    body.taxiReturnAddress = taxiReturn.enabled ? withPlaceName(taxiReturn.placeName, taxiReturn.address) : null;
     body.taxiReturnLat = taxiReturn.enabled ? taxiReturn.lat : null;
     body.taxiReturnLng = taxiReturn.enabled ? taxiReturn.lng : null;
     body.taxiAddonPrice = (taxiGo.enabled ? TAXI_ADDON_PRICE : 0) + (taxiReturn.enabled ? TAXI_ADDON_PRICE : 0);
@@ -56,11 +70,12 @@ export function buildBookingPayload(ctx: BuildPayloadCtx): Record<string, unknow
     body.taxiType = taxi.type;
     body.taxiPickupLat = taxi.pickupLat;
     body.taxiPickupLng = taxi.pickupLng;
-    body.taxiPickupAddress = taxi.pickupAddress || null;
+    const pickupFull = withPlaceName(taxi.pickupPlaceName, taxi.pickupAddress);
+    body.taxiPickupAddress = pickupFull;
     body.taxiDropoffAddress = taxi.dropoffAddress || null;
     const notes = [
       taxi.notes,
-      taxi.pickupAddress && `Départ: ${taxi.pickupAddress}`,
+      pickupFull && `Départ: ${pickupFull}`,
       taxi.dropoffAddress && `Arrivée: ${taxi.dropoffAddress}`,
     ].filter(Boolean).join(' | ');
     body.notes = notes || undefined;
