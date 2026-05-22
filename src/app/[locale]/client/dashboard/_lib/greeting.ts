@@ -50,11 +50,14 @@ export function buildGreeting(ctx: GreetingContext): Greeting {
   const fr = ctx.locale === 'fr';
   const ar = ctx.locale === 'ar';
 
-  let salutation: string;
-  if (h < 5)       salutation = fr ? 'Bonne nuit' : ar ? 'تصبح على خير' : 'Good night';
-  else if (h < 12) salutation = fr ? 'Bonjour'    : ar ? 'صباح الخير'   : 'Good morning';
-  else if (h < 18) salutation = fr ? 'Bon après-midi' : ar ? 'مساء الخير' : 'Good afternoon';
-  else             salutation = fr ? 'Bonsoir'    : ar ? 'مساء الخير'   : 'Good evening';
+  // Registre hospitalité premium : accueil chaleureux en journée, « Bonsoir »
+  // élégant le soir/la nuit. « Bon après-midi » / « Bonne nuit » sont des
+  // formules pour PARTIR → jamais pour accueillir. Le sous-titre porte le
+  // contexte (séjour à venir, etc.), la salutation porte la chaleur.
+  const daytime = h >= 5 && h < 18;
+  const salutation = daytime
+    ? (fr ? 'Ravi de vous revoir' : ar ? 'أهلاً بعودتك' : 'Welcome back')
+    : (fr ? 'Bonsoir' : ar ? 'مساء الخير' : 'Good evening');
 
   // Contextual subtitle — priority :
   //   1. Next booking with countdown
