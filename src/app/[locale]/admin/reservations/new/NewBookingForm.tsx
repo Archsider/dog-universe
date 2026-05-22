@@ -35,6 +35,17 @@ type Props = {
   pricing: PricingSettings;
 };
 
+// Per-form-session idempotency key (Stripe pattern). Stable for the lifetime
+// of this mounted form so a retry after a lost response dedups to the same
+// booking instead of creating a duplicate ; a fresh visit to /new (remount)
+// gets a new key. Mirrors useWalkinForm's idempotencyKey.
+function genIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().replace(/-/g, '');
+  }
+  return `bk_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
+}
+
 const L: Record<'fr' | 'en', Translations> = {
   fr: {
     clientSection: 'Client',
@@ -195,6 +206,8 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
   const [createInvoice, setCreateInvoice] = useState(true);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Stable per-mount idempotency key (see genIdempotencyKey above).
+  const [idempotencyKey] = useState(genIdempotencyKey);
 
   // COMPLETED is incompatible with open-ended — force off (mirrored in
   // children where needed).
@@ -291,6 +304,7 @@ export function NewBookingForm({ clients, locale, pricing }: Props) {
         createInvoice,
         isOpenEnded: effectiveIsOpenEnded,
         initialStatus,
+        idempotencyKey,
         finalAmount: initialStatus === 'COMPLETED' ? parseFloat(finalAmount) : null,
       };
       if (walkInMode) {
