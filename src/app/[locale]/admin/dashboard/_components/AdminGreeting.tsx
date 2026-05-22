@@ -41,9 +41,12 @@ function hourCasa(d: Date): number {
 function salutation(hour: number, locale: string): string {
   const fr = locale === 'fr';
   const ar = locale === 'ar';
-  if (hour < 5)  return fr ? 'Bonne nuit' : ar ? 'تصبح على خير' : 'Good night';
-  if (hour < 12) return fr ? 'Bonjour'    : ar ? 'صباح الخير'   : 'Good morning';
-  if (hour < 18) return fr ? 'Bon après-midi' : ar ? 'مساء الخير' : 'Good afternoon';
+  // Registre concierge premium : accueil chaleureux en journée, « Bonsoir »
+  // élégant le soir/la nuit. Le français n'a AUCUNE salutation d'après-midi
+  // correcte (« Bon après-midi » est une formule pour PARTIR), donc on
+  // privilégie un accueil — plus classe qu'un « Bonjour » plat.
+  const daytime = hour >= 5 && hour < 18;
+  if (daytime) return fr ? 'Ravi de vous revoir' : ar ? 'أهلاً بعودتك' : 'Welcome back';
   return fr ? 'Bonsoir' : ar ? 'مساء الخير' : 'Good evening';
 }
 
