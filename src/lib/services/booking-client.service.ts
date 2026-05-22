@@ -189,8 +189,21 @@ export async function createBookingTx(args: CreateBookingTxArgs) {
             client: true,
           },
         });
-        if (existing && !existing.deletedAt) {
-          return existing;
+        if (existing) {
+          // Active duplicate (same client + dates + pets within the
+          // idempotency window) → return it ; the request is idempotent.
+          if (!existing.deletedAt) {
+            return existing;
+          }
+          // A SOFT-DELETED booking still occupies this deterministic unique
+          // key (clientId:dates:pets). Release it so an identical booking can
+          // be re-created after the previous one was cancelled/deleted —
+          // otherwise booking.create below throws P2002 on idempotencyKey
+          // (prod bug 2026-05-22 : admin re-creating a deleted résa → 500).
+          await tx.booking.update({
+            where: { id: existing.id },
+            data: { idempotencyKey: null },
+          });
         }
       }
 
