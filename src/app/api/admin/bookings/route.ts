@@ -339,9 +339,15 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
           totalPrice: initialStatus === 'COMPLETED' ? (finalAmount ?? totalPrice) : totalPrice,
           source: 'MANUAL',
           petIds: resolvedPetIds,
-          idempotencyKey: isWalkInClient
-            ? undefined
-            : [resolvedClientId, new Date(startDate).toISOString(), endDate ? new Date(endDate).toISOString() : '', ...([...resolvedPetIds].sort())].join(':'),
+          // Idempotency = per-attempt key (Stripe pattern). Prefer the
+          // form-supplied key (stable per form session → double-submit
+          // dedups, returns the existing booking) ; otherwise a random UUID
+          // (always collision-free). We deliberately DROPPED the old
+          // deterministic natural key (clientId:dates:pets) : it doubled as a
+          // permanent uniqueness constraint and collided with soft-deleted
+          // rows → P2002 on re-create (prod bug 2026-05-22). Duplicate-active
+          // prevention is the capacity check's job, not the idempotency key's.
+          idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
           includeGrooming: false,
           groomingSize: null,
           groomingPrice: 0,

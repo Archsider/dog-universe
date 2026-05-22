@@ -229,6 +229,13 @@ export const adminBookingCreateSchema = z.object({
   // Walk-in initial status: admin picks the entry point for the booking.
   // Defaults to IN_PROGRESS (chien déjà là — cas le plus courant).
   initialStatus: z.enum(['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED']).optional().default('IN_PROGRESS'),
+  // Idempotency key — Stripe-style, generated PER FORM SESSION by the client
+  // (UUID), regenerated after each successful create. Protects against
+  // double-submit (network retry / double-click) WITHOUT being a deterministic
+  // natural key — the latter collided with soft-deleted bookings → P2002
+  // (prod bug 2026-05-22). Optional : a missing key gets a random server-side
+  // UUID (no dedup, but always collision-free).
+  idempotencyKey: z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9_-]+$/).optional(),
   // Required when initialStatus === 'COMPLETED' (retroactive entry with known amount).
   finalAmount: z.number().min(0).max(1_000_000).optional().nullable(),
   // Capacity override — explicit opt-in flag the admin must set to
