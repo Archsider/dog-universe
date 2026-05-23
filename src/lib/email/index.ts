@@ -12,6 +12,7 @@ import { authTemplates } from './auth';
 import { rgpdTemplates } from './rgpd';
 import { stayTemplates } from './stay';
 import { billingTemplates } from './billing';
+import { adminTemplates } from './admin';
 
 // Re-exports — preserve the public API of `@/lib/email`.
 export { sendEmail, escapeHtml } from './shared';
@@ -29,6 +30,7 @@ const allTemplates: Record<string, EmailTemplateBuilder> = {
   ...rgpdTemplates,
   ...stayTemplates,
   ...billingTemplates,
+  ...adminTemplates,
 };
 
 /**

@@ -106,4 +106,5 @@ export const CRON_NAMES = [
   'health-reconciliation',
   'invariants-check',
   'archive-notifications',
+  'morning-digest',
 ] as const;
