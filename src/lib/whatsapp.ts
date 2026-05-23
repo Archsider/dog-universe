@@ -61,6 +61,29 @@ export function toE164(phone: string | null | undefined): string | null {
  */
 export const toE164Morocco = toE164;
 
+interface OverdueInvoiceContext {
+  clientName: string | null | undefined;
+  invoiceNumber: string;
+  /** Pre-formatted remaining amount, e.g. `formatMAD(remaining)`. */
+  amountLabel: string;
+  locale: string;
+}
+
+/**
+ * Soft, professional WhatsApp reminder for an unpaid / partially-paid invoice.
+ * FR/EN parity. Uses the client's first name when available. Pure — the caller
+ * formats the amount (via `formatMAD`) so the currency rendering stays consistent.
+ */
+export function buildOverdueInvoiceMessage(ctx: OverdueInvoiceContext): string {
+  const first = (ctx.clientName ?? '').trim().split(/\s+/)[0] || '';
+  if (ctx.locale === 'en') {
+    const hi = first ? `Hello ${first}` : 'Hello';
+    return `${hi}, a friendly reminder about invoice ${ctx.invoiceNumber} — ${ctx.amountLabel} remaining — at Dog Universe. Feel free to reach out with any questions. Thank you!`;
+  }
+  const bonjour = first ? `Bonjour ${first}` : 'Bonjour';
+  return `${bonjour}, petit rappel concernant votre facture ${ctx.invoiceNumber} — reste ${ctx.amountLabel} — chez Dog Universe. N'hésitez pas si vous avez la moindre question. Merci !`;
+}
+
 /**
  * Builds a wa.me deep-link for WhatsApp.
  * Returns null if `phone` is null/empty/unrecognised — callers should hide

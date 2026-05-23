@@ -115,7 +115,7 @@ export default async function AdminBillingPage(props: PageProps) {
     prisma.invoice.findMany({
       where: listWhere,
       include: {
-        client: { select: { id: true, name: true, email: true, isWalkIn: true } },
+        client: { select: { id: true, name: true, email: true, phone: true, isWalkIn: true } },
         booking: { select: { serviceType: true } },
       },
       orderBy, skip: (page - 1) * limit, take: limit,
