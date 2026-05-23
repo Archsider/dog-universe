@@ -14,7 +14,7 @@ import { logger } from '@/lib/logger';
 // phone number).
 export function normalizePhone(phone: string): string {
   if (phone === 'ADMIN') return phone
-  const clean = phone.replace(/[\s\-\.]/g, '')
+  const clean = phone.replace(/[\s\-.()]/g, '')
   if (clean.startsWith('+')) return clean
   if (clean.startsWith('00')) return '+' + clean.slice(2)
   if (clean.startsWith('0')) return '+212' + clean.slice(1)
@@ -104,6 +104,18 @@ export async function sendSMS(
   }
 
   const phone = normalizePhone(phoneNumber)
+
+  // Garde-fou anti-échec passerelle : ne tente PAS d'envoyer à un numéro
+  // implausible (lettres, vide, trop court/long après normalisation). La
+  // passerelle (SIM marocain) le marquerait "Failed" de toute façon — autant
+  // ne pas le compter comme un envoi et garder les stats propres. E.164 large :
+  // '+' suivi de 8 à 15 chiffres. Couvre les numéros walk-in libres (#221) mal
+  // saisis. Un vrai +212XXXXXXXXX (12 chiffres) passe sans souci.
+  if (phone !== 'ADMIN' && !/^\+\d{8,15}$/.test(phone)) {
+    logger.warn('sms', 'Skipped — implausible phone number', { to: maskPhone(phone) })
+    return false
+  }
+
   const baseUrl = url.replace(/\/+$/, '')
 
   try {
