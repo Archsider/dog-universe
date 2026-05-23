@@ -3,6 +3,8 @@ import { FileText, Download, Eye, Pencil } from 'lucide-react';
 import { formatDate, formatMAD } from '@/lib/utils';
 import PaymentModal from './PaymentModalLazy';
 import ResendInvoiceButton from '@/components/admin/ResendInvoiceButton';
+import WhatsAppButton from '@/components/admin/WhatsAppButton';
+import { buildOverdueInvoiceMessage } from '@/lib/whatsapp';
 
 interface InvoiceRow {
   id: string;
@@ -13,7 +15,7 @@ interface InvoiceRow {
   amount: unknown;
   paidAmount: unknown;
   status: string;
-  client: { id: string; name: string; email: string; isWalkIn: boolean };
+  client: { id: string; name: string; email: string; phone: string | null; isWalkIn: boolean };
   booking: { serviceType: string } | null;
 }
 
@@ -153,6 +155,21 @@ export function BillingInvoicesTable({
                       paidAmount={invPaidAmount}
                       isWalkIn={inv.client.isWalkIn}
                     />
+                    {(inv.status === 'PENDING' || inv.status === 'PARTIALLY_PAID') && (
+                      <span className="p-2 rounded border border-[rgba(196,151,74,0.2)] inline-flex">
+                        <WhatsAppButton
+                          phone={inv.client.phone}
+                          variant="icon"
+                          label={isFr ? 'Relancer sur WhatsApp' : 'Remind on WhatsApp'}
+                          message={buildOverdueInvoiceMessage({
+                            clientName: inv.clientDisplayName ?? inv.client.name,
+                            invoiceNumber: inv.invoiceNumber,
+                            amountLabel: formatMAD(remaining),
+                            locale,
+                          })}
+                        />
+                      </span>
+                    )}
                   </div>
                 </li>
               );
@@ -285,6 +302,21 @@ export function BillingInvoicesTable({
                             paidAmount={invPaidAmount}
                             isWalkIn={inv.client.isWalkIn}
                           />
+                          {(inv.status === 'PENDING' || inv.status === 'PARTIALLY_PAID') && (
+                            <span className="p-1.5 inline-flex" title={isFr ? 'Relancer sur WhatsApp' : 'Remind on WhatsApp'}>
+                              <WhatsAppButton
+                                phone={inv.client.phone}
+                                variant="icon"
+                                label={isFr ? 'Relancer sur WhatsApp' : 'Remind on WhatsApp'}
+                                message={buildOverdueInvoiceMessage({
+                                  clientName: inv.clientDisplayName ?? inv.client.name,
+                                  invoiceNumber: inv.invoiceNumber,
+                                  amountLabel: formatMAD(remaining),
+                                  locale,
+                                })}
+                              />
+                            </span>
+                          )}
                         </div>
                       </td>
                     </tr>
