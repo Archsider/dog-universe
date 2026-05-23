@@ -8,6 +8,7 @@ import Image from 'next/image';
 import { formatDate, formatMAD } from '@/lib/utils';
 import CancelBookingButton from './CancelBookingButton';
 import ReviewButton from '@/components/client/ReviewButton';
+import { RebookButton } from '@/components/client/RebookButton';
 import { notDeleted } from '@/lib/prisma-soft';
 
 interface PageProps {
@@ -282,6 +283,9 @@ export default async function HistoryPage(props: PageProps) {
                   {canCancel && <CancelBookingButton bookingId={booking.id} locale={locale} />}
                   {booking.status === 'COMPLETED' && !booking.review && (
                     <ReviewButton bookingId={booking.id} locale={locale} />
+                  )}
+                  {booking.status === 'COMPLETED' && (
+                    <RebookButton booking={booking} locale={locale} variant="compact" />
                   )}
                 </div>
               </div>

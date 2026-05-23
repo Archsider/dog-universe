@@ -17,9 +17,12 @@ type Props = {
   booking: RebookBooking;
   locale: string;
   label?: string;
+  /** `card` (default) shows the CTA + a pets/service/price subtext line.
+   *  `compact` renders only an inline link — for tight action rows (history). */
+  variant?: 'card' | 'compact';
 };
 
-export function RebookButton({ booking, locale, label }: Props) {
+export function RebookButton({ booking, locale, label, variant = 'card' }: Props) {
   const petIds = booking.bookingPets.map((bp) => bp.pet.id).join(',');
   const petNames = booking.bookingPets.map((bp) => bp.pet.name).join(', ');
 
@@ -31,6 +34,17 @@ export function RebookButton({ booking, locale, label }: Props) {
   const href = `/${locale}/client/bookings/new?petIds=${encodeURIComponent(petIds)}&serviceType=${booking.serviceType}&prefill=1`;
 
   const defaultLabel = locale === 'fr' ? '🔄 Réserver à nouveau' : locale === 'ar' ? '🔄 احجز مجددًا' : '🔄 Book again';
+
+  if (variant === 'compact') {
+    return (
+      <Link
+        href={href}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-gold-600 hover:text-gold-700 whitespace-nowrap"
+      >
+        {label ?? defaultLabel}
+      </Link>
+    );
+  }
 
   return (
     <div className="space-y-2">
