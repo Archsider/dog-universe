@@ -58,13 +58,19 @@ vi.mock('@/lib/logger', () => ({
 vi.mock('@/lib/log', () => ({ logAction: vi.fn() }));
 vi.mock('@/lib/services/booking-errors', () => ({
   BookingError: class BookingError extends Error {
-    constructor(public code: string, message?: string) {
-      super(message ?? code);
+    status: number;
+    payload?: Record<string, unknown>;
+    constructor(public code: string, opts?: { status?: number; message?: string; payload?: Record<string, unknown> }) {
+      super(opts?.message ?? code);
+      this.status = opts?.status
+        ?? (code === 'VERSION_CONFLICT' ? 409 : code === 'NOT_FOUND' ? 404 : code === 'FORBIDDEN' ? 403 : 400);
+      this.payload = opts?.payload;
     }
   },
 }));
 
 import { PATCH } from '@/app/api/admin/bookings/[id]/route';
+import { BookingError } from '@/lib/services/booking-errors';
 
 function makeReq(body: unknown) {
   return new NextRequest('http://localhost/api/admin/bookings/b1', {
@@ -130,6 +136,27 @@ describe('PATCH /api/admin/bookings/[id]', () => {
     );
     expect(mocks.runStatusSideEffects).toHaveBeenCalled();
     expect(mocks.revalidateTag).toHaveBeenCalledWith('admin-counts');
+  });
+
+  it('409 VERSION_CONFLICT when applyStatusUpdate detects a concurrent write', async () => {
+    mocks.auth.mockResolvedValue(adminSession);
+    mocks.prisma.booking.findFirst.mockResolvedValue(baseBooking);
+    mocks.applyStatusUpdate.mockRejectedValueOnce(new BookingError('VERSION_CONFLICT'));
+
+    const res = await PATCH(makeReq({ status: 'CONFIRMED' }), { params: Promise.resolve({ id: 'b1' }) });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('VERSION_CONFLICT');
+    // Side effects must not fire when the write was rejected.
+    expect(mocks.runStatusSideEffects).not.toHaveBeenCalled();
+  });
+
+  it('passes expectedVersion (the read version) to applyStatusUpdate', async () => {
+    mocks.auth.mockResolvedValue(adminSession);
+    mocks.prisma.booking.findFirst.mockResolvedValue({ ...baseBooking, version: 7 });
+    await PATCH(makeReq({ status: 'CONFIRMED' }), { params: Promise.resolve({ id: 'b1' }) });
+    expect(mocks.applyStatusUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ bookingId: 'b1', expectedVersion: 7, status: 'CONFIRMED' }),
+    );
   });
 
   it('400 INVALID_TRANSITION when canTransition returns false', async () => {

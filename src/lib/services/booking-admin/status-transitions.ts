@@ -31,6 +31,7 @@ import { sendEmailNow, sendSmsNow, sendSmsRespectful } from '@/lib/notify-now';
 import { ServiceType } from './constants';
 import { notDeleted } from '@/lib/prisma-soft';
 import { withSpan } from '@/lib/observability';
+import { BookingError } from '@/lib/services/booking-errors';
 import { casablancaDateOnly } from '@/lib/dates-casablanca';
 
 type BookingForStatus = {
@@ -58,24 +59,40 @@ type BookingForStatus = {
 
 export interface ApplyStatusUpdateArgs {
   bookingId: string;
+  /** Version read alongside the booking — the UPDATE is conditional on it so
+   *  two concurrent admins (or a double-click) can't both win (lost update). */
+  expectedVersion: number;
   status?: BookingStatus;
   notes?: string;
   cancellationReason?: string;
 }
 
 export async function applyStatusUpdate(args: ApplyStatusUpdateArgs) {
-  const { bookingId, status, notes, cancellationReason } = args;
+  const { bookingId, expectedVersion, status, notes, cancellationReason } = args;
   return Sentry.startSpan(
     { name: 'db.booking.update', op: 'db', attributes: { bookingId, newStatus: status ?? '' } },
-    () => prisma.booking.update({
-      where: { id: bookingId },
-      data: {
-        ...(status && { status }),
-        ...(notes !== undefined && { notes }),
-        ...(cancellationReason !== undefined && { cancellationReason }),
-        version: { increment: 1 },
-      },
-    }),
+    async () => {
+      // Atomic optimistic lock: the version lives in the WHERE clause, so the
+      // write only lands if nobody bumped the row since we read it. count=0 →
+      // someone raced us → 409 (instead of silently clobbering their change).
+      const res = await prisma.booking.updateMany({
+        where: { id: bookingId, version: expectedVersion },
+        data: {
+          ...(status && { status }),
+          ...(notes !== undefined && { notes }),
+          ...(cancellationReason !== undefined && { cancellationReason }),
+          version: { increment: 1 },
+        },
+      });
+      if (res.count === 0) {
+        throw new BookingError('VERSION_CONFLICT', {
+          message: 'This booking was modified by someone else. Please refresh.',
+        });
+      }
+      const updated = await prisma.booking.findUnique({ where: { id: bookingId } });
+      if (!updated) throw new BookingError('NOT_FOUND');
+      return updated;
+    },
   );
 }
 
