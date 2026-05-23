@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toE164, waLink, buildOverdueInvoiceMessage } from '@/lib/whatsapp';
+import { toE164, waLink, buildOverdueInvoiceMessage, buildBookingContactMessage } from '@/lib/whatsapp';
 
 describe('toE164', () => {
   it('returns null for empty / unusable input', () => {
@@ -57,5 +57,26 @@ describe('buildOverdueInvoiceMessage', () => {
     expect(msg.startsWith('Hello,')).toBe(true);
     expect(msg).toContain('DU-1');
     expect(msg).toContain('50 MAD');
+  });
+});
+
+describe('buildBookingContactMessage', () => {
+  it('uses a status-specific message (FR)', () => {
+    expect(buildBookingContactMessage('Mehdi Bennani', 'CONFIRMED', 'fr')).toContain('confirmée');
+    expect(buildBookingContactMessage('Mehdi', 'IN_PROGRESS', 'fr')).toContain('bonnes mains');
+    expect(buildBookingContactMessage('Mehdi', 'COMPLETED', 'fr')).toContain('merci');
+    expect(buildBookingContactMessage('Mehdi', 'PENDING', 'fr')).toContain('bien reçu');
+  });
+
+  it('uses the first name and EN copy', () => {
+    const msg = buildBookingContactMessage('Sarah Lee', 'CONFIRMED', 'en');
+    expect(msg.startsWith('Hello Sarah')).toBe(true);
+    expect(msg).toContain('confirmed');
+  });
+
+  it('falls back to a neutral greeting on unknown status / blank name', () => {
+    const msg = buildBookingContactMessage(null, 'WAITLIST', 'fr');
+    expect(msg.startsWith('Bonjour,')).toBe(true);
+    expect(msg).toContain('Comment puis-je vous aider');
   });
 });

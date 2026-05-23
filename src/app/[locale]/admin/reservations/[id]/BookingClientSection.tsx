@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import WhatsAppButton from '@/components/admin/WhatsAppButton';
+import { APP_URL } from '@/lib/config';
+import { buildBookingContactMessage } from '@/lib/whatsapp';
 import type { TaxiTripData } from '@/components/shared/TaxiTimeline';
 
 interface BookingClientSectionProps {
@@ -53,14 +55,14 @@ export default function BookingClientSection({
           {showTrackingLink && rawStandalone?.trackingToken ? (
             <WhatsAppButton
               phone={client.phone}
-              message={`Bonjour ${client.name}, suivez votre taxi en temps réel : ${process.env.NEXTAUTH_URL ?? ''}/taxi/${rawStandalone.trackingToken}`}
+              message={`Bonjour ${client.name}, suivez votre taxi en temps réel : ${APP_URL}/${locale}/track/${rawStandalone.trackingToken}`}
               label={locale === 'fr' ? 'Envoyer lien tracking' : 'Send tracking link'}
               variant="full"
             />
           ) : (
             <WhatsAppButton
               phone={client.phone}
-              message={`Bonjour ${client.name}, je vous contacte de la part de Dog Universe. Comment puis-je vous aider ?`}
+              message={buildBookingContactMessage(client.name, bookingStatus, locale)}
               variant="icon"
             />
           )}
