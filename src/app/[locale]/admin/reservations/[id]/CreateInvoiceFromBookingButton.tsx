@@ -36,6 +36,7 @@ export default function CreateInvoiceFromBookingButton({ bookingId, clientId, lo
     confirm: isFr ? 'Générer la facture' : 'Generate invoice',
     success: isFr ? 'Facture créée' : 'Invoice created',
     error: isFr ? 'Erreur' : 'Error',
+    alreadyInvoiced: isFr ? 'Facture déjà existante' : 'Invoice already exists',
     total: isFr ? 'Total TTC' : 'Total',
   };
 
@@ -71,10 +72,22 @@ export default function CreateInvoiceFromBookingButton({ bookingId, clientId, lo
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId, bookingId, items }),
       });
-      if (!res.ok) throw new Error('Failed');
-      toast({ title: l.success, variant: 'success' });
-      setOpen(false);
-      router.refresh();
+      if (res.ok) {
+        toast({ title: l.success, variant: 'success' });
+        setOpen(false);
+        router.refresh();
+        return;
+      }
+      // La réservation a déjà une facture (409) : message clair + refresh pour
+      // afficher la facture en place, plutôt qu'un "Erreur" opaque.
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data?.error === 'BOOKING_ALREADY_INVOICED') {
+        toast({ title: l.alreadyInvoiced, description: data.message, variant: 'destructive' });
+        setOpen(false);
+        router.refresh();
+        return;
+      }
+      toast({ title: l.error, description: data?.message, variant: 'destructive' });
     } catch {
       toast({ title: l.error, variant: 'destructive' });
     } finally {
