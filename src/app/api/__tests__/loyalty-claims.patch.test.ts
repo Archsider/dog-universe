@@ -10,7 +10,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const tx = {
-    loyaltyBenefitClaim: { update: vi.fn() },
+    loyaltyBenefitClaim: { findUnique: vi.fn(), updateMany: vi.fn() },
     notification: { create: vi.fn() },
   };
   return {
@@ -52,13 +52,15 @@ const params = { params: Promise.resolve({ id: 'c1' }) };
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
-  mocks.tx.loyaltyBenefitClaim.update.mockResolvedValue({
+  mocks.tx.loyaltyBenefitClaim.findUnique.mockResolvedValue({
     id: 'c1',
+    status: 'PENDING',
     clientId: 'client-1',
     benefitLabelFr: 'Toilettage offert',
     benefitLabelEn: 'Free grooming',
     client: { id: 'client-1', name: 'Foo', email: 'foo@x.com', language: 'fr', role: 'CLIENT' },
   });
+  mocks.tx.loyaltyBenefitClaim.updateMany.mockResolvedValue({ count: 1 });
 });
 
 describe('PATCH /api/admin/loyalty/claims/[id] — role gate', () => {
@@ -79,9 +81,9 @@ describe('PATCH /api/admin/loyalty/claims/[id] — APPROVED', () => {
   it('creates notification in tx + revalidates admin-counts tag', async () => {
     const res = await PATCH(makeReq({ action: 'APPROVED' }), params);
     expect(res.status).toBe(200);
-    expect(mocks.tx.loyaltyBenefitClaim.update).toHaveBeenCalledWith(
+    expect(mocks.tx.loyaltyBenefitClaim.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'c1' },
+        where: { id: 'c1', status: 'PENDING' },
         data: expect.objectContaining({ status: 'APPROVED', rejectionReason: null }),
       }),
     );
@@ -102,7 +104,7 @@ describe('PATCH /api/admin/loyalty/claims/[id] — REJECTED', () => {
   it('rejects without rejectionReason → 400', async () => {
     const res = await PATCH(makeReq({ action: 'REJECTED' }), params);
     expect(res.status).toBe(400);
-    expect(mocks.tx.loyaltyBenefitClaim.update).not.toHaveBeenCalled();
+    expect(mocks.tx.loyaltyBenefitClaim.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects with too-short rejectionReason → 400', async () => {
@@ -116,7 +118,7 @@ describe('PATCH /api/admin/loyalty/claims/[id] — REJECTED', () => {
       params,
     );
     expect(res.status).toBe(200);
-    expect(mocks.tx.loyaltyBenefitClaim.update).toHaveBeenCalledWith(
+    expect(mocks.tx.loyaltyBenefitClaim.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           status: 'REJECTED',
@@ -124,6 +126,18 @@ describe('PATCH /api/admin/loyalty/claims/[id] — REJECTED', () => {
         }),
       }),
     );
+  });
+});
+
+describe('PATCH /api/admin/loyalty/claims/[id] — already resolved (double-fire guard)', () => {
+  it('returns 409 + no notification when the claim is not PENDING anymore', async () => {
+    // updateMany matches 0 rows (already APPROVED/REJECTED) → ALREADY_RESOLVED.
+    mocks.tx.loyaltyBenefitClaim.updateMany.mockResolvedValueOnce({ count: 0 });
+    const res = await PATCH(makeReq({ action: 'APPROVED' }), params);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('ALREADY_RESOLVED');
+    expect(mocks.tx.notification.create).not.toHaveBeenCalled();
+    expect(mocks.sendEmailNow).not.toHaveBeenCalled();
   });
 });
 

@@ -34,47 +34,57 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     claim = await Sentry.startSpan(
     { name: 'mutation.loyaltyClaim.review', op: 'db', attributes: { claimId: id, action } },
     () => prisma.$transaction(async (tx) => {
-    const updated = await tx.loyaltyBenefitClaim.update({
+    const existing = await tx.loyaltyBenefitClaim.findUnique({
       where: { id },
+      include: { client: { select: { id: true, name: true, email: true, language: true, role: true } } },
+    });
+    if (!existing) throw new Error('CLAIM_NOT_FOUND');
+
+    // L1 cross-role guard: ADMIN cannot review claims belonging to non-CLIENT
+    // users. SUPERADMIN passes through. Checked before any write.
+    if (session.user.role === 'ADMIN' && existing.client.role !== 'CLIENT') {
+      throw new Error('FORBIDDEN_CROSS_ROLE');
+    }
+
+    // Atomic state guard: only a PENDING claim transitions. A double-click
+    // (or approve racing reject) hits count=0 on the 2nd request — so the
+    // notification / email / loyalty side effects never fire twice.
+    const res = await tx.loyaltyBenefitClaim.updateMany({
+      where: { id, status: 'PENDING' },
       data: {
         status: action,
         rejectionReason: reasonClean,
         reviewedBy: session.user.id,
         reviewedAt: new Date(),
       },
-      include: { client: { select: { id: true, name: true, email: true, language: true, role: true } } },
     });
-
-    // L1 cross-role guard: ADMIN cannot review claims belonging to non-CLIENT
-    // users. SUPERADMIN passes through. Done inside the tx so the row update
-    // rolls back if the actor isn't allowed.
-    if (session.user.role === 'ADMIN' && updated.client.role !== 'CLIENT') {
-      throw new Error('FORBIDDEN_CROSS_ROLE');
-    }
+    if (res.count === 0) throw new Error('ALREADY_RESOLVED');
 
     await tx.notification.create({
       data: {
-        userId: updated.clientId,
+        userId: existing.clientId,
         type: 'LOYALTY_UPDATE',
         titleFr: isApproved ? 'Avantage fidélité accordé' : 'Réclamation d\'avantage refusée',
         titleEn: isApproved ? 'Loyalty benefit granted' : 'Benefit claim rejected',
         messageFr: isApproved
-          ? `Votre demande pour « ${updated.benefitLabelFr} » a été acceptée. Notre équipe vous contactera pour la mise en place.`
-          : `Votre demande pour « ${updated.benefitLabelFr} » a été refusée.${reasonClean ? ` Motif : ${reasonClean}` : ''}`,
+          ? `Votre demande pour « ${existing.benefitLabelFr} » a été acceptée. Notre équipe vous contactera pour la mise en place.`
+          : `Votre demande pour « ${existing.benefitLabelFr} » a été refusée.${reasonClean ? ` Motif : ${reasonClean}` : ''}`,
         messageEn: isApproved
-          ? `Your request for "${updated.benefitLabelEn}" has been approved. Our team will contact you shortly.`
-          : `Your request for "${updated.benefitLabelEn}" has been rejected.${reasonClean ? ` Reason: ${reasonClean}` : ''}`,
+          ? `Your request for "${existing.benefitLabelEn}" has been approved. Our team will contact you shortly.`
+          : `Your request for "${existing.benefitLabelEn}" has been rejected.${reasonClean ? ` Reason: ${reasonClean}` : ''}`,
         read: false,
       },
     });
 
-    return updated;
+    return { ...existing, status: action, rejectionReason: reasonClean, reviewedBy: session.user.id };
     }),
   );
   } catch (err) {
-    // L1: surface cross-role rejection as 403 (transaction rolled back).
-    if (err instanceof Error && err.message === 'FORBIDDEN_CROSS_ROLE') {
-      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+    if (err instanceof Error) {
+      // Cross-role rejection / not-found / already-resolved — tx rolled back.
+      if (err.message === 'FORBIDDEN_CROSS_ROLE') return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+      if (err.message === 'CLAIM_NOT_FOUND') return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+      if (err.message === 'ALREADY_RESOLVED') return NextResponse.json({ error: 'ALREADY_RESOLVED' }, { status: 409 });
     }
     throw err;
   }
