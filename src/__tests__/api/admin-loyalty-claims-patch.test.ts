@@ -15,7 +15,8 @@ import type { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
-  txClaimUpdate: vi.fn(),
+  txClaimFindUnique: vi.fn(),
+  txClaimUpdateMany: vi.fn(),
   txNotifCreate: vi.fn(),
   startSpan: vi.fn(async (_attrs: unknown, fn: () => unknown) => fn()),
   invalidateNotifCount: vi.fn(async () => undefined),
@@ -38,7 +39,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
       const tx = {
-        loyaltyBenefitClaim: { update: mocks.txClaimUpdate },
+        loyaltyBenefitClaim: { findUnique: mocks.txClaimFindUnique, updateMany: mocks.txClaimUpdateMany },
         notification: { create: mocks.txNotifCreate },
       };
       return fn(tx);
@@ -61,6 +62,7 @@ const ctx = { params: Promise.resolve({ id: 'claim1' }) };
 
 const baseClaim = {
   id: 'claim1',
+  status: 'PENDING',
   clientId: 'client1',
   benefitLabelFr: 'Toilettage offert',
   benefitLabelEn: 'Free grooming',
@@ -70,7 +72,8 @@ const baseClaim = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue({ user: { id: 'admin1', role: 'ADMIN' } });
-  mocks.txClaimUpdate.mockResolvedValue(baseClaim);
+  mocks.txClaimFindUnique.mockResolvedValue(baseClaim);
+  mocks.txClaimUpdateMany.mockResolvedValue({ count: 1 });
   mocks.txNotifCreate.mockResolvedValue({});
 });
 
@@ -128,8 +131,9 @@ describe('PATCH /api/admin/loyalty/claims/[id] — validation', () => {
       ctx,
     );
     expect(res.status).toBe(200);
-    expect(mocks.txClaimUpdate).toHaveBeenCalledWith(
+    expect(mocks.txClaimUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: { id: 'claim1', status: 'PENDING' },
         data: expect.objectContaining({
           status: 'REJECTED',
           rejectionReason: 'Conditions non remplies',
@@ -141,14 +145,15 @@ describe('PATCH /api/admin/loyalty/claims/[id] — validation', () => {
 
 describe('PATCH /api/admin/loyalty/claims/[id] — cross-role guard (L1)', () => {
   it('returns 403 when ADMIN tries to review a claim of an ADMIN/SUPERADMIN user', async () => {
-    mocks.txClaimUpdate.mockResolvedValueOnce({
+    mocks.txClaimFindUnique.mockResolvedValueOnce({
       ...baseClaim,
       client: { ...baseClaim.client, role: 'ADMIN' },
     });
     const res = await PATCH(makeReq({ action: 'APPROVED' }), ctx);
     expect(res.status).toBe(403);
     expect((await res.json()).error).toBe('FORBIDDEN');
-    // Email + cache invalidation must NOT have been triggered post-rollback.
+    // No write + no email/cache invalidation (guard fires before updateMany).
+    expect(mocks.txClaimUpdateMany).not.toHaveBeenCalled();
     expect(mocks.sendEmailNow).not.toHaveBeenCalled();
     expect(mocks.invalidateNotifCount).not.toHaveBeenCalled();
     expect(mocks.revalidateTag).not.toHaveBeenCalled();
@@ -156,7 +161,7 @@ describe('PATCH /api/admin/loyalty/claims/[id] — cross-role guard (L1)', () =>
 
   it('SUPERADMIN can review any claim (cross-role allowed)', async () => {
     mocks.auth.mockResolvedValueOnce({ user: { id: 'sa1', role: 'SUPERADMIN' } });
-    mocks.txClaimUpdate.mockResolvedValueOnce({
+    mocks.txClaimFindUnique.mockResolvedValueOnce({
       ...baseClaim,
       client: { ...baseClaim.client, role: 'ADMIN' },
     });
@@ -168,7 +173,7 @@ describe('PATCH /api/admin/loyalty/claims/[id] — cross-role guard (L1)', () =>
 describe('PATCH /api/admin/loyalty/claims/[id] — atomicity + side effects', () => {
   it('commits claim update + notification together (both inside the same tx)', async () => {
     await PATCH(makeReq({ action: 'APPROVED' }), ctx);
-    expect(mocks.txClaimUpdate).toHaveBeenCalledTimes(1);
+    expect(mocks.txClaimUpdateMany).toHaveBeenCalledTimes(1);
     expect(mocks.txNotifCreate).toHaveBeenCalledTimes(1);
     // notif content matches APPROVED template
     expect(mocks.txNotifCreate).toHaveBeenCalledWith(
@@ -205,7 +210,7 @@ describe('PATCH /api/admin/loyalty/claims/[id] — atomicity + side effects', ()
   });
 
   it('uses client.language for the email template (en path)', async () => {
-    mocks.txClaimUpdate.mockResolvedValueOnce({
+    mocks.txClaimFindUnique.mockResolvedValueOnce({
       ...baseClaim,
       client: { ...baseClaim.client, language: 'en' },
     });

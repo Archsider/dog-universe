@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth-guards';
 import { prisma } from '@/lib/prisma';
-import { notDeleted } from '@/lib/prisma-soft';
+import { contactable } from '@/lib/prisma-soft';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { APP_URL } from '@/lib/config';
 import { logger } from '@/lib/logger';
@@ -16,12 +16,16 @@ export async function POST(req: NextRequest) {
 
   const { clientId } = await req.json().catch(() => ({}));
 
-  const where = notDeleted({
+  // contactable() = { deletedAt: null, anonymizedAt: null }. RGPD: never email
+  // an anonymized client — they keep a retained/synthetic email but must not be
+  // contacted. The cron version already does this; this manual trigger drifted.
+  const where = {
     role: 'CLIENT' as const,
     isWalkIn: false, // Walk-in clients have no portal — never invite to sign.
     contract: null,
+    ...contactable(),
     ...(clientId ? { id: clientId } : {}),
-  });
+  };
 
   const clients = await prisma.user.findMany({
     where,
