@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   prisma: {
     invoice: { findUnique: vi.fn() },
     payment: { create: vi.fn() },
+    $executeRaw: vi.fn(),
+    $transaction: vi.fn(),
   },
   allocatePayments: vi.fn().mockResolvedValue(undefined),
   logAction: vi.fn().mockResolvedValue(undefined),
@@ -70,6 +72,18 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
   mocks.tryAcquireIdempotency.mockResolvedValue({ acquired: true });
   mocks.allocatePayments.mockResolvedValue(undefined);
+  // recordPayment's race guard: lock + permissive in-tx re-read + insert.
+  // Decoupled from the route's findUnique Once-queue; payment.create shared.
+  mocks.prisma.$executeRaw.mockResolvedValue(1);
+  mocks.prisma.$transaction.mockImplementation(async (fn: unknown) =>
+    typeof fn === 'function'
+      ? (fn as (tx: unknown) => unknown)({
+          $executeRaw: async () => 1,
+          invoice: { findUnique: async () => ({ status: 'PENDING', amount: 1_000_000, payments: [] }) },
+          payment: { create: mocks.prisma.payment.create },
+        })
+      : fn,
+  );
 });
 
 describe('POST /api/invoices/[id]/payments — role gate', () => {

@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   prisma: {
     invoice: { findUnique: vi.fn() },
     payment: { create: vi.fn() },
+    // recordPayment's race guard locks the invoice in a tx (FOR UPDATE) then
+    // re-checks. The tx delegates to the same mock fns so existing assertions
+    // on invoice.findUnique / payment.create still hold.
+    $executeRaw: vi.fn(),
+    $transaction: vi.fn(),
   },
   tryAcquireIdempotency: vi.fn(),
   allocatePayments: vi.fn().mockResolvedValue(undefined),
@@ -54,6 +59,20 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN' } });
   mocks.tryAcquireIdempotency.mockResolvedValue({ acquired: true });
+  mocks.prisma.$executeRaw.mockResolvedValue(1);
+  // The in-tx re-check only runs on the happy path (overpayment/cancelled/404
+  // are caught by the pre-check before the tx). A permissive in-tx invoice
+  // read keeps it decoupled from the route's findUnique Once-queue. payment.create
+  // stays shared so assertions on it hold.
+  mocks.prisma.$transaction.mockImplementation(async (fn: unknown) =>
+    typeof fn === 'function'
+      ? (fn as (tx: unknown) => unknown)({
+          $executeRaw: async () => 1,
+          invoice: { findUnique: async () => ({ status: 'PENDING', amount: 1_000_000, payments: [] }) },
+          payment: { create: mocks.prisma.payment.create },
+        })
+      : fn,
+  );
   mocks.prisma.invoice.findUnique.mockResolvedValue({
     id: 'inv-1',
     invoiceNumber: 'DU-1',
@@ -101,6 +120,34 @@ describe('POST /api/invoices/[id]/payments — overpayment', () => {
     expect(json.invoiceTotal).toBe(100);
     expect(json.alreadyPaid).toBe(80);
     expect(json.attempted).toBe(25);
+    expect(mocks.prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('race guard: rejects OVERPAYMENT detected only by the in-tx re-read', async () => {
+    // Snapshot pre-check sees a stale invoice (no payments) and passes — but a
+    // concurrent payment committed first, so the in-tx FOR-UPDATE re-read shows
+    // the invoice already fully paid → OVERPAYMENT, no payment inserted, no 500.
+    mocks.prisma.invoice.findUnique.mockResolvedValue({
+      id: 'inv-1',
+      invoiceNumber: 'DU-1',
+      status: 'PENDING',
+      amount: 100,
+      clientDisplayName: null,
+      payments: [], // stale snapshot → pre-check passes
+      client: { name: 'Alice', email: 'a@a.com', phone: '+212', isWalkIn: true, role: 'CLIENT' },
+      items: [],
+    });
+    mocks.prisma.$transaction.mockImplementationOnce(async (fn: unknown) =>
+      (fn as (tx: unknown) => unknown)({
+        $executeRaw: async () => 1,
+        // fresh read inside the lock: already fully paid by a concurrent request
+        invoice: { findUnique: async () => ({ status: 'PENDING', amount: 100, payments: [{ amount: 100 }] }) },
+        payment: { create: mocks.prisma.payment.create },
+      }),
+    );
+    const res = await POST(makeRequest({ amount: 50, paymentMethod: 'CASH' }), params);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('OVERPAYMENT');
     expect(mocks.prisma.payment.create).not.toHaveBeenCalled();
   });
 

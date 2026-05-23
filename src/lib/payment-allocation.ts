@@ -197,20 +197,62 @@ async function recordPaymentImpl(
   }
 
   // ── Insert Payment + allocate ─────────────────────────────────────────
-  const payment = await client.payment.create({
-    data: {
-      invoiceId: input.invoiceId,
-      amount: parsedAmount,
-      paymentMethod: input.paymentMethod,
-      paymentDate,
-      notes: typeof input.notes === 'string' ? input.notes.trim() || null : null,
-    },
-    select: { id: true },
-  });
+  const paymentData = {
+    invoiceId: input.invoiceId,
+    amount: parsedAmount,
+    paymentMethod: input.paymentMethod,
+    paymentDate,
+    notes: typeof input.notes === 'string' ? input.notes.trim() || null : null,
+  };
+
+  let paymentId: string;
+  if (!trustedAmount && !allowNegative && client === prisma) {
+    // Atomic race guard. The snapshot pre-check above is the fast path, but two
+    // concurrent payments on the same invoice can both pass it, both insert,
+    // and the 2nd allocation then breaches the DB CHECK (paidAmount<=amount)
+    // → raw 500 + an orphan over-payment row. Here we lock the Invoice row
+    // (FOR UPDATE), re-read the AUTHORITATIVE paid sum inside the lock, re-check
+    // overpayment, then insert — so concurrent payers serialize and the 2nd one
+    // gets a clean OVERPAYMENT instead of corrupting the books.
+    type GuardOut =
+      | { paymentId: string }
+      | { error: 'INVOICE_NOT_FOUND' }
+      | { error: 'INVOICE_CANCELLED' }
+      | { error: 'OVERPAYMENT'; detail: Record<string, unknown> };
+    const txOut: GuardOut = await prisma.$transaction(async (tx): Promise<GuardOut> => {
+      await tx.$executeRaw`SELECT 1 FROM "Invoice" WHERE id = ${input.invoiceId} FOR UPDATE`;
+      const fresh = await tx.invoice.findUnique({
+        where: { id: input.invoiceId },
+        select: { status: true, amount: true, payments: { select: { amount: true } } },
+      });
+      if (!fresh) return { error: 'INVOICE_NOT_FOUND' };
+      if (fresh.status === 'CANCELLED') return { error: 'INVOICE_CANCELLED' };
+      const paidNow = fresh.payments.reduce((s, p) => s + toNumber(p.amount), 0);
+      const total = toNumber(fresh.amount);
+      if (paidNow + parsedAmount > total + 0.01) {
+        return { error: 'OVERPAYMENT', detail: { invoiceTotal: total, alreadyPaid: paidNow, attempted: parsedAmount } };
+      }
+      const p = await tx.payment.create({ data: paymentData, select: { id: true } });
+      return { paymentId: p.id };
+    });
+    if ('error' in txOut) {
+      if (txOut.error === 'OVERPAYMENT') {
+        return { ok: false, error: 'OVERPAYMENT', detail: txOut.detail };
+      }
+      return { ok: false, error: txOut.error };
+    }
+    paymentId = txOut.paymentId;
+  } else {
+    // Trusted (Site B, amount == invoice.amount by construction) / refund
+    // (negative, cannot overpay) / caller-supplied tx client → no race guard.
+    const payment = await client.payment.create({ data: paymentData, select: { id: true } });
+    paymentId = payment.id;
+  }
   // allocatePayments opens its OWN Prisma transaction (Serializable). It
   // intentionally uses the global `prisma` client so its tx is independent
   // from `client`/`options.client` — calling it inside a parent tx would
-  // deadlock against the Invoice row our parent already holds.
+  // deadlock against the Invoice row our parent already holds. It runs AFTER
+  // the guard tx above has committed, so the lock is already released.
   await allocatePayments(input.invoiceId);
 
   // ── Revenue cache invalidation (fail-open) ─────────────────────────────
@@ -231,5 +273,5 @@ async function recordPaymentImpl(
   // is the canonical safety net.
   await scheduleMVRefreshIfCurrentMonth(paymentDate);
 
-  return { ok: true, paymentId: payment.id };
+  return { ok: true, paymentId };
 }
