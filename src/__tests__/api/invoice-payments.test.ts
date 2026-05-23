@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   invoiceFindUnique: vi.fn(),
   paymentCreate: vi.fn(),
   paymentFindMany: vi.fn(),
+  executeRaw: vi.fn(),
+  transaction: vi.fn(),
   allocatePayments: vi.fn(),
   tryAcquireIdempotency: vi.fn(),
   sendSMS: vi.fn(async () => true),
@@ -34,6 +36,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     invoice: { findUnique: mocks.invoiceFindUnique },
     payment: { create: mocks.paymentCreate, findMany: mocks.paymentFindMany },
+    $executeRaw: mocks.executeRaw,
+    $transaction: mocks.transaction,
   },
 }));
 vi.mock('@/lib/payments', () => ({ allocatePayments: mocks.allocatePayments }));
@@ -88,6 +92,22 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({ user: { id: 'admin1', role: 'ADMIN' } });
   mocks.tryAcquireIdempotency.mockResolvedValue({ acquired: true });
   mocks.invoiceFindUnique.mockResolvedValue({ ...baseInvoice });
+  // recordPayment's race guard: lock the invoice (FOR UPDATE) in a tx, re-read,
+  // re-check, insert. The tx delegates to the same mock fns.
+  mocks.executeRaw.mockResolvedValue(1);
+  // Permissive in-tx invoice read — decoupled from the route's findUnique
+  // Once-queue (the in-tx re-check only runs on the happy path; overpayment /
+  // cancelled / 404 are caught by the pre-check before the tx). payment.create
+  // stays shared so assertions hold.
+  mocks.transaction.mockImplementation(async (fn: unknown) =>
+    typeof fn === 'function'
+      ? (fn as (tx: unknown) => unknown)({
+          $executeRaw: async () => 1,
+          invoice: { findUnique: async () => ({ status: 'PENDING', amount: 1_000_000, payments: [] }) },
+          payment: { create: mocks.paymentCreate },
+        })
+      : fn,
+  );
   // recordPayment (Module 4-A) now does `payment.create({...,select:{id:true}})`
   // and reads `.id` off the result — default mock prevents an undefined throw
   // that would otherwise cascade as 500 + leak mockResolvedValueOnce queue
