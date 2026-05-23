@@ -373,3 +373,51 @@ describe('POST /api/invoices — cross-role gate (Module 4-A)', () => {
     expect(res.status).toBe(201);
   });
 });
+
+// ─── BOOKING_ALREADY_INVOICED — @unique bookingId guard ─────────────────
+// Invoice.bookingId is @unique: at most ONE principal invoice per booking.
+// Before this guard, a second create (already-invoiced booking OR a
+// double-submit race) hit prisma.invoice.create → P2002 → unhandled 500 +
+// a "prioritized" Sentry error email. Two layers now return a clean 409.
+describe('POST /api/invoices — BOOKING_ALREADY_INVOICED (unique bookingId)', () => {
+  beforeEach(() => {
+    setupHappyInvoiceCreate();
+    // The bookingId path resolves periodDate via booking.findUnique.
+    (mocks.prisma as unknown as { booking: { findUnique: ReturnType<typeof vi.fn> } }).booking = {
+      findUnique: vi.fn().mockResolvedValue({ startDate: new Date('2026-05-01T00:00:00Z') }),
+    };
+  });
+
+  it('returns 409 (pre-check) when an invoice already exists for the booking', async () => {
+    mocks.prisma.invoice.findUnique.mockImplementation(
+      async (args: { where: { bookingId?: string; invoiceNumber?: string } }) => {
+        if (args.where.bookingId) return { invoiceNumber: 'DU-2026-0001', status: 'PENDING' };
+        return null; // invoiceNumber collision check
+      },
+    );
+    const res = await InvoicesPOST(
+      makeReq({ clientId: 'c1', bookingId: 'bk-1', items: validItems }),
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('BOOKING_ALREADY_INVOICED');
+    expect(body.invoiceNumber).toBe('DU-2026-0001');
+    // Short-circuits BEFORE consuming an invoice sequence number / tx.
+    expect(mocks.prismaTx.invoice.create).not.toHaveBeenCalled();
+  });
+
+  it('maps a P2002 race on bookingId to 409 — never a noisy 500', async () => {
+    mocks.prisma.invoice.findUnique.mockResolvedValue(null); // pre-check passes
+    const p2002 = Object.assign(new Error('Unique constraint failed'), {
+      code: 'P2002',
+      meta: { target: ['bookingId'] },
+    });
+    mocks.prismaTx.invoice.create.mockRejectedValueOnce(p2002);
+    const res = await InvoicesPOST(
+      makeReq({ clientId: 'c1', bookingId: 'bk-1', items: validItems }),
+    );
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('BOOKING_ALREADY_INVOICED');
+    expect(mocks.logServerError).not.toHaveBeenCalled();
+  });
+});

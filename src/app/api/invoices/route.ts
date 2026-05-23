@@ -178,6 +178,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
     }
 
+    // Garde-fou : Invoice.bookingId est @unique — au plus UNE facture
+    // principale par réservation. Si une facture existe déjà pour ce booking,
+    // on renvoie un 409 clair AVANT de consommer un numéro de séquence (sinon
+    // prisma.invoice.create lève P2002 → 500 + bruit Sentry "erreur"). Les
+    // factures supplément passent par supplementaryForBookingId (bookingId
+    // null) et ne sont donc pas concernées.
+    if (bookingId) {
+      const existingInvoice = await prisma.invoice.findUnique({
+        where: { bookingId },
+        select: { invoiceNumber: true, status: true },
+      });
+      if (existingInvoice) {
+        return NextResponse.json(
+          {
+            error: 'BOOKING_ALREADY_INVOICED',
+            message: `Une facture (${existingInvoice.invoiceNumber}) existe déjà pour cette réservation.`,
+            invoiceNumber: existingInvoice.invoiceNumber,
+            status: existingInvoice.status,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     // Generate invoice number atomiquement via la table InvoiceSequence.
     // INSERT ... ON CONFLICT DO UPDATE RETURNING garantit qu'aucun deux
     // appels concurrents ne reçoivent le même seq (verrou de row PG).
@@ -298,6 +322,25 @@ export async function POST(request: Request) {
         }
         if (err.message.startsWith('PRODUCT_NOT_FOUND')) {
           return NextResponse.json({ error: 'PRODUCT_NOT_FOUND' }, { status: 400 });
+        }
+      }
+      // Course / double-submit : deux requêtes concurrentes pour le même
+      // booking passent le pré-check, la 2nde frappe le @unique bookingId
+      // (P2002). On renvoie le même 409 propre — jamais un 500 bruyant.
+      const code = (err as { code?: string }).code;
+      if (code === 'P2002') {
+        const target = (err as { meta?: { target?: string[] | string } }).meta?.target;
+        const onBooking = Array.isArray(target)
+          ? target.includes('bookingId')
+          : String(target ?? '').includes('bookingId');
+        if (onBooking) {
+          return NextResponse.json(
+            {
+              error: 'BOOKING_ALREADY_INVOICED',
+              message: 'Une facture existe déjà pour cette réservation.',
+            },
+            { status: 409 },
+          );
         }
       }
       throw err;
