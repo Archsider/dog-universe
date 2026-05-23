@@ -85,6 +85,43 @@ export function buildOverdueInvoiceMessage(ctx: OverdueInvoiceContext): string {
 }
 
 /**
+ * Status-aware opening message the admin can send to a client about their
+ * booking, in one tap. FR/EN. Pure — `status` is the Booking.status string;
+ * unknown statuses fall back to a neutral greeting.
+ */
+export function buildBookingContactMessage(
+  clientName: string | null | undefined,
+  status: string,
+  locale: string,
+): string {
+  const first = (clientName ?? '').trim().split(/\s+/)[0] || '';
+  const en = locale === 'en';
+  const hi = en ? (first ? `Hello ${first}` : 'Hello') : first ? `Bonjour ${first}` : 'Bonjour';
+  switch (status) {
+    case 'PENDING':
+      return en
+        ? `${hi}, we've received your booking request at Dog Universe and will confirm it shortly. Any question?`
+        : `${hi}, nous avons bien reçu votre demande de réservation chez Dog Universe et la confirmons très vite. Une question ?`;
+    case 'CONFIRMED':
+      return en
+        ? `${hi}, your booking at Dog Universe is confirmed — we can't wait to welcome your companion!`
+        : `${hi}, votre réservation chez Dog Universe est confirmée — nous avons hâte d'accueillir votre compagnon !`;
+    case 'IN_PROGRESS':
+      return en
+        ? `${hi}, your companion is in good hands at Dog Universe. Feel free to reach out anytime!`
+        : `${hi}, votre compagnon est entre de bonnes mains chez Dog Universe. N'hésitez pas si vous avez une question !`;
+    case 'COMPLETED':
+      return en
+        ? `${hi}, thank you for trusting Dog Universe! We hope to see your companion again soon.`
+        : `${hi}, merci de votre confiance chez Dog Universe ! Nous espérons revoir votre compagnon bientôt.`;
+    default:
+      return en
+        ? `${hi}, I'm reaching out from Dog Universe. How can I help?`
+        : `${hi}, je vous contacte de la part de Dog Universe. Comment puis-je vous aider ?`;
+  }
+}
+
+/**
  * Builds a wa.me deep-link for WhatsApp.
  * Returns null if `phone` is null/empty/unrecognised — callers should hide
  * the WhatsApp button entirely in that case.
