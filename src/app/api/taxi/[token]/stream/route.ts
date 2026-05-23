@@ -40,6 +40,14 @@ export const dynamic = 'force-dynamic';
 
 const SOFT_TIMEOUT_MS    = 54_000;
 const FALLBACK_POLL_MS   = 5_000;
+// Safety-net poll cadence when Pub/Sub IS connected. Publishing happens via
+// the Upstash REST client (recordLocation) while this stream subscribes via
+// ioredis TCP — if those resolve to different Upstash DBs, or Upstash doesn't
+// bridge REST-publish → TCP-subscribe, the subscriber connects fine yet
+// receives NOTHING. Without a backstop the position would only refresh on the
+// 54 s soft-timeout reconnect ("stuck/laggy live"). An 8 s Redis-GET poll
+// (deduped by lastTimestamp) costs almost nothing and guarantees freshness.
+const SAFETY_POLL_MS     = 8_000;
 const STATUS_CHECK_MS    = 10_000;
 // 30 s keepalive (was 20 s) — most proxies tolerate 60 s idle, so 30 s gives
 // a comfortable margin while halving the keepalive event rate on long-lived
@@ -48,7 +56,11 @@ const KEEPALIVE_MS       = 30_000;
 const ETA_REFRESH_MS     = 30_000;
 const ARRIVING_SOON_THRESHOLD_SEC = 300; // 5 min
 
-const TERMINAL_TRIP_STATUSES = new Set(['COMPLETED', 'CANCELLED', 'ARRIVED_AT_PENSION', 'ARRIVED_AT_DESTINATION']);
+// NB: ARRIVED_AT_DESTINATION is written by auto-transition (geofence), while
+// ARRIVED_AT_CLIENT is the manual return-leg terminal (status route). Both
+// mean "trip done" — include both so the stream closes cleanly whichever path
+// ended the trip.
+const TERMINAL_TRIP_STATUSES = new Set(['COMPLETED', 'CANCELLED', 'ARRIVED_AT_PENSION', 'ARRIVED_AT_CLIENT', 'ARRIVED_AT_DESTINATION']);
 
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -306,20 +318,25 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       subscriberHandle = await acquireSubscriber(channel, onMessage);
       const pubsubActive = subscriberHandle !== null;
 
-      // 3. Polling fallback (5 s) when Pub/Sub is unavailable.
-      if (!pubsubActive) {
-        const pollPos = async () => {
-          if (closed) return;
-          const snap = await readLatest(bookingId, tripId);
-          if (snap && snap.timestamp > lastTimestamp) {
-            lastTimestamp = snap.timestamp;
-            lastLat = snap.lat;
-            lastLng = snap.lng;
-            send(sseEvent('location', snap));
-          }
-        };
-        pollTimer = setInterval(() => { void pollPos(); }, FALLBACK_POLL_MS);
-      }
+      // 3. Polling loop. Runs ALWAYS as a freshness backstop:
+      //    - Pub/Sub down → 5 s (primary transport).
+      //    - Pub/Sub up   → 8 s safety net (in case REST-publish never reaches
+      //      this ioredis TCP subscriber). Deduped by lastTimestamp, so when
+      //      Pub/Sub works the poll finds nothing new and emits nothing.
+      const pollPos = async () => {
+        if (closed) return;
+        const snap = await readLatest(bookingId, tripId);
+        if (snap && snap.timestamp > lastTimestamp) {
+          lastTimestamp = snap.timestamp;
+          lastLat = snap.lat;
+          lastLng = snap.lng;
+          send(sseEvent('location', snap));
+        }
+      };
+      pollTimer = setInterval(
+        () => { void pollPos(); },
+        pubsubActive ? SAFETY_POLL_MS : FALLBACK_POLL_MS,
+      );
 
       // 4. Watch DB for terminal status
       const checkStatus = async () => {
