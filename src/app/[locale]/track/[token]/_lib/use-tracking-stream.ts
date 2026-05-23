@@ -124,28 +124,28 @@ export function useTrackingStream(token: string): UseTrackingStreamResult {
     };
     void fetchHistory();
 
-    const fetchOnce = async () => {
+    const fetchOnce = async (): Promise<'ok' | 'inactive' | 'notfound' | 'error'> => {
       try {
         const res = await fetch(`/api/taxi-tracking/${token}`, { cache: 'no-store' });
-        if (aborted) return false;
+        if (aborted) return 'error';
         if (res.status === 404) {
           setStatus('notfound');
-          return false;
+          return 'notfound';
         }
         if (!res.ok) {
           setStatus('error');
-          return false;
+          return 'error';
         }
         const json = (await res.json()) as TrackResponse;
-        if (aborted) return false;
+        if (aborted) return 'error';
         setData(json);
         const snap = snapshotFromEta(json.eta);
         if (snap) setEta(snap);
         setStatus(json.active ? 'ok' : 'inactive');
-        return json.active === true;
+        return json.active ? 'ok' : 'inactive';
       } catch {
         if (!aborted) setStatus('error');
-        return false;
+        return 'error';
       }
     };
 
@@ -323,9 +323,19 @@ export function useTrackingStream(token: string): UseTrackingStreamResult {
     forceReconnectRef.current = forceReconnect;
 
     void (async () => {
-      const isActive = await fetchOnce();
+      const outcome = await fetchOnce();
       if (aborted) return;
-      if (isActive) startSse();
+      if (outcome === 'ok') {
+        startSse();
+      } else if (outcome === 'inactive') {
+        // Trip not active YET (client opened the link before the driver
+        // started, or a transient inactive read). Without this, sseModeRef
+        // stays 'idle' forever and the watchdog never recovers → frozen page.
+        // Poll instead: each tick re-checks active, and the watchdog upgrades
+        // polling → SSE once the trip goes live.
+        startFallbackPolling();
+      }
+      // 'notfound' / 'error' → leave as-is (no live loop to start).
     })();
 
     // ── Watchdog (15 s) ──────────────────────────────────────────────────
