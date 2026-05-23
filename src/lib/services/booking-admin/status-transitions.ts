@@ -379,31 +379,21 @@ async function runStatusSideEffectsImpl(args: RunStatusSideEffectsArgs) {
 
     try {
       const { calculateSuggestedGrade } = await import('@/lib/loyalty');
+      const { computeClientCashCollected } = await import('@/lib/loyalty-server');
       const { createLoyaltyUpdateNotification } = await import('@/lib/notifications');
-      // Filter out invoices linked to soft-deleted bookings — otherwise a
-      // legacy CANCELLED+soft-deleted booking with a PAID invoice keeps
-      // inflating the totalSpentMAD used for PLATINUM threshold.  Also
-      // pull `historicalSpendMAD` (clients migrated with pre-app history)
-      // so the suggestion is parity with the canonical payments.ts path.
-      const [totalStays, totalPaid, client, currentGrade] = await Promise.all([
+      // Cash basis (Sémantique B): the PLATINUM revenue threshold is computed
+      // from collected Payment.amount (net of refunds), not billed PAID invoice
+      // totals. Shared helper keeps parity with the canonical payments.ts path.
+      const [totalStays, client, currentGrade] = await Promise.all([
         prisma.booking.count({ where: notDeleted({ clientId: booking.clientId, status: 'COMPLETED' }) }),
-        prisma.invoice.aggregate({
-          where: {
-            clientId: booking.clientId,
-            status: 'PAID',
-            booking: { deletedAt: null }, // -- OK: explicit filter on relation, no helper available
-          },
-          _sum: { amount: true },
-        }),
         prisma.user.findUnique({
           where: { id: booking.clientId },
           select: { historicalSpendMAD: true },
         }),
         prisma.loyaltyGrade.findUnique({ where: { clientId: booking.clientId } }),
       ]);
-      const liveRevenue = Number(totalPaid._sum.amount ?? 0);
-      const historical = Number(client?.historicalSpendMAD ?? 0);
-      const suggestedGrade = calculateSuggestedGrade(totalStays, liveRevenue + historical);
+      const totalRevenue = await computeClientCashCollected(prisma, booking.clientId, client?.historicalSpendMAD);
+      const suggestedGrade = calculateSuggestedGrade(totalStays, totalRevenue);
       if (!currentGrade?.isOverride && currentGrade?.grade !== suggestedGrade) {
         // Optimistic-lock guard against concurrent override admin actions :
         // updateMany with isOverride: false matches only if no override has

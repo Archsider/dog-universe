@@ -8,10 +8,12 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 const mockFindUnique = vi.hoisted(() => vi.fn());
 const mockCacheReadThrough = vi.hoisted(() => vi.fn());
 const mockCacheDel = vi.hoisted(() => vi.fn());
+const mockPaymentAggregate = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     loyaltyGrade: { findUnique: mockFindUnique },
+    payment: { aggregate: mockPaymentAggregate },
   },
 }));
 
@@ -26,7 +28,8 @@ vi.mock('@/lib/cache', () => ({
   CacheTTL: { loyaltyGrade: 300, capacityLimits: 300, notifCount: 30 },
 }));
 
-import { getLoyaltyGrade, invalidateLoyaltyCache } from '../loyalty-server';
+import { getLoyaltyGrade, invalidateLoyaltyCache, computeClientCashCollected } from '../loyalty-server';
+import { prisma } from '@/lib/prisma';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -105,6 +108,44 @@ describe('getLoyaltyGrade — cache miss', () => {
 // ---------------------------------------------------------------------------
 // invalidateLoyaltyCache
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// computeClientCashCollected — Sémantique B (cash basis) loyalty revenue
+// ---------------------------------------------------------------------------
+describe('computeClientCashCollected', () => {
+  it('sums collected Payment.amount + historicalSpendMAD (cash basis, not billed)', async () => {
+    mockPaymentAggregate.mockResolvedValueOnce({ _sum: { amount: 12000 } });
+    const total = await computeClientCashCollected(prisma, 'client-1', 3000);
+    expect(total).toBe(15000);
+  });
+
+  it('nets a refund (negative payment) into the total', async () => {
+    // e.g. 1000 collected then 200 refunded → _sum = 800
+    mockPaymentAggregate.mockResolvedValueOnce({ _sum: { amount: 800 } });
+    const total = await computeClientCashCollected(prisma, 'client-1', 0);
+    expect(total).toBe(800);
+  });
+
+  it('treats a null sum (no payments) as 0', async () => {
+    mockPaymentAggregate.mockResolvedValueOnce({ _sum: { amount: null } });
+    const total = await computeClientCashCollected(prisma, 'client-1', null);
+    expect(total).toBe(0);
+  });
+
+  it('filters to the client + excludes soft-deleted-booking invoices, includes bookingless', async () => {
+    mockPaymentAggregate.mockResolvedValueOnce({ _sum: { amount: 500 } });
+    await computeClientCashCollected(prisma, 'client-42', 0);
+    expect(mockPaymentAggregate).toHaveBeenCalledWith({
+      _sum: { amount: true },
+      where: {
+        invoice: {
+          clientId: 'client-42',
+          OR: [{ bookingId: null }, { booking: { deletedAt: null } }],
+        },
+      },
+    });
+  });
+});
+
 describe('invalidateLoyaltyCache', () => {
   it('calls cacheDel with the loyalty grade key for the user', async () => {
     await invalidateLoyaltyCache('user-789');

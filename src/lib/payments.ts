@@ -14,6 +14,7 @@
 import { prisma } from '@/lib/prisma';
 import { formatMAD } from '@/lib/utils';
 import { calculateSuggestedGrade } from '@/lib/loyalty';
+import { computeClientCashCollected } from '@/lib/loyalty-server';
 import { toNumber, type DecimalLike } from '@/lib/decimal';
 import { withSpan } from '@/lib/observability';
 import { notDeleted } from '@/lib/prisma-soft';
@@ -208,24 +209,18 @@ export async function allocatePayments(invoiceId: string): Promise<void> {
 
       // Walk-in clients: skip loyalty recalc and notifications
       if (client && !client.isWalkIn) {
-        // Aggregate across ALL paid invoices (including this one, now updated).
-        // Excludes invoices linked to soft-deleted bookings — otherwise
-        // legacy CANCELLED+soft-deleted bookings with PAID invoices keep
-        // inflating PLATINUM-threshold revenue silently.
-        const totalPaidAgg = await tx.invoice.aggregate({
-          where: {
-            clientId: invoice.clientId,
-            status: 'PAID',
-            booking: { deletedAt: null }, // -- OK: explicit filter on relation, no helper available
-          },
-          _sum: { amount: true },
-        });
+        // Cash basis (Sémantique B): sum collected Payment.amount, not billed
+        // Invoice.amount. Shared helper keeps all grade-recompute sites aligned.
         const completedStays = await tx.booking.count({
           where: notDeleted({ clientId: invoice.clientId, status: 'COMPLETED' }),
         });
 
         const totalStays = completedStays + (client.historicalStays ?? 0);
-        const totalRevenue = toNumber(totalPaidAgg._sum.amount) + toNumber(client.historicalSpendMAD);
+        const totalRevenue = await computeClientCashCollected(
+          tx,
+          invoice.clientId,
+          client.historicalSpendMAD,
+        );
 
         const suggestedGrade = calculateSuggestedGrade(totalStays, totalRevenue);
 

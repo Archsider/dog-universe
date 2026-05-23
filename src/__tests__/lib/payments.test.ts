@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => {
     createLoyaltyUpdateNotification: vi.fn().mockResolvedValue(undefined),
     createInvoicePaidNotification: vi.fn().mockResolvedValue(undefined),
     invalidateLoyaltyCache: vi.fn().mockResolvedValue(undefined),
+    computeClientCashCollected: vi.fn().mockResolvedValue(0),
     calculateSuggestedGrade: vi.fn().mockReturnValue('BRONZE'),
   };
 });
@@ -57,6 +58,7 @@ vi.mock('@/lib/notifications', () => ({
 }));
 vi.mock('@/lib/loyalty-server', () => ({
   invalidateLoyaltyCache: mocks.invalidateLoyaltyCache,
+  computeClientCashCollected: mocks.computeClientCashCollected,
 }));
 vi.mock('@/lib/loyalty', () => ({
   calculateSuggestedGrade: mocks.calculateSuggestedGrade,
@@ -274,7 +276,7 @@ describe('allocatePayments', () => {
       historicalSpendMAD: 0,
       isWalkIn: false,
     });
-    mocks.mockTx.invoice.aggregate.mockResolvedValue({ _sum: { amount: 600 } });
+    mocks.computeClientCashCollected.mockResolvedValue(600);
     mocks.mockTx.booking.count.mockResolvedValue(1);
     mocks.mockTx.loyaltyGrade.findUnique.mockResolvedValue({
       clientId: 'client-1',
@@ -338,8 +340,8 @@ describe('allocatePayments', () => {
 
     await allocatePayments('inv-1');
 
-    // Loyalty aggregate should not be called for walk-ins
-    expect(mocks.mockTx.invoice.aggregate).not.toHaveBeenCalled();
+    // Loyalty revenue should not be computed for walk-ins
+    expect(mocks.computeClientCashCollected).not.toHaveBeenCalled();
     expect(mocks.mockTx.loyaltyGrade.update).not.toHaveBeenCalled();
   });
 
@@ -351,7 +353,7 @@ describe('allocatePayments', () => {
       historicalSpendMAD: 0,
       isWalkIn: false,
     });
-    mocks.mockTx.invoice.aggregate.mockResolvedValue({ _sum: { amount: 600 } });
+    mocks.computeClientCashCollected.mockResolvedValue(600);
     mocks.mockTx.booking.count.mockResolvedValue(1);
     mocks.mockTx.loyaltyGrade.findUnique.mockResolvedValue({
       id: 'lg-1',
@@ -382,7 +384,7 @@ describe('allocatePayments', () => {
       historicalSpendMAD: 0,
       isWalkIn: false,
     });
-    mocks.mockTx.invoice.aggregate.mockResolvedValue({ _sum: { amount: 600 } });
+    mocks.computeClientCashCollected.mockResolvedValue(600);
     mocks.mockTx.booking.count.mockResolvedValue(1);
     mocks.mockTx.loyaltyGrade.findUnique.mockResolvedValue({
       clientId: 'client-1',
