@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/log';
 import { calculateSuggestedGrade } from '@/lib/loyalty';
-import { invalidateLoyaltyCache } from '@/lib/loyalty-server';
+import { invalidateLoyaltyCache, computeClientCashCollected } from '@/lib/loyalty-server';
 import { notDeleted } from '@/lib/prisma-soft';
 import { withSpan } from '@/lib/observability';
 import { requireRole } from '@/lib/auth-guards';
@@ -155,12 +155,12 @@ export async function PATCH(request: Request, { params }: Params) {
     const currentGrade = await prisma.loyaltyGrade.findUnique({ where: { clientId: id } });
     if (!currentGrade?.isOverride) {
       const user = await prisma.user.findFirst({ where: notDeleted({ id }), select: { historicalStays: true, historicalSpendMAD: true } });
-      const [totalPaid, completedStays] = await Promise.all([
-        prisma.invoice.aggregate({ where: { clientId: id, status: 'PAID' }, _sum: { amount: true } }),
+      const [totalRevenue, completedStays] = await Promise.all([
+        // Cash basis (Sémantique B) — collected payments, not billed PAID totals.
+        computeClientCashCollected(prisma, id, user?.historicalSpendMAD),
         prisma.booking.count({ where: notDeleted({ clientId: id, status: 'COMPLETED' }) }),
       ]);
       const totalStays = completedStays + (user?.historicalStays ?? 0);
-      const totalRevenue = Number(totalPaid._sum.amount ?? 0) + Number(user?.historicalSpendMAD ?? 0);
       const suggestedGrade = calculateSuggestedGrade(totalStays, totalRevenue);
       await prisma.loyaltyGrade.upsert({
         where: { clientId: id },
