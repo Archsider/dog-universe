@@ -206,7 +206,8 @@ export type EmailTemplateName =
   | 'booking_time_proposed'
   | 'booking_time_confirmed'
   | 'booking_cancelled'
-  | 'invoice_cancelled';
+  | 'invoice_cancelled'
+  | 'morning_digest';
 
 export type EmailPet = { name?: string | null; species?: string | null; gender?: string | null };
 
