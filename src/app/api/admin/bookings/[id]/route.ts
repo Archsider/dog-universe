@@ -108,6 +108,20 @@ export const PATCH = withSchema(
         { status: 400 },
       );
     }
+    // Open-ended stays accrue a price per night with no fixed endDate. COMPLETED
+    // MUST go through the checkout flow (POST .../checkout) which fixes endDate
+    // AND recomputes the invoice. A raw status=COMPLETED here would close the
+    // stay leaving the invoice at its stale/zero amount — financial data loss.
+    // CloseStayDialog is the canonical UI entry point.
+    if (status === 'COMPLETED' && booking.isOpenEnded) {
+      return NextResponse.json(
+        {
+          error: 'OPEN_ENDED_REQUIRES_CHECKOUT',
+          message: 'Séjour à durée ouverte : clôturez-le via la clôture de séjour (recalcul du prix), pas par un changement de statut direct.',
+        },
+        { status: 400 },
+      );
+    }
     if (
       status &&
       booking.status === 'WAITLIST' &&

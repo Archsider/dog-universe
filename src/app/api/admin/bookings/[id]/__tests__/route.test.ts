@@ -145,6 +145,33 @@ describe('PATCH /api/admin/bookings/[id]', () => {
     expect(json.to).toBe('COMPLETED');
   });
 
+  it('400 OPEN_ENDED_REQUIRES_CHECKOUT when COMPLETED on an open-ended stay', async () => {
+    mocks.auth.mockResolvedValue(adminSession);
+    mocks.prisma.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: 'IN_PROGRESS',
+      isOpenEnded: true,
+    });
+    const res = await PATCH(makeReq({ status: 'COMPLETED' }), { params: Promise.resolve({ id: 'b1' }) });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('OPEN_ENDED_REQUIRES_CHECKOUT');
+    // The raw status update must NOT run — would close the stay at a stale price.
+    expect(mocks.applyStatusUpdate).not.toHaveBeenCalled();
+  });
+
+  it('allows COMPLETED on a fixed-date (non open-ended) stay', async () => {
+    mocks.auth.mockResolvedValue(adminSession);
+    mocks.prisma.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: 'IN_PROGRESS',
+      isOpenEnded: false,
+    });
+    mocks.applyStatusUpdate.mockResolvedValue({ id: 'b1', status: 'COMPLETED' });
+    const res = await PATCH(makeReq({ status: 'COMPLETED' }), { params: Promise.resolve({ id: 'b1' }) });
+    expect(res.status).toBe(200);
+    expect(mocks.applyStatusUpdate).toHaveBeenCalled();
+  });
+
   it('400 CANCELLATION_REASON_REQUIRED when CANCELLED without reason', async () => {
     mocks.auth.mockResolvedValue(adminSession);
     mocks.prisma.booking.findFirst.mockResolvedValue({ ...baseBooking, status: 'CONFIRMED' });
