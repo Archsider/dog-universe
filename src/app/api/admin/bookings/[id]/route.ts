@@ -281,12 +281,20 @@ export const PATCH = withSchema(
       ? (typeof body.cancellationReason === 'string' ? body.cancellationReason.trim() : undefined)
       : undefined;
 
-    const updated = await applyStatusUpdate({
-      bookingId: id,
-      status,
-      notes,
-      cancellationReason,
-    });
+    let updated;
+    try {
+      updated = await applyStatusUpdate({
+        bookingId: id,
+        // Atomic optimistic lock — guards against a concurrent writer between
+        // the read above and this write (lost update / double-fire).
+        expectedVersion: booking.version,
+        status,
+        notes,
+        cancellationReason,
+      });
+    } catch (err) {
+      return mapBookingError(err);
+    }
 
     // NO_SHOW: cancel invoice (if unpaid) + restock products. Idempotent.
     if (status === 'NO_SHOW' && status !== booking.status) {

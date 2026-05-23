@@ -30,7 +30,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 // ---------------------------------------------------------------------------
 const mocks = vi.hoisted(() => {
   const prismaTx = {
-    booking: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), delete: vi.fn(), count: vi.fn() },
+    booking: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), delete: vi.fn(), count: vi.fn() },
     boardingDetail: { create: vi.fn(), upsert: vi.fn(), findUnique: vi.fn() },
     taxiDetail: { create: vi.fn() },
     bookingItem: { createMany: vi.fn(), updateMany: vi.fn() },
@@ -243,6 +243,9 @@ beforeEach(() => {
   // Defaults: idempotency available (acquired), capacity OK, transaction returns whatever the inner fn does.
   mocks.tryAcquireIdempotency.mockResolvedValue({ acquired: true, redisAvailable: true });
   mocks.checkBoardingCapacity.mockResolvedValue({ ok: true });
+  // applyStatusUpdate now uses a conditional updateMany (optimistic version
+  // lock) + findUnique. Default: the conditional write matches one row.
+  mocks.prisma.booking.updateMany.mockResolvedValue({ count: 1 });
   mocks.prisma.$transaction.mockImplementation(async (fn: any) => {
     if (typeof fn === 'function') return fn(mocks.prismaTx);
     return fn;
@@ -387,7 +390,7 @@ describe('PATCH /api/admin/bookings/[id]', () => {
       invoice: null,
     };
     mocks.prisma.booking.findFirst.mockResolvedValue(existing);
-    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'CONFIRMED' });
+    mocks.prisma.booking.findUnique.mockResolvedValue({ ...existing, status: 'CONFIRMED' });
     mocks.prisma.taxiTrip.findFirst.mockResolvedValue(null);
 
     const res = await AdminBookingsPATCH(
@@ -473,7 +476,7 @@ describe('PATCH /api/admin/bookings/[id]', () => {
       invoice: null,
     };
     mocks.prisma.booking.findFirst.mockResolvedValue(existing);
-    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
+    mocks.prisma.booking.findUnique.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
 
     const res = await AdminBookingsPATCH(
       makeAdminPatchRequest('b4', { status: 'NO_SHOW' }) as any,
@@ -530,7 +533,7 @@ describe('NO_SHOW handling', () => {
   it('cancels PENDING invoice and restores stock on NO_SHOW from CONFIRMED', async () => {
     const existing = baseBooking('CONFIRMED');
     mocks.prisma.booking.findFirst.mockResolvedValue(existing);
-    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
+    mocks.prisma.booking.findUnique.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
     mocks.prisma.invoice.findUnique.mockResolvedValue({
       id: 'inv-1',
       status: 'PENDING',
@@ -560,7 +563,7 @@ describe('NO_SHOW handling', () => {
     const existing = baseBooking('CONFIRMED');
     existing.invoice = { id: 'inv-paid', status: 'PAID' };
     mocks.prisma.booking.findFirst.mockResolvedValue(existing);
-    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
+    mocks.prisma.booking.findUnique.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
     mocks.prisma.invoice.findUnique.mockResolvedValue({
       id: 'inv-paid',
       status: 'PAID',
@@ -600,7 +603,7 @@ describe('NO_SHOW handling', () => {
     const existing = baseBooking('IN_PROGRESS');
     existing.invoice = { id: 'inv-partial', status: 'PARTIALLY_PAID' };
     mocks.prisma.booking.findFirst.mockResolvedValue(existing);
-    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
+    mocks.prisma.booking.findUnique.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
     mocks.prisma.invoice.findUnique.mockResolvedValue({
       id: 'inv-partial',
       status: 'PARTIALLY_PAID',
@@ -626,7 +629,7 @@ describe('NO_SHOW handling', () => {
     const existing = baseBooking('CONFIRMED');
     existing.invoice = { id: 'inv-cancelled', status: 'CANCELLED' };
     mocks.prisma.booking.findFirst.mockResolvedValue(existing);
-    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
+    mocks.prisma.booking.findUnique.mockResolvedValue({ ...existing, status: 'NO_SHOW' });
     mocks.prisma.invoice.findUnique.mockResolvedValue({
       id: 'inv-cancelled',
       status: 'CANCELLED',
@@ -703,7 +706,7 @@ describe('Optimistic lock — bookings PATCH', () => {
       version: 2,
     };
     mocks.prisma.booking.findFirst.mockResolvedValue(existing);
-    mocks.prisma.booking.update.mockResolvedValue({ ...existing, status: 'CONFIRMED', version: 3 });
+    mocks.prisma.booking.findUnique.mockResolvedValue({ ...existing, status: 'CONFIRMED', version: 3 });
     mocks.prisma.taxiTrip.findFirst.mockResolvedValue(null);
 
     const res = await AdminBookingsPATCH(
@@ -712,8 +715,9 @@ describe('Optimistic lock — bookings PATCH', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(mocks.prisma.booking.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'bv2' },
+    // Conditional update: version is in the WHERE (optimistic lock) + incremented.
+    expect(mocks.prisma.booking.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'bv2', version: 2 },
       data: expect.objectContaining({ version: { increment: 1 } }),
     }));
   });
