@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   loadTodaySnapshot: vi.fn(),
   sendEmailNow: vi.fn(),
   getCapacityLimits: vi.fn(),
+  loadBirthdays: vi.fn(),
+  loadVaccines: vi.fn(),
   prisma: {
     invoice: { aggregate: vi.fn() },
     booking: { findMany: vi.fn() },
@@ -17,6 +19,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.prisma }));
 vi.mock('@/app/[locale]/admin/reservations/_lib/today-queries', () => ({
   loadTodaySnapshot: mocks.loadTodaySnapshot,
+}));
+vi.mock('@/app/[locale]/admin/dashboard/_lib/loaders/birthdays', () => ({
+  loadBirthdays: mocks.loadBirthdays,
+}));
+vi.mock('@/app/[locale]/admin/dashboard/_lib/loaders/vaccines', () => ({
+  loadVaccines: mocks.loadVaccines,
 }));
 vi.mock('@/lib/notify-now', () => ({ sendEmailNow: mocks.sendEmailNow }));
 vi.mock('@/lib/capacity', () => ({ getCapacityLimits: mocks.getCapacityLimits }));
@@ -49,6 +57,12 @@ beforeEach(() => {
     { bookingPets: [{ pet: { species: 'DOG' } }, { pet: { species: 'CAT' } }] },
   ]);
   mocks.prisma.user.findMany.mockResolvedValue([{ email: 'admin@x.com', language: 'fr' }]);
+  mocks.loadBirthdays.mockResolvedValue([
+    { petId: 'p1', petName: 'Maxou', ownerName: 'Mehdi', birthdayYmd: '2026-05-24' },
+  ]);
+  mocks.loadVaccines.mockResolvedValue([
+    { petName: 'Rexy', ownerName: 'Sara', vaccineType: 'Rage', expiryYmd: '2026-06-10' },
+  ]);
 });
 
 afterEach(() => {
@@ -75,6 +89,24 @@ describe('GET /api/cron/morning-digest', () => {
     expect(arg.subject).toContain('Dog Universe');
     // occupancy + arrivals are rendered into the HTML
     expect(arg.html).toContain('Alice');
+    // enriched sections: birthdays + vaccines
+    expect(json.birthdays).toBe(1);
+    expect(json.vaccines).toBe(1);
+    expect(arg.html).toContain('Maxou');
+    expect(arg.html).toContain('Rexy');
+    expect(arg.html).toContain('Rage');
+  });
+
+  it('omits the birthday/vaccine lines when both are empty', async () => {
+    mocks.loadBirthdays.mockResolvedValue([]);
+    mocks.loadVaccines.mockResolvedValue([]);
+    const res = await mod.GET(req());
+    const arg = mocks.sendEmailNow.mock.calls[0][0];
+    expect(arg.html).not.toContain('Anniversaires');
+    expect(arg.html).not.toContain('Vaccins');
+    const json = await res.json();
+    expect(json.birthdays).toBe(0);
+    expect(json.vaccines).toBe(0);
   });
 
   it('sends nothing when there are no admin recipients', async () => {
