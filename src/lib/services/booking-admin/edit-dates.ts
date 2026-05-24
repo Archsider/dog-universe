@@ -90,6 +90,26 @@ async function editDatesImpl(args: EditDatesArgs) {
     throw new BookingError('INVALID_COMPUTED_TOTAL', { message: 'Invalid computed total' });
   }
 
+  // Guard: shortening a stay below the cash already collected would drive
+  // Invoice.amount under paidAmount and breach the DB CHECK
+  // (status='CANCELLED' OR paidAmount <= amount + 0.01) — surfacing as a raw
+  // 500 with the whole edit rolled back. The PAID branch above is gated by
+  // forcePaidInvoice, but PARTIALLY_PAID (a deposit) slips through, and even a
+  // forced PAID edit hits this. Refuse gracefully: a date edit must not perform
+  // an implicit refund — the admin cancels/refunds the invoice first.
+  const alreadyPaid = Number(booking.invoice?.paidAmount ?? 0);
+  if (
+    booking.invoice &&
+    booking.invoice.status !== 'CANCELLED' &&
+    newTotal < alreadyPaid - 0.01
+  ) {
+    throw new BookingError('CANNOT_SHORTEN_BELOW_PAID', {
+      message: 'New total is below the amount already paid on this invoice',
+      status: 409,
+      payload: { newTotal, paidAmount: alreadyPaid },
+    });
+  }
+
   // Reordered (was before pricing): the BOARDING capacity check inside the
   // transaction below is the canonical authoritative rejection (matches the
   // create-booking path's order). validateTaxiSlot only applies to PET_TAXI
