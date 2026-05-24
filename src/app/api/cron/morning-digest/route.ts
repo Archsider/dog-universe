@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { notDeleted, contactable } from '@/lib/prisma-soft';
 import { getCapacityLimits } from '@/lib/capacity';
 import { loadTodaySnapshot } from '@/app/[locale]/admin/reservations/_lib/today-queries';
+import { loadBirthdays } from '@/app/[locale]/admin/dashboard/_lib/loaders/birthdays';
+import { loadVaccines } from '@/app/[locale]/admin/dashboard/_lib/loaders/vaccines';
 import { buildMorningDigestData, buildMorningDigestSummary, type MorningDigestInput } from '@/lib/morning-digest';
 import { getEmailTemplate } from '@/lib/email';
 import { sendEmailNow } from '@/lib/notify-now';
@@ -22,7 +24,7 @@ export const GET = defineCron({
   name: 'morning-digest',
   period: 'daily',
   fn: async ({ now, logger }) => {
-    const [snapshot, limits, unpaidAgg, inProgress, admins] = await Promise.all([
+    const [snapshot, limits, unpaidAgg, inProgress, admins, birthdays, vaccines] = await Promise.all([
       loadTodaySnapshot(now),
       getCapacityLimits(),
       prisma.invoice.aggregate({
@@ -39,6 +41,8 @@ export const GET = defineCron({
         select: { email: true, language: true },
         take: 50,
       }),
+      loadBirthdays(),
+      loadVaccines(),
     ]);
 
     let dogsIn = 0;
@@ -67,6 +71,8 @@ export const GET = defineCron({
       dogsLimit: limits.dogs,
       catsIn,
       catsLimit: limits.cats,
+      birthdays: birthdays.slice(0, 15).map((b) => ({ petName: b.petName, ownerName: b.ownerName })),
+      vaccines: vaccines.map((v) => ({ petName: v.petName, vaccineType: v.vaccineType, expiry: v.expiryYmd })),
     };
 
     let sent = 0;
@@ -88,6 +94,6 @@ export const GET = defineCron({
     const summary = buildMorningDigestSummary({ ...base, dateLabel: '', dashboardUrl: '', billingUrl: '' }, 'fr');
     logger.info('cron', 'morning-digest sent', { recipients: sent, summary });
 
-    return { recipients: sent, arrivals: base.arrivals.length, departures: base.departures.length, pending: base.pendingCount, unpaidCount };
+    return { recipients: sent, arrivals: base.arrivals.length, departures: base.departures.length, pending: base.pendingCount, unpaidCount, birthdays: base.birthdays.length, vaccines: base.vaccines.length };
   },
 });

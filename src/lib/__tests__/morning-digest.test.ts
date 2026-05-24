@@ -13,6 +13,8 @@ const base: MorningDigestInput = {
   dogsLimit: 20,
   catsIn: 3,
   catsLimit: 10,
+  birthdays: [{ petName: 'Max', ownerName: 'Mehdi' }, { petName: 'Luna', ownerName: '' }],
+  vaccines: [{ petName: 'Rex', vaccineType: 'Rage', expiry: '2026-06-10' }],
   dashboardUrl: 'https://app/fr/admin/dashboard',
   billingUrl: 'https://app/fr/admin/billing?status=PENDING',
 };
@@ -47,6 +49,26 @@ describe('buildMorningDigestData', () => {
     const d = buildMorningDigestData(base);
     expect(d.dashboardUrl).toBe('https://app/fr/admin/dashboard');
     expect(d.billingUrl).toBe('https://app/fr/admin/billing?status=PENDING');
+  });
+
+  it('renders birthdays with owner in parentheses (omitted when blank) + count', () => {
+    const d = buildMorningDigestData(base);
+    expect(d.birthdaysCount).toBe('2');
+    expect(d.birthdaysText).toBe('Max (Mehdi), Luna');
+  });
+
+  it('renders vaccines as "pet — type (expiry)" + count', () => {
+    const d = buildMorningDigestData(base);
+    expect(d.vaccinesCount).toBe('1');
+    expect(d.vaccinesText).toBe('Rex — Rage (2026-06-10)');
+  });
+
+  it('uses a dash + 0 count when there are no birthdays/vaccines', () => {
+    const d = buildMorningDigestData({ ...base, birthdays: [], vaccines: [] });
+    expect(d.birthdaysCount).toBe('0');
+    expect(d.birthdaysText).toBe('—');
+    expect(d.vaccinesCount).toBe('0');
+    expect(d.vaccinesText).toBe('—');
   });
 });
 

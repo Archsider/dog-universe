@@ -45,6 +45,8 @@ export const adminTemplates: Record<string, EmailTemplateBuilder> = {
         <p style="margin: 8px 0;"><strong>Départs :</strong> ${d.departuresText}</p>
         <p style="margin: 8px 0;"><strong>Occupation :</strong> 🐶 ${d.dogsLine} &nbsp;·&nbsp; 🐱 ${d.catsLine}</p>
         <p style="margin: 8px 0;"><strong>Impayées :</strong> ${d.unpaidCount} facture(s) — ${d.unpaidTotal} restant</p>
+        ${d.birthdaysCount !== '0' ? `<p style="margin: 8px 0;"><strong>🎂 Anniversaires (7 j) :</strong> ${d.birthdaysText}</p>` : ''}
+        ${d.vaccinesCount !== '0' ? `<p style="margin: 8px 0;"><strong>💉 Vaccins à renouveler (30 j) :</strong> ${d.vaccinesText}</p>` : ''}
 
         <p style="margin: 24px 0;">
           <a href="${d.dashboardUrl}" style="background: #D4AF37; color: #141428; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">Ouvrir le dashboard</a>
@@ -85,6 +87,8 @@ export const adminTemplates: Record<string, EmailTemplateBuilder> = {
         <p style="margin: 8px 0;"><strong>Departures:</strong> ${d.departuresText}</p>
         <p style="margin: 8px 0;"><strong>Occupancy:</strong> 🐶 ${d.dogsLine} &nbsp;·&nbsp; 🐱 ${d.catsLine}</p>
         <p style="margin: 8px 0;"><strong>Unpaid:</strong> ${d.unpaidCount} invoice(s) — ${d.unpaidTotal} remaining</p>
+        ${d.birthdaysCount !== '0' ? `<p style="margin: 8px 0;"><strong>🎂 Birthdays (7 d):</strong> ${d.birthdaysText}</p>` : ''}
+        ${d.vaccinesCount !== '0' ? `<p style="margin: 8px 0;"><strong>💉 Vaccines due (30 d):</strong> ${d.vaccinesText}</p>` : ''}
 
         <p style="margin: 24px 0;">
           <a href="${d.dashboardUrl}" style="background: #D4AF37; color: #141428; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">Open dashboard</a>

@@ -10,6 +10,18 @@ export interface MorningDigestArrival {
   time: string | null;
 }
 
+export interface MorningDigestBirthday {
+  petName: string;
+  ownerName: string;
+}
+
+export interface MorningDigestVaccine {
+  petName: string;
+  vaccineType: string;
+  /** Pre-formatted expiry date (YYYY-MM-DD Casa). */
+  expiry: string;
+}
+
 export interface MorningDigestInput {
   /** Pre-formatted, locale-aware date label (e.g. "vendredi 23 mai 2026"). */
   dateLabel: string;
@@ -24,6 +36,10 @@ export interface MorningDigestInput {
   dogsLimit: number;
   catsIn: number;
   catsLimit: number;
+  /** Pet birthdays in the next 7 days (Casa, walk-ins excluded). */
+  birthdays: MorningDigestBirthday[];
+  /** Vaccinations expiring in the next 30 days (Casa, walk-ins excluded). */
+  vaccines: MorningDigestVaccine[];
   dashboardUrl: string;
   billingUrl: string;
 }
@@ -35,6 +51,12 @@ export function buildMorningDigestData(input: MorningDigestInput): Record<string
     : '—';
   const departuresText = input.departures.length
     ? input.departures.map((d) => d.name).join(', ')
+    : '—';
+  const birthdaysText = input.birthdays.length
+    ? input.birthdays.map((b) => (b.ownerName ? `${b.petName} (${b.ownerName})` : b.petName)).join(', ')
+    : '—';
+  const vaccinesText = input.vaccines.length
+    ? input.vaccines.map((v) => `${v.petName} — ${v.vaccineType} (${v.expiry})`).join(', ')
     : '—';
 
   return {
@@ -49,6 +71,10 @@ export function buildMorningDigestData(input: MorningDigestInput): Record<string
     catsLine: `${input.catsIn} / ${input.catsLimit}`,
     arrivalsText,
     departuresText,
+    birthdaysCount: String(input.birthdays.length),
+    birthdaysText,
+    vaccinesCount: String(input.vaccines.length),
+    vaccinesText,
     dashboardUrl: input.dashboardUrl,
     billingUrl: input.billingUrl,
   };
