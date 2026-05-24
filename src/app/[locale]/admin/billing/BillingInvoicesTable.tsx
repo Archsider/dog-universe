@@ -155,7 +155,7 @@ export function BillingInvoicesTable({
                       paidAmount={invPaidAmount}
                       isWalkIn={inv.client.isWalkIn}
                     />
-                    {(inv.status === 'PENDING' || inv.status === 'PARTIALLY_PAID') && (
+                    {(inv.status === 'PENDING' || inv.status === 'PARTIALLY_PAID') && inv.client.phone && (
                       <span className="p-2 rounded border border-[rgba(196,151,74,0.2)] inline-flex">
                         <WhatsAppButton
                           phone={inv.client.phone}
@@ -302,7 +302,7 @@ export function BillingInvoicesTable({
                             paidAmount={invPaidAmount}
                             isWalkIn={inv.client.isWalkIn}
                           />
-                          {(inv.status === 'PENDING' || inv.status === 'PARTIALLY_PAID') && (
+                          {(inv.status === 'PENDING' || inv.status === 'PARTIALLY_PAID') && inv.client.phone && (
                             <span className="p-1.5 inline-flex" title={isFr ? 'Relancer sur WhatsApp' : 'Remind on WhatsApp'}>
                               <WhatsAppButton
                                 phone={inv.client.phone}
