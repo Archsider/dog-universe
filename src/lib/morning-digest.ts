@@ -22,6 +22,13 @@ export interface MorningDigestVaccine {
   expiry: string;
 }
 
+export interface MorningDigestDay {
+  /** Pre-formatted short day label (e.g. "28/05"). */
+  label: string;
+  dogsCount: number;
+  catsCount: number;
+}
+
 export interface MorningDigestInput {
   /** Pre-formatted, locale-aware date label (e.g. "vendredi 23 mai 2026"). */
   dateLabel: string;
@@ -40,8 +47,26 @@ export interface MorningDigestInput {
   birthdays: MorningDigestBirthday[];
   /** Vaccinations expiring in the next 30 days (Casa, walk-ins excluded). */
   vaccines: MorningDigestVaccine[];
+  /** Per-day occupancy for the next 7 Casa days (used to surface the peak). */
+  occupancy7d: MorningDigestDay[];
   dashboardUrl: string;
   billingUrl: string;
+}
+
+/** Busiest day in the window for one species. Ties resolve to the earliest
+ *  day (the input is chronological). Returns null when occupancy stays at 0. */
+function peakDay(
+  days: MorningDigestDay[],
+  pick: (d: MorningDigestDay) => number,
+): { label: string; count: number } | null {
+  let best: { label: string; count: number } | null = null;
+  for (const d of days) {
+    const count = pick(d);
+    if (count > 0 && (best === null || count > best.count)) {
+      best = { label: d.label, count };
+    }
+  }
+  return best;
 }
 
 /** Flat string record for `getEmailTemplate('morning_digest', data, locale)`. */
@@ -59,6 +84,11 @@ export function buildMorningDigestData(input: MorningDigestInput): Record<string
     ? input.vaccines.map((v) => `${v.petName} — ${v.vaccineType} (${v.expiry})`).join(', ')
     : '—';
 
+  const dogPeak = peakDay(input.occupancy7d, (d) => d.dogsCount);
+  const catPeak = peakDay(input.occupancy7d, (d) => d.catsCount);
+  const dogsPeakText = dogPeak ? `${dogPeak.label} — ${dogPeak.count}/${input.dogsLimit}` : '—';
+  const catsPeakText = catPeak ? `${catPeak.label} — ${catPeak.count}/${input.catsLimit}` : '—';
+
   return {
     dateLabel: input.dateLabel,
     arrivalsCount: String(input.arrivals.length),
@@ -75,6 +105,9 @@ export function buildMorningDigestData(input: MorningDigestInput): Record<string
     birthdaysText,
     vaccinesCount: String(input.vaccines.length),
     vaccinesText,
+    occupancyPeakShown: dogPeak || catPeak ? '1' : '0',
+    dogsPeakText,
+    catsPeakText,
     dashboardUrl: input.dashboardUrl,
     billingUrl: input.billingUrl,
   };

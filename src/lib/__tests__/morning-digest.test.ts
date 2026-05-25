@@ -15,6 +15,11 @@ const base: MorningDigestInput = {
   catsLimit: 10,
   birthdays: [{ petName: 'Max', ownerName: 'Mehdi' }, { petName: 'Luna', ownerName: '' }],
   vaccines: [{ petName: 'Rex', vaccineType: 'Rage', expiry: '2026-06-10' }],
+  occupancy7d: [
+    { label: '24/05', dogsCount: 6, catsCount: 2 },
+    { label: '25/05', dogsCount: 14, catsCount: 9 },
+    { label: '26/05', dogsCount: 11, catsCount: 4 },
+  ],
   dashboardUrl: 'https://app/fr/admin/dashboard',
   billingUrl: 'https://app/fr/admin/billing?status=PENDING',
 };
@@ -69,6 +74,36 @@ describe('buildMorningDigestData', () => {
     expect(d.birthdaysText).toBe('—');
     expect(d.vaccinesCount).toBe('0');
     expect(d.vaccinesText).toBe('—');
+  });
+
+  it('surfaces the busiest upcoming day per species (peak), against the limit', () => {
+    const d = buildMorningDigestData(base);
+    expect(d.occupancyPeakShown).toBe('1');
+    expect(d.dogsPeakText).toBe('25/05 — 14/20'); // 14 is the max dog day
+    expect(d.catsPeakText).toBe('25/05 — 9/10');
+  });
+
+  it('hides the peak line and dashes the text when the 7-day window is all zero', () => {
+    const d = buildMorningDigestData({
+      ...base,
+      occupancy7d: [
+        { label: '24/05', dogsCount: 0, catsCount: 0 },
+        { label: '25/05', dogsCount: 0, catsCount: 0 },
+      ],
+    });
+    expect(d.occupancyPeakShown).toBe('0');
+    expect(d.dogsPeakText).toBe('—');
+    expect(d.catsPeakText).toBe('—');
+  });
+
+  it('shows a dog peak even when cats stay empty (independent per species)', () => {
+    const d = buildMorningDigestData({
+      ...base,
+      occupancy7d: [{ label: '24/05', dogsCount: 3, catsCount: 0 }],
+    });
+    expect(d.occupancyPeakShown).toBe('1');
+    expect(d.dogsPeakText).toBe('24/05 — 3/20');
+    expect(d.catsPeakText).toBe('—');
   });
 });
 

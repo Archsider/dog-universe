@@ -5,6 +5,7 @@ import { getCapacityLimits } from '@/lib/capacity';
 import { loadTodaySnapshot } from '@/app/[locale]/admin/reservations/_lib/today-queries';
 import { loadBirthdays } from '@/app/[locale]/admin/dashboard/_lib/loaders/birthdays';
 import { loadVaccines } from '@/app/[locale]/admin/dashboard/_lib/loaders/vaccines';
+import { loadCapacity7d } from '@/app/[locale]/admin/dashboard/_lib/loaders/capacity-7d';
 import { buildMorningDigestData, buildMorningDigestSummary, type MorningDigestInput } from '@/lib/morning-digest';
 import { getEmailTemplate } from '@/lib/email';
 import { sendEmailNow } from '@/lib/notify-now';
@@ -24,7 +25,7 @@ export const GET = defineCron({
   name: 'morning-digest',
   period: 'daily',
   fn: async ({ now, logger }) => {
-    const [snapshot, limits, unpaidAgg, inProgress, admins, birthdays, vaccines] = await Promise.all([
+    const [snapshot, limits, unpaidAgg, inProgress, admins, birthdays, vaccines, capacity7d] = await Promise.all([
       loadTodaySnapshot(now),
       getCapacityLimits(),
       prisma.invoice.aggregate({
@@ -43,6 +44,7 @@ export const GET = defineCron({
       }),
       loadBirthdays(),
       loadVaccines(),
+      loadCapacity7d(),
     ]);
 
     let dogsIn = 0;
@@ -73,6 +75,12 @@ export const GET = defineCron({
       catsLimit: limits.cats,
       birthdays: birthdays.slice(0, 15).map((b) => ({ petName: b.petName, ownerName: b.ownerName })),
       vaccines: vaccines.map((v) => ({ petName: v.petName, vaccineType: v.vaccineType, expiry: v.expiryYmd })),
+      occupancy7d: capacity7d.days.map((day) => ({
+        // Locale-neutral DD/MM label from the Casa ymd (e.g. "2026-05-28" → "28/05").
+        label: `${day.ymd.slice(8, 10)}/${day.ymd.slice(5, 7)}`,
+        dogsCount: day.dogsCount,
+        catsCount: day.catsCount,
+      })),
     };
 
     let sent = 0;
