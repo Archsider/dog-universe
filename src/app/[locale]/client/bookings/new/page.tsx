@@ -219,6 +219,7 @@ export default function NewBookingPage() {
             locale={locale} l={l} today={today}
             capacityStatus={capacityStatus}
             dogPets={dogPets}
+            catPets={catPets}
             boarding={boarding} taxiGo={taxiGo} taxiReturn={taxiReturn}
           />
         )}
