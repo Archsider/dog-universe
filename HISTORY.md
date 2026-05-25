@@ -5,6 +5,45 @@
 
 ---
 
+## 2026-05-25 — Session bugfix + features + audits proactifs (PR #235→#253)
+
+Série de corrections (dont 2 P0), enrichissements WhatsApp-first / ops, et audits ciblés des zones à risque.
+
+### PRs mergées
+
+| PR | Type | Sujet |
+|---|---|---|
+| #237 | fix | Suivi taxi live qui se figeait côté client |
+| #238 | fix P0 | Courses taxi « zombies » (`ARRIVED_AT_DESTINATION` non canonique) → migration `20260523_taxi_status_canonical` (exécutée prod) |
+| #239 | fix | Fuite RGPD relance contrat + double-fire fidélité |
+| #240 | fix P0 | `COMPLETED` direct bypassait le recalcul prix (walk-in ouvert à 0 MAD) |
+| #241 | fix | Verrou de version atomique sur les transitions de statut |
+| #242 | fix | Garde anti-surpaiement atomique (`FOR UPDATE`) sur `recordPayment` |
+| #243 | fix | Fidélité PLATINUM sur l'encaissé (cash basis) |
+| #244 | feat | Relance impayés WhatsApp sur `/admin/billing` |
+| #245 | feat | Digest matinal email aux admins (06h UTC) |
+| #246 | feat | Rebooking 1-tap depuis l'historique client |
+| #247 | feat/fix | Lien suivi taxi WhatsApp réparé + message client contextuel par statut |
+| #248 | fix | Bouton WhatsApp vide masqué pour clients sans téléphone |
+| #249 | fix | 500 en raccourcissant un séjour PARTIALLY_PAID → garde `CANNOT_SHORTEN_BELOW_PAID` |
+| #250 | feat | Digest enrichi : anniversaires (7j) + vaccins (30j) |
+| #251 | feat | Digest enrichi : pic d'occupation 7j par espèce |
+| #252 | feat | Dates alternatives les plus proches quand la pension est complète |
+| #253 | feat | Rappel vaccin client J-30 (cron + notif + email) |
+
+### Décisions clés
+
+- **Suivi taxi live = déjà complet** (page `/track/[token]` + SSE + ETA OSRM + géofencing) — non reconstruit ; seul le lien WhatsApp cassé a été réparé (#247).
+- **Waitlist auto-promotion = déjà présent** (`promoteWaitlistedBooking`) — non dupliqué.
+- **Moteur de dates alternatives** : helper pur à lookup d'occupation injecté → testable sans DB ; surfacé au form client (chips) ET à la réponse admin `CAPACITY_EXCEEDED`.
+- **Audits proactifs** : chemins argent + capacité/réservations confirmés solides (verrous, version-lock, Serializable + `excludeBookingId`) ; seuls défauts trouvés = #248 (cosmétique) et #249 (500 edge).
+
+### Note
+
+UI des chips « dates alternatives » (#252) **non validée en navigateur** (sandbox) — à vérifier visuellement au deploy.
+
+---
+
 ## 2026-05-20 — Session massive multi-waves (10 PRs)
 
 Session marathon : 5 vagues d'audit multi-agents + 10 PRs mergées + audit engineering final 87/100.

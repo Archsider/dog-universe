@@ -370,6 +370,7 @@ BOOKING_CONFIRMATION | BOOKING_VALIDATION | BOOKING_REFUSAL
 STAY_REMINDER | INVOICE_AVAILABLE | ADMIN_MESSAGE | STAY_PHOTO
 LOYALTY_UPDATE | PET_BIRTHDAY | BOOKING_RESCHEDULE_REQUEST | REVIEW_REQUEST
 TAXI_NEAR_PICKUP | TAXI_ARRIVED
+VACCINE_REMINDER (client — J-30 avant expiration d'un vaccin, PR #253)
 ```
 
 Chaque notification a `titleFr`, `titleEn`, `messageFr`, `messageEn`, `metadata` (JSON string).
@@ -392,6 +393,8 @@ Définis dans `vercel.json`, tous à **08h00 UTC** :
 | `/api/cron/heartbeat` | Toutes les 5 min | Self-monitoring : ping `/api/health/ping`, écrit `Heartbeat`, alerte SMS SUPERADMIN si 3 KO consécutifs (PR #26) |
 | `/api/cron/health-reconciliation` | Quotidien | Vérifie les invariants critiques (`Invoice.amount` vs `SUM(items.total)`, etc.) via `health-invariants.ts` (PR #23) |
 | `/api/cron/refresh-revenue-mv` | Quotidien 02h UTC | Refresh complet de `monthly_revenue_mv` (complément du tick horaire `refresh-monthly-revenue`) (PR #22) |
+| `/api/cron/morning-digest` | Quotidien 06h UTC | Digest matinal ops aux ADMIN/SUPERADMIN : arrivées/départs/présents/à-valider/impayés + 🎂 anniversaires 7j + 💉 vaccins 30j + 📅 pic d'occupation 7j (PR #245, #250, #251) |
+| `/api/cron/vaccine-reminders` | Quotidien 08h UTC | Rappel client J-30 avant expiration d'un vaccin (in-app + email FR/EN, dedup 60j, walk-ins exclus) (PR #253) |
 
 **Protection :** header `x-cron-secret` vérifié contre `CRON_SECRET` (déjà défini sur Vercel).
 Vercel l'injecte automatiquement via `Authorization: Bearer` pour ses propres crons.
@@ -1451,10 +1454,55 @@ Ne jamais patcher `status=COMPLETED` manuellement sans recalcul prix.
 | Zod | 3.23.8 |
 | @sentry/nextjs | (configuré server + edge + client + instrumentation-client) |
 | Playwright | configuré, skip gracieux si secrets absents (`test.skip()` dans `beforeEach`), timeout CI 25 min (PR #71) |
-| Vitest | 4.1.5 (**1565 tests** au 2026-05-19 — +519 depuis la dernière mise à jour : ESLint rule tests, intégration Postgres (record-payment × 8, cancel-invoice × 7, monthly-revenue × 7, payment-tz-bucketing × 2), refactoring requis CI (401→403)) |
+| Vitest | 4.1.5 (**~1869 tests** au 2026-05-25 — +304 depuis le 2026-05-19 : capacity-alternatives, vaccine-reminders, morning-digest enrichi, whatsapp helpers, edit-dates guard, etc.) |
 | k6 | scripts dans `tests/k6/` (booking-concurrent, dashboard-perf, invoice-payment-race, taxi-heartbeat-stress) — exécution manuelle, séparée d'E2E (PR #21) |
 
 **Pattern Next.js 15 params** : toujours `params: Promise<{ locale: string }>` + `const { locale } = await params` (async — pattern obligatoire sur main).
+
+---
+
+## ✅ ÉTAT — 2026-05-25 (session bugfix + features + audits, PR #235→#253)
+
+**~1869 tests Vitest** (verts), `tsc` + `lint` clean sur chaque PR.
+
+### Corrections livrées (mergé)
+
+| PR | Sujet |
+|---|---|
+| #237 | Suivi taxi live qui se figeait côté client |
+| #238 | **(P0)** Courses taxi « zombies » : statut géofence `ARRIVED_AT_DESTINATION` non canonique → trips bloqués actifs + exclus de l'historique. Migration `20260523_taxi_status_canonical` (backfill → terminaux canoniques). **Exécutée en prod (SQL manuel).** |
+| #239 | Fuite RGPD relance contrat + double-fire fidélité |
+| #240 | **(P0)** Passage direct `COMPLETED` bypassait le recalcul prix (walk-in ouvert à 0 MAD) |
+| #241 | Verrou de version atomique sur les transitions de statut (lost update) |
+| #242 | Garde anti-surpaiement atomique (`SELECT … FOR UPDATE`) sur `recordPayment` |
+| #243 | Fidélité PLATINUM sur l'**encaissé** (cash basis) et non le facturé |
+| #248 | Bouton WhatsApp « Relancer » vide masqué pour les clients sans téléphone (`/admin/billing`) |
+| #249 | **500** en raccourcissant un séjour **PARTIALLY_PAID** (CHECK `paidAmount<=amount`) → garde `CANNOT_SHORTEN_BELOW_PAID` (409) dans `edit-dates` |
+
+### Features livrées (mergé)
+
+| PR | Sujet |
+|---|---|
+| #244 | Relance impayés WhatsApp sur `/admin/billing` (`buildOverdueInvoiceMessage`) |
+| #245 | Digest matinal email aux admins (07h Casa / 06h UTC) |
+| #246 | Rebooking 1-tap depuis l'historique client |
+| #247 | Lien de suivi taxi WhatsApp réparé (`${APP_URL}/{locale}/track/{token}`) + message client contextuel selon statut (`buildBookingContactMessage`) |
+| #250 | Digest enrichi : 🎂 anniversaires (7j) + 💉 vaccins à renouveler (30j) |
+| #251 | Digest enrichi : 📅 pic d'occupation 7j par espèce (`peakDay`, réutilise `loadCapacity7d`) |
+| #252 | **Dates alternatives les plus proches** quand la pension est complète : `src/lib/capacity-alternatives.ts` (`searchAlternativeWindows` pur + `findBoardingAlternatives`), `GET /api/availability/alternatives` (auth), enrichit la réponse admin `CAPACITY_EXCEEDED`, chips cliquables dans le form client (`AvailabilityAlternatives.tsx`). |
+| #253 | **Rappel vaccin client J-30** : cron `vaccine-reminders` + type `VACCINE_REMINDER` + template email `vaccine_reminder` |
+
+### Modules nouveaux (sources de vérité)
+
+- `src/lib/capacity-alternatives.ts` → moteur pur de recherche de fenêtres disponibles (lookup d'occupation injecté) + binding live
+- `src/lib/whatsapp.ts` → `buildOverdueInvoiceMessage` + `buildBookingContactMessage` (FR/EN, status-aware)
+- `src/lib/morning-digest.ts` → builder pur du digest (anniversaires, vaccins, pic occupation)
+- `src/app/api/cron/{morning-digest,vaccine-reminders}/route.ts`
+
+### Audits proactifs (zones confirmées solides)
+
+- **Chemins argent** (`recordPayment`/`allocatePayments`/`cancelInvoice`) : verrou `FOR UPDATE`, garde surpaiement, version-lock — RAS. Seul défaut trouvé : cosmétique (#248).
+- **Capacité/réservations** : `checkBoardingCapacity` tourne dans la transaction Serializable avec le client tx + `excludeBookingId` sur tous les chemins (création, edit-dates, extension ×2) — race surbooking fermée. Seul défaut : #249.
 
 ---
 
@@ -1511,6 +1559,14 @@ Audit engineering staff×5 → **87/100**. Cf [docs/AUDIT_2026_05_20.md](./docs/
 ---
 
 ## ACTIONS MANUELLES EN ATTENTE
+
+### 🆕 Re-deploy Vercel pour activer les nouveaux crons (2026-05-25)
+
+Les crons `morning-digest` (PR #245, 06h UTC) et `vaccine-reminders` (PR #253, 08h UTC) sont déclarés dans `vercel.json` — Vercel doit re-synchroniser les schedules au prochain **deploy**. Un seul deploy active les deux. Le watchdog `cron-freshness` (heartbeat */5min) alerte par SMS SUPERADMIN si l'un ne tourne pas sous 48h.
+
+### ✅ Migration taxi exécutée (2026-05-25)
+
+`prisma/migrations/20260523_taxi_status_canonical/migration.sql` (PR #238) — **exécutée en prod via SQL Editor**. Backfill des `ARRIVED_AT_DESTINATION` legacy → terminaux canoniques. Penser à cliquer **« Déjà appliquée »** dans `/admin/health` pour l'enregistrer dans `_app_migrations`.
 
 ### 🆕 Migrations à exécuter sur Supabase (2026-05-20)
 
