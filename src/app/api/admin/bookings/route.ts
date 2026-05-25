@@ -367,7 +367,39 @@ export const POST = withSchema({ body: adminBookingCreateSchema }, async (reques
       );
     } catch (err) {
       if (err instanceof BookingError) {
-        return NextResponse.json({ error: err.code, ...(err.payload ?? {}) }, { status: err.status });
+        // Best-effort: on a full BOARDING window, attach the nearest dates that
+        // would fit so the admin can re-pitch instead of hitting a dead end.
+        // Wrapped so a failure here never masks the canonical 400.
+        let extra: Record<string, unknown> = {};
+        if (err.code === 'CAPACITY_EXCEEDED' && serviceType === 'BOARDING' && endDate && !isOpenEnded) {
+          try {
+            const [{ findBoardingAlternatives }, { startOfTodayCasa }, { getCapacityLimits }] = await Promise.all([
+              import('@/lib/capacity-alternatives'),
+              import('@/lib/dates-casablanca'),
+              import('@/lib/capacity'),
+            ]);
+            const petsForAlt = await prisma.pet.findMany({
+              where: { id: { in: resolvedPetIds } },
+              select: { species: true },
+            });
+            const newDogs = petsForAlt.filter((p) => p.species === 'DOG').length;
+            const newCats = petsForAlt.filter((p) => p.species === 'CAT').length;
+            const alternatives = await findBoardingAlternatives({
+              newDogs,
+              newCats,
+              startDate: new Date(startDate),
+              endDate: new Date(endDate),
+              limits: await getCapacityLimits(),
+              count: 3,
+              searchRadiusDays: 14,
+              earliestStart: startOfTodayCasa(),
+            });
+            if (alternatives.length > 0) extra = { alternatives };
+          } catch {
+            /* alternatives are advisory — never block the rejection response */
+          }
+        }
+        return NextResponse.json({ error: err.code, ...(err.payload ?? {}), ...extra }, { status: err.status });
       }
       if (err instanceof Error && err.message === 'CONFLICT_RETRY_EXCEEDED') {
         return NextResponse.json({ error: 'CONFLICT_RETRY_EXCEEDED' }, { status: 503 });

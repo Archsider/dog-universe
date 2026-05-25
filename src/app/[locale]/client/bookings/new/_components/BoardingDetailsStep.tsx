@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { AvailabilityCalendar } from '@/components/shared/AvailabilityCalendar';
+import { AvailabilityAlternatives } from './AvailabilityAlternatives';
 import { AddressAutocomplete } from '@/components/shared/AddressAutocomplete';
 import { GROOMING_PRICES, TAXI_ADDON_PRICE, type Pet, type PetSize } from '../_lib/types';
 import { pick, type WizardLabels } from '../_lib/i18n';
@@ -124,13 +125,14 @@ export interface BoardingDetailsStepProps {
   today: string;
   capacityStatus: 'ok' | 'limited' | 'full' | null;
   dogPets: Pet[];
+  catPets: Pet[];
   boarding: BoardingState;
   taxiGo: TaxiAddonState;
   taxiReturn: TaxiAddonState;
 }
 
 export function BoardingDetailsStep({
-  locale, l, today, capacityStatus, dogPets, boarding, taxiGo, taxiReturn,
+  locale, l, today, capacityStatus, dogPets, catPets, boarding, taxiGo, taxiReturn,
 }: BoardingDetailsStepProps) {
   return (
     <div className="space-y-5">
@@ -172,6 +174,19 @@ export function BoardingDetailsStep({
             )}
           </span>
         </div>
+      )}
+      {capacityStatus === 'full' && (
+        <AvailabilityAlternatives
+          start={boarding.checkIn}
+          end={boarding.checkOut}
+          dogs={dogPets.length}
+          cats={catPets.length}
+          locale={locale}
+          onPick={(start, end) => {
+            boarding.setCheckIn(start);
+            boarding.setCheckOut(end);
+          }}
+        />
       )}
 
       {/* Availability Calendar — visual aid for BOARDING dates */}
