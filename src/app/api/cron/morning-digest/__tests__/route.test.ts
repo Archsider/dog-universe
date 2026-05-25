@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getCapacityLimits: vi.fn(),
   loadBirthdays: vi.fn(),
   loadVaccines: vi.fn(),
+  loadCapacity7d: vi.fn(),
   prisma: {
     invoice: { aggregate: vi.fn() },
     booking: { findMany: vi.fn() },
@@ -25,6 +26,9 @@ vi.mock('@/app/[locale]/admin/dashboard/_lib/loaders/birthdays', () => ({
 }));
 vi.mock('@/app/[locale]/admin/dashboard/_lib/loaders/vaccines', () => ({
   loadVaccines: mocks.loadVaccines,
+}));
+vi.mock('@/app/[locale]/admin/dashboard/_lib/loaders/capacity-7d', () => ({
+  loadCapacity7d: mocks.loadCapacity7d,
 }));
 vi.mock('@/lib/notify-now', () => ({ sendEmailNow: mocks.sendEmailNow }));
 vi.mock('@/lib/capacity', () => ({ getCapacityLimits: mocks.getCapacityLimits }));
@@ -63,6 +67,14 @@ beforeEach(() => {
   mocks.loadVaccines.mockResolvedValue([
     { petName: 'Rexy', ownerName: 'Sara', vaccineType: 'Rage', expiryYmd: '2026-06-10' },
   ]);
+  mocks.loadCapacity7d.mockResolvedValue({
+    dogsLimit: 20,
+    catsLimit: 10,
+    days: [
+      { ymd: '2026-05-24', dayOfMonth: 24, weekdayShortFr: 'D', startUtc: new Date(), endUtc: new Date(), dogsCount: 6, catsCount: 2 },
+      { ymd: '2026-05-25', dayOfMonth: 25, weekdayShortFr: 'L', startUtc: new Date(), endUtc: new Date(), dogsCount: 14, catsCount: 9 },
+    ],
+  });
 });
 
 afterEach(() => {
@@ -95,15 +107,26 @@ describe('GET /api/cron/morning-digest', () => {
     expect(arg.html).toContain('Maxou');
     expect(arg.html).toContain('Rexy');
     expect(arg.html).toContain('Rage');
+    // peak occupancy: busiest dog day is 25/05 at 14/20
+    expect(arg.html).toContain('Pic');
+    expect(arg.html).toContain('25/05 — 14/20');
   });
 
-  it('omits the birthday/vaccine lines when both are empty', async () => {
+  it('omits the birthday/vaccine/peak lines when everything is empty', async () => {
     mocks.loadBirthdays.mockResolvedValue([]);
     mocks.loadVaccines.mockResolvedValue([]);
+    mocks.loadCapacity7d.mockResolvedValue({
+      dogsLimit: 20,
+      catsLimit: 10,
+      days: [
+        { ymd: '2026-05-24', dayOfMonth: 24, weekdayShortFr: 'D', startUtc: new Date(), endUtc: new Date(), dogsCount: 0, catsCount: 0 },
+      ],
+    });
     const res = await mod.GET(req());
     const arg = mocks.sendEmailNow.mock.calls[0][0];
     expect(arg.html).not.toContain('Anniversaires');
     expect(arg.html).not.toContain('Vaccins');
+    expect(arg.html).not.toContain('Pic');
     const json = await res.json();
     expect(json.birthdays).toBe(0);
     expect(json.vaccines).toBe(0);

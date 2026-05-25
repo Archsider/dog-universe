@@ -44,6 +44,7 @@ export const adminTemplates: Record<string, EmailTemplateBuilder> = {
         <p style="margin: 8px 0;"><strong>Arrivées :</strong> ${d.arrivalsText}</p>
         <p style="margin: 8px 0;"><strong>Départs :</strong> ${d.departuresText}</p>
         <p style="margin: 8px 0;"><strong>Occupation :</strong> 🐶 ${d.dogsLine} &nbsp;·&nbsp; 🐱 ${d.catsLine}</p>
+        ${d.occupancyPeakShown === '1' ? `<p style="margin: 8px 0;"><strong>📅 Pic d'occupation (7 j) :</strong> 🐶 ${d.dogsPeakText} &nbsp;·&nbsp; 🐱 ${d.catsPeakText}</p>` : ''}
         <p style="margin: 8px 0;"><strong>Impayées :</strong> ${d.unpaidCount} facture(s) — ${d.unpaidTotal} restant</p>
         ${d.birthdaysCount !== '0' ? `<p style="margin: 8px 0;"><strong>🎂 Anniversaires (7 j) :</strong> ${d.birthdaysText}</p>` : ''}
         ${d.vaccinesCount !== '0' ? `<p style="margin: 8px 0;"><strong>💉 Vaccins à renouveler (30 j) :</strong> ${d.vaccinesText}</p>` : ''}
@@ -86,6 +87,7 @@ export const adminTemplates: Record<string, EmailTemplateBuilder> = {
         <p style="margin: 8px 0;"><strong>Arrivals:</strong> ${d.arrivalsText}</p>
         <p style="margin: 8px 0;"><strong>Departures:</strong> ${d.departuresText}</p>
         <p style="margin: 8px 0;"><strong>Occupancy:</strong> 🐶 ${d.dogsLine} &nbsp;·&nbsp; 🐱 ${d.catsLine}</p>
+        ${d.occupancyPeakShown === '1' ? `<p style="margin: 8px 0;"><strong>📅 Peak occupancy (7 d):</strong> 🐶 ${d.dogsPeakText} &nbsp;·&nbsp; 🐱 ${d.catsPeakText}</p>` : ''}
         <p style="margin: 8px 0;"><strong>Unpaid:</strong> ${d.unpaidCount} invoice(s) — ${d.unpaidTotal} remaining</p>
         ${d.birthdaysCount !== '0' ? `<p style="margin: 8px 0;"><strong>🎂 Birthdays (7 d):</strong> ${d.birthdaysText}</p>` : ''}
         ${d.vaccinesCount !== '0' ? `<p style="margin: 8px 0;"><strong>💉 Vaccines due (30 d):</strong> ${d.vaccinesText}</p>` : ''}
