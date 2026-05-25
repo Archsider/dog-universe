@@ -2017,6 +2017,29 @@ Helper unifié qui wrap une opération dans `Sentry.startSpan()` + structured lo
 ### Page `/status` publique
 Voir section UPTIME SELF-MONITORING.
 
+### Structured logging (depuis 2026-05-18)
+
+`src/lib/logger.ts` — JSON stdout avec scrubbing PII auto. Deux API :
+
+- `logger.{info,warn,error}(service, message, extra?)` — sync, safe dans
+  tout runtime (Edge, Client, Workers BullMQ)
+- `await log(level, service, message, extra?)` — async, attache
+  automatiquement le `x-request-id` de la requête courante
+
+Le middleware `applyI18nAndCsp` génère un `x-request-id` (UUID v4) à
+chaque requête HTTP, forwarded en header request (Server Components peuvent
+le lire via `headers().get('x-request-id')`) et response (visible côté
+client pour debug).
+
+**Destination** : actuellement stdout → Vercel logs (rétention 1h Hobby,
+3 jours Pro). Pour passer searchable + rétention 30j, configurer un
+**Vercel Log Drain** vers Axiom (free tier 500 GB/mois, 30 jours
+rétention) ou Better Stack. Runbook complet : `docs/STRUCTURED_LOGGING.md`.
+
+**Anti-pattern interdit** : `console.error(JSON.stringify({...}))`. La
+migration est terminée (0 occurrence restante au 2026-05-18). Tout
+nouveau site qui logge doit passer par `logger` ou `log()`.
+
 ---
 
 ## DETTE TECHNIQUE
