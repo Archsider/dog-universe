@@ -5,7 +5,7 @@ import {
   CheckCheck, Loader2, BellOff, Camera, MessageSquare,
   CheckCircle2, XCircle, Bell, Star, Receipt, CalendarClock,
   ArrowRight, Cake, Truck, UserX, Hourglass, Sparkles, AlertTriangle,
-  AlertCircle, RefreshCw, Car, MapPin, FileText, PawPrint,
+  AlertCircle, RefreshCw, Car, MapPin, FileText, PawPrint, Syringe,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
@@ -53,6 +53,7 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string; bg: 
   WEEKLY_PET_REPORT:            { icon: Sparkles,    color: 'text-emerald-600', bg: 'bg-emerald-50' },
   INVOICE_OVERDUE:              { icon: Receipt,     color: 'text-red-600',     bg: 'bg-red-50' },
   REVIEW_REQUEST:               { icon: Star,        color: 'text-gold-500',    bg: 'bg-gold-50' },
+  VACCINE_REMINDER:             { icon: Syringe,     color: 'text-teal-600',    bg: 'bg-teal-50' },
   END_STAY_REPORT:              { icon: FileText,    color: 'text-emerald-700', bg: 'bg-emerald-50' },
   DAILY_REPORT:                 { icon: PawPrint,    color: 'text-[#8B6914]',   bg: 'bg-[#FFF9E8]' },
   PRE_STAY_BRIEFING_REQUEST:    { icon: FileText,    color: 'text-[#8B6914]',   bg: 'bg-[#FFF9E8]' },

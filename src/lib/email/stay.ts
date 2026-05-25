@@ -5,6 +5,45 @@ import type { EmailTemplateBuilder } from './shared';
  */
 export const stayTemplates: Record<string, EmailTemplateBuilder> = {
   /**
+   * Vaccine renewal reminder — sent to the owner ~30 days before a confirmed
+   * vaccination's nextDueDate.
+   *
+   * d.clientFirstName — pre-escaped first name (or empty)
+   * d.petName         — pre-escaped pet name
+   * d.vaccineType     — pre-escaped vaccine label (may be empty)
+   * d.dueDateLong     — pretty due date 'le 18 juin 2026' / 'June 18, 2026'
+   * d.petUrl          — link to the client pet page
+   */
+  vaccine_reminder: ({ d }) => {
+    const vaccineSuffix = d.vaccineType ? ` (${d.vaccineType})` : '';
+    return {
+      subjectFr: `💉 Rappel vaccin pour ${d.petName} — Dog Universe`,
+      subjectEn: `💉 Vaccine reminder for ${d.petName} — Dog Universe`,
+      bodyFr: `
+        <h2 style="color: #2C2C2C;">Bonjour ${d.clientFirstName || ''} 👋</h2>
+        <p>Un petit rappel : le vaccin${vaccineSuffix} de <strong>${d.petName}</strong> arrive à échéance <strong>${d.dueDateLong}</strong>.</p>
+        <p>Pensez à prendre rendez-vous chez votre vétérinaire pour le renouveler — un carnet à jour est aussi nécessaire pour les prochains séjours chez nous. 🐾</p>
+        <p style="margin-top: 16px;">
+          <a href="${d.petUrl}" style="background: #C9A84C; color: #fff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Voir le carnet de ${d.petName}
+          </a>
+        </p>
+        <p style="margin-top: 16px;">À très bientôt,<br><strong>L'équipe Dog Universe</strong></p>
+      `,
+      bodyEn: `
+        <h2 style="color: #2C2C2C;">Hello ${d.clientFirstName || ''} 👋</h2>
+        <p>A quick reminder: ${d.petName}'s vaccine${vaccineSuffix} is due on <strong>${d.dueDateLong}</strong>.</p>
+        <p>Please book an appointment with your vet to renew it — an up-to-date record is also required for future stays with us. 🐾</p>
+        <p style="margin-top: 16px;">
+          <a href="${d.petUrl}" style="background: #C9A84C; color: #fff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            View ${d.petName}'s record
+          </a>
+        </p>
+        <p style="margin-top: 16px;">See you soon,<br><strong>The Dog Universe Team</strong></p>
+      `,
+    };
+  },
+  /**
    * Weekly AI-generated stay report sent to clients with an active IN_PROGRESS boarding.
    *
    * d.aiReport   — the AI-generated paragraph (may be fallback generic text)

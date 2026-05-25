@@ -107,4 +107,5 @@ export const CRON_NAMES = [
   'invariants-check',
   'archive-notifications',
   'morning-digest',
+  'vaccine-reminders',
 ] as const;

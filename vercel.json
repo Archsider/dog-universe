@@ -37,6 +37,10 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/vaccine-reminders",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/cron/review-requests",
       "schedule": "0 10 * * *"
     },

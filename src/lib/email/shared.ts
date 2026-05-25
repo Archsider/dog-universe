@@ -207,6 +207,7 @@ export type EmailTemplateName =
   | 'booking_time_confirmed'
   | 'booking_cancelled'
   | 'invoice_cancelled'
+  | 'vaccine_reminder'
   | 'morning_digest';
 
 export type EmailPet = { name?: string | null; species?: string | null; gender?: string | null };
