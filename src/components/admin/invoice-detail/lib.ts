@@ -14,6 +14,7 @@ export interface InvoiceItemData {
   allocatedAmount: number | Decimal;
   status: string;
   category?: ItemCategory;
+  productId?: string | null;
 }
 
 export interface PaymentData {
@@ -57,6 +58,8 @@ export interface EditItem {
   quantity: number;
   unitPrice: number;
   category: ItemCategory;
+  /** Catalog link — required (non-null) when category === 'PRODUCT'. */
+  productId?: string | null;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────

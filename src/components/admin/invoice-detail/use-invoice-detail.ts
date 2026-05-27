@@ -45,6 +45,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
       quantity: it.quantity,
       unitPrice: Number(it.unitPrice),
       category: (it.category ?? 'OTHER') as ItemCategory,
+      productId: it.productId ?? null,
     })));
     setEditIssuedAt(toDateStr(invoice.issuedAt));
     setEditNotes(invoice.notes ?? '');
@@ -60,7 +61,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
   };
 
   const addItem = () =>
-    setEditItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0, category: 'OTHER' }]);
+    setEditItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0, category: 'OTHER', productId: null }]);
 
   const removeItem = (i: number) =>
     setEditItems(prev => prev.filter((_, idx) => idx !== i));
@@ -75,6 +76,11 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
       return next;
     }));
 
+  // Multi-field patch — used by the product catalog search to set
+  // description + unitPrice + productId + category atomically.
+  const patchItem = (i: number, patch: Partial<EditItem>) =>
+    setEditItems(prev => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+
   const editTotal = editItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
 
   const handleSave = async () => {
@@ -84,6 +90,16 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     }
     if (editItems.some(it => !it.description.trim())) {
       toast({ title: isFr ? 'Toutes les descriptions sont obligatoires' : 'All descriptions are required', variant: 'destructive' });
+      return;
+    }
+    if (editItems.some(it => !Number.isFinite(it.quantity) || it.quantity < 1)) {
+      toast({ title: isFr ? 'La quantité doit être au moins 1' : 'Quantity must be at least 1', variant: 'destructive' });
+      return;
+    }
+    // Mirror of server Zod refine PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID: a
+    // PRODUCT line must be linked to a catalog product before save.
+    if (editItems.some(it => it.category === 'PRODUCT' && !it.productId)) {
+      toast({ title: isFr ? 'Une ligne « Produit » doit être liée au catalogue.' : 'A "Product" line must be linked to the catalog.', variant: 'destructive' });
       return;
     }
     if (editTotal <= 0) {
@@ -114,6 +130,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
             quantity: it.quantity,
             unitPrice: it.unitPrice,
             category: it.category,
+            productId: it.category === 'PRODUCT' ? (it.productId ?? null) : null,
           })),
           issuedAt: editIssuedAt,
           notes: editNotes,
@@ -267,7 +284,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     addingPayment,
     deletingPaymentId,
     enterEdit,
-    addItem, removeItem, updateItem,
+    addItem, removeItem, updateItem, patchItem,
     handleSave,
     handleAddPayment,
     handleDeletePayment,
