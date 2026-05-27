@@ -74,6 +74,21 @@ export default function WalkinItemsStep({ fr, items, total, onAdd, onRemove, onU
     }
   }
 
+  // Per-night BOARDING: let the operator enter check-in / check-out dates;
+  // we derive `nights` from the span (noon-anchored, DST-free Casa math) and
+  // re-derive the line via patchContext. The Stepper stays as a manual
+  // alternative. Dates are UI-only (not sent to the server).
+  function applyDates(it: WalkinItem, checkIn: string, checkOut: string) {
+    const patch: Partial<WalkinItem> = { checkIn, checkOut };
+    if (checkIn && checkOut) {
+      const a = new Date(`${checkIn}T12:00:00Z`).getTime();
+      const b = new Date(`${checkOut}T12:00:00Z`).getTime();
+      const nights = Math.round((b - a) / 86_400_000);
+      if (Number.isFinite(nights) && nights >= 1) patch.nights = nights;
+    }
+    patchContext(it, patch);
+  }
+
   function changeCategory(it: WalkinItem, next: ItemCategory) {
     // DISCOUNT sign normalisation.
     let unit = it.unitPrice;
@@ -207,6 +222,31 @@ export default function WalkinItemsStep({ fr, items, total, onAdd, onRemove, onU
                     />
                   )}
 
+                  {/* Boarding dates (per-night) → auto-fills the nights count */}
+                  {it.category === 'BOARDING' && (it.billingUnit ?? 'NIGHT') === 'NIGHT' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-medium text-gray-500 mb-1 uppercase">{fr ? 'Arrivée' : 'Check-in'}</label>
+                        <input
+                          type="date"
+                          value={it.checkIn ?? ''}
+                          onChange={(e) => applyDates(it, e.target.value, it.checkOut ?? '')}
+                          className="w-full px-2 py-1.5 rounded-md border border-[#E2C048]/40 text-sm focus:outline-none focus:ring-2 focus:ring-[#C4974A]/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-medium text-gray-500 mb-1 uppercase">{fr ? 'Départ' : 'Check-out'}</label>
+                        <input
+                          type="date"
+                          value={it.checkOut ?? ''}
+                          min={it.checkIn || undefined}
+                          onChange={(e) => applyDates(it, it.checkIn ?? '', e.target.value)}
+                          className="w-full px-2 py-1.5 rounded-md border border-[#E2C048]/40 text-sm focus:outline-none focus:ring-2 focus:ring-[#C4974A]/40"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Pet name + (boarding) duration stepper */}
                   <div className="flex items-end gap-2">
                     <div className="flex-1">
@@ -276,8 +316,12 @@ export default function WalkinItemsStep({ fr, items, total, onAdd, onRemove, onU
                   </div>
                   <div className="col-span-4 md:col-span-2">
                     <label className="block text-[10px] font-medium text-gray-500 mb-1 uppercase">{fr ? 'Qté' : 'Qty'}</label>
-                    <input type="number" min="1" step="1" value={it.quantity}
-                      onChange={(e) => onUpdate(it.id, { quantity: Math.max(1, parseInt(e.target.value || '1', 10) || 1) })}
+                    <input type="number" min="1" step="1" inputMode="numeric" value={it.quantity || ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const n = raw === '' ? 0 : parseInt(raw, 10);
+                        onUpdate(it.id, { quantity: Number.isNaN(n) ? 0 : Math.max(0, n) });
+                      }}
                       className="w-full px-2 py-1.5 rounded-md border border-[#E2C048]/40 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#C4974A]/40" />
                   </div>
                   <div className="col-span-8 md:col-span-3">
@@ -301,8 +345,12 @@ export default function WalkinItemsStep({ fr, items, total, onAdd, onRemove, onU
                   </div>
                   <div className="col-span-4 md:col-span-2">
                     <label className="block text-[10px] font-medium text-gray-500 mb-1 uppercase">{fr ? 'Qté' : 'Qty'}</label>
-                    <input type="number" min="1" step="1" value={it.quantity}
-                      onChange={(e) => onUpdate(it.id, { quantity: Math.max(1, parseInt(e.target.value || '1', 10) || 1) })}
+                    <input type="number" min="1" step="1" inputMode="numeric" value={it.quantity || ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const n = raw === '' ? 0 : parseInt(raw, 10);
+                        onUpdate(it.id, { quantity: Number.isNaN(n) ? 0 : Math.max(0, n) });
+                      }}
                       className="w-full px-2 py-1.5 rounded-md border border-[#E2C048]/40 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#C4974A]/40" />
                   </div>
                   <div className="col-span-8 md:col-span-3">

@@ -1,7 +1,8 @@
 'use client';
 
-import { Plus, X } from 'lucide-react';
+import { Plus, X, AlertCircle } from 'lucide-react';
 import { formatMAD } from '@/lib/utils';
+import ProductCatalogSearchSelect from '@/components/admin/ProductCatalogSearchSelect';
 import { CATEGORY_OPTIONS, type EditItem, type InvoiceData, type ItemCategory } from './lib';
 
 // ── View mode table ──────────────────────────────────────────────────────────
@@ -67,11 +68,14 @@ interface EditProps {
   onAdd: () => void;
   onRemove: (i: number) => void;
   onUpdate: (i: number, field: keyof EditItem, value: string | number) => void;
+  /** Atomic multi-field update — used by the product catalog search. */
+  onPatch: (i: number, patch: Partial<EditItem>) => void;
 }
 
 export function InvoiceItemsEdit({
-  editItems, editTotal, isFr, onAdd, onRemove, onUpdate,
+  editItems, editTotal, isFr, onAdd, onRemove, onUpdate, onPatch,
 }: EditProps) {
+  const productMissing = editItems.some(it => it.category === 'PRODUCT' && !it.productId);
   return (
     <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card p-4">
       <div className="flex items-center justify-between mb-3">
@@ -96,17 +100,48 @@ export function InvoiceItemsEdit({
           <span className="col-span-1" />
         </div>
 
-        {editItems.map((it, i) => (
+        {editItems.map((it, i) => {
+          const isProduct = it.category === 'PRODUCT';
+          return (
           <div key={i} className="grid grid-cols-12 gap-2 items-center">
-            <input
-              className="col-span-4 text-sm h-8 px-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gold-400"
-              value={it.description}
-              onChange={e => onUpdate(i, 'description', e.target.value)}
-              placeholder={isFr ? 'Description' : 'Description'}
-            />
+            {isProduct ? (
+              <div className="col-span-4">
+                <ProductCatalogSearchSelect
+                  locale={isFr ? 'fr' : 'en'}
+                  value={{ productId: it.productId ?? null, description: it.description, price: it.unitPrice }}
+                  serverError={!it.productId ? (isFr ? 'Produit non lié' : 'Not catalog-linked') : null}
+                  onChange={sel => onPatch(i, {
+                    productId: sel.productId,
+                    description: sel.description,
+                    unitPrice: sel.price,
+                    category: 'PRODUCT',
+                  })}
+                />
+              </div>
+            ) : (
+              <input
+                className="col-span-4 text-sm h-8 px-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gold-400"
+                value={it.description}
+                onChange={e => onUpdate(i, 'description', e.target.value)}
+                placeholder={isFr ? 'Description' : 'Description'}
+              />
+            )}
             <select
               value={it.category}
-              onChange={e => onUpdate(i, 'category', e.target.value)}
+              onChange={e => {
+                const next = e.target.value as ItemCategory;
+                // Switching INTO PRODUCT → reset to a blank, unlinked product row
+                // (the smart search must bind a productId). Switching OUT → drop
+                // the productId so the free-text path resumes.
+                if (next === 'PRODUCT' && !isProduct) {
+                  // eslint-disable-next-line dog-universe/no-hardcoded-product-without-id -- OK: UI state reset on category switch, not an InvoiceItem create. ProductCatalogSearchSelect binds productId before save; handleSave + server Zod refine block PRODUCT without productId.
+                  onPatch(i, { category: 'PRODUCT', productId: null, description: '', unitPrice: 0 });
+                } else if (next !== 'PRODUCT' && isProduct) {
+                  onPatch(i, { category: next, productId: null });
+                } else {
+                  onUpdate(i, 'category', next);
+                }
+              }}
               className={`col-span-3 text-sm h-8 px-2 rounded-lg border border-[#C4974A] bg-white focus:outline-none focus:ring-2 focus:ring-[#C4974A]/20 min-w-0 ${it.category === 'OTHER' ? 'border-l-4 border-l-amber-400' : ''}`}
             >
               {CATEGORY_OPTIONS.map(opt => (
@@ -116,15 +151,23 @@ export function InvoiceItemsEdit({
             <input
               type="number"
               min={1}
+              inputMode="numeric"
               className="col-span-1 text-sm h-8 px-2 border border-gray-200 rounded-lg text-center focus:outline-none focus:border-gold-400"
-              value={it.quantity}
-              onChange={e => onUpdate(i, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
+              // 0 / empty render blank so the field is freely editable — no
+              // snap-to-1. Quantity ≥ 1 is enforced at save (handleSave).
+              value={it.quantity || ''}
+              onChange={e => {
+                const raw = e.target.value;
+                const n = raw === '' ? 0 : parseInt(raw, 10);
+                onUpdate(i, 'quantity', Number.isNaN(n) ? 0 : Math.max(0, n));
+              }}
             />
             <input
               type="number"
               min={0}
               step={0.01}
-              className="col-span-3 text-sm h-8 px-2 border border-gray-200 rounded-lg text-right focus:outline-none focus:border-gold-400"
+              disabled={isProduct && !it.productId}
+              className="col-span-3 text-sm h-8 px-2 border border-gray-200 rounded-lg text-right focus:outline-none focus:border-gold-400 disabled:bg-gray-50 disabled:text-gray-400"
               value={it.unitPrice}
               onChange={e => onUpdate(i, 'unitPrice', parseFloat(e.target.value) || 0)}
             />
@@ -136,8 +179,18 @@ export function InvoiceItemsEdit({
               <X className="h-4 w-4" />
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
+
+      {productMissing && (
+        <p className="text-xs text-amber-700 flex items-center gap-1 mt-2">
+          <AlertCircle className="h-3 w-3" />
+          {isFr
+            ? 'Une ligne « Produit » doit être liée au catalogue avant d\'enregistrer.'
+            : 'A "Product" line must be linked to the catalog before saving.'}
+        </p>
+      )}
 
       <div className="flex justify-end mt-3 pt-2 border-t border-ivory-100">
         <span className="text-sm font-bold text-charcoal">

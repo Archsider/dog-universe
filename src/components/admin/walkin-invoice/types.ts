@@ -39,6 +39,10 @@ export interface WalkinItem {
   petName?: string;
   /** Count of nights OR months, per billingUnit (BOARDING). */
   nights?: number;
+  /** Optional check-in / check-out (UI only) — when both set on a per-night
+   *  BOARDING line, `nights` is derived from the span. Not sent to the server. */
+  checkIn?: string;
+  checkOut?: string;
   billingUnit?: 'NIGHT' | 'MONTH';
   groomingSize?: 'SMALL' | 'LARGE';
   taxiType?: 'STANDARD' | 'VET' | 'AIRPORT';

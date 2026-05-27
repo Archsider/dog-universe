@@ -80,6 +80,7 @@ export default function InvoiceDetailClient({
             onAdd={s.addItem}
             onRemove={s.removeItem}
             onUpdate={s.updateItem}
+            onPatch={s.patchItem}
           />
           <MetadataEditForm
             isFr={s.isFr}

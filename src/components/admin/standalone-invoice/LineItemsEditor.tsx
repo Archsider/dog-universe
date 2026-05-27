@@ -146,9 +146,15 @@ export function LineItemsEditor({
               <Input
                 type="number"
                 min={1}
+                inputMode="numeric"
                 className="col-span-1 text-sm h-8 text-center"
-                value={it.quantity}
-                onChange={e => onUpdateItem(i, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
+                // 0 / empty render blank → freely editable, no snap-to-1.
+                value={it.quantity || ''}
+                onChange={e => {
+                  const raw = e.target.value;
+                  const n = raw === '' ? 0 : parseInt(raw, 10);
+                  onUpdateItem(i, 'quantity', Number.isNaN(n) ? 0 : Math.max(0, n));
+                }}
               />
               <Input
                 type="number"
