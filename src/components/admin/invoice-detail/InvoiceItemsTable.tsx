@@ -82,106 +82,122 @@ export function InvoiceItemsEdit({
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
           {isFr ? 'Lignes de facture' : 'Line items'}
         </p>
-        <button
-          onClick={onAdd}
-          className="flex items-center gap-1 px-2.5 py-1 text-xs text-gold-700 border border-gold-300 rounded-lg hover:bg-gold-50 transition-colors"
-        >
-          <Plus className="h-3 w-3" />
-          {isFr ? 'Ajouter une ligne' : 'Add row'}
-        </button>
+        <span className="text-[11px] text-gray-400">
+          {editItems.length} {isFr ? (editItems.length > 1 ? 'lignes' : 'ligne') : (editItems.length > 1 ? 'lines' : 'line')}
+        </span>
       </div>
 
-      <div className="space-y-2">
-        <div className="grid grid-cols-12 gap-2 text-xs text-gray-400 px-1">
-          <span className="col-span-4">{isFr ? 'Description' : 'Description'}</span>
-          <span className="col-span-3">{isFr ? 'Catégorie' : 'Category'}</span>
-          <span className="col-span-1 text-center">{isFr ? 'Qté' : 'Qty'}</span>
-          <span className="col-span-3 text-right">{isFr ? 'Prix unit.' : 'Unit price'}</span>
-          <span className="col-span-1" />
-        </div>
-
+      <div className="space-y-2.5">
         {editItems.map((it, i) => {
           const isProduct = it.category === 'PRODUCT';
+          const lineSubtotal = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
           return (
-          <div key={i} className="grid grid-cols-12 gap-2 items-center">
+          <div key={i} className="rounded-xl border border-gray-200 bg-white p-3 space-y-2.5 hover:border-gold-300/70 transition-colors">
+            {/* Description / recherche produit — pleine largeur */}
             {isProduct ? (
-              <div className="col-span-4">
-                <ProductCatalogSearchSelect
-                  locale={isFr ? 'fr' : 'en'}
-                  value={{ productId: it.productId ?? null, description: it.description, price: it.unitPrice }}
-                  serverError={!it.productId ? (isFr ? 'Produit non lié' : 'Not catalog-linked') : null}
-                  onChange={sel => onPatch(i, {
-                    productId: sel.productId,
-                    description: sel.description,
-                    unitPrice: sel.price,
-                    category: 'PRODUCT',
-                  })}
-                />
-              </div>
+              <ProductCatalogSearchSelect
+                locale={isFr ? 'fr' : 'en'}
+                value={{ productId: it.productId ?? null, description: it.description, price: it.unitPrice }}
+                serverError={!it.productId ? (isFr ? 'Produit non lié' : 'Not catalog-linked') : null}
+                onChange={sel => onPatch(i, {
+                  productId: sel.productId,
+                  description: sel.description,
+                  unitPrice: sel.price,
+                  category: 'PRODUCT',
+                })}
+              />
             ) : (
               <input
-                className="col-span-4 text-sm h-8 px-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gold-400"
+                className="w-full text-sm h-9 px-3 border border-gray-200 rounded-lg focus:outline-none focus:border-gold-400"
                 value={it.description}
                 onChange={e => onUpdate(i, 'description', e.target.value)}
-                placeholder={isFr ? 'Description' : 'Description'}
+                placeholder={isFr ? 'Description de la ligne…' : 'Line description…'}
               />
             )}
-            <select
-              value={it.category}
-              onChange={e => {
-                const next = e.target.value as ItemCategory;
-                // Switching INTO PRODUCT → reset to a blank, unlinked product row
-                // (the smart search must bind a productId). Switching OUT → drop
-                // the productId so the free-text path resumes.
-                if (next === 'PRODUCT' && !isProduct) {
-                  // eslint-disable-next-line dog-universe/no-hardcoded-product-without-id -- OK: UI state reset on category switch, not an InvoiceItem create. ProductCatalogSearchSelect binds productId before save; handleSave + server Zod refine block PRODUCT without productId.
-                  onPatch(i, { category: 'PRODUCT', productId: null, description: '', unitPrice: 0 });
-                } else if (next !== 'PRODUCT' && isProduct) {
-                  onPatch(i, { category: next, productId: null });
-                } else {
-                  onUpdate(i, 'category', next);
-                }
-              }}
-              className={`col-span-3 text-sm h-8 px-2 rounded-lg border border-[#C4974A] bg-white focus:outline-none focus:ring-2 focus:ring-[#C4974A]/20 min-w-0 ${it.category === 'OTHER' ? 'border-l-4 border-l-amber-400' : ''}`}
-            >
-              {CATEGORY_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min={1}
-              inputMode="numeric"
-              className="col-span-1 text-sm h-8 px-2 border border-gray-200 rounded-lg text-center focus:outline-none focus:border-gold-400"
-              // 0 / empty render blank so the field is freely editable — no
-              // snap-to-1. Quantity ≥ 1 is enforced at save (handleSave).
-              value={it.quantity || ''}
-              onChange={e => {
-                const raw = e.target.value;
-                const n = raw === '' ? 0 : parseInt(raw, 10);
-                onUpdate(i, 'quantity', Number.isNaN(n) ? 0 : Math.max(0, n));
-              }}
-            />
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              disabled={isProduct && !it.productId}
-              className="col-span-3 text-sm h-8 px-2 border border-gray-200 rounded-lg text-right focus:outline-none focus:border-gold-400 disabled:bg-gray-50 disabled:text-gray-400"
-              value={it.unitPrice}
-              onChange={e => onUpdate(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-            />
-            <button
-              onClick={() => onRemove(i)}
-              disabled={editItems.length === 1}
-              className="col-span-1 flex items-center justify-center text-gray-400 hover:text-red-500 disabled:opacity-20 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
+
+            {/* Catégorie · Qté · Prix · supprimer */}
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex-1 min-w-[130px]">
+                <span className="block text-[10px] font-medium uppercase tracking-wide text-gray-400 mb-1">{isFr ? 'Catégorie' : 'Category'}</span>
+                <select
+                  value={it.category}
+                  onChange={e => {
+                    const next = e.target.value as ItemCategory;
+                    // Switching INTO PRODUCT → reset to a blank, unlinked product row
+                    // (the smart search must bind a productId). Switching OUT → drop
+                    // the productId so the free-text path resumes.
+                    if (next === 'PRODUCT' && !isProduct) {
+                      // eslint-disable-next-line dog-universe/no-hardcoded-product-without-id -- OK: UI state reset on category switch, not an InvoiceItem create. ProductCatalogSearchSelect binds productId before save; handleSave + server Zod refine block PRODUCT without productId.
+                      onPatch(i, { category: 'PRODUCT', productId: null, description: '', unitPrice: 0 });
+                    } else if (next !== 'PRODUCT' && isProduct) {
+                      onPatch(i, { category: next, productId: null });
+                    } else {
+                      onUpdate(i, 'category', next);
+                    }
+                  }}
+                  className={`w-full text-sm h-9 px-2 rounded-lg border border-[#C4974A] bg-white focus:outline-none focus:ring-2 focus:ring-[#C4974A]/20 min-w-0 ${it.category === 'OTHER' ? 'border-l-4 border-l-amber-400' : ''}`}
+                >
+                  {CATEGORY_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="w-16">
+                <span className="block text-[10px] font-medium uppercase tracking-wide text-gray-400 mb-1 text-center">{isFr ? 'Qté' : 'Qty'}</span>
+                <input
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  className="w-full text-sm h-9 px-2 border border-gray-200 rounded-lg text-center focus:outline-none focus:border-gold-400"
+                  // 0 / empty render blank so the field is freely editable — no
+                  // snap-to-1. Quantity ≥ 1 is enforced at save (handleSave).
+                  value={it.quantity || ''}
+                  onChange={e => {
+                    const raw = e.target.value;
+                    const n = raw === '' ? 0 : parseInt(raw, 10);
+                    onUpdate(i, 'quantity', Number.isNaN(n) ? 0 : Math.max(0, n));
+                  }}
+                />
+              </label>
+              <label className="flex-1 min-w-[110px]">
+                <span className="block text-[10px] font-medium uppercase tracking-wide text-gray-400 mb-1 text-right">{isFr ? 'Prix unit.' : 'Unit price'}</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  disabled={isProduct && !it.productId}
+                  className="w-full text-sm h-9 px-2 border border-gray-200 rounded-lg text-right focus:outline-none focus:border-gold-400 disabled:bg-gray-50 disabled:text-gray-400"
+                  value={it.unitPrice}
+                  onChange={e => onUpdate(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                />
+              </label>
+              <button
+                onClick={() => onRemove(i)}
+                disabled={editItems.length === 1}
+                aria-label={isFr ? 'Supprimer la ligne' : 'Remove line'}
+                className="h-9 w-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-20 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Sous-total de la ligne */}
+            <div className="flex justify-end items-center gap-1.5 text-xs text-gray-500 border-t border-gray-100 pt-2">
+              <span>{isFr ? 'Sous-total' : 'Subtotal'}</span>
+              <span className="font-semibold text-charcoal tabular-nums">{formatMAD(lineSubtotal)}</span>
+            </div>
           </div>
           );
         })}
       </div>
+
+      <button
+        onClick={onAdd}
+        className="mt-2.5 w-full flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium text-gold-700 border border-dashed border-gold-300 rounded-xl hover:bg-gold-50 transition-colors"
+      >
+        <Plus className="h-4 w-4" />
+        {isFr ? 'Ajouter une ligne' : 'Add a line'}
+      </button>
 
       {productMissing && (
         <p className="text-xs text-amber-700 flex items-center gap-1 mt-2">
@@ -192,10 +208,9 @@ export function InvoiceItemsEdit({
         </p>
       )}
 
-      <div className="flex justify-end mt-3 pt-2 border-t border-ivory-100">
-        <span className="text-sm font-bold text-charcoal">
-          Total : {editTotal.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD
-        </span>
+      <div className="mt-3 flex items-center justify-between rounded-xl bg-gradient-to-r from-[#FBF5E0] to-[#F4E6BC] border border-[#E2C048]/50 px-4 py-3">
+        <span className="text-sm font-medium text-charcoal/70">{isFr ? 'Total' : 'Total'}</span>
+        <span className="text-xl font-bold text-charcoal tabular-nums">{formatMAD(editTotal)}</span>
       </div>
     </div>
   );
