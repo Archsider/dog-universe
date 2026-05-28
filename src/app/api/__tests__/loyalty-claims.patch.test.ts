@@ -100,6 +100,24 @@ describe('PATCH /api/admin/loyalty/claims/[id] — APPROVED', () => {
   });
 });
 
+describe('PATCH /api/admin/loyalty/claims/[id] — RGPD anonymized client', () => {
+  it('resolves the claim but skips notification + email for an anonymized client', async () => {
+    mocks.tx.loyaltyBenefitClaim.findUnique.mockResolvedValueOnce({
+      id: 'c1',
+      status: 'PENDING',
+      clientId: 'client-1',
+      benefitLabelFr: 'Toilettage offert',
+      benefitLabelEn: 'Free grooming',
+      client: { id: 'client-1', name: 'Foo', email: 'anon@x.com', language: 'fr', role: 'CLIENT', anonymizedAt: new Date() },
+    });
+    const res = await PATCH(makeReq({ action: 'APPROVED' }), params);
+    expect(res.status).toBe(200);
+    expect(mocks.tx.loyaltyBenefitClaim.updateMany).toHaveBeenCalled();
+    expect(mocks.tx.notification.create).not.toHaveBeenCalled();
+    expect(mocks.sendEmailNow).not.toHaveBeenCalled();
+  });
+});
+
 describe('PATCH /api/admin/loyalty/claims/[id] — REJECTED', () => {
   it('rejects without rejectionReason → 400', async () => {
     const res = await PATCH(makeReq({ action: 'REJECTED' }), params);

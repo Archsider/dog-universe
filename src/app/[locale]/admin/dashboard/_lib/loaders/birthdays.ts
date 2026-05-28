@@ -19,6 +19,9 @@ export async function loadBirthdays(): Promise<UpcomingBirthday[]> {
       dateOfBirth: true,
       owner: { select: { name: true } },
     },
+    // Cap the scan — pets accumulate forever (soft-deleted, never purged), so
+    // an unbounded load grows with the dataset on this hot dashboard path.
+    take: 5000,
   });
   return upcomingBirthdays(pets);
 }
