@@ -40,7 +40,7 @@ export function InvoiceHeader({
       {mode === 'view' ? (
         <div className="flex items-center gap-2 flex-wrap">
           <a
-            href={`/api/invoices/${invoice.id}/pdf?view=1`}
+            href={`/api/invoices/${invoice.id}/pdf?view=1&v=${invoice.version}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-ivory-200 rounded-lg text-gray-600 hover:border-gold-300 hover:text-gold-700 transition-colors"
@@ -49,7 +49,7 @@ export function InvoiceHeader({
             {isFr ? 'Aperçu PDF' : 'PDF preview'}
           </a>
           <a
-            href={`/api/invoices/${invoice.id}/pdf`}
+            href={`/api/invoices/${invoice.id}/pdf?v=${invoice.version}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-ivory-200 rounded-lg text-gray-600 hover:border-gold-300 hover:text-gold-700 transition-colors"
