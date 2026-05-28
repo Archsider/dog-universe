@@ -229,6 +229,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Could not generate invoice number' }, { status: 500 });
     }
 
+    // `total` is caller-supplied on purpose: discount math is computed upstream
+    // (a line's total may legitimately differ from quantity × unitPrice). The DB
+    // trigger recomputes Invoice.amount = SUM(items.total) on the stored totals,
+    // so summing the same `total` here keeps both in sync. See
+    // invoices.discount.test.ts.
     const amount = (items as { total: number }[]).reduce(
       (sum: number, item: { total: number }) => sum + item.total,
       0
