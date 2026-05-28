@@ -38,11 +38,13 @@ export default function InvoiceDetailClient({
         mode={s.mode}
         saving={s.saving}
         sendingSms={s.sendingSms}
+        duplicating={s.duplicating}
         onEdit={s.enterEdit}
         onCancelEdit={() => s.setMode('view')}
         onSave={s.handleSave}
         onSendSms={s.handleSendSms}
         onDelete={() => s.setDeleteOpen(true)}
+        onDuplicate={s.handleDuplicate}
       />
 
       {s.mode === 'view' && (

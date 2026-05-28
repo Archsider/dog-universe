@@ -47,6 +47,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
   const [newPaymentSendSms, setNewPaymentSendSms] = useState(!invoice.client.isWalkIn);
   const [addingPayment, setAddingPayment] = useState(false);
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
 
   const enterEdit = () => {
     setEditItems(invoice.items.map(it => ({
@@ -286,6 +287,23 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     }
   };
 
+  const handleDuplicate = async () => {
+    setDuplicating(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/duplicate`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || (isFr ? 'Erreur serveur' : 'Server error'));
+      }
+      const { id } = await res.json();
+      toast({ title: isFr ? 'Facture dupliquée' : 'Invoice duplicated', variant: 'success' });
+      router.push(`/${locale}/admin/invoices/${id}`);
+    } catch (e: unknown) {
+      toast({ title: e instanceof Error ? e.message : (isFr ? 'Erreur' : 'Error'), variant: 'destructive' });
+      setDuplicating(false);
+    }
+  };
+
   const remaining = Math.max(0, Number(invoice.amount) - Number(invoice.paidAmount));
 
   return {
@@ -315,6 +333,8 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     handleDeletePayment,
     handleSendSms,
     handleDelete,
+    duplicating,
+    handleDuplicate,
     remaining,
   };
 }

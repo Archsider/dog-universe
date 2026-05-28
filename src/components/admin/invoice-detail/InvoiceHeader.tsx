@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  Pencil, Trash2, Download, Eye, Loader2, Save, MessageSquare,
+  Pencil, Trash2, Download, Eye, Loader2, Save, MessageSquare, Copy,
 } from 'lucide-react';
 import { formatDate, getInvoiceStatusColor } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -14,16 +14,18 @@ interface Props {
   mode: 'view' | 'edit';
   saving: boolean;
   sendingSms: boolean;
+  duplicating: boolean;
   onEdit: () => void;
   onCancelEdit: () => void;
   onSave: () => void;
   onSendSms: () => void;
   onDelete: () => void;
+  onDuplicate: () => void;
 }
 
 export function InvoiceHeader({
-  invoice, locale, isFr, mode, saving, sendingSms,
-  onEdit, onCancelEdit, onSave, onSendSms, onDelete,
+  invoice, locale, isFr, mode, saving, sendingSms, duplicating,
+  onEdit, onCancelEdit, onSave, onSendSms, onDelete, onDuplicate,
 }: Props) {
   return (
     <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
@@ -73,6 +75,14 @@ export function InvoiceHeader({
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <MessageSquare className="h-3.5 w-3.5" />}
             {isFr ? 'Envoyer par SMS' : 'Send by SMS'}
+          </button>
+          <button
+            onClick={onDuplicate}
+            disabled={duplicating}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-ivory-200 rounded-lg text-gray-600 hover:border-gold-300 hover:text-gold-700 disabled:opacity-50 transition-colors"
+          >
+            {duplicating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+            {isFr ? 'Dupliquer' : 'Duplicate'}
           </button>
           <button
             onClick={onEdit}
