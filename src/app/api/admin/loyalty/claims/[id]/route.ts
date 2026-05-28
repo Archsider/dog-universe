@@ -36,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     () => prisma.$transaction(async (tx) => {
     const existing = await tx.loyaltyBenefitClaim.findUnique({
       where: { id },
-      include: { client: { select: { id: true, name: true, email: true, language: true, role: true } } },
+      include: { client: { select: { id: true, name: true, email: true, language: true, role: true, anonymizedAt: true } } },
     });
     if (!existing) throw new Error('CLAIM_NOT_FOUND');
 
@@ -60,6 +60,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     });
     if (res.count === 0) throw new Error('ALREADY_RESOLVED');
 
+    // RGPD: this path inserts the notification directly (bypassing
+    // createNotification's anonymizedAt chokepoint). Skip notifying a client
+    // whose account has been anonymized (right-to-be-forgotten).
+    if (!existing.client.anonymizedAt) {
     await tx.notification.create({
       data: {
         userId: existing.clientId,
@@ -75,6 +79,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         read: false,
       },
     });
+    }
 
     return { ...existing, status: action, rejectionReason: reasonClean, reviewedBy: session.user.id };
     }),
@@ -90,20 +95,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   // Email is fire-and-forget post-commit — an SMTP outage must not roll back
-  // a successfully approved claim.
-  const locale = claim.client.language ?? 'fr';
-  const templateType = isApproved ? 'loyalty_claim_approved' : 'loyalty_claim_rejected';
-  const { subject, html } = getEmailTemplate(
-    templateType,
-    {
-      clientName: claim.client.name ?? claim.client.email,
-      benefitFr: claim.benefitLabelFr,
-      benefitEn: claim.benefitLabelEn,
-      reason: reasonClean ?? '',
-    },
-    locale,
-  );
-  sendEmailNow({ to: claim.client.email, subject, html });
+  // a successfully approved claim. RGPD: never email an anonymized client
+  // (their address is a synthetic placeholder).
+  if (!claim.client.anonymizedAt) {
+    const locale = claim.client.language ?? 'fr';
+    const templateType = isApproved ? 'loyalty_claim_approved' : 'loyalty_claim_rejected';
+    const { subject, html } = getEmailTemplate(
+      templateType,
+      {
+        clientName: claim.client.name ?? claim.client.email,
+        benefitFr: claim.benefitLabelFr,
+        benefitEn: claim.benefitLabelEn,
+        reason: reasonClean ?? '',
+      },
+      locale,
+    );
+    sendEmailNow({ to: claim.client.email, subject, html });
+  }
 
   // Notification was inserted via tx.notification.create (bypassing the
   // createNotification helper that auto-invalidates), so do it manually here.

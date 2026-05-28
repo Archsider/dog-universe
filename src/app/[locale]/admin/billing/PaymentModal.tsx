@@ -9,6 +9,7 @@ import {
 import { toast } from '@/hooks/use-toast';
 import type { Decimal } from '@prisma/client/runtime/library';
 import { submitPayment } from './_lib/submit-payment';
+import { casablancaYMD } from '@/lib/dates-casablanca';
 
 interface Payment {
   id: string;
@@ -52,7 +53,11 @@ const METHOD_LABEL: Record<string, { fr: string; en: string }> = {
 };
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  // Casa calendar day, not UTC — `toISOString` rolls to "yesterday" between
+  // 23:00–00:00 UTC (00:00–01:00 Casa), mis-dating a payment into the prior
+  // Casa revenue month at month boundaries.
+  const { year, month, day } = casablancaYMD(new Date());
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 // Casablanca quiet hours mirror the server policy (src/lib/sms-policy.ts).

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from '@/hooks/use-toast';
 import { submitPayment } from '@/app/[locale]/admin/billing/_lib/submit-payment';
+import { casablancaYMD } from '@/lib/dates-casablanca';
 import {
   autoCategory,
   getDisplayEmail,
@@ -12,6 +13,14 @@ import {
   type InvoiceData,
   type ItemCategory,
 } from './lib';
+
+/** Today in Casablanca as YYYY-MM-DD — never UTC `toISOString` (which rolls
+ *  to "yesterday" between 23:00–00:00 UTC = 00:00–01:00 Casa, mis-dating a
+ *  payment into the previous Casa revenue month at month boundaries). */
+function casaTodayYmd(): string {
+  const { year, month, day } = casablancaYMD(new Date());
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
 
 export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
   const isFr = locale === 'fr';
@@ -32,7 +41,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
   const [editClientPhone, setEditClientPhone] = useState('');
   const [editClientEmail, setEditClientEmail] = useState('');
 
-  const [newPaymentDate, setNewPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newPaymentDate, setNewPaymentDate] = useState(() => casaTodayYmd());
   const [newPaymentAmount, setNewPaymentAmount] = useState('');
   const [newPaymentMethod, setNewPaymentMethod] = useState('CASH');
   const [newPaymentSendSms, setNewPaymentSendSms] = useState(!invoice.client.isWalkIn);
@@ -55,7 +64,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     setEditClientEmail(getDisplayEmail(invoice));
     const remaining = Math.max(0, Number(invoice.amount) - Number(invoice.paidAmount));
     setNewPaymentAmount(remaining > 0 ? remaining.toFixed(2) : '');
-    setNewPaymentDate(new Date().toISOString().slice(0, 10));
+    setNewPaymentDate(casaTodayYmd());
     setNewPaymentMethod('CASH');
     setMode('edit');
   };
@@ -121,7 +130,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
 
     setSaving(true);
     try {
-      const res = await fetch(`/api/invoices/${invoice.id}`, {
+      const doPatch = (version: number) => fetch(`/api/invoices/${invoice.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -138,14 +147,30 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
           clientDisplayName: editClientName.trim(),
           clientDisplayPhone: editClientPhone.trim() || null,
           clientDisplayEmail: editClientEmail.trim() || null,
-          version: invoice.version,
+          version,
         }),
       });
+
+      let res = await doPatch(invoice.version);
+      // Optimistic-lock self-heal : recording a payment in this same edit
+      // session bumps `version` under the editor (allocatePayments), so the
+      // first save 409s even for a lone operator. Refetch the current version
+      // and retry the save ONCE before surfacing the conflict.
       if (res.status === 409) {
+        const fresh = await fetch(`/api/invoices/${invoice.id}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+        if (fresh && typeof fresh.version === 'number') {
+          res = await doPatch(fresh.version);
+        }
+      }
+      if (res.status === 409) {
+        // Still conflicting → a genuine concurrent change. Refresh local state
+        // so the operator sees the latest, then ask them to re-apply.
+        const latest = await fetch(`/api/invoices/${invoice.id}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+        if (latest) setInvoice(latest);
         toast({
           title: isFr
-            ? 'Cette facture a été modifiée par quelqu\'un d\'autre. Veuillez rafraîchir.'
-            : 'This record was modified by someone else. Please refresh.',
+            ? 'Facture modifiée entre-temps — données rechargées, réappliquez vos changements.'
+            : 'Invoice changed meanwhile — data reloaded, please re-apply your changes.',
           variant: 'destructive',
         });
         return;
@@ -201,7 +226,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
       await refetchInvoice();
       const rem = Math.max(0, Number(invoice.amount) - Number(invoice.paidAmount));
       setNewPaymentAmount(rem > 0 ? rem.toFixed(2) : '');
-      setNewPaymentDate(new Date().toISOString().slice(0, 10));
+      setNewPaymentDate(casaTodayYmd());
       // Reset the toggle to the context default for the next entry.
       setNewPaymentSendSms(!invoice.client.isWalkIn);
       toast({ title: isFr ? 'Paiement ajouté' : 'Payment added', variant: 'success' });
