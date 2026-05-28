@@ -63,11 +63,18 @@ function maskEmail(addr: string): string {
   return addr[0] + '***' + addr.slice(at);
 }
 
+export type EmailAttachment = {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+};
+
 type EmailSendParams = {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  attachments?: EmailAttachment[];
 };
 
 // Inner sender — actually performs the SMTP transaction. Throws on any failure
@@ -80,6 +87,9 @@ async function emailSendInner(params: EmailSendParams): Promise<void> {
     subject: sanitizeSmtpHeader(params.subject),
     html: params.html,
     text: params.text ?? params.html.replace(/<[^>]*>/g, ''),
+    ...(params.attachments && params.attachments.length > 0
+      ? { attachments: params.attachments }
+      : {}),
   });
 }
 
@@ -106,11 +116,13 @@ export async function sendEmail({
   subject,
   html,
   text,
+  attachments,
 }: {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  attachments?: EmailAttachment[];
 }): Promise<void> {
   // Pre-flight env check — in production, Nodemailer with undefined host
   // silently constructs a transport then fails at sendMail with an opaque
@@ -145,7 +157,7 @@ export async function sendEmail({
   });
 
   try {
-    await getEmailBreaker().fire({ to, subject, html, text });
+    await getEmailBreaker().fire({ to, subject, html, text, attachments });
     logger.info('email', 'sendEmail ok', {
       to: maskEmail(to),
       host,

@@ -32,6 +32,7 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [editIssuedAt, setEditIssuedAt] = useState('');
@@ -275,6 +276,23 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     }
   };
 
+  const handleSendEmail = async () => {
+    setSendingEmail(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/send-email`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || (isFr ? 'Erreur serveur' : 'Server error'));
+      }
+      const { to } = await res.json();
+      toast({ title: isFr ? `Facture envoyée à ${to}` : `Invoice sent to ${to}`, variant: 'success' });
+    } catch (e: unknown) {
+      toast({ title: e instanceof Error ? e.message : (isFr ? 'Erreur lors de l\'envoi' : 'Send failed'), variant: 'destructive' });
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -332,6 +350,8 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     handleAddPayment,
     handleDeletePayment,
     handleSendSms,
+    sendingEmail,
+    handleSendEmail,
     handleDelete,
     duplicating,
     handleDuplicate,
