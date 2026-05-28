@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  Pencil, Trash2, Download, Eye, Loader2, Save, MessageSquare, Copy,
+  Pencil, Trash2, Download, Eye, Loader2, Save, MessageSquare, Copy, Mail,
 } from 'lucide-react';
 import { formatDate, getInvoiceStatusColor } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -14,19 +14,22 @@ interface Props {
   mode: 'view' | 'edit';
   saving: boolean;
   sendingSms: boolean;
+  sendingEmail: boolean;
   duplicating: boolean;
   onEdit: () => void;
   onCancelEdit: () => void;
   onSave: () => void;
   onSendSms: () => void;
+  onSendEmail: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
 }
 
 export function InvoiceHeader({
-  invoice, locale, isFr, mode, saving, sendingSms, duplicating,
-  onEdit, onCancelEdit, onSave, onSendSms, onDelete, onDuplicate,
+  invoice, locale, isFr, mode, saving, sendingSms, sendingEmail, duplicating,
+  onEdit, onCancelEdit, onSave, onSendSms, onSendEmail, onDelete, onDuplicate,
 }: Props) {
+  const hasEmail = !!(invoice.clientDisplayEmail || (invoice.client.email && invoice.client.email !== 'passage@doguniverse.ma'));
   return (
     <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
       <div>
@@ -75,6 +78,23 @@ export function InvoiceHeader({
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <MessageSquare className="h-3.5 w-3.5" />}
             {isFr ? 'Envoyer par SMS' : 'Send by SMS'}
+          </button>
+          <button
+            onClick={onSendEmail}
+            disabled={sendingEmail || !hasEmail || invoice.status === 'CANCELLED'}
+            title={
+              !hasEmail
+                ? (isFr ? 'Client sans email' : 'No email on file')
+                : invoice.status === 'CANCELLED'
+                  ? (isFr ? 'Facture annulée' : 'Invoice cancelled')
+                  : (isFr ? 'Envoyer le PDF par email' : 'Email the PDF')
+            }
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-ivory-200 rounded-lg text-gray-600 hover:border-gold-300 hover:text-gold-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {sendingEmail
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Mail className="h-3.5 w-3.5" />}
+            {isFr ? 'Envoyer par email' : 'Send by email'}
           </button>
           <button
             onClick={onDuplicate}
