@@ -2,6 +2,7 @@ import React from 'react';
 import path from 'path';
 import { renderToBuffer, Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 import { formatDateShort, formatMAD } from '@/lib/utils';
+import { montantEnLettresMAD } from '@/lib/number-to-words-fr';
 import type { Decimal } from '@prisma/client/runtime/library';
 
 const LOGO_PATH = path.resolve(process.cwd(), 'public', 'logo_rgba.png');
@@ -362,6 +363,10 @@ function InvoicePDFDocument({ invoice }: { invoice: InvoiceData }) {
               <Text style={styles.totalLabel}>TOTAL TTC</Text>
               <Text style={styles.totalAmount}>{formatMAD(invoice.amount)}</Text>
             </View>
+            {/* Mention légale Maroc : montant en toutes lettres. */}
+            <Text style={{ fontSize: 8.5, color: '#6B7280', fontStyle: 'italic', paddingHorizontal: 8, paddingTop: 6 }}>
+              Arrêtée la présente facture à la somme de {montantEnLettresMAD(Number(invoice.amount))} TTC.
+            </Text>
           </View>
         </View>
 
