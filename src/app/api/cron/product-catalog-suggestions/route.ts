@@ -58,9 +58,17 @@ export const GET = defineCron({
     });
     const existingIds = new Set(existing.map((e) => e.invoiceItemId));
 
-    let suggested = 0;
     let skipped = 0;
     let noMatch = 0;
+    // Collect matches then insert in a single batch (createMany) instead of
+    // one round-trip per row — jusqu'à 500 INSERT séquentiels auparavant.
+    // skipDuplicates couvre la race sur l'unique index invoiceItemId (ex-P2002).
+    const toCreate: {
+      invoiceItemId: string;
+      suggestedProductId: string;
+      confidence: number;
+      matchedTokens: string[];
+    }[] = [];
     for (const item of recentItems) {
       if (existingIds.has(item.id)) { skipped++; continue; }
       if (!item.description || item.description.length < 4) { skipped++; continue; }
@@ -68,25 +76,22 @@ export const GET = defineCron({
       const match = findBestMatch(item.description, catalog, 0.8);
       if (!match) { noMatch++; continue; }
 
-      try {
-        await prisma.productCatalogSuggestion.create({
-          data: {
-            invoiceItemId: item.id,
-            suggestedProductId: match.productId,
-            confidence: match.confidence,
-            matchedTokens: match.matchedTokens,
-          },
-        });
-        suggested++;
-      } catch (err) {
-        // P2002 = unique violation (someone created it between our findMany
-        // and our create). Idempotent — just skip.
-        logger.info('cron-product-catalog-suggestions', 'skip (race or fk)', {
-          invoiceItemId: item.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        skipped++;
-      }
+      toCreate.push({
+        invoiceItemId: item.id,
+        suggestedProductId: match.productId,
+        confidence: match.confidence,
+        matchedTokens: match.matchedTokens,
+      });
+    }
+
+    let suggested = 0;
+    if (toCreate.length > 0) {
+      const res = await prisma.productCatalogSuggestion.createMany({
+        data: toCreate,
+        skipDuplicates: true,
+      });
+      suggested = res.count;
+      skipped += toCreate.length - res.count;
     }
 
     // New `pending` suggestions just landed — the sidebar badge count

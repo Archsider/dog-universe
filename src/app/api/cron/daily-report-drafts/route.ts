@@ -43,34 +43,28 @@ export const GET = defineCron({
     });
     const targets = links;
 
+    // Insertion en un seul batch (createMany) au lieu d'un create() par pet.
+    // skipDuplicates s'appuie sur l'unique (petId, date) → idempotent sur
+    // replay du cron (remplace l'ancien try/catch P2002 par row).
     let created = 0;
-    let skipped = 0;
-    for (const t of targets) {
-      try {
-        await prisma.dailyReport.create({
-          data: {
-            bookingId: t.bookingId,
-            petId: t.petId,
-            date: today,
-            createdBy: 'cron-system',
-          },
-        });
-        created++;
-      } catch (err) {
-        if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002') {
-          // Already exists for (petId, date) — idempotent replay.
-          skipped++;
-        } else {
-          throw err;
-        }
-      }
+    if (targets.length > 0) {
+      const res = await prisma.dailyReport.createMany({
+        data: targets.map((t) => ({
+          bookingId: t.bookingId,
+          petId: t.petId,
+          date: today,
+          createdBy: 'cron-system',
+        })),
+        skipDuplicates: true,
+      });
+      created = res.count;
     }
 
     return {
       date: today,
       petsInProgress: targets.length,
       draftsCreated: created,
-      alreadyExisting: skipped,
+      alreadyExisting: targets.length - created,
     };
   },
 });

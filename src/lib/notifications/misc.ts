@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { NOTIFICATION_MESSAGES } from '@/lib/notification-messages';
 import { createNotification, createAdminNotifications } from './core';
-import { notDeleted } from '@/lib/prisma-soft';
+import { notDeleted, contactable } from '@/lib/prisma-soft';
 
 export async function createInvoiceNotification(
   userId: string,
@@ -23,7 +23,9 @@ export async function createInvoicePaidNotification(
 
   try {
     const client = await prisma.user.findFirst({
-      where: notDeleted({ id: userId }),
+      // contactable() exclut aussi les comptes anonymisés (RGPD) — sinon
+      // l'email part vers un placeholder `deleted_<id>@…invalid`.
+      where: { ...contactable(), id: userId },
       select: { name: true, email: true, language: true },
     });
     if (client) {
