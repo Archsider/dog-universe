@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-05-28 — Session facturation : bugs UI + features + audit (PR #255→#262)
+
+Corrections des bugs facture signalés par captures (Mehdi), 4 features facturation, audit ciblé money/billing, et refonte visuelle de l'éditeur.
+
+### PRs mergées
+
+| PR | Type | Sujet |
+|---|---|---|
+| #255 | fix | Qté repassait à 1 (`Math.max(1,…\|\|1)`) → 3 éditeurs corrigés ; recherche produit câblée sur l'édition de facture (fin du 400 PRODUCT_CATEGORY) ; dates Arrivée/Départ walk-in → nuits auto |
+| #256 | fix | Aperçu PDF périmé après édition → cache-buster `&v=${version}` |
+| #257 | fix | Audit : PDF HT/TVA centimes + lignes partielles ; dates Casa ; 409 self-heal ; cap pets ; RGPD claims |
+| #258 | feat | Montant en toutes lettres sur le PDF (conformité Maroc) + helper `number-to-words-fr` (38 tests) |
+| #259 | docs | Commentaire-guard : `total` client intentionnel sur POST /api/invoices |
+| #260 | feat | Dupliquer une facture en 1 clic |
+| #261 | feat | Envoyer la facture PDF par email (pièce jointe) |
+| #262 | feat | Éditeur de lignes de facture relooké (mobile-first, purement visuel) |
+
+### Décisions clés
+
+- **Date de paiement = date d'encaissement banque** (cash basis Sémantique B). TPE/virement de fin de mois encaissés le mois suivant → `paymentDate` au mois suivant, l'app accepte une date future. Le CA matche relevé bancaire + déclaration fiscale.
+- **Fausse alerte d'audit écartée** : le `total` client à la création de facture est intentionnel (remises en amont, couvert par `invoices.discount.test.ts`). Le test a attrapé ma tentative de « fix » → revert + commentaire-guard (#259).
+- **Refonte UI ≠ création** : #262 ne touche que l'édition d'une facture existante ; les modals de création walk-in/standard n'ont pas été retouchés (à faire si demandé).
+
+### Note
+
+Tous les changements PDF/UI **non validés en navigateur** (sandbox) — à confirmer à l'écran après deploy. La logique serveur (routes, helpers) est couverte par tests.
+
+---
+
 ## 2026-05-25 — Session bugfix + features + audits proactifs (PR #235→#253)
 
 Série de corrections (dont 2 P0), enrichissements WhatsApp-first / ops, et audits ciblés des zones à risque.

@@ -1454,10 +1454,58 @@ Ne jamais patcher `status=COMPLETED` manuellement sans recalcul prix.
 | Zod | 3.23.8 |
 | @sentry/nextjs | (configuré server + edge + client + instrumentation-client) |
 | Playwright | configuré, skip gracieux si secrets absents (`test.skip()` dans `beforeEach`), timeout CI 25 min (PR #71) |
-| Vitest | 4.1.5 (**~1869 tests** au 2026-05-25 — +304 depuis le 2026-05-19 : capacity-alternatives, vaccine-reminders, morning-digest enrichi, whatsapp helpers, edit-dates guard, etc.) |
+| Vitest | 4.1.5 (**~1919 tests** au 2026-05-28 — +50 depuis le 2026-05-25 : number-to-words-fr ×38, duplicate-invoice ×5, send-email ×6, loyalty-claims RGPD, etc.) |
 | k6 | scripts dans `tests/k6/` (booking-concurrent, dashboard-perf, invoice-payment-race, taxi-heartbeat-stress) — exécution manuelle, séparée d'E2E (PR #21) |
 
 **Pattern Next.js 15 params** : toujours `params: Promise<{ locale: string }>` + `const { locale } = await params` (async — pattern obligatoire sur main).
+
+---
+
+## ✅ ÉTAT — 2026-05-28 (session facturation : bugs UI + features + audit, PR #255→#262)
+
+**~1919 tests Vitest** (verts), `tsc` + `lint` clean sur chaque PR.
+
+### Corrections livrées (mergé)
+
+| PR | Sujet |
+|---|---|
+| #255 | Qté impossible à vider / repassait à 1 (`Math.max(1, parseInt\|\|1)` forçait 1 sur 0/vide) — corrigé dans les 3 éditeurs (édition facture, modal standalone, walk-in). + recherche produit (`ProductCatalogSearchSelect`) câblée sur l'**édition** de facture (`InvoiceItemsTable`) → fin du 400 `PRODUCT_CATEGORY_REQUIRES_PRODUCT_ID`. + dates Arrivée/Départ walk-in (dérivent les nuits → prix auto). |
+| #256 | Aperçu PDF facture périmé après édition : lien `?view=1` constant → Chrome resservait le rendu caché. Cache-buster `&v=${invoice.version}` sur les liens aperçu + télécharger. |
+| #257 | **Audit ciblé** : PDF HT/TVA arrondis au centime + réconciliés (TVA = TTC − HT) ; lignes PARTIAL ne « perdent » plus le montant payé (split par quantité supprimé) ; dates Casa par défaut (plus de `toISOString` UTC qui datait un paiement la veille) ; **409 self-heal** (auto-refetch version + retry 1× quand un paiement bumpe la version sous l'éditeur) ; cap `take: 5000` sur le scan Pet du dashboard ; RGPD : claims fidélité d'un client anonymisé n'envoient plus notif/email. |
+| #259 | Commentaire-guard : `POST /api/invoices` fait **volontairement** confiance au `total` client (remises en amont, couvert par `invoices.discount.test.ts`) — fausse alerte d'audit documentée pour éviter un futur « fix » qui casse la remise. |
+
+### Features livrées (mergé)
+
+| PR | Sujet |
+|---|---|
+| #258 | **Montant en toutes lettres** sur la facture PDF (conformité Maroc : « Arrêtée la présente facture à la somme de … TTC »). Helper pur `src/lib/number-to-words-fr.ts` (`integerToFrenchWords` + `montantEnLettresMAD`, règles FR complètes). +38 tests. |
+| #260 | **Dupliquer une facture en 1 clic** : `POST /api/invoices/[id]/duplicate` clone les lignes dans une nouvelle facture PENDING (numéro frais, date du jour Casa, zéro paiement, standalone). Bouton « Dupliquer » sur la fiche. `LOG_ACTIONS.INVOICE_DUPLICATED`. +5 tests. |
+| #261 | **Envoyer la facture PDF par email** (pièce jointe) : `POST /api/invoices/[id]/send-email`. Support pièces jointes ajouté à `sendEmail` (`EmailAttachment`). Bouton « Envoyer par email ». `LOG_ACTIONS.INVOICE_SENT_EMAIL`. +6 tests. ⚠️ WhatsApp + pièce jointe impossible via `wa.me` (limite plateforme). |
+| #262 | **Éditeur de lignes de facture relooké** (mobile-first) : cartes par ligne, champs étiquetés, sous-total/ligne, total en bandeau doré. **Purement visuel** — handlers inchangés. Ne concerne QUE le mode édition d'une facture existante (pas les modals de création walk-in/standard, non retouchés). |
+
+### Règle métier confirmée — date de paiement = date d'encaissement banque (Sémantique B)
+
+Décision Mehdi 2026-05-28 : sous cash basis (Sémantique B), `Payment.paymentDate`
+doit être **la date où l'argent arrive en banque**, pas la date où le client a
+payé. TPE/virement de fin de mois encaissés le mois suivant → `paymentDate` =
+date de crédit banque (mois suivant) ⇒ le CA de l'app matche le relevé bancaire
+et la déclaration fiscale. L'app **accepte une date future** (aucune garde
+anti-future sur `recordPayment`/`recordPaymentBodySchema`), donc on peut
+enregistrer le paiement immédiatement (facture passe « Payée », pas de relance)
+avec une date de paiement future. Règle d'encaissement : espèces = jour même,
+TPE/carte = +1..2 j, virement = date de valeur, chèque = date d'encaissement.
+
+### Modules nouveaux (sources de vérité)
+
+- `src/lib/number-to-words-fr.ts` → nombre → français (montant en lettres facture)
+- `src/app/api/invoices/[id]/duplicate/route.ts` → dupliquer une facture
+- `src/app/api/invoices/[id]/send-email/route.ts` → email facture PDF en pièce jointe
+- `src/lib/email/shared.ts` → `EmailAttachment` + support `attachments` dans `sendEmail`
+
+### Audit (zones confirmées solides)
+
+- **Chemins argent** : `recordPayment` (FOR UPDATE + garde surpaiement + version-lock), `allocatePayments`, `cancelInvoice` — RAS. Seuls défauts trouvés : cosmétiques/edge déjà corrigés (#257).
+- Fausse alerte écartée : `total` client à la création de facture = intentionnel (#259).
 
 ---
 
