@@ -1,4 +1,4 @@
-# HANDOFF — État au 2026-05-20
+# HANDOFF — État au 2026-05-28
 
 > Document de passation rapide. Pour le contexte complet voir [CLAUDE.md](./CLAUDE.md).
 
@@ -6,15 +6,36 @@
 
 ## 🎯 État de l'app
 
-**Note audit engineering** : **87/100** ([docs/AUDIT_2026_05_20.md](./docs/AUDIT_2026_05_20.md))
-**Tests** : 1725 passing, 31 skipped (E2E sans secrets)
+**Tests** : **~1919 passing**, 31 skipped (E2E sans secrets) · `tsc` + `lint` clean
 **Stack** : Next.js 15.5.18 · React 19 · Prisma 5.22 · Node 22 · Postgres Supabase
-**Déployé sur** : `https://app.doguniverse.ma` (Vercel)
+**Déployé sur** : `https://app.doguniverse.ma` (Vercel — auto-deploy à chaque push sur `main`)
 **Branch active** : `main`
 
 ---
 
-## ⚡ À faire de TOUTE URGENCE (côté opérateur)
+## 🆕 À faire / vérifier en priorité (session 2026-05-28)
+
+### 1. Vérifier à l'écran les changements UI facturation (non testés en navigateur)
+
+Beaucoup de changements **visuels** ont été livrés sans validation navigateur (sandbox). Recharge `app.doguniverse.ma` (cache !) et vérifie :
+- **Édition facture** (bouton Modifier) : lignes en **cartes** + recherche produit quand catégorie = Croquettes/Produits + Qté éditable (ne repasse plus à 1).
+- **PDF** : montants à jour (aperçu œil) + mention **« Arrêtée la présente facture à la somme de … »** en lettres.
+- **Fiche facture** : boutons **« Dupliquer »** + **« Envoyer par email »**.
+- **Walk-in** : ligne Pension avec **dates Arrivée/Départ** qui calculent les nuits.
+
+Si l'éditeur relooké (#262) ne plaît pas → revert 1 fichier (`InvoiceItemsTable.tsx`).
+
+### 2. Re-deploy Vercel pour activer les crons (toujours en attente)
+
+`morning-digest` (06h UTC) + `vaccine-reminders` (08h UTC) sont dans `vercel.json` → un deploy les active. Le watchdog `cron-freshness` alerte par SMS SUPERADMIN si l'un ne tourne pas sous 48h.
+
+### 3. Règle compta à appliquer (date de paiement)
+
+**`paymentDate` = date où l'argent arrive en banque** (pas la date où le client a payé). TPE/virement de fin de mois encaissés le mois suivant → date du mois suivant (l'app accepte une date future). Garantit app = relevé bancaire = déclaration fiscale. Voir CLAUDE.md §ÉTAT 2026-05-28.
+
+---
+
+## ⚡ Actions plus anciennes — vérifier si encore en attente
 
 ### 1. Migrations SQL à exécuter sur Supabase
 
@@ -85,20 +106,24 @@ Va sur `/admin/maintenance` → Actions rapides → **"Vider stamp erreur backup
 
 ---
 
-## 📋 PRs mergées cette session (10 PRs)
+## 📋 PRs mergées récemment
 
-| PR | Wave | Sujet |
-|---|---|---|
-| #185 | 1 | 8 P0 money + RGPD + Casa TZ + loyalty |
-| #186 | 2 | 8 P1 races + double-fire |
-| #188 | 3 | Perf + observability |
-| #189 | 4 | 4 invariants DB additionnels |
-| #187 | 5 | 7 features UX client (luxe) |
-| #190 | 5b | Polish greeting + product UI refonte |
-| #191 | 6 | 6 features admin cockpit |
-| #192 | 6.1 | Walk-in deep-link `?walkin=open` |
-| #193 | 7 | Page maintenance ops |
-| #194 | 7.2 | Web Push + Storage orphans + mobile UX + E2E flake |
+**Session 2026-05-28 (facturation, #255→#262)** :
+
+| PR | Sujet |
+|---|---|
+| #255 | Qté éditable + recherche produit (édition facture) + dates walk-in |
+| #256 | Aperçu PDF périmé après édition (cache-buster `&v=version`) |
+| #257 | Audit : PDF HT/TVA + lignes partielles + dates Casa + 409 self-heal + cap pets + RGPD claims |
+| #258 | Montant en toutes lettres sur le PDF (conformité Maroc) |
+| #259 | Doc : `total` client intentionnel sur POST /api/invoices |
+| #260 | Dupliquer une facture en 1 clic |
+| #261 | Envoyer la facture PDF par email (pièce jointe) |
+| #262 | Éditeur de lignes de facture relooké (mobile-first) |
+
+**Session 2026-05-25 (#235→#253)** : taxi zombies (P0), recalcul prix COMPLETED (P0), WhatsApp impayés, digest matinal enrichi, dates alternatives quand complet, rappel vaccin J-30. Voir [HISTORY.md](./HISTORY.md).
+
+**Session 2026-05-20 (#185→#194)** : 10 PRs (waves P0/P1, cockpit admin, Web Push, maintenance ops). Voir [HISTORY.md](./HISTORY.md).
 
 ---
 
@@ -152,4 +177,4 @@ Va sur `/admin/maintenance` → Actions rapides → **"Vider stamp erreur backup
 
 ---
 
-*Document généré 2026-05-20. Tient lieu de passation propre pour la prochaine session.*
+*Document mis à jour 2026-05-28. Tient lieu de passation propre pour la prochaine session.*

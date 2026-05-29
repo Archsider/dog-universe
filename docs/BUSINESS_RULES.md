@@ -46,6 +46,27 @@ revenue(month, category) +=
 
 **Exclusion** : facture `CANCELLED` avec `paidAmount = 0` → ignorée
 totalement.
+
+### Quelle date saisir dans `paymentDate` ? (décision 2026-05-28)
+
+`paymentDate` = **la date où l'argent est effectivement reçu en banque
+(ou en caisse)**, PAS la date où le client a déclenché le paiement. C'est
+ce qui aligne le CA de l'app sur le relevé bancaire et la déclaration
+fiscale (régime encaissement).
+
+| Moyen | `paymentDate` à saisir |
+|---|---|
+| Espèces | jour même (reçu en main) |
+| TPE / carte | date de crédit banque (souvent +1 à +2 j) |
+| Virement | date de valeur sur le relevé |
+| Chèque | date d'encaissement du chèque |
+
+**Cas fin de mois → encaissement le mois suivant** (TPE/virement de fin
+mai crédités début juin) : enregistrer le paiement **immédiatement** (la
+facture passe « Payée », plus de relance) avec une `paymentDate` au mois
+suivant. L'app **accepte une date future** — aucune garde anti-future sur
+`recordPayment` / `recordPaymentBodySchema`. Le CA tombe alors dans le bon
+mois Casa (juin) automatiquement.
 **Inclusion** : facture `CANCELLED` avec `paidAmount > 0` → conservée
 (revenu acquis ; un éventuel remboursement physique est un `Payment`
 négatif séparé, pas un effacement rétroactif).
