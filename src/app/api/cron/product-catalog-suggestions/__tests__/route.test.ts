@@ -12,7 +12,7 @@ vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
 const productFindMany = vi.fn();
 const invoiceItemFindMany = vi.fn();
 const suggestionFindMany = vi.fn();
-const suggestionCreate = vi.fn();
+const suggestionCreateMany = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -20,7 +20,7 @@ vi.mock('@/lib/prisma', () => ({
     invoiceItem: { findMany: (a: any) => invoiceItemFindMany(a) },
     productCatalogSuggestion: {
       findMany: (a: any) => suggestionFindMany(a),
-      create: (a: any) => suggestionCreate(a),
+      createMany: (a: any) => suggestionCreateMany(a),
     },
   },
 }));
@@ -32,9 +32,10 @@ beforeEach(() => {
   productFindMany.mockReset();
   invoiceItemFindMany.mockReset();
   suggestionFindMany.mockReset();
-  suggestionCreate.mockReset();
+  suggestionCreateMany.mockReset();
   suggestionFindMany.mockResolvedValue([]);
-  suggestionCreate.mockResolvedValue({ id: 'sug1' });
+  // Default : tout est inséré (count = nombre de lignes du batch).
+  suggestionCreateMany.mockImplementation(async (a: any) => ({ count: a.data.length }));
 });
 
 afterAll(() => {
@@ -71,11 +72,12 @@ describe('GET /api/cron/product-catalog-suggestions', () => {
     const r = await callCron();
     expect(r.status).toBe(200);
     expect(r.body.suggested).toBe(1);
-    expect(suggestionCreate).toHaveBeenCalledOnce();
-    const call = suggestionCreate.mock.calls[0][0];
-    expect(call.data.invoiceItemId).toBe('ii1');
-    expect(call.data.suggestedProductId).toBe('p1');
-    expect(call.data.confidence).toBeGreaterThanOrEqual(0.8);
+    expect(suggestionCreateMany).toHaveBeenCalledOnce();
+    const call = suggestionCreateMany.mock.calls[0][0];
+    expect(call.skipDuplicates).toBe(true);
+    expect(call.data[0].invoiceItemId).toBe('ii1');
+    expect(call.data[0].suggestedProductId).toBe('p1');
+    expect(call.data[0].confidence).toBeGreaterThanOrEqual(0.8);
   });
 
   it('skips items that already have a suggestion', async () => {
@@ -88,7 +90,8 @@ describe('GET /api/cron/product-catalog-suggestions', () => {
     const r = await callCron();
     expect(r.body.suggested).toBe(1);
     expect(r.body.skipped).toBe(1);
-    expect(suggestionCreate).toHaveBeenCalledTimes(1);
+    // ii1 déjà existant → exclu du batch ; seul ii2 part dans createMany.
+    expect(suggestionCreateMany.mock.calls[0][0].data).toHaveLength(1);
   });
 
   it('skips short descriptions and no-match rows', async () => {
@@ -100,15 +103,16 @@ describe('GET /api/cron/product-catalog-suggestions', () => {
     const r = await callCron();
     expect(r.body.suggested).toBe(0);
     expect(r.body.skipped).toBeGreaterThanOrEqual(1);
-    expect(suggestionCreate).not.toHaveBeenCalled();
+    expect(suggestionCreateMany).not.toHaveBeenCalled();
   });
 
-  it('treats unique-constraint race as idempotent skip', async () => {
+  it('traite la race unique comme un skip idempotent (skipDuplicates)', async () => {
     productFindMany.mockResolvedValueOnce([{ id: 'p1', name: 'Royal Canin Adult Medium' }]);
     invoiceItemFindMany.mockResolvedValueOnce([
       { id: 'ii1', description: 'Royal Canin Adult Medium' },
     ]);
-    suggestionCreate.mockRejectedValueOnce(new Error('Unique constraint failed'));
+    // createMany avec skipDuplicates : la ligne en double est ignorée → count 0.
+    suggestionCreateMany.mockResolvedValueOnce({ count: 0 });
     const r = await callCron();
     expect(r.status).toBe(200);
     expect(r.body.suggested).toBe(0);

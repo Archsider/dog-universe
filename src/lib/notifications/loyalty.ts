@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { NOTIFICATION_MESSAGES } from '@/lib/notification-messages';
 import { createNotification, createAdminNotifications } from './core';
-import { notDeleted } from '@/lib/prisma-soft';
+import { contactable } from '@/lib/prisma-soft';
 
 export async function createLoyaltyUpdateNotification(
   userId: string,
@@ -20,7 +20,8 @@ export async function createLoyaltyUpdateNotification(
 
   // Send email notification (non-blocking)
   try {
-    const client = await prisma.user.findFirst({ where: notDeleted({ id: userId }), select: { name: true, email: true } });
+    // contactable() exclut les comptes anonymisés (RGPD).
+    const client = await prisma.user.findFirst({ where: { ...contactable(), id: userId }, select: { name: true, email: true } });
     if (client) {
       const gradeLabel = locale === 'fr' ? gradeFr : gradeEn;
       const { subject, html } = getEmailTemplate('loyalty_update', { clientName: client.name, grade: gradeLabel }, locale);
@@ -51,7 +52,8 @@ export async function createLoyaltyClaimResultNotification(
   // Send email (non-blocking)
   try {
     const client = await prisma.user.findFirst({
-      where: notDeleted({ id: userId }),
+      // contactable() exclut les comptes anonymisés (RGPD).
+      where: { ...contactable(), id: userId },
       select: { name: true, email: true, language: true },
     });
     if (client) {

@@ -26,6 +26,10 @@ export async function GET() {
       bookingPets: { select: { pet: { select: { id: true, name: true, species: true } } } },
     },
     orderBy: { endDate: 'asc' },
+    // Cap défensif : la pension réelle dépasse rarement quelques dizaines
+    // d'animaux ; protège contre un IN_PROGRESS jamais clôturé qui gonflerait
+    // la réponse (parité avec les autres findMany cappés du dashboard).
+    take: 200,
   });
 
   const pets: Array<{

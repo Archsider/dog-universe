@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail, getEmailTemplate } from '@/lib/email';
 import { NOTIFICATION_MESSAGES } from '@/lib/notification-messages';
 import { createNotification, createAdminNotifications } from './core';
-import { notDeleted } from '@/lib/prisma-soft';
+import { notDeleted, contactable } from '@/lib/prisma-soft';
 
 export async function createBookingConfirmationNotification(
   userId: string,
@@ -67,7 +67,9 @@ export async function createBookingCompletedNotification(
   // Send email (non-blocking)
   try {
     const client = await prisma.user.findFirst({
-      where: notDeleted({ id: userId }),
+      // contactable() exclut les comptes anonymisés (RGPD) — pas d'email
+      // vers un placeholder `deleted_<id>@…invalid`.
+      where: { ...contactable(), id: userId },
       select: { name: true, email: true, language: true },
     });
     if (client) {

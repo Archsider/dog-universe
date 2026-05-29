@@ -14,12 +14,12 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   requireRole: vi.fn(),
   paymentFindUnique: vi.fn(),
-  paymentUpdate: vi.fn(async () => undefined),
+  paymentUpdate: vi.fn(async (_args: { where: { id: string }; data: { paymentDate?: Date } }) => undefined),
   invoiceFindUnique: vi.fn(),
-  allocatePayments: vi.fn(async () => undefined),
-  cacheDel: vi.fn(async () => undefined),
-  scheduleMVRefresh: vi.fn(async () => undefined),
-  logAction: vi.fn(async () => undefined),
+  allocatePayments: vi.fn(async (_id: string) => undefined),
+  cacheDel: vi.fn(async (_key: string) => undefined),
+  scheduleMVRefresh: vi.fn(async (_d: Date) => undefined),
+  logAction: vi.fn(async (_a: { action: string }) => undefined),
 }));
 
 vi.mock('@/lib/auth-guards', () => ({ requireRole: mocks.requireRole }));
@@ -76,7 +76,7 @@ describe('PATCH /api/invoices/[id]/payments/[paymentId]', () => {
     // L'update porte bien la nouvelle date.
     const updateArg = mocks.paymentUpdate.mock.calls[0][0];
     expect(updateArg.where).toEqual({ id: 'pay1' });
-    expect(updateArg.data.paymentDate.toISOString().slice(0, 10)).toBe('2026-06-01');
+    expect(updateArg.data.paymentDate?.toISOString().slice(0, 10)).toBe('2026-06-01');
 
     // Re-allocation déclenchée.
     expect(mocks.allocatePayments).toHaveBeenCalledWith('inv1');
