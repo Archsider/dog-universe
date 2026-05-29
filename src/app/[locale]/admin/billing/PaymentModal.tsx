@@ -4,12 +4,13 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CheckCircle, Loader2, Banknote, CreditCard, Receipt,
-  Building2, Trash2, ChevronDown,
+  Building2, Trash2, ChevronDown, CalendarClock, Check, Pencil, X,
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import type { Decimal } from '@prisma/client/runtime/library';
 import { submitPayment } from './_lib/submit-payment';
 import { casablancaYMD } from '@/lib/dates-casablanca';
+import { computeSettlementYmd, explainSettlement, formatYmdLong, type SettlementMethod } from '@/lib/settlement';
 
 interface Payment {
   id: string;
@@ -88,9 +89,27 @@ export default function PaymentModal({
   // Form state
   const [method, setMethod] = useState('CASH');
   const [paymentDate, setPaymentDate] = useState(todayIso());
+  // `true` tant que l'opérateur n'a pas figé la date à la main → la date
+  // d'encaissement s'auto-calcule depuis le moyen de paiement (date de valeur
+  // banque, weekends + fériés Maroc exclus).
+  const [dateAuto, setDateAuto] = useState(true);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Inline edit of an existing payment's settlement date.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDateValue, setEditDateValue] = useState('');
+  const [savingDateId, setSavingDateId] = useState<string | null>(null);
+
+  // Changement de méthode → ré-applique la date de valeur auto si non figée.
+  const changeMethod = (m: string) => {
+    setMethod(m);
+    if (dateAuto) setPaymentDate(computeSettlementYmd(todayIso(), m as SettlementMethod));
+  };
+  const changeDate = (v: string) => {
+    setPaymentDate(v);
+    setDateAuto(false);
+  };
   // SMS notification toggle. Defaults: ON for standard clients, OFF for
   // walk-ins (matches the server policy default — see ADR-0008). The
   // operator can override either way per-payment.
@@ -119,7 +138,9 @@ export default function PaymentModal({
 
   const handleOpen = async () => {
     setMethod('CASH');
-    setPaymentDate(todayIso());
+    setPaymentDate(computeSettlementYmd(todayIso(), 'CASH'));
+    setDateAuto(true);
+    setEditingId(null);
     setNotes('');
     // Reset SMS toggle to its context-aware default on each open. Avoids
     // a sticky "I unchecked it once 3 months ago" surprise.
@@ -180,6 +201,37 @@ export default function PaymentModal({
       setDeletingId(null);
     }
   };
+
+  const startEditDate = (paymentId: string, current: string) => {
+    setEditDateValue(current.slice(0, 10));
+    setEditingId(paymentId);
+  };
+  const handleEditDate = async (paymentId: string) => {
+    if (!editDateValue) return;
+    setSavingDateId(paymentId);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/payments/${paymentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentDate: editDateValue }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Failed');
+      }
+      toast({ title: isFr ? "Date d'encaissement mise à jour" : 'Settlement date updated', variant: 'success' });
+      setEditingId(null);
+      await fetchPayments();
+      router.refresh();
+    } catch (e: unknown) {
+      toast({ title: e instanceof Error ? e.message : (isFr ? 'Erreur' : 'Error'), variant: 'destructive' });
+    } finally {
+      setSavingDateId(null);
+    }
+  };
+
+  // Encart : date de crédit banque estimée pour la méthode choisie (cash → rien).
+  const settlement = method === 'CASH' ? null : explainSettlement(todayIso(), method as SettlementMethod);
 
   if (currentStatus === 'PAID' || currentStatus === 'CANCELLED') return null;
 
@@ -260,9 +312,24 @@ export default function PaymentModal({
                 <input
                   type="date"
                   value={paymentDate}
-                  onChange={e => setPaymentDate(e.target.value)}
+                  onChange={e => changeDate(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gold-300"
                 />
+                {settlement && (
+                  <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-500">
+                    <CalendarClock className="h-3.5 w-3.5 mt-0.5 shrink-0 text-gold-500" />
+                    <span>
+                      {isFr ? 'Crédit banque estimé le ' : 'Estimated bank credit on '}
+                      <span className="font-semibold text-charcoal">
+                        {formatYmdLong(settlement.settlementYmd, isFr ? 'fr' : 'en')}
+                      </span>
+                      {' '}({isFr ? `+${settlement.lagBusinessDays} j ouvré` : `+${settlement.lagBusinessDays} business day`}
+                      {settlement.lagBusinessDays > 1 ? (isFr ? 's' : 's') : ''}
+                      {settlement.skipped.some(s => s.reason === 'holiday') ? (isFr ? ', férié inclus' : ', holiday skipped') : ''}
+                      {isFr ? ', weekends exclus)' : ', weekends skipped)'}
+                    </span>
+                  </p>
+                )}
               </div>
 
               {/* ── Method ── */}
@@ -275,7 +342,7 @@ export default function PaymentModal({
                     <button
                       key={key}
                       type="button"
-                      onClick={() => setMethod(key)}
+                      onClick={() => changeMethod(key)}
                       className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${
                         method === key
                           ? 'bg-gold-50 border-gold-400 text-gold-700'
@@ -388,7 +455,17 @@ export default function PaymentModal({
                             className="flex items-center justify-between bg-ivory-50 rounded-lg px-3 py-2 text-sm"
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-gray-500 shrink-0">{date}</span>
+                              {editingId === p.id ? (
+                                <input
+                                  type="date"
+                                  value={editDateValue}
+                                  autoFocus
+                                  onChange={e => setEditDateValue(e.target.value)}
+                                  className="px-2 py-0.5 border border-gold-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-gold-400"
+                                />
+                              ) : (
+                                <span className="text-gray-500 shrink-0">{date}</span>
+                              )}
                               <span className="text-gray-300">·</span>
                               <span className="text-gray-600 font-medium shrink-0">{methodLabel}</span>
                               {p.notes && (
@@ -400,16 +477,48 @@ export default function PaymentModal({
                             </div>
                             <div className="flex items-center gap-2 shrink-0 ml-3">
                               <span className="font-semibold text-charcoal">-{Number(p.amount).toFixed(2)} MAD</span>
-                              <button
-                                onClick={() => handleDelete(p.id)}
-                                disabled={deletingId === p.id}
-                                className="p-1 text-gray-300 hover:text-red-500 transition-colors rounded disabled:opacity-40"
-                                title={isFr ? 'Supprimer' : 'Delete'}
-                              >
-                                {deletingId === p.id
-                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  : <Trash2 className="h-3.5 w-3.5" />}
-                              </button>
+                              {editingId === p.id ? (
+                                <>
+                                  <button
+                                    onClick={() => handleEditDate(p.id)}
+                                    disabled={savingDateId === p.id}
+                                    className="p-1 text-green-500 hover:text-green-600 transition-colors rounded disabled:opacity-40"
+                                    title={isFr ? "Enregistrer la date d'encaissement" : 'Save settlement date'}
+                                  >
+                                    {savingDateId === p.id
+                                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      : <Check className="h-3.5 w-3.5" />}
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingId(null)}
+                                    disabled={savingDateId === p.id}
+                                    className="p-1 text-gray-300 hover:text-gray-500 transition-colors rounded disabled:opacity-40"
+                                    title={isFr ? 'Annuler' : 'Cancel'}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => startEditDate(p.id, p.paymentDate)}
+                                    className="p-1 text-gray-300 hover:text-gold-500 transition-colors rounded"
+                                    title={isFr ? "Modifier la date d'encaissement" : 'Edit settlement date'}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(p.id)}
+                                    disabled={deletingId === p.id}
+                                    className="p-1 text-gray-300 hover:text-red-500 transition-colors rounded disabled:opacity-40"
+                                    title={isFr ? 'Supprimer' : 'Delete'}
+                                  >
+                                    {deletingId === p.id
+                                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      : <Trash2 className="h-3.5 w-3.5" />}
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                         );

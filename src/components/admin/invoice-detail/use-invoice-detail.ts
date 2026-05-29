@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from '@/hooks/use-toast';
 import { submitPayment } from '@/app/[locale]/admin/billing/_lib/submit-payment';
 import { casablancaYMD } from '@/lib/dates-casablanca';
+import { computeSettlementYmd, type SettlementMethod } from '@/lib/settlement';
 import {
   autoCategory,
   getDisplayEmail,
@@ -45,10 +46,29 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
   const [newPaymentDate, setNewPaymentDate] = useState(() => casaTodayYmd());
   const [newPaymentAmount, setNewPaymentAmount] = useState('');
   const [newPaymentMethod, setNewPaymentMethod] = useState('CASH');
+  // `true` tant que l'opérateur n'a pas saisi manuellement la date : la date
+  // d'encaissement est alors auto-calculée depuis le moyen de paiement
+  // (date de valeur banque, weekends + fériés Maroc exclus).
+  const [newPaymentDateAuto, setNewPaymentDateAuto] = useState(true);
   const [newPaymentSendSms, setNewPaymentSendSms] = useState(!invoice.client.isWalkIn);
   const [addingPayment, setAddingPayment] = useState(false);
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
+  const [savingPaymentDateId, setSavingPaymentDateId] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState(false);
+
+  // Changement de méthode → ré-applique la date de valeur auto si l'opérateur
+  // n'a pas figé la date à la main.
+  const handleChangePaymentMethod = (m: string) => {
+    setNewPaymentMethod(m);
+    if (newPaymentDateAuto) {
+      setNewPaymentDate(computeSettlementYmd(casaTodayYmd(), m as SettlementMethod));
+    }
+  };
+  // Saisie manuelle de la date → on cesse de la recalculer automatiquement.
+  const handleChangePaymentDate = (v: string) => {
+    setNewPaymentDate(v);
+    setNewPaymentDateAuto(false);
+  };
 
   const enterEdit = () => {
     setEditItems(invoice.items.map(it => ({
@@ -66,8 +86,9 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     setEditClientEmail(getDisplayEmail(invoice));
     const remaining = Math.max(0, Number(invoice.amount) - Number(invoice.paidAmount));
     setNewPaymentAmount(remaining > 0 ? remaining.toFixed(2) : '');
-    setNewPaymentDate(casaTodayYmd());
     setNewPaymentMethod('CASH');
+    setNewPaymentDate(computeSettlementYmd(casaTodayYmd(), 'CASH'));
+    setNewPaymentDateAuto(true);
     setMode('edit');
   };
 
@@ -228,7 +249,8 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
       await refetchInvoice();
       const rem = Math.max(0, Number(invoice.amount) - Number(invoice.paidAmount));
       setNewPaymentAmount(rem > 0 ? rem.toFixed(2) : '');
-      setNewPaymentDate(casaTodayYmd());
+      setNewPaymentDate(computeSettlementYmd(casaTodayYmd(), newPaymentMethod as SettlementMethod));
+      setNewPaymentDateAuto(true);
       // Reset the toggle to the context default for the next entry.
       setNewPaymentSendSms(!invoice.client.isWalkIn);
       toast({ title: isFr ? 'Paiement ajouté' : 'Payment added', variant: 'success' });
@@ -250,6 +272,32 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
       toast({ title: isFr ? 'Erreur lors de la suppression' : 'Delete failed', variant: 'destructive' });
     } finally {
       setDeletingPaymentId(null);
+    }
+  };
+
+  // Corrige la date d'encaissement (date de valeur banque) d'un paiement
+  // existant. Sert à reclasser un TPE/virement payé fin de mois mais crédité
+  // le mois suivant dans le bon mois de CA (cash-basis). Renvoie true si OK.
+  const handleEditPaymentDate = async (paymentId: string, paymentDate: string): Promise<boolean> => {
+    setSavingPaymentDateId(paymentId);
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/payments/${paymentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentDate }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || (isFr ? 'Erreur serveur' : 'Server error'));
+      }
+      await refetchInvoice();
+      toast({ title: isFr ? "Date d'encaissement mise à jour" : 'Settlement date updated', variant: 'success' });
+      return true;
+    } catch (e: unknown) {
+      toast({ title: e instanceof Error ? e.message : (isFr ? 'Erreur' : 'Error'), variant: 'destructive' });
+      return false;
+    } finally {
+      setSavingPaymentDateId(null);
     }
   };
 
@@ -341,14 +389,19 @@ export function useInvoiceDetail(initialInvoice: InvoiceData, locale: string) {
     newPaymentDate, setNewPaymentDate,
     newPaymentAmount, setNewPaymentAmount,
     newPaymentMethod, setNewPaymentMethod,
+    newPaymentDateAuto,
+    handleChangePaymentMethod,
+    handleChangePaymentDate,
     newPaymentSendSms, setNewPaymentSendSms,
     addingPayment,
     deletingPaymentId,
+    savingPaymentDateId,
     enterEdit,
     addItem, removeItem, updateItem, patchItem,
     handleSave,
     handleAddPayment,
     handleDeletePayment,
+    handleEditPaymentDate,
     handleSendSms,
     sendingEmail,
     handleSendEmail,
