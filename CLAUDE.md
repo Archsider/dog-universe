@@ -1352,6 +1352,58 @@ applicative ajoutée.
 
 ---
 
+## ENCAISSEMENT BANCAIRE — DATE DE VALEUR (depuis 2026-05-29)
+
+Moteur qui traduit « le client a payé tel jour, par tel moyen » → « l'argent
+est crédité en banque tel jour ». Sous cash-basis (Sémantique B), c'est cette
+date de crédit (`Payment.paymentDate`) qui pilote le mois de CA. Avant ce
+module, l'opérateur devait calculer la date de valeur à la main (en tenant
+compte des fériés marocains + weekends) — source d'erreur à chaque fin de mois
+où un TPE/virement est payé en mai mais crédité en juin.
+
+### Source de vérité
+
+```
+src/lib/settlement/morocco-calendar.ts  → jours ouvrés + fériés Maroc (pur, TZ-safe UTC)
+src/lib/settlement/index.ts             → computeSettlementYmd / explainSettlement / formatYmdLong
+```
+
+- **Règle de date de valeur** (`SETTLEMENT_LAG_BUSINESS_DAYS`) :
+  Espèces = jour même · TPE/Carte = +1 j ouvré · Virement = +1 j ouvré ·
+  Chèque = +2 j ouvrés — en sautant **weekends (sam/dim) + fériés marocains**.
+- **Calendrier marocain** : fériés fixes grégoriens (récurrents) + fériés
+  islamiques (Aïd, Moharram, Mawlid) hardcodés par année 2025-2027.
+  ⚠️ **Les dates islamiques sont lunaires** (glissent ~11 j/an) → à RÉVISER
+  CHAQUE ANNÉE dans `VARIABLE_HOLIDAYS`. Un décalage ±1 j n'est jamais fatal :
+  l'auto-date n'est qu'une **suggestion** UI, l'opérateur peut toujours
+  corriger la date à la main.
+- **Arithmétique 100% UTC** sur chaînes `YYYY-MM-DD` → aucun drift de fuseau,
+  aucun getter local (`getMonth/getDate/getDay`) interdit par la règle ESLint Casa.
+
+### Intégration UI
+
+- **Auto-date** : dans les écrans de paiement (`PaymentModal`,
+  `AddPaymentSection`), le champ date s'auto-remplit à la date de valeur
+  calculée depuis le moyen choisi, tant que l'opérateur ne l'a pas saisie à la
+  main (`dateAuto`/`newPaymentDateAuto`). Encart explicatif sous le champ :
+  « Crédit banque estimé le 1 juin 2026 (+1 j ouvré, weekends exclus) ».
+- **Correction d'un paiement existant** : `PATCH /api/invoices/[id]/payments/[paymentId]`
+  (ADMIN/SUPERADMIN) édite `paymentDate` (et/ou méthode/notes). Re-allocation +
+  invalidation cache `revenue:YYYY:M` de l'**ancien ET du nouveau** mois +
+  `scheduleMVRefreshIfCurrentMonth` sur les deux + `logAction(PAYMENT_UPDATED)`.
+  UI inline (crayon → input date → ✓) dans l'historique des paiements, **y
+  compris sur les factures PAID** (c'est là qu'on reclasse un encaissement de
+  fin de mois vers le mois suivant). Cross-role gate + 400 si facture CANCELLED.
+
+### Tests
+
+`src/lib/settlement/__tests__/` (23) + route PATCH (7) = 30. Couvre le pont
+Aïd al-Adha fin mai 2026 (cas réel : TPE/virement vendredi 29 mai → crédit
+lundi 1 juin), chèque mardi 26 mai → 1 juin (Aïd + weekend sautés), espèces
+jour même.
+
+---
+
 ## SIDEBAR ADMIN
 
 `src/components/layout/AdminSidebar.tsx` — props :

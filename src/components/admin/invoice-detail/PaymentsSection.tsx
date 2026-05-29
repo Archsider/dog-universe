@@ -1,7 +1,43 @@
 'use client';
 
-import { Banknote, Loader2, Plus, Trash2 } from 'lucide-react';
-import { METHOD_ICONS, METHOD_LABELS, fmtPaymentDate, type InvoiceData } from './lib';
+import { useState } from 'react';
+import { Banknote, CalendarClock, Check, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { METHOD_ICONS, METHOD_LABELS, fmtPaymentDate, toDateStr, type InvoiceData } from './lib';
+import { casablancaYMD } from '@/lib/dates-casablanca';
+import { explainSettlement, formatYmdLong, type SettlementMethod } from '@/lib/settlement';
+
+/** Aujourd'hui en calendrier Casa (YYYY-MM-DD) — base du calcul de date de valeur. */
+function casaTodayYmd(): string {
+  const { year, month, day } = casablancaYMD(new Date());
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * Encart explicatif sous le champ date : pour un TPE/virement/chèque, montre la
+ * date de crédit banque estimée (date de valeur, weekends + fériés Maroc
+ * exclus). Cash → rien (encaissé le jour même). Le calcul part d'aujourd'hui ;
+ * l'opérateur peut toujours saisir une autre date à la main.
+ */
+function SettlementHint({ method, isFr }: { method: string; isFr: boolean }) {
+  if (method === 'CASH') return null;
+  const exp = explainSettlement(casaTodayYmd(), method as SettlementMethod);
+  const holiday = exp.skipped.some((s) => s.reason === 'holiday');
+  const lagLabel = isFr
+    ? `+${exp.lagBusinessDays} j ouvré${exp.lagBusinessDays > 1 ? 's' : ''}`
+    : `+${exp.lagBusinessDays} business day${exp.lagBusinessDays > 1 ? 's' : ''}`;
+  return (
+    <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-500">
+      <CalendarClock className="h-3.5 w-3.5 mt-0.5 shrink-0 text-gold-500" />
+      <span>
+        {isFr ? 'Crédit banque estimé le ' : 'Estimated bank credit on '}
+        <span className="font-semibold text-charcoal">{formatYmdLong(exp.settlementYmd, isFr ? 'fr' : 'en')}</span>
+        {' '}({lagLabel}
+        {holiday ? (isFr ? ', férié inclus' : ', holiday skipped') : ''}
+        {isFr ? ', weekends exclus)' : ', weekends skipped)'}
+      </span>
+    </p>
+  );
+}
 
 // ── Payment history (view mode) ──────────────────────────────────────────────
 
@@ -10,13 +46,32 @@ interface HistoryProps {
   locale: string;
   isFr: boolean;
   deletingPaymentId: string | null;
+  savingPaymentDateId?: string | null;
   onDeletePayment: (paymentId: string) => void;
+  /** Corrige la date d'encaissement d'un paiement. Renvoie true si OK
+   *  (la ligne quitte alors le mode édition). */
+  onEditPaymentDate?: (paymentId: string, paymentDate: string) => Promise<boolean>;
 }
 
 export function PaymentHistorySection({
-  invoice, locale, isFr, deletingPaymentId, onDeletePayment,
+  invoice, locale, isFr, deletingPaymentId, savingPaymentDateId,
+  onDeletePayment, onEditPaymentDate,
 }: HistoryProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [dateValue, setDateValue] = useState('');
+
   if (invoice.payments.length === 0) return null;
+
+  const startEdit = (paymentId: string, current: Date | string) => {
+    setDateValue(toDateStr(current));
+    setEditingId(paymentId);
+  };
+  const saveEdit = async (paymentId: string) => {
+    if (!onEditPaymentDate || !dateValue) return;
+    const ok = await onEditPaymentDate(paymentId, dateValue);
+    if (ok) setEditingId(null);
+  };
+
   return (
     <div className="bg-white rounded-xl border border-[#F0D98A]/40 shadow-card p-4">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
@@ -25,27 +80,71 @@ export function PaymentHistorySection({
       <div className="space-y-2">
         {invoice.payments.map(p => {
           const Icon = METHOD_ICONS[p.paymentMethod] ?? Banknote;
+          const isEditing = editingId === p.id;
+          const saving = savingPaymentDateId === p.id;
           return (
             <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-ivory-50 last:border-0">
-              <div className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-2 text-sm min-w-0">
                 <Icon className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
                 <span className="text-gray-600">
                   {METHOD_LABELS[p.paymentMethod]?.[isFr ? 'fr' : 'en'] ?? p.paymentMethod}
                 </span>
-                <span className="text-gray-400 text-xs">{fmtPaymentDate(p.paymentDate, locale)}</span>
+                {isEditing ? (
+                  <input
+                    type="date"
+                    value={dateValue}
+                    autoFocus
+                    onChange={e => setDateValue(e.target.value)}
+                    className="px-2 py-0.5 border border-gold-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-gold-400"
+                  />
+                ) : (
+                  <span className="text-gray-400 text-xs">{fmtPaymentDate(p.paymentDate, locale)}</span>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <span className="font-semibold text-green-700 text-sm">{Number(p.amount).toFixed(2)} MAD</span>
-                <button
-                  onClick={() => onDeletePayment(p.id)}
-                  disabled={deletingPaymentId === p.id}
-                  className="text-gray-300 hover:text-red-400 disabled:opacity-50 transition-colors"
-                  title={isFr ? 'Supprimer ce paiement' : 'Delete this payment'}
-                >
-                  {deletingPaymentId === p.id
-                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    : <Trash2 className="h-3.5 w-3.5" />}
-                </button>
+                {isEditing ? (
+                  <>
+                    <button
+                      onClick={() => saveEdit(p.id)}
+                      disabled={saving}
+                      className="text-green-500 hover:text-green-600 disabled:opacity-50 transition-colors"
+                      title={isFr ? "Enregistrer la date d'encaissement" : 'Save settlement date'}
+                    >
+                      {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      disabled={saving}
+                      className="text-gray-300 hover:text-gray-500 disabled:opacity-50 transition-colors"
+                      title={isFr ? 'Annuler' : 'Cancel'}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {onEditPaymentDate && (
+                      <button
+                        onClick={() => startEdit(p.id, p.paymentDate)}
+                        className="text-gray-300 hover:text-gold-500 transition-colors"
+                        title={isFr ? "Modifier la date d'encaissement" : 'Edit settlement date'}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => onDeletePayment(p.id)}
+                      disabled={deletingPaymentId === p.id}
+                      className="text-gray-300 hover:text-red-400 disabled:opacity-50 transition-colors"
+                      title={isFr ? 'Supprimer ce paiement' : 'Delete this payment'}
+                    >
+                      {deletingPaymentId === p.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Trash2 className="h-3.5 w-3.5" />}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           );
@@ -138,6 +237,7 @@ export function AddPaymentSection({
             onChange={e => onChangeDate(e.target.value)}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gold-400"
           />
+          <SettlementHint method={newPaymentMethod} isFr={isFr} />
         </div>
       </div>
 

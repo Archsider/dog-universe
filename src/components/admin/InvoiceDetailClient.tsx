@@ -59,7 +59,9 @@ export default function InvoiceDetailClient({
             locale={locale}
             isFr={s.isFr}
             deletingPaymentId={s.deletingPaymentId}
+            savingPaymentDateId={s.savingPaymentDateId}
             onDeletePayment={s.handleDeletePayment}
+            onEditPaymentDate={s.handleEditPaymentDate}
           />
           <NotesView invoice={s.invoice} isFr={s.isFr} />
           <BookingLink invoice={s.invoice} locale={locale} isFr={s.isFr} />
@@ -108,9 +110,9 @@ export default function InvoiceDetailClient({
             newPaymentSendSms={s.newPaymentSendSms}
             addingPayment={s.addingPayment}
             deletingPaymentId={s.deletingPaymentId}
-            onChangeDate={s.setNewPaymentDate}
+            onChangeDate={s.handleChangePaymentDate}
             onChangeAmount={s.setNewPaymentAmount}
-            onChangeMethod={s.setNewPaymentMethod}
+            onChangeMethod={s.handleChangePaymentMethod}
             onChangeSendSms={s.setNewPaymentSendSms}
             onAddPayment={s.handleAddPayment}
             onDeletePayment={s.handleDeletePayment}
